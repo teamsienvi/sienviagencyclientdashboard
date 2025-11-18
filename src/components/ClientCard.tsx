@@ -17,7 +17,7 @@ export const ClientCard = ({ client }: ClientCardProps) => {
         </div>
         
         <div className="space-y-3">
-          {client.reports.slice(0, 2).map((report, index) => (
+          {client.reports.map((report, index) => (
             <div key={index} className="flex items-center justify-between py-2">
               <span className="text-sm text-muted-foreground">{report.dateRange}</span>
               <a
