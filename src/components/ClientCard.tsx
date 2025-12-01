@@ -22,7 +22,7 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
           {client.reports.map((report, index) => (
             <Link
               key={index}
-              to={`/report/${clientIndex}/${index}`}
+              to={report.isInternal ? report.link : `/report/${clientIndex}/${index}`}
               className="flex items-center justify-between py-3 px-3 hover:bg-accent/70 rounded-lg transition-all duration-200 group/item"
             >
               <span className="text-sm text-muted-foreground font-medium">{report.dateRange}</span>
