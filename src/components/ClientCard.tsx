@@ -1,11 +1,13 @@
-import { ExternalLink } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Client } from "@/data/clients";
+import { Link } from "react-router-dom";
 
 interface ClientCardProps {
   client: Client;
+  clientIndex: number;
 }
 
-export const ClientCard = ({ client }: ClientCardProps) => {
+export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
   return (
     <div className="bg-card border border-border rounded-lg p-6 hover:shadow-sm transition-shadow">
       <div className="space-y-4">
@@ -18,18 +20,17 @@ export const ClientCard = ({ client }: ClientCardProps) => {
         
         <div className="space-y-3">
           {client.reports.map((report, index) => (
-            <div key={index} className="flex items-center justify-between py-2">
+            <Link
+              key={index}
+              to={`/report/${clientIndex}/${index}`}
+              className="flex items-center justify-between py-2 hover:bg-accent/50 rounded-md px-2 -mx-2 transition-colors group"
+            >
               <span className="text-sm text-muted-foreground">{report.dateRange}</span>
-              <a
-                href={report.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5"
-              >
+              <span className="text-sm font-medium text-primary group-hover:text-primary/80 transition-colors flex items-center gap-1.5">
                 View Report
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </div>
+                <ChevronRight className="h-4 w-4" />
+              </span>
+            </Link>
           ))}
         </div>
       </div>
