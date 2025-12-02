@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { Client } from "@/data/clients";
 import { useNavigate } from "react-router-dom";
 import {
@@ -7,17 +8,68 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, ExternalLink } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight } from "lucide-react";
 
 interface ClientCardProps {
   client: Client;
   clientIndex: number;
 }
 
+// Helper to extract month from date range (e.g., "Nov 24-30" -> "November")
+const getMonthFromDateRange = (dateRange: string): string => {
+  const monthMap: Record<string, string> = {
+    'Jan': 'January',
+    'Feb': 'February',
+    'Mar': 'March',
+    'Apr': 'April',
+    'May': 'May',
+    'Jun': 'June',
+    'Jul': 'July',
+    'Aug': 'August',
+    'Sep': 'September',
+    'Oct': 'October',
+    'Nov': 'November',
+    'Dec': 'December'
+  };
+  
+  const match = dateRange.match(/^([A-Za-z]+)/);
+  if (match) {
+    return monthMap[match[1]] || match[1];
+  }
+  return dateRange;
+};
+
 export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
   const navigate = useNavigate();
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
   
-  const handleReportSelect = (value: string) => {
+  // Group reports by month
+  const reportsByMonth = useMemo(() => {
+    const grouped: Record<string, { index: number; report: typeof client.reports[0] }[]> = {};
+    
+    client.reports.forEach((report, index) => {
+      const month = getMonthFromDateRange(report.dateRange);
+      if (!grouped[month]) {
+        grouped[month] = [];
+      }
+      grouped[month].push({ index, report });
+    });
+    
+    return grouped;
+  }, [client.reports]);
+  
+  // Get unique months in order (most recent first)
+  const months = useMemo(() => {
+    return Object.keys(reportsByMonth).reverse();
+  }, [reportsByMonth]);
+  
+  // Get weeks for selected month
+  const weeksInSelectedMonth = useMemo(() => {
+    if (!selectedMonth) return [];
+    return reportsByMonth[selectedMonth] || [];
+  }, [selectedMonth, reportsByMonth]);
+  
+  const handleWeekSelect = (value: string) => {
     const reportIndex = parseInt(value);
     const report = client.reports[reportIndex];
     
@@ -42,30 +94,59 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
         </div>
         
         <div className="space-y-3">
-          <Select onValueChange={handleReportSelect}>
+          {/* Step 1: Month Selection */}
+          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-full bg-accent/50 border-border hover:bg-accent transition-colors">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-primary" />
-                <SelectValue placeholder="Select a report date" />
+                <SelectValue placeholder="Select month" />
               </div>
             </SelectTrigger>
             <SelectContent className="bg-popover border-border">
-              {client.reports.map((report, index) => (
+              {months.map((month) => (
                 <SelectItem 
-                  key={index} 
-                  value={index.toString()}
+                  key={month} 
+                  value={month}
                   className="cursor-pointer"
                 >
                   <div className="flex items-center justify-between gap-3 w-full">
-                    <span>{report.dateRange}</span>
-                    {!report.isInternal && (
-                      <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                    )}
+                    <span>{month}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {reportsByMonth[month].length} {reportsByMonth[month].length === 1 ? 'week' : 'weeks'}
+                    </span>
                   </div>
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          
+          {/* Step 2: Week Selection (only show when month is selected) */}
+          {selectedMonth && (
+            <Select onValueChange={handleWeekSelect}>
+              <SelectTrigger className="w-full bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors">
+                <div className="flex items-center gap-2">
+                  <ChevronRight className="h-4 w-4 text-primary" />
+                  <SelectValue placeholder="Select week" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                {weeksInSelectedMonth.map(({ index, report }) => (
+                  <SelectItem 
+                    key={index} 
+                    value={index.toString()}
+                    className="cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between gap-3 w-full">
+                      <span>{report.dateRange}</span>
+                      {!report.isInternal && (
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           
           <p className="text-xs text-muted-foreground text-center">
             Latest: {latestReport.dateRange}
