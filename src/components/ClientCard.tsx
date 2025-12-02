@@ -8,7 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, ExternalLink, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight } from "lucide-react";
 
 interface ClientCardProps {
   client: Client;
@@ -80,34 +81,66 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
     }
   };
 
+  const handleViewLatest = () => {
+    const latestReport = client.reports[client.reports.length - 1];
+    if (latestReport.isInternal) {
+      navigate(latestReport.link);
+    } else {
+      window.open(latestReport.link, '_blank');
+    }
+  };
+
   // Get the most recent report for display
   const latestReport = client.reports[client.reports.length - 1];
 
   return (
-    <div className="bg-card border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary/20 transition-all duration-300 animate-fade-in group">
+    <div 
+      className="bg-card border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fade-in group"
+      style={{ animationDelay: `${clientIndex * 100}ms` }}
+    >
       <div className="space-y-5">
-        <div>
-          <h3 className="text-xl font-heading font-semibold text-foreground mb-1">{client.name}</h3>
-          <p className="text-xs font-medium text-primary uppercase tracking-wider">
-            {client.reports.length} Weekly Reports
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-xl font-heading font-semibold text-foreground mb-1 group-hover:text-primary transition-colors duration-300">
+              {client.name}
+            </h3>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {client.reports.length} Weekly Reports
+            </p>
+          </div>
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
+            <span className="text-sm font-bold">{client.name.charAt(0)}</span>
+          </div>
         </div>
+        
+        {/* View Latest Button */}
+        <Button
+          variant="secondary"
+          className="w-full justify-between group/btn hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+          onClick={handleViewLatest}
+        >
+          <span className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            View Latest Report
+          </span>
+          <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-300" />
+        </Button>
         
         <div className="space-y-3">
           {/* Step 1: Month Selection */}
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-full bg-accent/50 border-border hover:bg-accent transition-colors">
+            <SelectTrigger className="w-full bg-accent/50 border-border hover:bg-accent hover:border-primary/20 transition-all duration-300">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-primary" />
-                <SelectValue placeholder="Select month" />
+                <SelectValue placeholder="Browse by month" />
               </div>
             </SelectTrigger>
-            <SelectContent className="bg-popover border-border">
+            <SelectContent className="bg-popover border-border animate-scale-in">
               {months.map((month) => (
                 <SelectItem 
                   key={month} 
                   value={month}
-                  className="cursor-pointer"
+                  className="cursor-pointer transition-colors duration-200"
                 >
                   <div className="flex items-center justify-between gap-3 w-full">
                     <span>{month}</span>
@@ -122,33 +155,35 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
           
           {/* Step 2: Week Selection (only show when month is selected) */}
           {selectedMonth && (
-            <Select onValueChange={handleWeekSelect}>
-              <SelectTrigger className="w-full bg-primary/5 border-primary/20 hover:bg-primary/10 transition-colors">
-                <div className="flex items-center gap-2">
-                  <ChevronRight className="h-4 w-4 text-primary" />
-                  <SelectValue placeholder="Select week" />
-                </div>
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {weeksInSelectedMonth.map(({ index, report }) => (
-                  <SelectItem 
-                    key={index} 
-                    value={index.toString()}
-                    className="cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between gap-3 w-full">
-                      <span>{report.dateRange}</span>
-                      {!report.isInternal && (
-                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="animate-slide-down">
+              <Select onValueChange={handleWeekSelect}>
+                <SelectTrigger className="w-full bg-primary/5 border-primary/20 hover:bg-primary/10 hover:border-primary/30 transition-all duration-300">
+                  <div className="flex items-center gap-2">
+                    <ChevronRight className="h-4 w-4 text-primary" />
+                    <SelectValue placeholder="Select week" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border animate-scale-in">
+                  {weeksInSelectedMonth.map(({ index, report }) => (
+                    <SelectItem 
+                      key={index} 
+                      value={index.toString()}
+                      className="cursor-pointer transition-colors duration-200"
+                    >
+                      <div className="flex items-center justify-between gap-3 w-full">
+                        <span>{report.dateRange}</span>
+                        {!report.isInternal && (
+                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
           
-          <p className="text-xs text-muted-foreground text-center">
+          <p className="text-xs text-muted-foreground text-center pt-1">
             Latest: {latestReport.dateRange}
           </p>
         </div>
