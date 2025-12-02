@@ -6,6 +6,7 @@ export interface Report {
 
 export interface Client {
   name: string;
+  logo?: string; // URL to client logo image
   reports: Report[];
 }
 
