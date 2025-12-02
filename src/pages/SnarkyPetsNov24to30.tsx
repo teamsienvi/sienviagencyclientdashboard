@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Search, Download, Activity, TrendingUp, TrendingDown, Info, ExternalLink } from "lucide-react";
+import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -387,32 +388,27 @@ const SnarkyPetsNov24to30 = () => {
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="bg-card border-b border-border sticky top-0 z-50">
-          <div className="container mx-auto px-4 py-4">
+        <Header />
+
+        <main className="container mx-auto px-6 py-8">
+          {/* Back Button */}
+          <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-6">
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Clients</span>
+          </Link>
+
+          {/* Client Info */}
+          <div className="mb-8 animate-slide-up">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
-                  <ArrowLeft className="h-5 w-5" />
-                </Link>
-                <div>
-                  <h1 className="text-2xl font-heading font-bold text-primary">SIENVI AGENCY</h1>
-                  <p className="text-sm text-muted-foreground">Client Dashboard</p>
-                </div>
+              <div>
+                <h1 className="text-3xl font-bold text-foreground mb-2">Snarky Pets</h1>
+                <p className="text-muted-foreground">Weekly Performance Insights (Nov 24 - 30)</p>
               </div>
-              <Button variant="outline" className="gap-2">
-                <Activity className="h-4 w-4" />
+              <Button className="bg-primary hover:bg-primary/90">
+                <Activity className="mr-2 h-4 w-4" />
                 Live Data
               </Button>
             </div>
-          </div>
-        </header>
-
-        <main className="container mx-auto px-4 py-8 space-y-8">
-          {/* Client Info */}
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl font-heading font-bold text-foreground">Snarky Pets</h2>
-            <p className="text-muted-foreground">Weekly Performance Insights (Nov 24-30)</p>
           </div>
 
           {/* Top Performing Insights */}
