@@ -166,29 +166,29 @@ const instagramData: PlatformData = {
 };
 
 const instagramContent: InstagramContent[] = [
-  { type: "Reel", date: "Mon Nov 24", reach: 127, views: 143, likesReactions: 6, comments: 0, shares: 0, interactions: 8 },
-  { type: "Reel", date: "Mon Nov 24", reach: 234, views: 273, likesReactions: 10, comments: 0, shares: 1, interactions: 11 },
-  { type: "Photo", date: "Mon Nov 24", reach: 16, views: 84, likesReactions: 3, comments: 1, shares: 0, interactions: 4 },
-  { type: "Photo", date: "Tue Nov 25", reach: 13, views: 78, likesReactions: 3, comments: 1, shares: 0, interactions: 4 },
-  { type: "Reel", date: "Tue Nov 25", reach: 1238, views: 1578, likesReactions: 68, comments: 2, shares: 12, interactions: 86 },
-  { type: "Reel", date: "Tue Nov 25", reach: 741, views: 859, likesReactions: 19, comments: 2, shares: 6, interactions: 31 },
-  { type: "Photo", date: "Wed Nov 26", reach: 7, views: 71, likesReactions: 2, comments: 1, shares: 0, interactions: 3 },
-  { type: "Reel", date: "Wed Nov 26", reach: 130, views: 147, likesReactions: 3, comments: 2, shares: 0, interactions: 5 },
-  { type: "Reel", date: "Wed Nov 26", reach: 138, views: 169, likesReactions: 8, comments: 2, shares: 6, interactions: 20 },
-  { type: "Photo", date: "Thu Nov 27", reach: 6, views: 51, likesReactions: 2, comments: 0, shares: 0, interactions: 2 },
-  { type: "Reel", date: "Thu Nov 27", reach: 149, views: 194, likesReactions: 3, comments: 1, shares: 0, interactions: 4 },
-  { type: "Reel", date: "Thu Nov 27", reach: 131, views: 150, likesReactions: 1, comments: 1, shares: 0, interactions: 2 },
-  { type: "Reel", date: "Fri Nov 28", reach: 1248, views: 1414, likesReactions: 29, comments: 2, shares: 6, interactions: 39 },
-  { type: "Photo", date: "Fri Nov 28", reach: 4, views: 29, likesReactions: 1, comments: 1, shares: 0, interactions: 2 },
-  { type: "Reel", date: "Fri Nov 28", reach: 119, views: 142, likesReactions: 4, comments: 2, shares: 0, interactions: 7 },
-  { type: "Reel", date: "Sat Nov 29", reach: 377, views: 569, likesReactions: 17, comments: 0, shares: 5, interactions: 24 },
-  { type: "Photo", date: "Sat Nov 29", reach: 5, views: 28, likesReactions: 0, comments: 0, shares: 0, interactions: 0 },
-  { type: "Reel", date: "Sat Nov 29", reach: 139, views: 168, likesReactions: 1, comments: 0, shares: 1, interactions: 2 },
-  { type: "Reel", date: "Sat Nov 29", reach: 9, views: 19, likesReactions: 0, comments: 0, shares: 0, interactions: 0 },
-  { type: "Reel", date: "Sun Nov 30", reach: 91, views: 126, likesReactions: 0, comments: 0, shares: 0, interactions: 0 },
-  { type: "Photo", date: "Sun Nov 30", reach: 15, views: 31, likesReactions: 1, comments: 0, shares: 0, interactions: 1 },
-  { type: "Reel", date: "Sun Nov 30", reach: 301, views: 391, likesReactions: 16, comments: 0, shares: 2, interactions: 18 },
-  { type: "Reel", date: "Sun Nov 30", reach: 4, views: 4, likesReactions: 0, comments: 0, shares: 0, interactions: 0 }
+  { type: "Reel", date: "Monday, Nov 24", reach: 127, views: 143, likesReactions: 6, comments: 0, shares: 0, interactions: 8 },
+  { type: "Reel", date: "Monday, Nov 24", reach: 234, views: 273, likesReactions: 10, comments: 0, shares: 1, interactions: 11 },
+  { type: "Photo", date: "Monday, Nov 24", reach: 16, views: 84, likesReactions: 3, comments: 1, shares: 0, interactions: 4 },
+  { type: "Photo", date: "Tuesday, Nov 25", reach: 13, views: 78, likesReactions: 3, comments: 1, shares: 0, interactions: 4 },
+  { type: "Reel", date: "Tuesday, Nov 25", reach: 1238, views: 1578, likesReactions: 68, comments: 2, shares: 12, interactions: 86 },
+  { type: "Reel", date: "Tuesday, Nov 25", reach: 741, views: 859, likesReactions: 19, comments: 2, shares: 6, interactions: 31 },
+  { type: "Photo", date: "Wednesday, Nov 26", reach: 7, views: 71, likesReactions: 2, comments: 1, shares: 0, interactions: 3 },
+  { type: "Reel", date: "Wednesday, Nov 26", reach: 130, views: 147, likesReactions: 3, comments: 2, shares: 0, interactions: 5 },
+  { type: "Reel", date: "Wednesday, Nov 26", reach: 138, views: 169, likesReactions: 8, comments: 2, shares: 6, interactions: 20 },
+  { type: "Photo", date: "Thursday, Nov 27", reach: 6, views: 51, likesReactions: 2, comments: 0, shares: 0, interactions: 2 },
+  { type: "Reel", date: "Thursday, Nov 27", reach: 149, views: 194, likesReactions: 3, comments: 1, shares: 0, interactions: 4 },
+  { type: "Reel", date: "Thursday, Nov 27", reach: 131, views: 150, likesReactions: 1, comments: 1, shares: 0, interactions: 2 },
+  { type: "Reel", date: "Friday, Nov 28", reach: 1248, views: 1414, likesReactions: 29, comments: 2, shares: 6, interactions: 39 },
+  { type: "Photo", date: "Friday, Nov 28", reach: 4, views: 29, likesReactions: 1, comments: 1, shares: 0, interactions: 2 },
+  { type: "Reel", date: "Friday, Nov 28", reach: 119, views: 142, likesReactions: 4, comments: 2, shares: 0, interactions: 7 },
+  { type: "Reel", date: "Saturday, Nov 29", reach: 377, views: 569, likesReactions: 17, comments: 0, shares: 5, interactions: 24 },
+  { type: "Photo", date: "Saturday, Nov 29", reach: 5, views: 28, likesReactions: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Saturday, Nov 29", reach: 139, views: 168, likesReactions: 1, comments: 0, shares: 1, interactions: 2 },
+  { type: "Reel", date: "Saturday, Nov 29", reach: 9, views: 19, likesReactions: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Sunday, Nov 30", reach: 91, views: 126, likesReactions: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Photo", date: "Sunday, Nov 30", reach: 15, views: 31, likesReactions: 1, comments: 0, shares: 0, interactions: 1 },
+  { type: "Reel", date: "Sunday, Nov 30", reach: 301, views: 391, likesReactions: 16, comments: 0, shares: 2, interactions: 18 },
+  { type: "Reel", date: "Sunday, Nov 30", reach: 4, views: 4, likesReactions: 0, comments: 0, shares: 0, interactions: 0 }
 ];
 
 const facebookData: PlatformData = {
@@ -201,29 +201,29 @@ const facebookData: PlatformData = {
 };
 
 const facebookContent: FacebookContent[] = [
-  { type: "Reel", date: "Mon Nov 24", reach: 20, views: 46, likesReactions: 7, comments: 0, shares: 2, interactions: 9, linkClicks: 0 },
-  { type: "Reel", date: "Mon Nov 24", reach: 16, views: 24, likesReactions: 7, comments: 0, shares: 2, interactions: 9, linkClicks: 0 },
-  { type: "Photo", date: "Mon Nov 24", reach: 14, views: 24, likesReactions: 7, comments: 0, shares: 0, interactions: 7, linkClicks: 0 },
-  { type: "Photo", date: "Tue Nov 25", reach: 15, views: 29, likesReactions: 6, comments: 0, shares: 3, interactions: 9, linkClicks: 0 },
-  { type: "Reel", date: "Tue Nov 25", reach: 280, views: 279, likesReactions: 13, comments: 2, shares: 1, interactions: 16, linkClicks: 0 },
-  { type: "Reel", date: "Tue Nov 25", reach: 21, views: 113, likesReactions: 7, comments: 1, shares: 2, interactions: 10, linkClicks: 0 },
-  { type: "Photo", date: "Wed Nov 26", reach: 16, views: 24, likesReactions: 6, comments: 0, shares: 0, interactions: 6, linkClicks: 0 },
-  { type: "Reel", date: "Wed Nov 26", reach: 42, views: 131, likesReactions: 7, comments: 0, shares: 4, interactions: 11, linkClicks: 0 },
-  { type: "Reel", date: "Wed Nov 26", reach: 12, views: 99, likesReactions: 6, comments: 0, shares: 12, interactions: 18, linkClicks: 0 },
-  { type: "Photo", date: "Thu Nov 27", reach: 22, views: 39, likesReactions: 6, comments: 1, shares: 8, interactions: 15, linkClicks: 0 },
-  { type: "Reel", date: "Thu Nov 27", reach: 24, views: 115, likesReactions: 6, comments: 0, shares: 6, interactions: 12, linkClicks: 0 },
-  { type: "Reel", date: "Thu Nov 27", reach: 48, views: 160, likesReactions: 7, comments: 0, shares: 10, interactions: 17, linkClicks: 0 },
-  { type: "Reel", date: "Fri Nov 28", reach: 22, views: 22, likesReactions: 5, comments: 0, shares: 0, interactions: 5, linkClicks: 0 },
-  { type: "Photo", date: "Fri Nov 28", reach: 14, views: 28, likesReactions: 5, comments: 0, shares: 7, interactions: 12, linkClicks: 0 },
-  { type: "Reel", date: "Fri Nov 28", reach: 16, views: 140, likesReactions: 5, comments: 0, shares: 15, interactions: 20, linkClicks: 0 },
-  { type: "Reel", date: "Sat Nov 29", reach: 9, views: 4, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
-  { type: "Photo", date: "Sat Nov 29", reach: 5, views: 7, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
-  { type: "Reel", date: "Sat Nov 29", reach: 12, views: 15, likesReactions: 2, comments: 0, shares: 0, interactions: 2, linkClicks: 0 },
-  { type: "Reel", date: "Sat Nov 29", reach: 7, views: 15, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
-  { type: "Reel", date: "Sun Nov 30", reach: 5, views: 2, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
-  { type: "Photo", date: "Sun Nov 30", reach: 5, views: 7, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
-  { type: "Reel", date: "Sun Nov 30", reach: 209, views: 237, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
-  { type: "Reel", date: "Sun Nov 30", reach: 4, views: 3, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 }
+  { type: "Reel", date: "Monday, Nov 24", reach: 20, views: 46, likesReactions: 7, comments: 0, shares: 2, interactions: 9, linkClicks: 0 },
+  { type: "Reel", date: "Monday, Nov 24", reach: 16, views: 24, likesReactions: 7, comments: 0, shares: 2, interactions: 9, linkClicks: 0 },
+  { type: "Photo", date: "Monday, Nov 24", reach: 14, views: 24, likesReactions: 7, comments: 0, shares: 0, interactions: 7, linkClicks: 0 },
+  { type: "Photo", date: "Tuesday, Nov 25", reach: 15, views: 29, likesReactions: 6, comments: 0, shares: 3, interactions: 9, linkClicks: 0 },
+  { type: "Reel", date: "Tuesday, Nov 25", reach: 280, views: 279, likesReactions: 13, comments: 2, shares: 1, interactions: 16, linkClicks: 0 },
+  { type: "Reel", date: "Tuesday, Nov 25", reach: 21, views: 113, likesReactions: 7, comments: 1, shares: 2, interactions: 10, linkClicks: 0 },
+  { type: "Photo", date: "Wednesday, Nov 26", reach: 16, views: 24, likesReactions: 6, comments: 0, shares: 0, interactions: 6, linkClicks: 0 },
+  { type: "Reel", date: "Wednesday, Nov 26", reach: 42, views: 131, likesReactions: 7, comments: 0, shares: 4, interactions: 11, linkClicks: 0 },
+  { type: "Reel", date: "Wednesday, Nov 26", reach: 12, views: 99, likesReactions: 6, comments: 0, shares: 12, interactions: 18, linkClicks: 0 },
+  { type: "Photo", date: "Thursday, Nov 27", reach: 22, views: 39, likesReactions: 6, comments: 1, shares: 8, interactions: 15, linkClicks: 0 },
+  { type: "Reel", date: "Thursday, Nov 27", reach: 24, views: 115, likesReactions: 6, comments: 0, shares: 6, interactions: 12, linkClicks: 0 },
+  { type: "Reel", date: "Thursday, Nov 27", reach: 48, views: 160, likesReactions: 7, comments: 0, shares: 10, interactions: 17, linkClicks: 0 },
+  { type: "Reel", date: "Friday, Nov 28", reach: 22, views: 22, likesReactions: 5, comments: 0, shares: 0, interactions: 5, linkClicks: 0 },
+  { type: "Photo", date: "Friday, Nov 28", reach: 14, views: 28, likesReactions: 5, comments: 0, shares: 7, interactions: 12, linkClicks: 0 },
+  { type: "Reel", date: "Friday, Nov 28", reach: 16, views: 140, likesReactions: 5, comments: 0, shares: 15, interactions: 20, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Nov 29", reach: 9, views: 4, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Photo", date: "Saturday, Nov 29", reach: 5, views: 7, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Nov 29", reach: 12, views: 15, likesReactions: 2, comments: 0, shares: 0, interactions: 2, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Nov 29", reach: 7, views: 15, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday, Nov 30", reach: 5, views: 2, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Photo", date: "Sunday, Nov 30", reach: 5, views: 7, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday, Nov 30", reach: 209, views: 237, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday, Nov 30", reach: 4, views: 3, likesReactions: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 }
 ];
 
 const tiktokData: PlatformData = {
@@ -236,22 +236,22 @@ const tiktokData: PlatformData = {
 };
 
 const tiktokContent: TikTokContent[] = [
-  { type: "Video", date: "Sun Nov 30", views: 122, likes: 1, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Sun Nov 30", views: 105, likes: 1, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Sat Nov 29", views: 169, likes: 6, comments: 0, shares: 0, addToFavorites: 2 },
-  { type: "Video", date: "Sat Nov 29", views: 695, likes: 48, comments: 0, shares: 0, addToFavorites: 1 },
-  { type: "Video", date: "Sat Nov 29", views: 102, likes: 2, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Fri Nov 28", views: 220, likes: 9, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Fri Nov 28", views: 227, likes: 10, comments: 1, shares: 1, addToFavorites: 0 },
-  { type: "Video", date: "Thu Nov 27", views: 104, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Thu Nov 27", views: 112, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Wed Nov 26", views: 113, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Wed Nov 26", views: 100, likes: 3, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Wed Nov 26", views: 113, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Tue Nov 25", views: 103, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Tue Nov 25", views: 210, likes: 15, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Tue Nov 25", views: 88, likes: 1, comments: 0, shares: 0, addToFavorites: 0 },
-  { type: "Video", date: "Mon Nov 24", views: 103, likes: 0, comments: 0, shares: 0, addToFavorites: 0 }
+  { type: "Video", date: "Monday, Nov 24", views: 103, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Tuesday, Nov 25", views: 103, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Tuesday, Nov 25", views: 210, likes: 15, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Tuesday, Nov 25", views: 88, likes: 1, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Wednesday, Nov 26", views: 113, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Wednesday, Nov 26", views: 100, likes: 3, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Wednesday, Nov 26", views: 113, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Thursday, Nov 27", views: 104, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Thursday, Nov 27", views: 112, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Friday, Nov 28", views: 220, likes: 9, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Friday, Nov 28", views: 227, likes: 10, comments: 1, shares: 1, addToFavorites: 0 },
+  { type: "Video", date: "Saturday, Nov 29", views: 169, likes: 6, comments: 0, shares: 0, addToFavorites: 2 },
+  { type: "Video", date: "Saturday, Nov 29", views: 695, likes: 48, comments: 0, shares: 0, addToFavorites: 1 },
+  { type: "Video", date: "Saturday, Nov 29", views: 102, likes: 2, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Sunday, Nov 30", views: 122, likes: 1, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Sunday, Nov 30", views: 105, likes: 1, comments: 0, shares: 0, addToFavorites: 0 }
 ];
 
 const xData: PlatformData = {
@@ -264,24 +264,24 @@ const xData: PlatformData = {
 };
 
 const xContent: XContent[] = [
-  { type: "Post", date: "Sun Nov 30", impressions: 23, likes: 0, engagements: 0, profileVisits: 0 },
-  { type: "Post", date: "Sun Nov 30", impressions: 7, likes: 0, engagements: 0, profileVisits: 0 },
-  { type: "Post", date: "Sat Nov 29", impressions: 11, likes: 0, engagements: 0, profileVisits: 0 },
-  { type: "Post", date: "Sat Nov 29", impressions: 17, likes: 0, engagements: 0, profileVisits: 0 },
-  { type: "Post", date: "Fri Nov 28", impressions: 14, likes: 0, engagements: 0, profileVisits: 0 },
-  { type: "Post", date: "Fri Nov 28", impressions: 9, likes: 0, engagements: 0, profileVisits: 0 },
-  { type: "Post", date: "Fri Nov 28", impressions: 139, likes: 7, engagements: 8, profileVisits: 0 },
-  { type: "Post", date: "Thu Nov 27", impressions: 19, likes: 7, engagements: 7, profileVisits: 0 },
-  { type: "Post", date: "Thu Nov 27", impressions: 17, likes: 7, engagements: 7, profileVisits: 0 },
-  { type: "Post", date: "Thu Nov 27", impressions: 22, likes: 7, engagements: 8, profileVisits: 0 },
-  { type: "Post", date: "Wed Nov 26", impressions: 14, likes: 7, engagements: 7, profileVisits: 0 },
-  { type: "Post", date: "Wed Nov 26", impressions: 8, likes: 7, engagements: 7, profileVisits: 0 },
-  { type: "Post", date: "Tue Nov 25", impressions: 12, likes: 7, engagements: 7, profileVisits: 0 },
-  { type: "Post", date: "Tue Nov 25", impressions: 27, likes: 8, engagements: 9, profileVisits: 0 },
-  { type: "Post", date: "Tue Nov 25", impressions: 32, likes: 8, engagements: 9, profileVisits: 0 },
-  { type: "Post", date: "Tue Nov 25", impressions: 57, likes: 8, engagements: 9, profileVisits: 0 },
-  { type: "Post", date: "Mon Nov 24", impressions: 45, likes: 7, engagements: 9, profileVisits: 0 },
-  { type: "Post", date: "Mon Nov 24", impressions: 21, likes: 7, engagements: 7, profileVisits: 0 }
+  { type: "Post", date: "Monday, Nov 24", impressions: 45, likes: 7, engagements: 9, profileVisits: 0 },
+  { type: "Post", date: "Monday, Nov 24", impressions: 21, likes: 7, engagements: 7, profileVisits: 0 },
+  { type: "Post", date: "Tuesday, Nov 25", impressions: 12, likes: 7, engagements: 7, profileVisits: 0 },
+  { type: "Post", date: "Tuesday, Nov 25", impressions: 27, likes: 8, engagements: 9, profileVisits: 0 },
+  { type: "Post", date: "Tuesday, Nov 25", impressions: 32, likes: 8, engagements: 9, profileVisits: 0 },
+  { type: "Post", date: "Tuesday, Nov 25", impressions: 57, likes: 8, engagements: 9, profileVisits: 0 },
+  { type: "Post", date: "Wednesday, Nov 26", impressions: 14, likes: 7, engagements: 7, profileVisits: 0 },
+  { type: "Post", date: "Wednesday, Nov 26", impressions: 8, likes: 7, engagements: 7, profileVisits: 0 },
+  { type: "Post", date: "Thursday, Nov 27", impressions: 19, likes: 7, engagements: 7, profileVisits: 0 },
+  { type: "Post", date: "Thursday, Nov 27", impressions: 17, likes: 7, engagements: 7, profileVisits: 0 },
+  { type: "Post", date: "Thursday, Nov 27", impressions: 22, likes: 7, engagements: 8, profileVisits: 0 },
+  { type: "Post", date: "Friday, Nov 28", impressions: 14, likes: 0, engagements: 0, profileVisits: 0 },
+  { type: "Post", date: "Friday, Nov 28", impressions: 9, likes: 0, engagements: 0, profileVisits: 0 },
+  { type: "Post", date: "Friday, Nov 28", impressions: 139, likes: 7, engagements: 8, profileVisits: 0 },
+  { type: "Post", date: "Saturday, Nov 29", impressions: 11, likes: 0, engagements: 0, profileVisits: 0 },
+  { type: "Post", date: "Saturday, Nov 29", impressions: 17, likes: 0, engagements: 0, profileVisits: 0 },
+  { type: "Post", date: "Sunday, Nov 30", impressions: 23, likes: 0, engagements: 0, profileVisits: 0 },
+  { type: "Post", date: "Sunday, Nov 30", impressions: 7, likes: 0, engagements: 0, profileVisits: 0 }
 ];
 
 const youtubeData: PlatformData = {
@@ -294,21 +294,21 @@ const youtubeData: PlatformData = {
 };
 
 const youtubeContent: YouTubeContent[] = [
-  { title: "The Overflow of a Father's Love Is a Feeling Like No Other ❤️", date: "Nov 30, 2025", duration: 9, likes: 11, comments: 0, shares: 1, views: 984, subscribers: 1, impressions: 3 },
-  { title: "A Son's True Strength Comes from a Father Who Guides, Not Controls ❤️", date: "Nov 30, 2025", duration: 41, likes: 0, comments: 0, shares: 0, views: 3, subscribers: 0, impressions: 11 },
-  { title: "Presence Over Perfection — Love Shows Up Even in the Mess 🌧️", date: "Nov 30, 2025", duration: 12, likes: 22, comments: 0, shares: 1, views: 811, subscribers: 1, impressions: 37 },
-  { title: "A Father's Message Is Felt in Actions, Not Words ❤️", date: "Nov 29, 2025", duration: 57, likes: 1, comments: 0, shares: 0, views: 9, subscribers: 0, impressions: 19 },
-  { title: "Love Comes in Many Forms — But Presence Is Always the Greatest 💙", date: "Nov 29, 2025", duration: 11, likes: 16, comments: 0, shares: 0, views: 754, subscribers: 0, impressions: 25 },
-  { title: "Every Act of Love Becomes Their Story — Write a Legacy That Lasts 📖", date: "Nov 29, 2025", duration: 10, likes: 10, comments: 0, shares: 0, views: 625, subscribers: 0, impressions: 2 },
-  { title: "A Father's Journey: Lifting Their Hearts Higher Every Day ❤️", date: "Nov 28, 2025", duration: 58, likes: 0, comments: 0, shares: 0, views: 2, subscribers: 0, impressions: 7 },
-  { title: "Lead Your Family with Purpose — You're the CEO of Your Home", date: "Nov 28, 2025", duration: 12, likes: 38, comments: 0, shares: 2, views: 1140, subscribers: 3, impressions: 21 },
-  { title: "Fatherhood Is Growth — Become the Strongest Version of Yourself", date: "Nov 27, 2025", duration: 58, likes: 1, comments: 0, shares: 0, views: 126, subscribers: 0, impressions: 31 },
-  { title: "Set the Standard — They Learn Manhood and Love from You", date: "Nov 27, 2025", duration: 18, likes: 15, comments: 0, shares: 0, views: 1274, subscribers: 0, impressions: 78 },
-  { title: "The Greatest Gift a Father Gives Is His Time ❤️", date: "Nov 26, 2025", duration: 78, likes: 4, comments: 0, shares: 1, views: 224, subscribers: 0, impressions: 26 },
-  { title: "Real Heroes Don't Wear Capes — They Show Up ❤️", date: "Nov 26, 2025", duration: 19, likes: 19, comments: 0, shares: 0, views: 1002, subscribers: 4, impressions: 50 },
-  { title: "A Father's Love Becomes the Legacy That Lasts for Generations 🌅", date: "Nov 25, 2025", duration: 55, likes: 16, comments: 0, shares: 0, views: 642, subscribers: 0, impressions: 66 },
-  { title: "Core Memories Are Built in the Little Moments ❤️", date: "Nov 25, 2025", duration: 58, likes: 11, comments: 0, shares: 0, views: 711, subscribers: 0, impressions: 17 },
-  { title: "Success Starts with a Father's Presence: Time, Attention, and Support ❤️", date: "Nov 24, 2025", duration: 21, likes: 25, comments: 0, shares: 1, views: 946, subscribers: 2, impressions: 59 }
+  { title: "Success Starts with a Father's Presence: Time, Attention, and Support ❤️", date: "Monday, Nov 24", duration: 21, likes: 25, comments: 0, shares: 1, views: 946, subscribers: 2, impressions: 59 },
+  { title: "A Father's Love Becomes the Legacy That Lasts for Generations 🌅", date: "Tuesday, Nov 25", duration: 55, likes: 16, comments: 0, shares: 0, views: 642, subscribers: 0, impressions: 66 },
+  { title: "Core Memories Are Built in the Little Moments ❤️", date: "Tuesday, Nov 25", duration: 58, likes: 11, comments: 0, shares: 0, views: 711, subscribers: 0, impressions: 17 },
+  { title: "The Greatest Gift a Father Gives Is His Time ❤️", date: "Wednesday, Nov 26", duration: 78, likes: 4, comments: 0, shares: 1, views: 224, subscribers: 0, impressions: 26 },
+  { title: "Real Heroes Don't Wear Capes — They Show Up ❤️", date: "Wednesday, Nov 26", duration: 19, likes: 19, comments: 0, shares: 0, views: 1002, subscribers: 4, impressions: 50 },
+  { title: "Fatherhood Is Growth — Become the Strongest Version of Yourself", date: "Thursday, Nov 27", duration: 58, likes: 1, comments: 0, shares: 0, views: 126, subscribers: 0, impressions: 31 },
+  { title: "Set the Standard — They Learn Manhood and Love from You", date: "Thursday, Nov 27", duration: 18, likes: 15, comments: 0, shares: 0, views: 1274, subscribers: 0, impressions: 78 },
+  { title: "A Father's Journey: Lifting Their Hearts Higher Every Day ❤️", date: "Friday, Nov 28", duration: 58, likes: 0, comments: 0, shares: 0, views: 2, subscribers: 0, impressions: 7 },
+  { title: "Lead Your Family with Purpose — You're the CEO of Your Home", date: "Friday, Nov 28", duration: 12, likes: 38, comments: 0, shares: 2, views: 1140, subscribers: 3, impressions: 21 },
+  { title: "A Father's Message Is Felt in Actions, Not Words ❤️", date: "Saturday, Nov 29", duration: 57, likes: 1, comments: 0, shares: 0, views: 9, subscribers: 0, impressions: 19 },
+  { title: "Love Comes in Many Forms — But Presence Is Always the Greatest 💙", date: "Saturday, Nov 29", duration: 11, likes: 16, comments: 0, shares: 0, views: 754, subscribers: 0, impressions: 25 },
+  { title: "Every Act of Love Becomes Their Story — Write a Legacy That Lasts 📖", date: "Saturday, Nov 29", duration: 10, likes: 10, comments: 0, shares: 0, views: 625, subscribers: 0, impressions: 2 },
+  { title: "The Overflow of a Father's Love Is a Feeling Like No Other ❤️", date: "Sunday, Nov 30", duration: 9, likes: 11, comments: 0, shares: 1, views: 984, subscribers: 1, impressions: 3 },
+  { title: "A Son's True Strength Comes from a Father Who Guides, Not Controls ❤️", date: "Sunday, Nov 30", duration: 41, likes: 0, comments: 0, shares: 0, views: 3, subscribers: 0, impressions: 11 },
+  { title: "Presence Over Perfection — Love Shows Up Even in the Mess 🌧️", date: "Sunday, Nov 30", duration: 12, likes: 22, comments: 0, shares: 1, views: 811, subscribers: 1, impressions: 37 }
 ];
 
 const linkedinData: PlatformData = {
@@ -321,27 +321,27 @@ const linkedinData: PlatformData = {
 };
 
 const linkedinContent: LinkedInContent[] = [
-  { date: "Nov 24, 2025", impressions: 5, membersReached: 3, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 24, 2025", impressions: 4, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 24, 2025", impressions: 8, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 25, 2025", impressions: 3, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 25, 2025", impressions: 3, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 25, 2025", impressions: 3, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 25, 2025", impressions: 2, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 26, 2025", impressions: 20, membersReached: 10, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 26, 2025", impressions: 3, membersReached: 2, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 26, 2025", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 27, 2025", impressions: 4, membersReached: 2, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 27, 2025", impressions: 2, membersReached: 2, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 27, 2025", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 28, 2025", impressions: 13, membersReached: 7, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 28, 2025", impressions: 4, membersReached: 3, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 28, 2025", impressions: 2, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 29, 2025", impressions: 5, membersReached: 3, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 29, 2025", impressions: 2, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 30, 2025", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 30, 2025", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
-  { date: "Nov 30, 2025", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 }
+  { date: "Monday, Nov 24", impressions: 5, membersReached: 3, profileViewers: 0, followersGained: 0 },
+  { date: "Monday, Nov 24", impressions: 4, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Monday, Nov 24", impressions: 8, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Tuesday, Nov 25", impressions: 3, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Tuesday, Nov 25", impressions: 3, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Tuesday, Nov 25", impressions: 3, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Tuesday, Nov 25", impressions: 2, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Wednesday, Nov 26", impressions: 20, membersReached: 10, profileViewers: 0, followersGained: 0 },
+  { date: "Wednesday, Nov 26", impressions: 3, membersReached: 2, profileViewers: 0, followersGained: 0 },
+  { date: "Wednesday, Nov 26", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Thursday, Nov 27", impressions: 4, membersReached: 2, profileViewers: 0, followersGained: 0 },
+  { date: "Thursday, Nov 27", impressions: 2, membersReached: 2, profileViewers: 0, followersGained: 0 },
+  { date: "Thursday, Nov 27", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Friday, Nov 28", impressions: 13, membersReached: 7, profileViewers: 0, followersGained: 0 },
+  { date: "Friday, Nov 28", impressions: 4, membersReached: 3, profileViewers: 0, followersGained: 0 },
+  { date: "Friday, Nov 28", impressions: 2, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Saturday, Nov 29", impressions: 5, membersReached: 3, profileViewers: 0, followersGained: 0 },
+  { date: "Saturday, Nov 29", impressions: 2, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Sunday, Nov 30", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Sunday, Nov 30", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 },
+  { date: "Sunday, Nov 30", impressions: 1, membersReached: 1, profileViewers: 0, followersGained: 0 }
 ];
 
 // Chart Data
