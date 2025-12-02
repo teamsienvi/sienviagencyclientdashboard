@@ -8,6 +8,7 @@ import Report from "./pages/Report";
 import NotFound from "./pages/NotFound";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
 import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
+import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/report/:clientId/:reportId" element={<Report />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/snarky-humans-nov24-30" element={<SnarkyHumansNov24to30 />} />
+          <Route path="/snarky-pets-nov24-30" element={<SnarkyPetsNov24to30 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
