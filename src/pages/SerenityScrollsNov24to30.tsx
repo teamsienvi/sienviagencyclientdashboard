@@ -94,7 +94,7 @@ const topPerformingPosts: TopPerformingPost[] = [
     link: "https://www.tiktok.com/@serenity_scrolls/video/7576533730202799374",
     views: 275,
     engagement: 39.27,
-    platform: "Instagram",
+    platform: "TikTok",
     followers: 111,
     reachTier: "Tier 5",
     engagementTier: "Tier 1",
