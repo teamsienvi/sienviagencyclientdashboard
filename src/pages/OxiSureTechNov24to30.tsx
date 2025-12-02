@@ -61,7 +61,7 @@ interface ChartData {
 // Top Performing Posts Data
 const topPerformingPosts: TopPerformingPost[] = [
   {
-    postLink: "https://www.tiktok.com/@oxisuretech/video/7575596131602763064",
+    postLink: "https://www.tiktok.com/@oxisuretech/photo/7578245474038205752",
     views: 100,
     engagementPercent: "2.00%",
     platform: "TikTok",
@@ -75,7 +75,7 @@ const topPerformingPosts: TopPerformingPost[] = [
     notes: "low engagement",
   },
   {
-    postLink: "https://www.tiktok.com/@oxisuretech/video/7575993757028355340",
+    postLink: "https://www.tiktok.com/@oxisuretech/video/7578245752678255928",
     views: 101,
     engagementPercent: "1.96%",
     platform: "TikTok",
@@ -89,7 +89,7 @@ const topPerformingPosts: TopPerformingPost[] = [
     notes: "low engagement",
   },
   {
-    postLink: "https://www.tiktok.com/@oxisuretech/video/7574498090304933176",
+    postLink: "https://www.tiktok.com/@oxisuretech/photo/7578616062791421196",
     views: 100,
     engagementPercent: "2.00%",
     platform: "TikTok",
