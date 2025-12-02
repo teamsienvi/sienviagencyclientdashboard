@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon } from "lucide-react";
 
 interface ClientCardProps {
   client: Client;
@@ -99,17 +99,28 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
       style={{ animationDelay: `${clientIndex * 100}ms` }}
     >
       <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-xl font-heading font-semibold text-foreground mb-1 group-hover:text-primary transition-colors duration-300">
-              {client.name}
-            </h3>
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {client.reports.length} Weekly Reports
-            </p>
-          </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-300">
-            <span className="text-sm font-bold">{client.name.charAt(0)}</span>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            {/* Logo Placeholder */}
+            <div className="h-14 w-14 rounded-xl bg-accent border-2 border-dashed border-border flex items-center justify-center overflow-hidden group-hover:border-primary/30 transition-all duration-300">
+              {client.logo ? (
+                <img 
+                  src={client.logo} 
+                  alt={`${client.name} logo`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <ImageIcon className="h-6 w-6 text-muted-foreground/50" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-xl font-heading font-semibold text-foreground mb-1 group-hover:text-primary transition-colors duration-300">
+                {client.name}
+              </h3>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {client.reports.length} Weekly Reports
+              </p>
+            </div>
           </div>
         </div>
         
