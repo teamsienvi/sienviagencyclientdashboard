@@ -11,6 +11,7 @@ import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
 import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
 import SerenityScrollsNov24to30 from "./pages/SerenityScrollsNov24to30";
 import SerenityScrollsNov17to23 from "./pages/SerenityScrollsNov17to23";
+import OxiSureTechNov24to30 from "./pages/OxiSureTechNov24to30";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/snarky-pets-nov24-30" element={<SnarkyPetsNov24to30 />} />
           <Route path="/serenity-scrolls-nov24-30" element={<SerenityScrollsNov24to30 />} />
           <Route path="/serenity-scrolls-nov17-23" element={<SerenityScrollsNov17to23 />} />
+          <Route path="/oxisure-tech-nov24-30" element={<OxiSureTechNov24to30 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

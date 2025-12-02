@@ -57,6 +57,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 3 - 9", link: "https://oxisuretechnov3to9.lovable.app/" },
       { dateRange: "Nov 10-16", link: "https://oxisuretechnov10to16.lovable.app/" },
       { dateRange: "Nov 17-23", link: "https://oxisuretechnov13to17.lovable.app/" },
+      { dateRange: "Nov 24-30", link: "/oxisure-tech-nov24-30", isInternal: true },
     ],
   },
   {
