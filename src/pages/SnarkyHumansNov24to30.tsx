@@ -303,7 +303,7 @@ const youtubeContent: YouTubeContent[] = [
   { title: "Not Our Mug… But Definitely Our Vibe 😂☕ | Snarky Humans Coffee Mugs", date: "Saturday, Nov 29", duration: 39, likes: 2, comments: 0, shares: 0, views: 976, subscribers: 0, impressions: 20 },
   { title: "Warm Outside, Cold-Hearted Inside 🧥💀 | Snarky Humans Sarcastic Jacket", date: "Saturday, Nov 29", duration: 27, likes: 0, comments: 0, shares: 0, views: 248, subscribers: 0, impressions: 5 },
   { title: "Not Lazy… Just Efficient ⚡😴 | Snarky Humans Energy Saver Tee", date: "Sunday, Nov 30", duration: 10, likes: 0, comments: 0, shares: 0, views: 163, subscribers: 0, impressions: 0 },
-  { title: "When 'I Love You, Dad' Isn't Enough… 😂💛 | Snarky Humans Sarcastic Cards", date: "Monday, Dec 1", duration: 14, likes: 0, comments: 0, shares: 0, views: 61, subscribers: 0, impressions: 1 }
+  { title: "When 'I Love You, Dad' Isn't Enough… 😂💛 | Snarky Humans Sarcastic Cards", date: "Sunday, Nov 30", duration: 14, likes: 0, comments: 0, shares: 0, views: 61, subscribers: 0, impressions: 1 }
 ];
 
 // Chart data
