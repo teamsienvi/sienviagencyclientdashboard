@@ -1,3 +1,10 @@
+import snarkyHumansLogo from "@/assets/snarky-humans-logo.jpg";
+import snarkyPetsLogo from "@/assets/snarky-pets-logo.jpg";
+import fatherFigureFormulaLogo from "@/assets/father-figure-formula-logo.jpg";
+import serenityScrollsLogo from "@/assets/serenity-scrolls-logo.jpg";
+import oxisureTechLogo from "@/assets/oxisure-tech-logo.png";
+import theHavenAtDeerParkLogo from "@/assets/the-haven-at-deer-park-logo.jpg";
+
 export interface Report {
   dateRange: string;
   link: string;
@@ -6,13 +13,14 @@ export interface Report {
 
 export interface Client {
   name: string;
-  logo?: string; // URL to client logo image
+  logo?: string;
   reports: Report[];
 }
 
 export const clientsData: Client[] = [
   {
     name: "Snarky Humans",
+    logo: snarkyHumansLogo,
     reports: [
       { dateRange: "Oct 27 to Nov 2", link: "https://snarkyhumans.lovable.app/" },
       { dateRange: "Nov 3 - 9", link: "https://snarkyhumansnov3to9.lovable.app/" },
@@ -23,6 +31,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "Snarky Pets",
+    logo: snarkyPetsLogo,
     reports: [
       { dateRange: "Oct 27 to Nov 2", link: "https://snarkypets.lovable.app/" },
       { dateRange: "Nov 3 - 9", link: "https://snarkypetsnov3to9.lovable.app/" },
@@ -33,6 +42,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "Father Figure Formula",
+    logo: fatherFigureFormulaLogo,
     reports: [
       { dateRange: "Oct 27 to Nov 2", link: "https://fatherfigureformula1.lovable.app/" },
       { dateRange: "Nov 3 - 9", link: "https://fatherfigureformulanov3to9.lovable.app/" },
@@ -43,6 +53,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "Serenity Scrolls",
+    logo: serenityScrollsLogo,
     reports: [
       { dateRange: "Oct 27 to Nov 2", link: "https://serenityscrolls.lovable.app/" },
       { dateRange: "Nov 3 - 9", link: "https://serenityscrollsnov3to9.lovable.app/" },
@@ -53,6 +64,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "OxiSure Tech",
+    logo: oxisureTechLogo,
     reports: [
       { dateRange: "Oct 27 to Nov 2", link: "https://oxisuretech.lovable.app/" },
       { dateRange: "Nov 3 - 9", link: "https://oxisuretechnov3to9.lovable.app/" },
@@ -63,6 +75,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "The Haven At Deer Park",
+    logo: theHavenAtDeerParkLogo,
     reports: [
       { dateRange: "Oct 27 to Nov 2", link: "https://thehavenatdeerpark.lovable.app" },
       { dateRange: "Nov 3 - 9", link: "https://thehavenatdeerparknov3to9.lovable.app" },
