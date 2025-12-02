@@ -19,7 +19,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info } from "lucide-react";
+import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info, ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 
 // TypeScript Interfaces
@@ -665,6 +666,12 @@ const FatherFigureFormulaNov24to30 = () => {
         <Header />
 
         <main className="container mx-auto px-6 py-8">
+          {/* Back Button */}
+          <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-6">
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back to Clients</span>
+          </Link>
+
           {/* Client Info */}
           <div className="mb-8 animate-slide-up">
             <div className="flex items-center justify-between">
