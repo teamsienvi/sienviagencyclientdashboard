@@ -401,66 +401,291 @@ const FatherFigureFormulaDec1to7 = () => {
     title: string; 
     value: string | number; 
     added?: number; 
-    lastWeek?: number;
+    lastWeek?: string;
     showTrend?: boolean;
     currentValue?: number;
     previousValue?: number;
   }) => (
     <Card className="bg-card border-border">
-      <CardContent className="p-4">
+      <CardContent className="p-6">
         <p className="text-sm text-muted-foreground mb-1">{title}</p>
         <div className="flex items-center gap-2">
-          <p className="text-2xl font-bold text-foreground">{value}</p>
+          <span className="text-3xl font-heading font-bold text-foreground">{value}</span>
+          {added !== undefined && added > 0 && (
+            <span className="text-sm text-green-500 font-medium">+{added}</span>
+          )}
           {showTrend && currentValue !== undefined && previousValue !== undefined && (
             <TrendIndicator current={currentValue} previous={previousValue} />
           )}
         </div>
-        {added !== undefined && (
-          <p className="text-xs text-green-500">+{added} this week</p>
-        )}
-        {lastWeek !== undefined && (
-          <p className="text-xs text-muted-foreground">Last week: {lastWeek}%</p>
+        {lastWeek && (
+          <p className="text-xs text-muted-foreground mt-1">Last week: {lastWeek}</p>
         )}
       </CardContent>
     </Card>
   );
 
-  const TypeBadge = ({ type }: { type: string }) => {
-    const colors: Record<string, string> = {
-      Reel: "bg-violet-500/20 text-violet-400 border-violet-500/30",
-      Photo: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-      Video: "bg-pink-500/20 text-pink-400 border-pink-500/30",
-      Post: "bg-secondary text-secondary-foreground border-secondary",
-    };
+  const renderInstagramTable = () => {
+    const filtered = instagramContent.filter(item => {
+      const matchesSearch = item.date.toLowerCase().includes(contentSearch.toLowerCase());
+      const matchesFilter = contentFilter === "All" || 
+        (contentFilter === "Reel" && item.type === "Reel") ||
+        (contentFilter === "Post" && item.type === "Photo");
+      return matchesSearch && matchesFilter;
+    });
+
     return (
-      <Badge variant="outline" className={colors[type] || colors.Post}>
-        {type}
-      </Badge>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes & Reactions</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant={item.type === "Reel" ? "default" : "secondary"}>
+                  {item.type}
+                </Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach.toLocaleString()}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likesReactions}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderFacebookTable = () => {
+    const filtered = facebookContent.filter(item => {
+      const matchesSearch = item.date.toLowerCase().includes(contentSearch.toLowerCase());
+      const matchesFilter = contentFilter === "All" || 
+        (contentFilter === "Reel" && item.type === "Reel") ||
+        (contentFilter === "Post" && item.type === "Photo");
+      return matchesSearch && matchesFilter;
+    });
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes & Reactions</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+            <TableHead>Link Clicks</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant={item.type === "Reel" ? "default" : "secondary"}>
+                  {item.type}
+                </Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach.toLocaleString()}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likesReactions}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+              <TableCell>{item.linkClicks}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderTikTokTable = () => {
+    const filtered = tiktokContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Add to Favorites</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.addToFavorites}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderXTable = () => {
+    const filtered = xContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Impressions</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Engagements</TableHead>
+            <TableHead>Profile Visits</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="secondary">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.impressions.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.engagements}</TableCell>
+              <TableCell>{item.profileVisits}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderYouTubeTable = () => {
+    const filtered = youtubeContent.filter(item =>
+      item.title.toLowerCase().includes(contentSearch.toLowerCase()) ||
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[300px]">Video Title</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Duration (s)</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Subscribers</TableHead>
+            <TableHead>Impressions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell className="font-medium">{item.title}</TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.duration}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.subscribers}</TableCell>
+              <TableCell>{item.impressions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderLinkedInTable = () => {
+    const filtered = linkedinContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date Published</TableHead>
+            <TableHead>Impressions</TableHead>
+            <TableHead>Members Reached</TableHead>
+            <TableHead>Profile Viewers</TableHead>
+            <TableHead>Followers Gained</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.impressions}</TableCell>
+              <TableCell>{item.membersReached}</TableCell>
+              <TableCell>{item.profileViewers}</TableCell>
+              <TableCell>{item.followersGained}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     );
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-4">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Clients
-          </Link>
-          <h1 className="text-3xl font-heading font-bold text-foreground">Father Figure Formula</h1>
-          <p className="text-muted-foreground">Weekly Performance Insights: Dec 1 - 7</p>
-        </div>
+    <TooltipProvider>
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          {/* Back Link and Title */}
+          <div className="mb-8 animate-fade-in">
+            <Link 
+              to="/" 
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-4"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Clients
+            </Link>
+            <h1 className="text-4xl font-heading font-bold text-foreground">Father Figure Formula</h1>
+            <p className="text-muted-foreground text-lg">Weekly Performance Insights: Dec 1 - 7</p>
+          </div>
 
-        {/* Top Performing Posts */}
-        <section className="mb-8">
-          <Card className="bg-card border-border">
+          {/* Top Performing Insights */}
+          <Card className="mb-8 animate-fade-in">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-primary" />
+              <CardTitle className="text-2xl font-heading flex items-center gap-2">
+                <Activity className="h-6 w-6 text-primary" />
                 Top Performing Insights
               </CardTitle>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -470,8 +695,8 @@ const FatherFigureFormulaDec1to7 = () => {
                     className="pl-10 w-64"
                   />
                 </div>
-                <Button variant="outline" size="sm" onClick={exportTopPostsCSV}>
-                  <Download className="h-4 w-4 mr-2" />
+                <Button variant="outline" onClick={exportTopPostsCSV} className="gap-2">
+                  <Download className="h-4 w-4" />
                   Export CSV
                 </Button>
               </div>
@@ -481,18 +706,20 @@ const FatherFigureFormulaDec1to7 = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Link</TableHead>
+                      <TableHead>Post Link</TableHead>
                       <TableHead>Views</TableHead>
                       <TableHead>Engagement %</TableHead>
                       <TableHead>Platform</TableHead>
                       <TableHead>Followers</TableHead>
                       <TableHead>
-                        <TooltipProvider>
+                        <div className="flex items-center gap-1">
+                          Reach Tier
                           <Tooltip>
-                            <TooltipTrigger className="flex items-center gap-1">
-                              Reach Tier <Info className="h-3 w-3" />
+                            <TooltipTrigger>
+                              <Info className="h-3 w-3 text-muted-foreground" />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
+                              <p className="font-semibold mb-1">Reach Tier</p>
                               <p>Tier 1: 1M+ views</p>
                               <p>Tier 2: 500K – 1M</p>
                               <p>Tier 3: 100K – 500K</p>
@@ -500,44 +727,95 @@ const FatherFigureFormulaDec1to7 = () => {
                               <p>Tier 5: &lt;50K</p>
                             </TooltipContent>
                           </Tooltip>
-                        </TooltipProvider>
+                        </div>
                       </TableHead>
                       <TableHead>
-                        <TooltipProvider>
+                        <div className="flex items-center gap-1">
+                          Engagement Tier
                           <Tooltip>
-                            <TooltipTrigger className="flex items-center gap-1">
-                              Engagement Tier <Info className="h-3 w-3" />
+                            <TooltipTrigger>
+                              <Info className="h-3 w-3 text-muted-foreground" />
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs">
-                              <p>Tier 1: 8%+ engagement</p>
+                              <p className="font-semibold mb-1">Engagement Tier</p>
+                              <p>Tier 1: 8%+ engagement rate</p>
                               <p>Tier 2: 5–8%</p>
                               <p>Tier 3: 3–5%</p>
                               <p>Tier 4: 1–3%</p>
                               <p>Tier 5: &lt;1%</p>
                             </TooltipContent>
                           </Tooltip>
-                        </TooltipProvider>
+                        </div>
                       </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Influence
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="font-semibold mb-1">Influence (1-5 Scale)</p>
+                              <p>Quality of interactions:</p>
+                              <p>• Mentions from authority accounts</p>
+                              <p>• Shares by influencers</p>
+                              <p>• Media pickups or organic reposts</p>
+                              <p>• Collaboration requests</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableHead>
+                      <TableHead>
+                        <div className="flex items-center gap-1">
+                          Conversion
+                          <Tooltip>
+                            <TooltipTrigger>
+                              <Info className="h-3 w-3 text-muted-foreground" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <p className="font-semibold mb-1">Conversion Signals (1-5 Scale)</p>
+                              <p>• Click-throughs to site/landing page</p>
+                              <p>• DM inquiries</p>
+                              <p>• Newsletter signups</p>
+                              <p>• Purchases directly attributed</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TableHead>
+                      <TableHead>Total Score ↓</TableHead>
                       <TableHead>Post Tier</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTopPosts.map((post, index) => (
-                      <TableRow key={index}>
+                    {filteredTopPosts.map((post, idx) => (
+                      <TableRow key={idx}>
                         <TableCell>
-                          <a href={post.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-primary hover:underline">
-                            View <ExternalLink className="h-3 w-3" />
+                          <a
+                            href={post.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            View Post
+                            <ExternalLink className="h-3 w-3" />
                           </a>
                         </TableCell>
                         <TableCell>{post.views.toLocaleString()}</TableCell>
                         <TableCell>{post.engagementPercent}%</TableCell>
-                        <TableCell><Badge variant="secondary">{post.platform}</Badge></TableCell>
+                        <TableCell>
+                          <Badge variant="default">{post.platform}</Badge>
+                        </TableCell>
                         <TableCell>{post.followers.toLocaleString()}</TableCell>
-                        <TableCell><Badge variant="outline">{post.reachTier}</Badge></TableCell>
-                        <TableCell><Badge variant="outline">{post.engagementTier}</Badge></TableCell>
-                        <TableCell><Badge>{post.postTier}</Badge></TableCell>
-                        <TableCell className="max-w-xs truncate">{post.notes}</TableCell>
+                        <TableCell>{post.reachTier}</TableCell>
+                        <TableCell>{post.engagementTier}</TableCell>
+                        <TableCell>{post.influence}</TableCell>
+                        <TableCell>{post.conversion}</TableCell>
+                        <TableCell className="font-bold">{post.totalScore}</TableCell>
+                        <TableCell>{post.postTier}</TableCell>
+                        <TableCell className="max-w-[200px] truncate" title={post.notes}>
+                          {post.notes}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -545,44 +823,38 @@ const FatherFigureFormulaDec1to7 = () => {
               </div>
             </CardContent>
           </Card>
-        </section>
 
-        {/* Platform Performance Overview Chart */}
-        <section className="mb-8">
-          <Card className="bg-card border-border">
+          {/* Platform Performance Chart */}
+          <Card className="mb-8 animate-fade-in">
             <CardHeader>
-              <CardTitle>Platform Performance Overview</CardTitle>
+              <CardTitle className="text-2xl font-heading">Platform Performance Overview</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="platform" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
-                    <RechartsTooltip 
-                      contentStyle={{ 
-                        backgroundColor: 'hsl(var(--card))', 
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px'
-                      }} 
-                    />
-                    <Legend />
-                    <Bar dataKey="followers" fill="hsl(var(--primary))" name="Followers" />
-                    <Bar dataKey="views" fill="hsl(262, 83%, 70%)" name="Views" />
-                    <Bar dataKey="interactions" fill="hsl(262, 83%, 80%)" name="Interactions" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="platform" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px"
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="followers" name="Followers" fill="hsl(262, 83%, 58%)" />
+                  <Bar dataKey="views" name="Total Views" fill="hsl(262, 83%, 70%)" />
+                  <Bar dataKey="interactions" name="Total Interactions" fill="hsl(262, 83%, 85%)" />
+                </BarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
-        </section>
 
-        {/* Platform Content Performance */}
-        <section>
-          <Card className="bg-card border-border">
+          {/* Platform Content Performance */}
+          <Card className="animate-fade-in">
             <CardHeader>
-              <CardTitle>Platform Content Performance</CardTitle>
+              <CardTitle className="text-2xl font-heading">Platform Content Performance</CardTitle>
             </CardHeader>
             <CardContent>
               <Tabs defaultValue="instagram" className="w-full">
@@ -595,18 +867,17 @@ const FatherFigureFormulaDec1to7 = () => {
                   <TabsTrigger value="linkedin">LinkedIn</TabsTrigger>
                 </TabsList>
 
-                {/* Instagram Tab */}
                 <TabsContent value="instagram">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <MetricCard 
-                      title="Total Followers" 
+                      title="Followers" 
                       value={instagramData.followers.toLocaleString()} 
                       added={instagramData.addedFollowers} 
                     />
                     <MetricCard 
-                      title="Engagement Rate" 
-                      value={`${instagramData.engagementRate}%`} 
-                      lastWeek={instagramData.lastWeekEngagementRate}
+                      title="Engagement Rate %" 
+                      value={`${instagramData.engagementRate}%`}
+                      lastWeek={`${instagramData.lastWeekEngagementRate}%`}
                       showTrend
                       currentValue={instagramData.engagementRate}
                       previousValue={instagramData.lastWeekEngagementRate}
@@ -614,59 +885,49 @@ const FatherFigureFormulaDec1to7 = () => {
                     <MetricCard 
                       title="Total Content" 
                       value={instagramData.totalContent}
+                      lastWeek={instagramData.lastWeekTotalContent.toString()}
                       showTrend
                       currentValue={instagramData.totalContent}
                       previousValue={instagramData.lastWeekTotalContent}
                     />
-                    <MetricCard 
-                      title="Last Week Content" 
-                      value={instagramData.lastWeekTotalContent} 
-                    />
                   </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Reach</TableHead>
-                          <TableHead>Views</TableHead>
-                          <TableHead>Likes & Reactions</TableHead>
-                          <TableHead>Comments</TableHead>
-                          <TableHead>Shares</TableHead>
-                          <TableHead>Interactions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {instagramContent.map((content, index) => (
-                          <TableRow key={index}>
-                            <TableCell><TypeBadge type={content.type} /></TableCell>
-                            <TableCell>{content.date}</TableCell>
-                            <TableCell>{content.reach.toLocaleString()}</TableCell>
-                            <TableCell>{content.views.toLocaleString()}</TableCell>
-                            <TableCell>{content.likesReactions}</TableCell>
-                            <TableCell>{content.comments}</TableCell>
-                            <TableCell>{content.shares}</TableCell>
-                            <TableCell>{content.interactions}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search content..."
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      {["All", "Reel", "Post"].map((filter) => (
+                        <Button
+                          key={filter}
+                          variant={contentFilter === filter ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setContentFilter(filter)}
+                        >
+                          {filter}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">{renderInstagramTable()}</div>
                 </TabsContent>
 
-                {/* Facebook Tab */}
                 <TabsContent value="facebook">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <MetricCard 
-                      title="Total Followers" 
+                      title="Followers" 
                       value={facebookData.followers.toLocaleString()} 
                       added={facebookData.addedFollowers} 
                     />
                     <MetricCard 
-                      title="Engagement Rate" 
-                      value={`${facebookData.engagementRate}%`} 
-                      lastWeek={facebookData.lastWeekEngagementRate}
+                      title="Engagement Rate %" 
+                      value={`${facebookData.engagementRate}%`}
+                      lastWeek={`${facebookData.lastWeekEngagementRate}%`}
                       showTrend
                       currentValue={facebookData.engagementRate}
                       previousValue={facebookData.lastWeekEngagementRate}
@@ -674,61 +935,49 @@ const FatherFigureFormulaDec1to7 = () => {
                     <MetricCard 
                       title="Total Content" 
                       value={facebookData.totalContent}
+                      lastWeek={facebookData.lastWeekTotalContent.toString()}
                       showTrend
                       currentValue={facebookData.totalContent}
                       previousValue={facebookData.lastWeekTotalContent}
                     />
-                    <MetricCard 
-                      title="Last Week Content" 
-                      value={facebookData.lastWeekTotalContent} 
-                    />
                   </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Reach</TableHead>
-                          <TableHead>Views</TableHead>
-                          <TableHead>Likes & Reactions</TableHead>
-                          <TableHead>Comments</TableHead>
-                          <TableHead>Shares</TableHead>
-                          <TableHead>Interactions</TableHead>
-                          <TableHead>Link Clicks</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {facebookContent.map((content, index) => (
-                          <TableRow key={index}>
-                            <TableCell><TypeBadge type={content.type} /></TableCell>
-                            <TableCell>{content.date}</TableCell>
-                            <TableCell>{content.reach.toLocaleString()}</TableCell>
-                            <TableCell>{content.views.toLocaleString()}</TableCell>
-                            <TableCell>{content.likesReactions}</TableCell>
-                            <TableCell>{content.comments}</TableCell>
-                            <TableCell>{content.shares}</TableCell>
-                            <TableCell>{content.interactions}</TableCell>
-                            <TableCell>{content.linkClicks}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search content..."
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      {["All", "Reel", "Post"].map((filter) => (
+                        <Button
+                          key={filter}
+                          variant={contentFilter === filter ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setContentFilter(filter)}
+                        >
+                          {filter}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">{renderFacebookTable()}</div>
                 </TabsContent>
 
-                {/* TikTok Tab */}
                 <TabsContent value="tiktok">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <MetricCard 
-                      title="Total Followers" 
+                      title="Followers" 
                       value={tiktokData.followers.toLocaleString()} 
                       added={tiktokData.addedFollowers} 
                     />
                     <MetricCard 
-                      title="Engagement Rate" 
-                      value={`${tiktokData.engagementRate}%`} 
-                      lastWeek={tiktokData.lastWeekEngagementRate}
+                      title="Engagement Rate %" 
+                      value={`${tiktokData.engagementRate}%`}
+                      lastWeek={`${tiktokData.lastWeekEngagementRate}%`}
                       showTrend
                       currentValue={tiktokData.engagementRate}
                       previousValue={tiktokData.lastWeekEngagementRate}
@@ -736,57 +985,37 @@ const FatherFigureFormulaDec1to7 = () => {
                     <MetricCard 
                       title="Total Content" 
                       value={tiktokData.totalContent}
+                      lastWeek={tiktokData.lastWeekTotalContent.toString()}
                       showTrend
                       currentValue={tiktokData.totalContent}
                       previousValue={tiktokData.lastWeekTotalContent}
                     />
-                    <MetricCard 
-                      title="Last Week Content" 
-                      value={tiktokData.lastWeekTotalContent} 
-                    />
                   </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Views</TableHead>
-                          <TableHead>Likes</TableHead>
-                          <TableHead>Comments</TableHead>
-                          <TableHead>Shares</TableHead>
-                          <TableHead>Add to Favorites</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {tiktokContent.map((content, index) => (
-                          <TableRow key={index}>
-                            <TableCell><TypeBadge type={content.type} /></TableCell>
-                            <TableCell>{content.date}</TableCell>
-                            <TableCell>{content.views.toLocaleString()}</TableCell>
-                            <TableCell>{content.likes}</TableCell>
-                            <TableCell>{content.comments}</TableCell>
-                            <TableCell>{content.shares}</TableCell>
-                            <TableCell>{content.addToFavorites}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search content..."
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">{renderTikTokTable()}</div>
                 </TabsContent>
 
-                {/* X Tab */}
                 <TabsContent value="x">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <MetricCard 
-                      title="Total Followers" 
+                      title="Followers" 
                       value={xData.followers.toLocaleString()} 
                       added={xData.addedFollowers} 
                     />
                     <MetricCard 
-                      title="Engagement Rate" 
-                      value={`${xData.engagementRate}%`} 
-                      lastWeek={xData.lastWeekEngagementRate}
+                      title="Engagement Rate %" 
+                      value={`${xData.engagementRate}%`}
+                      lastWeek={`${xData.lastWeekEngagementRate}%`}
                       showTrend
                       currentValue={xData.engagementRate}
                       previousValue={xData.lastWeekEngagementRate}
@@ -794,55 +1023,37 @@ const FatherFigureFormulaDec1to7 = () => {
                     <MetricCard 
                       title="Total Content" 
                       value={xData.totalContent}
+                      lastWeek={xData.lastWeekTotalContent.toString()}
                       showTrend
                       currentValue={xData.totalContent}
                       previousValue={xData.lastWeekTotalContent}
                     />
-                    <MetricCard 
-                      title="Last Week Content" 
-                      value={xData.lastWeekTotalContent} 
-                    />
                   </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Impressions</TableHead>
-                          <TableHead>Likes</TableHead>
-                          <TableHead>Engagements</TableHead>
-                          <TableHead>Profile Visits</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {xContent.map((content, index) => (
-                          <TableRow key={index}>
-                            <TableCell><TypeBadge type={content.type} /></TableCell>
-                            <TableCell>{content.date}</TableCell>
-                            <TableCell>{content.impressions.toLocaleString()}</TableCell>
-                            <TableCell>{content.likes}</TableCell>
-                            <TableCell>{content.engagements}</TableCell>
-                            <TableCell>{content.profileVisits}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search content..."
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">{renderXTable()}</div>
                 </TabsContent>
 
-                {/* YouTube Tab */}
                 <TabsContent value="youtube">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <MetricCard 
-                      title="Total Subscribers" 
+                      title="Subscribers" 
                       value={youtubeData.followers.toLocaleString()} 
                       added={youtubeData.addedFollowers} 
                     />
                     <MetricCard 
-                      title="Engagement Rate" 
-                      value={`${youtubeData.engagementRate}%`} 
-                      lastWeek={youtubeData.lastWeekEngagementRate}
+                      title="Engagement Rate %" 
+                      value={`${youtubeData.engagementRate}%`}
+                      lastWeek={`${youtubeData.lastWeekEngagementRate}%`}
                       showTrend
                       currentValue={youtubeData.engagementRate}
                       previousValue={youtubeData.lastWeekEngagementRate}
@@ -850,59 +1061,37 @@ const FatherFigureFormulaDec1to7 = () => {
                     <MetricCard 
                       title="Total Content" 
                       value={youtubeData.totalContent}
+                      lastWeek={youtubeData.lastWeekTotalContent.toString()}
                       showTrend
                       currentValue={youtubeData.totalContent}
                       previousValue={youtubeData.lastWeekTotalContent}
                     />
-                    <MetricCard 
-                      title="Last Week Content" 
-                      value={youtubeData.lastWeekTotalContent} 
-                    />
                   </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Title</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Views</TableHead>
-                          <TableHead>Likes</TableHead>
-                          <TableHead>Comments</TableHead>
-                          <TableHead>Shares</TableHead>
-                          <TableHead>Subscribers</TableHead>
-                          <TableHead>Impressions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {youtubeContent.map((content, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="max-w-xs truncate">{content.title}</TableCell>
-                            <TableCell>{content.date}</TableCell>
-                            <TableCell>{content.views.toLocaleString()}</TableCell>
-                            <TableCell>{content.likes}</TableCell>
-                            <TableCell>{content.comments}</TableCell>
-                            <TableCell>{content.shares}</TableCell>
-                            <TableCell>{content.subscribers}</TableCell>
-                            <TableCell>{content.impressions}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search content..."
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">{renderYouTubeTable()}</div>
                 </TabsContent>
 
-                {/* LinkedIn Tab */}
                 <TabsContent value="linkedin">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <MetricCard 
-                      title="Total Followers" 
+                      title="Followers" 
                       value={linkedinData.followers.toLocaleString()} 
                       added={linkedinData.addedFollowers} 
                     />
                     <MetricCard 
-                      title="Impressions Rate" 
-                      value={`${linkedinData.engagementRate}%`} 
-                      lastWeek={linkedinData.lastWeekEngagementRate}
+                      title="Impressions Rate %" 
+                      value={`${linkedinData.engagementRate}%`}
+                      lastWeek={`${linkedinData.lastWeekEngagementRate}%`}
                       showTrend
                       currentValue={linkedinData.engagementRate}
                       previousValue={linkedinData.lastWeekEngagementRate}
@@ -910,46 +1099,31 @@ const FatherFigureFormulaDec1to7 = () => {
                     <MetricCard 
                       title="Total Content" 
                       value={linkedinData.totalContent}
+                      lastWeek={linkedinData.lastWeekTotalContent.toString()}
                       showTrend
                       currentValue={linkedinData.totalContent}
                       previousValue={linkedinData.lastWeekTotalContent}
                     />
-                    <MetricCard 
-                      title="Last Week Content" 
-                      value={linkedinData.lastWeekTotalContent} 
-                    />
                   </div>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Impressions</TableHead>
-                          <TableHead>Members Reached</TableHead>
-                          <TableHead>Profile Viewers</TableHead>
-                          <TableHead>Followers Gained</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {linkedinContent.map((content, index) => (
-                          <TableRow key={index}>
-                            <TableCell>{content.date}</TableCell>
-                            <TableCell>{content.impressions}</TableCell>
-                            <TableCell>{content.membersReached}</TableCell>
-                            <TableCell>{content.profileViewers}</TableCell>
-                            <TableCell>{content.followersGained}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search content..."
+                        value={contentSearch}
+                        onChange={(e) => setContentSearch(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
+                  <div className="overflow-x-auto">{renderLinkedInTable()}</div>
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
-        </section>
-      </main>
-    </div>
+        </main>
+      </div>
+    </TooltipProvider>
   );
 };
 
