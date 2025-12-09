@@ -82,6 +82,7 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
   };
 
   const handleViewLatest = () => {
+    if (client.reports.length === 0) return;
     const latestReport = client.reports[client.reports.length - 1];
     if (latestReport.isInternal) {
       navigate(latestReport.link);
@@ -91,7 +92,7 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
   };
 
   // Get the most recent report for display
-  const latestReport = client.reports[client.reports.length - 1];
+  const latestReport = client.reports.length > 0 ? client.reports[client.reports.length - 1] : null;
 
   return (
     <div 
@@ -129,10 +130,11 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
           variant="secondary"
           className="w-full justify-between group/btn hover:bg-primary hover:text-primary-foreground transition-all duration-300"
           onClick={handleViewLatest}
+          disabled={!latestReport}
         >
           <span className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
-            View Latest Report
+            {latestReport ? "View Latest Report" : "No Reports Yet"}
           </span>
           <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-300" />
         </Button>
@@ -194,9 +196,11 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
             </div>
           )}
           
-          <p className="text-xs text-muted-foreground text-center pt-1">
-            Latest: {latestReport.dateRange}
-          </p>
+          {latestReport && (
+            <p className="text-xs text-muted-foreground text-center pt-1">
+              Latest: {latestReport.dateRange}
+            </p>
+          )}
         </div>
       </div>
     </div>
