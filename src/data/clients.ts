@@ -94,6 +94,8 @@ export const clientsData: Client[] = [
   {
     name: "BSUE Brow & Lash",
     logo: bsueBrowLashLogo,
-    reports: [],
+    reports: [
+      { dateRange: "Dec 1-7", link: "/bsue-brow-lash-dec1-7", isInternal: true },
+    ],
   },
 ];
