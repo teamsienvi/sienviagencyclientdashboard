@@ -1,12 +1,38 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { ClientCard } from "@/components/ClientCard";
 import { DashboardStats } from "@/components/DashboardStats";
 import { ClientSearch } from "@/components/ClientSearch";
 import { clientsData } from "@/data/clients";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  
+  // Fetch database clients to get their IDs
+  const { data: dbClients } = useQuery({
+    queryKey: ["clients-for-analytics"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, supabase_url")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data;
+    },
+  });
+  
+  // Map client names to their database IDs
+  const clientIdMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    dbClients?.forEach((client) => {
+      if (client.supabase_url) {
+        map[client.name] = client.id;
+      }
+    });
+    return map;
+  }, [dbClients]);
   
   const filteredClients = useMemo(() => {
     if (!searchQuery.trim()) return clientsData;
@@ -36,7 +62,12 @@ const Index = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredClients.map((client, index) => (
-              <ClientCard key={client.name} client={client} clientIndex={index} />
+              <ClientCard 
+                key={client.name} 
+                client={client} 
+                clientIndex={index} 
+                clientId={clientIdMap[client.name]}
+              />
             ))}
           </div>
         )}
