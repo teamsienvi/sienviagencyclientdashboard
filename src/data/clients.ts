@@ -4,6 +4,7 @@ import fatherFigureFormulaLogo from "@/assets/father-figure-formula-logo.jpg";
 import serenityScrollsLogo from "@/assets/serenity-scrolls-logo.jpg";
 import oxisureTechLogo from "@/assets/oxisure-tech-logo.png";
 import theHavenAtDeerParkLogo from "@/assets/the-haven-at-deer-park-logo.jpg";
+import bsueBrowLashLogo from "@/assets/bsue-brow-lash-logo.png";
 
 export interface Report {
   dateRange: string;
@@ -86,6 +87,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "BSUE Brow & Lash",
+    logo: bsueBrowLashLogo,
     reports: [],
   },
 ];
