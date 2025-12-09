@@ -123,7 +123,7 @@ const topPerformingPosts: TopPerformingPost[] = [
     link: "https://www.youtube.com/shorts/31Rf6MhG8Jc",
     views: "163",
     engagementPercent: "2.12%",
-    page: "Tiktok",
+    page: "Youtube",
     followers: 6,
     reachTier: "Tier 5",
     engagementTier: "Tier 4",
