@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Report from "./pages/Report";
 import NotFound from "./pages/NotFound";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
+import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
 import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
 import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
 import SerenityScrollsNov24to30 from "./pages/SerenityScrollsNov24to30";
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/report/:clientId/:reportId" element={<Report />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
+          <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
           <Route path="/snarky-humans-nov24-30" element={<SnarkyHumansNov24to30 />} />
           <Route path="/snarky-pets-nov24-30" element={<SnarkyPetsNov24to30 />} />
           <Route path="/serenity-scrolls-nov24-30" element={<SerenityScrollsNov24to30 />} />
