@@ -76,9 +76,8 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': client.api_key,
       },
-      body: JSON.stringify({ startDate, endDate }),
+      body: JSON.stringify({ startDate, endDate, apiKey: client.api_key }),
     });
 
     if (!analyticsResponse.ok) {
