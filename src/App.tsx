@@ -16,6 +16,7 @@ import SerenityScrollsNov24to30 from "./pages/SerenityScrollsNov24to30";
 import SerenityScrollsNov17to23 from "./pages/SerenityScrollsNov17to23";
 import SerenityScrollsDec1to7 from "./pages/SerenityScrollsDec1to7";
 import OxiSureTechNov24to30 from "./pages/OxiSureTechNov24to30";
+import OxiSureTechDec1to7 from "./pages/OxiSureTechDec1to7";
 import TheHavenAtDeerParkNov24to30 from "./pages/TheHavenAtDeerParkNov24to30";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
           <Route path="/serenity-scrolls-nov17-23" element={<SerenityScrollsNov17to23 />} />
           <Route path="/serenity-scrolls-dec1-7" element={<SerenityScrollsDec1to7 />} />
           <Route path="/oxisure-tech-nov24-30" element={<OxiSureTechNov24to30 />} />
+          <Route path="/oxisure-tech-dec1-7" element={<OxiSureTechDec1to7 />} />
           <Route path="/the-haven-at-deer-park-nov24-30" element={<TheHavenAtDeerParkNov24to30 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
