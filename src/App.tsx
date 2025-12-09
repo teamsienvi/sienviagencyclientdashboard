@@ -14,6 +14,7 @@ import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
 import SnarkyPetsDec1to7 from "./pages/SnarkyPetsDec1to7";
 import SerenityScrollsNov24to30 from "./pages/SerenityScrollsNov24to30";
 import SerenityScrollsNov17to23 from "./pages/SerenityScrollsNov17to23";
+import SerenityScrollsDec1to7 from "./pages/SerenityScrollsDec1to7";
 import OxiSureTechNov24to30 from "./pages/OxiSureTechNov24to30";
 import TheHavenAtDeerParkNov24to30 from "./pages/TheHavenAtDeerParkNov24to30";
 
@@ -36,6 +37,7 @@ const App = () => (
           <Route path="/snarky-pets-dec1-7" element={<SnarkyPetsDec1to7 />} />
           <Route path="/serenity-scrolls-nov24-30" element={<SerenityScrollsNov24to30 />} />
           <Route path="/serenity-scrolls-nov17-23" element={<SerenityScrollsNov17to23 />} />
+          <Route path="/serenity-scrolls-dec1-7" element={<SerenityScrollsDec1to7 />} />
           <Route path="/oxisure-tech-nov24-30" element={<OxiSureTechNov24to30 />} />
           <Route path="/the-haven-at-deer-park-nov24-30" element={<TheHavenAtDeerParkNov24to30 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
