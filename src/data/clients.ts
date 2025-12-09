@@ -64,6 +64,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 10-16", link: "https://serenityscrollsnov10to16.lovable.app/" },
       { dateRange: "Nov 17-23", link: "/serenity-scrolls-nov17-23", isInternal: true },
       { dateRange: "Nov 24-30", link: "/serenity-scrolls-nov24-30", isInternal: true },
+      { dateRange: "Dec 1-7", link: "/serenity-scrolls-dec1-7", isInternal: true },
     ],
   },
   {
