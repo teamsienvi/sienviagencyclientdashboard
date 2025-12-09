@@ -82,7 +82,15 @@ export const useClientAnalytics = ({
         throw new Error(error.message || "Failed to fetch analytics");
       }
 
-      return data;
+      // Handle nested analytics structure from the edge function
+      const analytics = data.analytics?.analytics || data.analytics;
+      
+      return {
+        clientId: data.clientId,
+        clientName: data.clientName,
+        analytics,
+        dateRange: data.dateRange,
+      };
     },
     enabled: enabled && !!clientId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
