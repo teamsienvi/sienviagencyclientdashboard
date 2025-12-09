@@ -88,6 +88,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 10-16", link: "https://thehavenatdeerparknov10to16.lovable.app" },
       { dateRange: "Nov 17-23", link: "https://thehavenatdeerparknov17to23.lovable.app/" },
       { dateRange: "Nov 24-30", link: "/the-haven-at-deer-park-nov24-30", isInternal: true },
+      { dateRange: "Dec 1-7", link: "/the-haven-at-deer-park-dec1-7", isInternal: true },
     ],
   },
   {
