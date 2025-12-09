@@ -84,4 +84,8 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 24-30", link: "/the-haven-at-deer-park-nov24-30", isInternal: true },
     ],
   },
+  {
+    name: "BSUE Brow & Lash",
+    reports: [],
+  },
 ];
