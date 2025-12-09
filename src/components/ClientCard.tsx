@@ -9,13 +9,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
+import { DateRangeSelector } from "@/components/DateRangeSelector";
+import { useClientAnalytics } from "@/hooks/useClientAnalytics";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ClientCardProps {
   client: Client;
   clientIndex: number;
+  clientId?: string; // Database ID for fetching analytics
 }
+
+type DateRangePreset = "7d" | "30d" | "custom";
 
 // Helper to extract month from date range (e.g., "Nov 24-30" -> "November")
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -41,10 +47,27 @@ const getMonthFromDateRange = (dateRange: string): string => {
   return dateRange;
 };
 
-export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
+export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
   
+  // Fetch analytics if clientId is provided
+  const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useClientAnalytics({
+    clientId: clientId || "",
+    dateRange,
+    startDate: customRange?.start,
+    endDate: customRange?.end,
+    enabled: !!clientId,
+  });
+
+  const handleDateRangeChange = (preset: DateRangePreset, custom?: { start: Date; end: Date }) => {
+    setDateRange(preset);
+    if (custom) {
+      setCustomRange(custom);
+    }
+  };
   // Group reports by month
   const reportsByMonth = useMemo(() => {
     const grouped: Record<string, { index: number; report: typeof client.reports[0] }[]> = {};
@@ -216,6 +239,81 @@ export const ClientCard = ({ client, clientIndex }: ClientCardProps) => {
             </p>
           )}
         </div>
+
+        {/* Analytics Section */}
+        {clientId && (
+          <div className="pt-4 border-t border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-foreground">Analytics</h4>
+              <DateRangeSelector 
+                value={dateRange} 
+                onChange={handleDateRangeChange}
+                customRange={customRange}
+              />
+            </div>
+            
+            {analyticsLoading ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="bg-accent/50 rounded-lg p-3 space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-6 w-12" />
+                  </div>
+                ))}
+              </div>
+            ) : analyticsError ? (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                <p className="text-xs text-destructive">Failed to load analytics</p>
+              </div>
+            ) : analyticsData?.analytics ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-accent/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Users className="h-3 w-3" />
+                    <span className="text-xs">Visitors</span>
+                  </div>
+                  <p className="text-lg font-semibold">
+                    {analyticsData.analytics.visitors.toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-accent/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Eye className="h-3 w-3" />
+                    <span className="text-xs">Page Views</span>
+                  </div>
+                  <p className="text-lg font-semibold">
+                    {analyticsData.analytics.pageViews.toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-accent/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <Clock className="h-3 w-3" />
+                    <span className="text-xs">Avg Duration</span>
+                  </div>
+                  <p className="text-lg font-semibold">
+                    {analyticsData.analytics.avgDuration < 60 
+                      ? `${Math.round(analyticsData.analytics.avgDuration)}s`
+                      : `${Math.floor(analyticsData.analytics.avgDuration / 60)}m ${Math.round(analyticsData.analytics.avgDuration % 60)}s`
+                    }
+                  </p>
+                </div>
+                <div className="bg-accent/50 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <TrendingDown className="h-3 w-3" />
+                    <span className="text-xs">Bounce Rate</span>
+                  </div>
+                  <p className="text-lg font-semibold">
+                    {analyticsData.analytics.bounceRate.toFixed(1)}%
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-muted/50 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground">No analytics configured</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
