@@ -177,6 +177,7 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
         </div>
         
         <div className="space-y-3">
+          <h4 className="text-sm font-medium text-foreground">Socials Analytics</h4>
           {/* Step 1: Month Selection */}
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-full bg-accent/50 border-border hover:bg-accent hover:border-primary/20 transition-all duration-300">
@@ -244,7 +245,7 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
         {clientId && (
           <div className="pt-4 border-t border-border space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-foreground">Analytics</h4>
+              <h4 className="text-sm font-medium text-foreground">Website Analytics</h4>
               <DateRangeSelector 
                 value={dateRange} 
                 onChange={handleDateRangeChange}
