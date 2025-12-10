@@ -151,7 +151,7 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
         
         {/* Socials Analytics Section */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-foreground">Socials Analytics</h4>
+          <h4 className="text-sm font-medium text-foreground">Social Media Analytics</h4>
           
           {/* Action Buttons */}
           <div className="flex gap-2">
