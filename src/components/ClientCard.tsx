@@ -149,35 +149,37 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
           </div>
         </div>
         
-        {/* Action Buttons */}
-        <div className="flex gap-2">
-          {/* View Latest Button */}
-          <Button
-            variant="secondary"
-            className="flex-1 justify-between group/btn hover:bg-primary hover:text-primary-foreground transition-all duration-300"
-            onClick={handleViewLatest}
-            disabled={!latestReport}
-          >
-            <span className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              {latestReport ? "View Latest" : "No Reports"}
-            </span>
-            <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-300" />
-          </Button>
-          
-          {/* CSV Upload Button */}
-          <CSVUploadDialog
-            clientName={client.name}
-            trigger={
-              <Button variant="outline" size="icon" className="shrink-0" title="Import CSV">
-                <Upload className="h-4 w-4" />
-              </Button>
-            }
-          />
-        </div>
-        
+        {/* Socials Analytics Section */}
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-foreground">Socials Analytics</h4>
+          
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            {/* View Latest Button */}
+            <Button
+              variant="secondary"
+              className="flex-1 justify-between group/btn hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+              onClick={handleViewLatest}
+              disabled={!latestReport}
+            >
+              <span className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                {latestReport ? "View Latest" : "No Reports"}
+              </span>
+              <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-300" />
+            </Button>
+            
+            {/* CSV Upload Button */}
+            <CSVUploadDialog
+              clientName={client.name}
+              trigger={
+                <Button variant="outline" size="icon" className="shrink-0" title="Import CSV">
+                  <Upload className="h-4 w-4" />
+                </Button>
+              }
+            />
+          </div>
+          
           {/* Step 1: Month Selection */}
           <Select value={selectedMonth} onValueChange={setSelectedMonth}>
             <SelectTrigger className="w-full bg-accent/50 border-border hover:bg-accent hover:border-primary/20 transition-all duration-300">
