@@ -11,19 +11,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, FileSpreadsheet, Check, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  parseCSV,
-  topPostsHeaderMap,
-  platformDataHeaderMap,
-  platformContentHeaderMap,
-  TopPostCSVRow,
-  PlatformDataCSVRow,
-  PlatformContentCSVRow,
-} from "@/utils/csvParser";
+import { parseCombinedCSV, PlatformContentCSVRow } from "@/utils/csvParser";
 
 interface CSVUploadDialogProps {
   clientName: string;
@@ -41,22 +32,15 @@ export const CSVUploadDialog = ({
   const [dateRange, setDateRange] = useState("");
   const [weekStart, setWeekStart] = useState("");
   const [weekEnd, setWeekEnd] = useState("");
-  const [topPostsFile, setTopPostsFile] = useState<File | null>(null);
-  const [platformDataFile, setPlatformDataFile] = useState<File | null>(null);
-  const [platformContentFile, setPlatformContentFile] = useState<File | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const topPostsRef = useRef<HTMLInputElement>(null);
-  const platformDataRef = useRef<HTMLInputElement>(null);
-  const platformContentRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    setter: React.Dispatch<React.SetStateAction<File | null>>
-  ) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type === "text/csv") {
-      setter(file);
+    if (file && (file.type === "text/csv" || file.name.endsWith('.csv'))) {
+      setCsvFile(file);
     } else if (file) {
       toast.error("Please upload a CSV file");
     }
@@ -77,14 +61,25 @@ export const CSVUploadDialog = ({
       return;
     }
 
-    if (!topPostsFile && !platformDataFile && !platformContentFile) {
-      toast.error("Please upload at least one CSV file");
+    if (!csvFile) {
+      toast.error("Please upload a CSV file");
       return;
     }
 
     setIsUploading(true);
 
     try {
+      // Read and parse the CSV
+      const csvText = await readFileAsText(csvFile);
+      const parsedData = parseCombinedCSV(csvText);
+      
+      // Validate we have some data
+      if (parsedData.topPosts.length === 0 && parsedData.platformData.length === 0 && parsedData.platformContent.length === 0) {
+        toast.error("Could not parse any data from the CSV. Please check the format.");
+        setIsUploading(false);
+        return;
+      }
+
       // First, get or create the client
       let actualClientId = clientId;
       
@@ -123,59 +118,46 @@ export const CSVUploadDialog = ({
 
       if (reportError) throw reportError;
 
-      // Parse and insert top performing posts
-      if (topPostsFile) {
-        const csvText = await readFileAsText(topPostsFile);
-        const topPosts = parseCSV<TopPostCSVRow>(csvText, topPostsHeaderMap);
-
-        if (topPosts.length > 0) {
-          const { error } = await supabase.from("top_performing_posts").insert(
-            topPosts.map((post) => ({
-              report_id: report.id,
-              link: post.link || "",
-              views: post.views || 0,
-              engagement_percent: post.engagementPercent || 0,
-              platform: post.platform || "",
-              followers: post.followers || 0,
-              reach_tier: post.reachTier || null,
-              engagement_tier: post.engagementTier || null,
-              influence: post.influence || 0,
-            }))
-          );
-          if (error) throw error;
-        }
+      // Insert top performing posts
+      if (parsedData.topPosts.length > 0) {
+        const { error } = await supabase.from("top_performing_posts").insert(
+          parsedData.topPosts.map((post) => ({
+            report_id: report.id,
+            link: post.link || "",
+            views: post.views || 0,
+            engagement_percent: post.engagementPercent || 0,
+            platform: post.platform || "",
+            followers: post.followers || 0,
+            reach_tier: post.reachTier || null,
+            engagement_tier: post.engagementTier || null,
+            influence: post.influence || 0,
+          }))
+        );
+        if (error) throw error;
       }
 
-      // Parse and insert platform data
-      if (platformDataFile) {
-        const csvText = await readFileAsText(platformDataFile);
-        const platformData = parseCSV<PlatformDataCSVRow>(csvText, platformDataHeaderMap);
-
-        if (platformData.length > 0) {
-          const { error } = await supabase.from("platform_data").insert(
-            platformData.map((pd) => ({
-              report_id: report.id,
-              platform: pd.platform || "",
-              followers: pd.followers || 0,
-              new_followers: pd.newFollowers || 0,
-              engagement_rate: pd.engagementRate || 0,
-              last_week_engagement_rate: pd.lastWeekEngagementRate || 0,
-              total_content: pd.totalContent || 0,
-              last_week_total_content: pd.lastWeekTotalContent || 0,
-            }))
-          );
-          if (error) throw error;
-        }
+      // Insert platform data
+      if (parsedData.platformData.length > 0) {
+        const { error } = await supabase.from("platform_data").insert(
+          parsedData.platformData.map((pd) => ({
+            report_id: report.id,
+            platform: pd.platform || "",
+            followers: pd.followers || 0,
+            new_followers: pd.newFollowers || 0,
+            engagement_rate: pd.engagementRate || 0,
+            last_week_engagement_rate: pd.lastWeekEngagementRate || 0,
+            total_content: pd.totalContent || 0,
+            last_week_total_content: pd.lastWeekTotalContent || 0,
+          }))
+        );
+        if (error) throw error;
       }
 
-      // Parse and insert platform content
-      if (platformContentFile) {
-        const csvText = await readFileAsText(platformContentFile);
-        const platformContent = parseCSV<PlatformContentCSVRow>(csvText, platformContentHeaderMap);
-
+      // Insert platform content
+      if (parsedData.platformContent.length > 0) {
         // Group by platform
         const contentByPlatform: Record<string, PlatformContentCSVRow[]> = {};
-        platformContent.forEach((content) => {
+        parsedData.platformContent.forEach((content) => {
           const platform = content.platform || "Unknown";
           if (!contentByPlatform[platform]) {
             contentByPlatform[platform] = [];
@@ -236,7 +218,8 @@ export const CSVUploadDialog = ({
         }
       }
 
-      toast.success(`Report created for ${clientName} - ${dateRange}`);
+      const parsedCount = parsedData.topPosts.length + parsedData.platformData.length + parsedData.platformContent.length;
+      toast.success(`Report created! Imported ${parsedCount} records.`);
       setOpen(false);
       resetForm();
       
@@ -254,9 +237,7 @@ export const CSVUploadDialog = ({
     setDateRange("");
     setWeekStart("");
     setWeekEnd("");
-    setTopPostsFile(null);
-    setPlatformDataFile(null);
-    setPlatformContentFile(null);
+    setCsvFile(null);
   };
 
   return (
@@ -276,7 +257,7 @@ export const CSVUploadDialog = ({
             Import Report for {clientName}
           </DialogTitle>
           <DialogDescription>
-            Upload CSV files to create a new weekly report. You can upload one or more CSV files.
+            Upload a single CSV file containing all report data to create a new weekly report.
           </DialogDescription>
         </DialogHeader>
 
@@ -314,122 +295,57 @@ export const CSVUploadDialog = ({
             </div>
           </div>
 
-          {/* CSV Upload Tabs */}
-          <Tabs defaultValue="top-posts" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="top-posts" className="text-xs">Top Posts</TabsTrigger>
-              <TabsTrigger value="platform-data" className="text-xs">Platforms</TabsTrigger>
-              <TabsTrigger value="content" className="text-xs">Content</TabsTrigger>
-            </TabsList>
+          {/* Single CSV Upload */}
+          <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <Button
+              variant="ghost"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-2 h-auto py-4 px-6"
+            >
+              {csvFile ? (
+                <>
+                  <Check className="h-5 w-5 text-green-500" />
+                  <span className="font-medium">{csvFile.name}</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-5 w-5" />
+                  <span>Upload CSV File</span>
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground mt-3">
+              Include sections for: Top Posts, Platform Data, and Content
+            </p>
+          </div>
 
-            <TabsContent value="top-posts" className="space-y-3">
-              <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                <input
-                  ref={topPostsRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => handleFileChange(e, setTopPostsFile)}
-                />
-                <Button
-                  variant="ghost"
-                  onClick={() => topPostsRef.current?.click()}
-                  className="gap-2"
-                >
-                  {topPostsFile ? (
-                    <>
-                      <Check className="h-4 w-4 text-green-500" />
-                      {topPostsFile.name}
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Upload Top Posts CSV
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Columns: link, views, engagement%, platform, followers, reachTier, engagementTier
-                </p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="platform-data" className="space-y-3">
-              <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                <input
-                  ref={platformDataRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => handleFileChange(e, setPlatformDataFile)}
-                />
-                <Button
-                  variant="ghost"
-                  onClick={() => platformDataRef.current?.click()}
-                  className="gap-2"
-                >
-                  {platformDataFile ? (
-                    <>
-                      <Check className="h-4 w-4 text-green-500" />
-                      {platformDataFile.name}
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Upload Platform Data CSV
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Columns: platform, followers, newFollowers, engagementRate, totalContent
-                </p>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="content" className="space-y-3">
-              <div className="border-2 border-dashed border-border rounded-lg p-4 text-center">
-                <input
-                  ref={platformContentRef}
-                  type="file"
-                  accept=".csv"
-                  className="hidden"
-                  onChange={(e) => handleFileChange(e, setPlatformContentFile)}
-                />
-                <Button
-                  variant="ghost"
-                  onClick={() => platformContentRef.current?.click()}
-                  className="gap-2"
-                >
-                  {platformContentFile ? (
-                    <>
-                      <Check className="h-4 w-4 text-green-500" />
-                      {platformContentFile.name}
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Upload Content CSV
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Columns: platform, type, date, reach, views, likes, comments, shares
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
+          {/* CSV Format Info */}
+          <div className="bg-muted/50 rounded-lg p-3 text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">Expected CSV Format:</p>
+            <div className="space-y-1">
+              <p><span className="font-medium">Top Posts:</span> link, views, engagement%, platform, followers, reachTier, engagementTier</p>
+              <p><span className="font-medium">Platforms:</span> platform, followers, newFollowers, engagementRate, totalContent</p>
+              <p><span className="font-medium">Content:</span> platform, type, date, reach, views, likes, comments, shares</p>
+            </div>
+            <p className="text-[10px] opacity-70">Sections can be separated by empty lines or section headers like [TOP_POSTS], [PLATFORM_DATA], [PLATFORM_CONTENT]</p>
+          </div>
 
           {/* Upload Status */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4" />
-            <span>
-              {[topPostsFile, platformDataFile, platformContentFile].filter(Boolean).length} file(s) selected
-            </span>
+            <span>{csvFile ? "1 file selected" : "No file selected"}</span>
           </div>
 
           <Button
             onClick={handleUpload}
-            disabled={isUploading}
+            disabled={isUploading || !csvFile}
             className="w-full"
           >
             {isUploading ? "Uploading..." : "Create Report"}
