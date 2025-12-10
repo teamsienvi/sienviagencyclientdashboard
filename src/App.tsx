@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Report from "./pages/Report";
+import DynamicReport from "./pages/DynamicReport";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/report/:clientId/:reportId" element={<Report />} />
+          <Route path="/dynamic-report/:reportId" element={<DynamicReport />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
           <Route path="/snarky-humans-nov24-30" element={<SnarkyHumansNov24to30 />} />

@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ export const CSVUploadDialog = ({
   clientId,
   trigger,
 }: CSVUploadDialogProps) => {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [dateRange, setDateRange] = useState("");
   const [weekStart, setWeekStart] = useState("");
@@ -237,6 +239,9 @@ export const CSVUploadDialog = ({
       toast.success(`Report created for ${clientName} - ${dateRange}`);
       setOpen(false);
       resetForm();
+      
+      // Navigate to the dynamic report page
+      navigate(`/dynamic-report/${report.id}`);
     } catch (error) {
       console.error("Error uploading CSV:", error);
       toast.error("Failed to upload CSV. Please check the format and try again.");
