@@ -29,6 +29,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 17-23", link: "https://snarkyhumansnov13to17.lovable.app/" },
       { dateRange: "Nov 24-30", link: "/snarky-humans-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/snarky-humans-dec1-7", isInternal: true },
+      { dateRange: "Dec 8-14", link: "/dynamic-report/c05fcbfc-f918-4586-86c1-a752df240e2e", isInternal: true },
     ],
   },
   {
@@ -41,6 +42,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 17-23", link: "https://snarkypetsnov17to23.lovable.app/" },
       { dateRange: "Nov 24-30", link: "/snarky-pets-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/snarky-pets-dec1-7", isInternal: true },
+      { dateRange: "Dec 8-14", link: "/dynamic-report/ab99f7d1-19ed-4d74-b2b2-7c43c03fe313", isInternal: true },
     ],
   },
   {
@@ -53,6 +55,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 17-23", link: "https://fatherfigureformulanov17to23.lovable.app/" },
       { dateRange: "Nov 24-30", link: "/father-figure-formula-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/father-figure-formula-dec1-7", isInternal: true },
+      { dateRange: "Dec 8-14", link: "/dynamic-report/7614771f-847b-41c5-adc6-fd6574138c61", isInternal: true },
     ],
   },
   {
