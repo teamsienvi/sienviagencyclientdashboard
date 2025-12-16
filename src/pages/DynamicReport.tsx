@@ -63,6 +63,12 @@ interface PlatformContent {
   engagements: number | null;
   profile_visits: number | null;
   link_clicks: number | null;
+  // YouTube-specific fields
+  duration: string | null;
+  played_to_watch_percent: number | null;
+  watch_time_hours: number | null;
+  subscribers: number | null;
+  click_through_rate: number | null;
 }
 
 interface Report {
@@ -556,18 +562,34 @@ const DynamicReport = () => {
                         <TableRow>
                           <TableHead>Type</TableHead>
                           <TableHead>Date</TableHead>
-                          <TableHead>Reach</TableHead>
-                          <TableHead>Views</TableHead>
-                          <TableHead>Likes & Reactions</TableHead>
-                          <TableHead>Comments</TableHead>
-                          <TableHead>Shares</TableHead>
-                          <TableHead>Interactions</TableHead>
+                          {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
+                            <>
+                              <TableHead>Duration</TableHead>
+                              <TableHead>Likes</TableHead>
+                              <TableHead>Comments</TableHead>
+                              <TableHead>Shares</TableHead>
+                              <TableHead>Stayed to Watch %</TableHead>
+                              <TableHead>Views</TableHead>
+                              <TableHead>Watch Time (hrs)</TableHead>
+                              <TableHead>Subscribers</TableHead>
+                              <TableHead>Impressions</TableHead>
+                            </>
+                          ) : (
+                            <>
+                              <TableHead>Reach</TableHead>
+                              <TableHead>Views</TableHead>
+                              <TableHead>Likes & Reactions</TableHead>
+                              <TableHead>Comments</TableHead>
+                              <TableHead>Shares</TableHead>
+                              <TableHead>Interactions</TableHead>
+                            </>
+                          )}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredContent.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center text-muted-foreground">
+                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 11 : 8} className="text-center text-muted-foreground">
                               No content data available
                             </TableCell>
                           </TableRow>
@@ -580,12 +602,28 @@ const DynamicReport = () => {
                                 </Badge>
                               </TableCell>
                               <TableCell>{formatDate(content.post_date)}</TableCell>
-                              <TableCell>{(content.reach || 0).toLocaleString()}</TableCell>
-                              <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
-                              <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
-                              <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
-                              <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
-                              <TableCell>{(content.interactions || 0).toLocaleString()}</TableCell>
+                              {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
+                                <>
+                                  <TableCell>{content.duration || "-"}</TableCell>
+                                  <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{content.played_to_watch_percent ? `${content.played_to_watch_percent}%` : "-"}</TableCell>
+                                  <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{content.watch_time_hours ? `${content.watch_time_hours}%` : "-"}</TableCell>
+                                  <TableCell>{(content.subscribers || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
+                                </>
+                              ) : (
+                                <>
+                                  <TableCell>{(content.reach || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.interactions || 0).toLocaleString()}</TableCell>
+                                </>
+                              )}
                             </TableRow>
                           ))
                         )}

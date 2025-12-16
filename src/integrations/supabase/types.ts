@@ -49,9 +49,11 @@ export type Database = {
       }
       platform_content: {
         Row: {
+          click_through_rate: number | null
           comments: number | null
           content_type: string
           created_at: string
+          duration: string | null
           engagements: number | null
           id: string
           impressions: number | null
@@ -59,16 +61,21 @@ export type Database = {
           likes: number | null
           link_clicks: number | null
           platform_data_id: string
+          played_to_watch_percent: number | null
           post_date: string
           profile_visits: number | null
           reach: number | null
           shares: number | null
+          subscribers: number | null
           views: number | null
+          watch_time_hours: number | null
         }
         Insert: {
+          click_through_rate?: number | null
           comments?: number | null
           content_type: string
           created_at?: string
+          duration?: string | null
           engagements?: number | null
           id?: string
           impressions?: number | null
@@ -76,16 +83,21 @@ export type Database = {
           likes?: number | null
           link_clicks?: number | null
           platform_data_id: string
+          played_to_watch_percent?: number | null
           post_date: string
           profile_visits?: number | null
           reach?: number | null
           shares?: number | null
+          subscribers?: number | null
           views?: number | null
+          watch_time_hours?: number | null
         }
         Update: {
+          click_through_rate?: number | null
           comments?: number | null
           content_type?: string
           created_at?: string
+          duration?: string | null
           engagements?: number | null
           id?: string
           impressions?: number | null
@@ -93,11 +105,14 @@ export type Database = {
           likes?: number | null
           link_clicks?: number | null
           platform_data_id?: string
+          played_to_watch_percent?: number | null
           post_date?: string
           profile_visits?: number | null
           reach?: number | null
           shares?: number | null
+          subscribers?: number | null
           views?: number | null
+          watch_time_hours?: number | null
         }
         Relationships: [
           {
