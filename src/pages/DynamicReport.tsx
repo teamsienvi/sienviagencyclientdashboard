@@ -574,6 +574,13 @@ const DynamicReport = () => {
                               <TableHead>Subscribers</TableHead>
                               <TableHead>Impressions</TableHead>
                             </>
+                          ) : pd.platform === "X" ? (
+                            <>
+                              <TableHead>Impressions</TableHead>
+                              <TableHead>Engagements</TableHead>
+                              <TableHead>Profile Visits</TableHead>
+                              <TableHead>Link Clicks</TableHead>
+                            </>
                           ) : (
                             <>
                               <TableHead>Reach</TableHead>
@@ -589,7 +596,7 @@ const DynamicReport = () => {
                       <TableBody>
                         {filteredContent.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 11 : 8} className="text-center text-muted-foreground">
+                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 11 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
                               No content data available
                             </TableCell>
                           </TableRow>
@@ -613,6 +620,13 @@ const DynamicReport = () => {
                                   <TableCell>{content.watch_time_hours ? `${content.watch_time_hours}%` : "-"}</TableCell>
                                   <TableCell>{(content.subscribers || 0).toLocaleString()}</TableCell>
                                   <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
+                                </>
+                              ) : pd.platform === "X" ? (
+                                <>
+                                  <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.engagements || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.profile_visits || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.link_clicks || 0).toLocaleString()}</TableCell>
                                 </>
                               ) : (
                                 <>
