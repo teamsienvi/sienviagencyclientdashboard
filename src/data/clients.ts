@@ -5,6 +5,7 @@ import serenityScrollsLogo from "@/assets/serenity-scrolls-logo.jpg";
 import oxisureTechLogo from "@/assets/oxisure-tech-logo.png";
 import theHavenAtDeerParkLogo from "@/assets/the-haven-at-deer-park-logo.jpg";
 import bsueBrowLashLogo from "@/assets/bsue-brow-lash-logo.png";
+import cissiePryorPresentsLogo from "@/assets/cissie-pryor-presents-logo.jpg";
 
 export interface Report {
   dateRange: string;
@@ -107,6 +108,7 @@ export const clientsData: Client[] = [
   },
   {
     name: "Cissie Pryor Presents",
+    logo: cissiePryorPresentsLogo,
     reports: [
       { dateRange: "Dec 8-14", link: "/dynamic-report/4590d61c-60de-43d1-be67-c01a391f2bd7", isInternal: true },
     ],
