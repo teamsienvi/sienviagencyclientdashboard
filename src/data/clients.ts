@@ -105,4 +105,10 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 8-14", link: "/dynamic-report/6c0042b9-f216-4fb1-85ff-31f744122837", isInternal: true },
     ],
   },
+  {
+    name: "Cissie Pryor Presents",
+    reports: [
+      { dateRange: "Dec 8-14", link: "/dynamic-report/4590d61c-60de-43d1-be67-c01a391f2bd7", isInternal: true },
+    ],
+  },
 ];
