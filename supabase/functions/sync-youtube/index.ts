@@ -166,8 +166,23 @@ serve(async (req) => {
       const comments = parseInt(stats.commentCount || "0");
       const interactions = likes + comments;
       
-      // Estimate watch time: views * average view duration (assume 50% of video length)
-      const estimatedWatchTimeHours = (views * durationSeconds * 0.5) / 3600;
+      // Improved watch time estimation based on content type and industry averages:
+      // - Shorts (≤60s): ~75% average view duration (high retention for short content)
+      // - Short videos (1-5 min): ~50% average view duration
+      // - Medium videos (5-20 min): ~40% average view duration  
+      // - Long videos (20+ min): ~30% average view duration
+      let retentionRate: number;
+      if (durationSeconds <= 60) {
+        retentionRate = 0.75; // Shorts have high retention
+      } else if (durationSeconds <= 300) {
+        retentionRate = 0.50; // 1-5 min videos
+      } else if (durationSeconds <= 1200) {
+        retentionRate = 0.40; // 5-20 min videos
+      } else {
+        retentionRate = 0.30; // 20+ min videos
+      }
+      
+      const estimatedWatchTimeHours = (views * durationSeconds * retentionRate) / 3600;
 
       const { error: metricsError } = await supabase
         .from("social_content_metrics")
