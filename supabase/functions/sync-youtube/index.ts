@@ -26,13 +26,38 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { clientId, accountId, channelId, periodStart, periodEnd } = await req.json();
+    const { clientId, accountId, channelId: inputChannelId, channelHandle, periodStart, periodEnd } = await req.json();
 
-    if (!channelId) {
+    if (!inputChannelId && !channelHandle) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing channel ID" }),
+        JSON.stringify({ success: false, error: "Missing channel ID or handle" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    let channelId = inputChannelId;
+
+    // If handle provided, resolve to channel ID
+    if (!channelId && channelHandle) {
+      const handle = channelHandle.startsWith('@') ? channelHandle.slice(1) : channelHandle;
+      const handleUrl = `https://www.googleapis.com/youtube/v3/channels?part=id,snippet&forHandle=${handle}&key=${youtubeApiKey}`;
+      
+      console.log(`Resolving handle @${handle} to channel ID...`);
+      const handleResponse = await fetch(handleUrl);
+      
+      if (!handleResponse.ok) {
+        const errorText = await handleResponse.text();
+        console.error("YouTube API error resolving handle:", errorText);
+        throw new Error(`Failed to resolve channel handle: ${handleResponse.status}`);
+      }
+      
+      const handleData = await handleResponse.json();
+      if (!handleData.items?.[0]?.id) {
+        throw new Error(`Channel not found for handle: @${handle}`);
+      }
+      
+      channelId = handleData.items[0].id;
+      console.log(`Resolved @${handle} to channel ID: ${channelId}`);
     }
 
     console.log(`Syncing YouTube data for channel ${channelId}`);
