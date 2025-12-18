@@ -441,6 +441,17 @@ const DynamicReport = () => {
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
               Top Performing Insights
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="text-sm">
+                    <strong>Scoring:</strong> Posts are ranked by a weighted score combining views and engagement. 
+                    Posts with fewer than 50 views are excluded to prevent artificially inflated engagement rates.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </CardTitle>
             <div className="flex items-center gap-2">
               <div className="relative">
