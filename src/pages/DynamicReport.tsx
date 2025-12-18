@@ -310,7 +310,7 @@ const DynamicReport = () => {
                 size="sm"
                 onClick={() =>
                   exportToCSV(
-                    topPosts.map((p) => ({
+                    filteredTopPosts.map((p) => ({
                       Link: p.link,
                       Views: p.views,
                       "Engagement %": p.engagement_percent,
@@ -318,6 +318,7 @@ const DynamicReport = () => {
                       Followers: p.followers,
                       "Reach Tier": p.reach_tier || "",
                       "Engagement Tier": p.engagement_tier || "",
+                      Influence: p.influence || 0,
                     })),
                     "top-posts.csv"
                   )
@@ -346,11 +347,11 @@ const DynamicReport = () => {
                             <Info className="h-3 w-3" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Tier 1: 1M+ views</p>
-                            <p>Tier 2: 500K-1M</p>
-                            <p>Tier 3: 100K-500K</p>
-                            <p>Tier 4: 50K-100K</p>
-                            <p>Tier 5: &lt;50K</p>
+                            <p>Tier 1: &lt; 1k reach</p>
+                            <p>Tier 2: 1k–5k reach</p>
+                            <p>Tier 3: 5k–20k reach</p>
+                            <p>Tier 4: 20k–100k reach</p>
+                            <p>Tier 5: &gt; 100k reach</p>
                           </TooltipContent>
                         </Tooltip>
                       </div>
@@ -363,11 +364,11 @@ const DynamicReport = () => {
                             <Info className="h-3 w-3" />
                           </TooltipTrigger>
                           <TooltipContent>
-                            <p>Tier 1: 8%+</p>
-                            <p>Tier 2: 5-8%</p>
-                            <p>Tier 3: 3-5%</p>
-                            <p>Tier 4: 1-3%</p>
-                            <p>Tier 5: &lt;1%</p>
+                            <p>Tier 1: ≥ 7%</p>
+                            <p>Tier 2: 5–6.99%</p>
+                            <p>Tier 3: 3–4.99%</p>
+                            <p>Tier 4: 1–2.99%</p>
+                            <p>Tier 5: &lt; 1%</p>
                           </TooltipContent>
                         </Tooltip>
                       </div>
