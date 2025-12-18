@@ -69,9 +69,10 @@ type DateRange = "today" | "7d" | "30d" | "custom";
 interface YouTubeAnalyticsSectionProps {
   clientId: string;
   clientName: string;
+  channelHandle?: string; // Optional YouTube channel handle (e.g., "@FatherFigureFormula")
 }
 
-const YouTubeAnalyticsSection = ({ clientId, clientName }: YouTubeAnalyticsSectionProps) => {
+const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChannelHandle }: YouTubeAnalyticsSectionProps) => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<YouTubeStats | null>(null);
@@ -249,17 +250,17 @@ const YouTubeAnalyticsSection = ({ clientId, clientName }: YouTubeAnalyticsSecti
       let channelHandle = "";
       let accountId = "";
 
+      // Check for connected YouTube account first
       if (accounts && accounts.length > 0) {
         channelHandle = accounts[0].account_name || accounts[0].account_id;
         accountId = accounts[0].id;
+      } else if (propChannelHandle) {
+        // Use the channel handle passed as prop
+        channelHandle = propChannelHandle;
       } else {
-        if (clientName.toLowerCase().includes("father figure")) {
-          channelHandle = "@FatherFigureFormula";
-        } else {
-          toast.error("No YouTube channel connected");
-          setIsSyncing(false);
-          return;
-        }
+        toast.error("No YouTube channel connected. Please add a YouTube account in the admin settings.");
+        setIsSyncing(false);
+        return;
       }
 
       const { start, end } = getDateRangeFilter();
