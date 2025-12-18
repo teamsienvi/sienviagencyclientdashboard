@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info, ArrowLeft } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { YouTubeAnalytics } from "@/components/YouTubeAnalytics";
 
 interface TopPost {
   id: string;
@@ -458,192 +459,196 @@ const DynamicReport = () => {
 
                 {platformData.map((pd) => (
                   <TabsContent key={pd.id} value={pd.platform}>
-                    {/* Metrics Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <Card className="bg-card">
-                        <CardContent className="pt-6">
-                          <p className="text-sm text-muted-foreground">Followers</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-3xl font-bold">{pd.followers.toLocaleString()}</span>
-                            {pd.new_followers && pd.new_followers > 0 && (
-                              <span className="text-sm text-green-500 flex items-center">
-                                +{pd.new_followers}
-                                <TrendingUp className="h-3 w-3 ml-1" />
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className="bg-card">
-                        <CardContent className="pt-6">
-                          <p className="text-sm text-muted-foreground">Engagement Rate %</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-3xl font-bold">{(pd.engagement_rate || 0).toFixed(2)}%</span>
-                            {pd.last_week_engagement_rate !== null && (
-                              <span
-                                className={`text-sm flex items-center ${
-                                  (pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0)
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                                }`}
-                              >
-                                {(pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0) ? (
-                                  <TrendingUp className="h-3 w-3" />
-                                ) : (
-                                  <TrendingDown className="h-3 w-3" />
+                    {/* Check if YouTube - use dedicated component */}
+                    {(pd.platform === "YouTube" || pd.platform === "Youtube") && report && client ? (
+                      <YouTubeAnalytics
+                        clientId={report.client_id}
+                        clientName={client.name}
+                        content={currentContent.map(c => ({
+                          id: c.id,
+                          content_type: c.content_type,
+                          post_date: c.post_date,
+                          views: c.views,
+                          likes: c.likes,
+                          comments: c.comments,
+                          shares: c.shares,
+                          impressions: c.impressions,
+                          duration: c.duration,
+                          played_to_watch_percent: c.played_to_watch_percent,
+                          watch_time_hours: c.watch_time_hours,
+                          subscribers: c.subscribers,
+                        }))}
+                        followers={pd.followers}
+                        weekStart={report.week_start}
+                        weekEnd={report.week_end}
+                        onDataRefresh={fetchReportData}
+                      />
+                    ) : (
+                      <>
+                        {/* Metrics Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                          <Card className="bg-card">
+                            <CardContent className="pt-6">
+                              <p className="text-sm text-muted-foreground">Followers</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-3xl font-bold">{pd.followers.toLocaleString()}</span>
+                                {pd.new_followers && pd.new_followers > 0 && (
+                                  <span className="text-sm text-green-500 flex items-center">
+                                    +{pd.new_followers}
+                                    <TrendingUp className="h-3 w-3 ml-1" />
+                                  </span>
                                 )}
-                              </span>
-                            )}
-                          </div>
-                          {pd.last_week_engagement_rate !== null && (
-                            <p className="text-xs text-muted-foreground">
-                              Last week: {(pd.last_week_engagement_rate || 0).toFixed(2)}%
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                      <Card className="bg-card">
-                        <CardContent className="pt-6">
-                          <p className="text-sm text-muted-foreground">Total Content</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-3xl font-bold">{pd.total_content || 0}</span>
-                            {pd.last_week_total_content !== null && (
-                              <span
-                                className={`text-sm flex items-center ${
-                                  (pd.total_content || 0) >= (pd.last_week_total_content || 0)
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                                }`}
-                              >
-                                {(pd.total_content || 0) >= (pd.last_week_total_content || 0) ? (
-                                  <TrendingUp className="h-3 w-3" />
-                                ) : (
-                                  <TrendingDown className="h-3 w-3" />
+                              </div>
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-card">
+                            <CardContent className="pt-6">
+                              <p className="text-sm text-muted-foreground">Engagement Rate %</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-3xl font-bold">{(pd.engagement_rate || 0).toFixed(2)}%</span>
+                                {pd.last_week_engagement_rate !== null && (
+                                  <span
+                                    className={`text-sm flex items-center ${
+                                      (pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0)
+                                        ? "text-green-500"
+                                        : "text-red-500"
+                                    }`}
+                                  >
+                                    {(pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0) ? (
+                                      <TrendingUp className="h-3 w-3" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3" />
+                                    )}
+                                  </span>
                                 )}
-                              </span>
-                            )}
+                              </div>
+                              {pd.last_week_engagement_rate !== null && (
+                                <p className="text-xs text-muted-foreground">
+                                  Last week: {(pd.last_week_engagement_rate || 0).toFixed(2)}%
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                          <Card className="bg-card">
+                            <CardContent className="pt-6">
+                              <p className="text-sm text-muted-foreground">Total Content</p>
+                              <div className="flex items-center gap-2">
+                                <span className="text-3xl font-bold">{pd.total_content || 0}</span>
+                                {pd.last_week_total_content !== null && (
+                                  <span
+                                    className={`text-sm flex items-center ${
+                                      (pd.total_content || 0) >= (pd.last_week_total_content || 0)
+                                        ? "text-green-500"
+                                        : "text-red-500"
+                                    }`}
+                                  >
+                                    {(pd.total_content || 0) >= (pd.last_week_total_content || 0) ? (
+                                      <TrendingUp className="h-3 w-3" />
+                                    ) : (
+                                      <TrendingDown className="h-3 w-3" />
+                                    )}
+                                  </span>
+                                )}
+                              </div>
+                              {pd.last_week_total_content !== null && (
+                                <p className="text-xs text-muted-foreground">
+                                  Last week: {pd.last_week_total_content}
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </div>
+
+                        {/* Search and Filter */}
+                        <div className="flex items-center gap-4 mb-4">
+                          <div className="relative flex-1 max-w-xs">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              placeholder="Search content..."
+                              value={contentSearchTerm}
+                              onChange={(e) => setContentSearchTerm(e.target.value)}
+                              className="pl-10"
+                            />
                           </div>
-                          {pd.last_week_total_content !== null && (
-                            <p className="text-xs text-muted-foreground">
-                              Last week: {pd.last_week_total_content}
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
+                          <div className="flex gap-2">
+                            {["All", "Reel", "Post"].map((filter) => (
+                              <Button
+                                key={filter}
+                                variant={contentFilter === filter ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setContentFilter(filter)}
+                              >
+                                {filter}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
 
-                    {/* Search and Filter */}
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="relative flex-1 max-w-xs">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Search content..."
-                          value={contentSearchTerm}
-                          onChange={(e) => setContentSearchTerm(e.target.value)}
-                          className="pl-10"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        {["All", "Reel", "Post"].map((filter) => (
-                          <Button
-                            key={filter}
-                            variant={contentFilter === filter ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setContentFilter(filter)}
-                          >
-                            {filter}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Content Table */}
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Date</TableHead>
-                          {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
-                            <>
-                              <TableHead>Duration</TableHead>
-                              <TableHead>Likes</TableHead>
-                              <TableHead>Comments</TableHead>
-                              <TableHead>Shares</TableHead>
-                              <TableHead>Stayed to Watch %</TableHead>
-                              <TableHead>Views</TableHead>
-                              <TableHead>Watch Time (hrs)</TableHead>
-                              <TableHead>Subscribers</TableHead>
-                              <TableHead>Impressions</TableHead>
-                            </>
-                          ) : pd.platform === "X" ? (
-                            <>
-                              <TableHead>Impressions</TableHead>
-                              <TableHead>Engagements</TableHead>
-                              <TableHead>Profile Visits</TableHead>
-                              <TableHead>Link Clicks</TableHead>
-                            </>
-                          ) : (
-                            <>
-                              <TableHead>Reach</TableHead>
-                              <TableHead>Views</TableHead>
-                              <TableHead>Likes & Reactions</TableHead>
-                              <TableHead>Comments</TableHead>
-                              <TableHead>Shares</TableHead>
-                              <TableHead>Interactions</TableHead>
-                            </>
-                          )}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredContent.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 11 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
-                              No content data available
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          filteredContent.map((content) => (
-                            <TableRow key={content.id}>
-                              <TableCell>
-                                <Badge className={getTypeBadgeColor(content.content_type)}>
-                                  {content.content_type}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>{formatDate(content.post_date)}</TableCell>
-                              {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
+                        {/* Content Table */}
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Date</TableHead>
+                              {pd.platform === "X" ? (
                                 <>
-                                  <TableCell>{content.duration || "-"}</TableCell>
-                                  <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{content.played_to_watch_percent ? `${content.played_to_watch_percent}%` : "-"}</TableCell>
-                                  <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{content.watch_time_hours ? `${content.watch_time_hours}%` : "-"}</TableCell>
-                                  <TableCell>{(content.subscribers || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
-                                </>
-                              ) : pd.platform === "X" ? (
-                                <>
-                                  <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.engagements || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.profile_visits || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.link_clicks || 0).toLocaleString()}</TableCell>
+                                  <TableHead>Impressions</TableHead>
+                                  <TableHead>Engagements</TableHead>
+                                  <TableHead>Profile Visits</TableHead>
+                                  <TableHead>Link Clicks</TableHead>
                                 </>
                               ) : (
                                 <>
-                                  <TableCell>{(content.reach || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.interactions || 0).toLocaleString()}</TableCell>
+                                  <TableHead>Reach</TableHead>
+                                  <TableHead>Views</TableHead>
+                                  <TableHead>Likes & Reactions</TableHead>
+                                  <TableHead>Comments</TableHead>
+                                  <TableHead>Shares</TableHead>
+                                  <TableHead>Interactions</TableHead>
                                 </>
                               )}
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredContent.length === 0 ? (
+                              <TableRow>
+                                <TableCell colSpan={pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
+                                  No content data available
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              filteredContent.map((content) => (
+                                <TableRow key={content.id}>
+                                  <TableCell>
+                                    <Badge className={getTypeBadgeColor(content.content_type)}>
+                                      {content.content_type}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>{formatDate(content.post_date)}</TableCell>
+                                  {pd.platform === "X" ? (
+                                    <>
+                                      <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.engagements || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.profile_visits || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.link_clicks || 0).toLocaleString()}</TableCell>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <TableCell>{(content.reach || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
+                                      <TableCell>{(content.interactions || 0).toLocaleString()}</TableCell>
+                                    </>
+                                  )}
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
+                      </>
+                    )}
                   </TabsContent>
                 ))}
               </Tabs>
