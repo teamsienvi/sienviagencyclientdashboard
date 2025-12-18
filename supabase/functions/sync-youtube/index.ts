@@ -239,6 +239,106 @@ serve(async (req) => {
       console.error("Error inserting account metrics:", accountMetricsError);
     }
 
+    // Populate top_performing_posts table
+    // First, find or create a report for this client and date range
+    const { data: existingReport } = await supabase
+      .from("reports")
+      .select("id")
+      .eq("client_id", clientId)
+      .eq("week_start", periodStart)
+      .eq("week_end", periodEnd)
+      .maybeSingle();
+
+    let reportId = existingReport?.id;
+
+    if (!reportId) {
+      // Create a new report
+      const { data: newReport, error: reportError } = await supabase
+        .from("reports")
+        .insert({
+          client_id: clientId,
+          date_range: `${periodStart} - ${periodEnd}`,
+          week_start: periodStart,
+          week_end: periodEnd,
+        })
+        .select("id")
+        .single();
+
+      if (reportError) {
+        console.error("Error creating report:", reportError);
+      } else {
+        reportId = newReport.id;
+      }
+    }
+
+    // Insert top performing YouTube posts
+    if (reportId) {
+      // Calculate reach and engagement tiers for each video
+      const topPostsToInsert = videoStats
+        .map((video) => {
+          const stats = video.statistics || {};
+          const views = parseInt(stats.viewCount || "0");
+          const likes = parseInt(stats.likeCount || "0");
+          const comments = parseInt(stats.commentCount || "0");
+          const engagementPercent = views > 0 ? ((likes + comments) / views) * 100 : 0;
+
+          // Calculate reach tier (using views as proxy for reach)
+          let reachTier = "Tier 1";
+          if (views >= 100000) reachTier = "Tier 5";
+          else if (views >= 20000) reachTier = "Tier 4";
+          else if (views >= 5000) reachTier = "Tier 3";
+          else if (views >= 1000) reachTier = "Tier 2";
+
+          // Calculate engagement tier
+          let engagementTier = "Tier 5";
+          if (engagementPercent >= 7) engagementTier = "Tier 1";
+          else if (engagementPercent >= 5) engagementTier = "Tier 2";
+          else if (engagementPercent >= 3) engagementTier = "Tier 3";
+          else if (engagementPercent >= 1) engagementTier = "Tier 4";
+
+          // Calculate influence score (1-5)
+          let influence = 1;
+          if (reachTier === "Tier 4" || reachTier === "Tier 5") influence++;
+          if (engagementTier === "Tier 1" || engagementTier === "Tier 2") influence++;
+          if (views >= videoStats.reduce((sum, v) => sum + parseInt(v.statistics?.viewCount || "0"), 0) / videoStats.length) influence++;
+          influence = Math.min(influence, 5);
+
+          return {
+            report_id: reportId,
+            link: `https://www.youtube.com/watch?v=${video.id}`,
+            views,
+            engagement_percent: parseFloat(engagementPercent.toFixed(2)),
+            platform: "Youtube",
+            followers: subscriberCount,
+            reach_tier: reachTier,
+            engagement_tier: engagementTier,
+            influence,
+          };
+        })
+        .sort((a, b) => b.engagement_percent - a.engagement_percent)
+        .slice(0, 10); // Top 10 posts
+
+      // Delete existing YouTube posts for this report to avoid duplicates
+      await supabase
+        .from("top_performing_posts")
+        .delete()
+        .eq("report_id", reportId)
+        .eq("platform", "Youtube");
+
+      // Insert new top posts
+      if (topPostsToInsert.length > 0) {
+        const { error: topPostsError } = await supabase
+          .from("top_performing_posts")
+          .insert(topPostsToInsert);
+
+        if (topPostsError) {
+          console.error("Error inserting top performing posts:", topPostsError);
+        } else {
+          console.log(`Inserted ${topPostsToInsert.length} top performing YouTube posts`);
+        }
+      }
+    }
+
     console.log(`YouTube sync completed. Records synced: ${recordsSynced}`);
 
     return new Response(
