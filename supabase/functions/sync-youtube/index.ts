@@ -159,6 +159,9 @@ serve(async (req) => {
       const likes = parseInt(stats.likeCount || "0");
       const comments = parseInt(stats.commentCount || "0");
       const interactions = likes + comments;
+      
+      // Estimate watch time: views * average view duration (assume 50% of video length)
+      const estimatedWatchTimeHours = (views * durationSeconds * 0.5) / 3600;
 
       const { error: metricsError } = await supabase
         .from("social_content_metrics")
@@ -171,7 +174,7 @@ serve(async (req) => {
           shares: 0, // YouTube doesn't expose shares via API
           interactions,
           subscribers: subscriberCount,
-          watch_time_hours: 0, // Would need YouTube Analytics API with OAuth
+          watch_time_hours: estimatedWatchTimeHours,
           click_through_rate: 0, // Would need YouTube Analytics API with OAuth
           period_start: periodStart,
           period_end: periodEnd,
