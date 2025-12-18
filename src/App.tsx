@@ -8,6 +8,7 @@ import Report from "./pages/Report";
 import DynamicReport from "./pages/DynamicReport";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import YouTubeAnalyticsPage from "./pages/YouTubeAnalyticsPage";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
 import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
 import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
@@ -34,6 +35,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/youtube-analytics/:clientId" element={<YouTubeAnalyticsPage />} />
           <Route path="/report/:clientId/:reportId" element={<Report />} />
           <Route path="/dynamic-report/:reportId" element={<DynamicReport />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
