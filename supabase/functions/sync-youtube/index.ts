@@ -133,19 +133,25 @@ serve(async (req) => {
       const durationSeconds = parseDuration(duration);
       const contentType = durationSeconds <= 60 ? "short" : "video";
 
-      // Upsert content
+      // Upsert content - only include social_account_id if it's a valid UUID
+      const contentData: any = {
+        client_id: clientId,
+        platform: "youtube",
+        content_id: videoId,
+        content_type: contentType,
+        published_at: snippet.publishedAt || new Date().toISOString(),
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        title: snippet.title?.substring(0, 100),
+      };
+      
+      // Only add social_account_id if it's a valid UUID
+      if (accountId && accountId.length === 36) {
+        contentData.social_account_id = accountId;
+      }
+
       const { data: content, error: contentError } = await supabase
         .from("social_content")
-        .upsert({
-          client_id: clientId,
-          social_account_id: accountId,
-          platform: "youtube",
-          content_id: videoId,
-          content_type: contentType,
-          published_at: snippet.publishedAt || new Date().toISOString(),
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-          title: snippet.title?.substring(0, 100),
-        }, { onConflict: 'client_id,platform,content_id' })
+        .upsert(contentData, { onConflict: 'client_id,platform,content_id' })
         .select()
         .single();
 
@@ -195,19 +201,24 @@ serve(async (req) => {
     
     const engagementRate = subscriberCount > 0 ? (totalInteractions / subscriberCount) * 100 : 0;
 
-    // Store account metrics
+    // Store account metrics - only include social_account_id if valid
+    const accountMetricsData: any = {
+      client_id: clientId,
+      platform: "youtube",
+      followers: subscriberCount,
+      engagement_rate: engagementRate,
+      total_content: videoStats.length,
+      period_start: periodStart,
+      period_end: periodEnd,
+    };
+    
+    if (accountId && accountId.length === 36) {
+      accountMetricsData.social_account_id = accountId;
+    }
+
     const { error: accountMetricsError } = await supabase
       .from("social_account_metrics")
-      .insert({
-        client_id: clientId,
-        social_account_id: accountId,
-        platform: "youtube",
-        followers: subscriberCount,
-        engagement_rate: engagementRate,
-        total_content: videoStats.length,
-        period_start: periodStart,
-        period_end: periodEnd,
-      });
+      .insert(accountMetricsData);
 
     if (accountMetricsError) {
       console.error("Error inserting account metrics:", accountMetricsError);

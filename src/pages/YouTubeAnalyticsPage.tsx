@@ -86,10 +86,11 @@ const YouTubeAnalyticsPage = () => {
     likes: number,
     comments: number,
     shares: number,
-    views: number
+    views: number,
+    newSubscribers: number = 0
   ): number => {
     if (views === 0) return 0;
-    return ((likes + comments + shares) / views) * 100;
+    return ((likes + comments + shares + Math.abs(newSubscribers)) / views) * 100;
   };
 
   const getDateRangeFilter = (): { start: Date; end: Date } => {
@@ -196,7 +197,7 @@ const YouTubeAnalyticsPage = () => {
         totalComments,
         totalShares,
         totalWatchTimeHours,
-        engagementRate: computeEngagementRate(totalLikes, totalComments, totalShares, totalViews),
+        engagementRate: computeEngagementRate(totalLikes, totalComments, totalShares, totalViews, newFollowers),
       });
     } catch (err: any) {
       console.error("Error fetching YouTube data:", err);
