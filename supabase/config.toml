@@ -2,3 +2,21 @@ project_id = "ihbdwilzjxivmmmlkuyu"
 
 [functions.fetch-client-analytics]
 verify_jwt = false
+
+[functions.sync-social-analytics]
+verify_jwt = false
+
+[functions.sync-meta]
+verify_jwt = false
+
+[functions.sync-youtube]
+verify_jwt = false
+
+[functions.sync-tiktok]
+verify_jwt = false
+
+[functions.sync-x]
+verify_jwt = false
+
+[functions.sync-linkedin]
+verify_jwt = false
