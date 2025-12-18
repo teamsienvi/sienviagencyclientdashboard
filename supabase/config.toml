@@ -12,6 +12,9 @@ verify_jwt = false
 [functions.sync-youtube]
 verify_jwt = false
 
+[functions.sync-youtube-bulk]
+verify_jwt = false
+
 [functions.sync-tiktok]
 verify_jwt = false
 
