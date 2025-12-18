@@ -215,15 +215,23 @@ const DynamicReport = () => {
       }
 
       // Update followers for any YouTube posts with 0 followers
-      const enhancedTopPosts = allTopPosts.map((post) => {
-        if ((post.platform?.toLowerCase() === "youtube" || post.platform === "Youtube") && post.followers === 0) {
-          return { ...post, followers: youtubeFollowers };
-        }
-        return post;
-      });
+      const enhancedTopPosts = allTopPosts
+        .map((post) => {
+          if ((post.platform?.toLowerCase() === "youtube" || post.platform === "Youtube") && post.followers === 0) {
+            return { ...post, followers: youtubeFollowers };
+          }
+          return post;
+        })
+        // Filter out posts with very low views (< 50) as they have artificially inflated engagement %
+        .filter((post) => post.views >= 50);
 
-      // Sort by engagement percentage descending
-      enhancedTopPosts.sort((a, b) => (b.engagement_percent || 0) - (a.engagement_percent || 0));
+      // Sort by a weighted score: views matter more than just engagement %
+      // This prevents low-view posts with inflated engagement from ranking high
+      enhancedTopPosts.sort((a, b) => {
+        const scoreA = a.views * (1 + (a.engagement_percent || 0) / 100);
+        const scoreB = b.views * (1 + (b.engagement_percent || 0) / 100);
+        return scoreB - scoreA;
+      });
 
       setTopPosts(enhancedTopPosts);
 
