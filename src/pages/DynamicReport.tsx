@@ -132,43 +132,100 @@ const DynamicReport = () => {
 
       if (!clientError) setClient(clientData);
 
-      // Fetch top posts
+      // Fetch top posts from the top_performing_posts table
       const { data: topPostsData, error: topPostsError } = await supabase
         .from("top_performing_posts")
         .select("*")
         .eq("report_id", reportId);
 
-      if (!topPostsError && topPostsData) {
-        // For YouTube posts with 0 followers, try to get subscriber count from social_account_metrics
-        const youtubePostsWithZeroFollowers = topPostsData.filter(
-          (p) => (p.platform?.toLowerCase() === "youtube" || p.platform?.toLowerCase() === "Youtube") && p.followers === 0
+      // Also fetch YouTube content from social_content for this date range
+      const { data: youtubeContent } = await supabase
+        .from("social_content")
+        .select(`
+          id, url, title, content_type, published_at,
+          social_content_metrics!inner(views, likes, comments, shares, period_start, period_end)
+        `)
+        .eq("client_id", reportData.client_id)
+        .eq("platform", "youtube")
+        .gte("published_at", `${reportData.week_start}T00:00:00Z`)
+        .lte("published_at", `${reportData.week_end}T23:59:59Z`);
+
+      // Fetch YouTube subscriber count
+      const { data: youtubeMetrics } = await supabase
+        .from("social_account_metrics")
+        .select("followers")
+        .eq("client_id", reportData.client_id)
+        .eq("platform", "youtube")
+        .order("collected_at", { ascending: false })
+        .limit(1);
+
+      const youtubeFollowers = youtubeMetrics?.[0]?.followers || 0;
+
+      // Combine existing top posts with YouTube content
+      let allTopPosts: TopPost[] = topPostsData || [];
+
+      // Check if we have YouTube posts in social_content that aren't in top_performing_posts
+      if (youtubeContent && youtubeContent.length > 0) {
+        const existingYoutubeLinks = new Set(
+          allTopPosts
+            .filter((p) => p.platform?.toLowerCase() === "youtube")
+            .map((p) => p.link)
         );
 
-        if (youtubePostsWithZeroFollowers.length > 0 && reportData.client_id) {
-          // Fetch the latest YouTube account metrics for this client
-          const { data: youtubeMetrics } = await supabase
-            .from("social_account_metrics")
-            .select("followers")
-            .eq("client_id", reportData.client_id)
-            .eq("platform", "youtube")
-            .order("collected_at", { ascending: false })
-            .limit(1);
+        // Process YouTube content and add missing posts
+        const youtubeTopPosts: TopPost[] = youtubeContent
+          .map((content: any) => {
+            // Get the latest metrics
+            const metrics = content.social_content_metrics?.[0] || {};
+            const views = metrics.views || 0;
+            const likes = metrics.likes || 0;
+            const comments = metrics.comments || 0;
+            const engagementPercent = views > 0 ? ((likes + comments) / views) * 100 : 0;
 
-          const youtubeFollowers = youtubeMetrics?.[0]?.followers || 0;
+            // Calculate reach tier
+            let reachTier = "Tier 1";
+            if (views >= 100000) reachTier = "Tier 5";
+            else if (views >= 20000) reachTier = "Tier 4";
+            else if (views >= 5000) reachTier = "Tier 3";
+            else if (views >= 1000) reachTier = "Tier 2";
 
-          // Update followers for YouTube posts
-          const enhancedTopPosts = topPostsData.map((post) => {
-            if ((post.platform?.toLowerCase() === "youtube" || post.platform?.toLowerCase() === "Youtube") && post.followers === 0) {
-              return { ...post, followers: youtubeFollowers };
-            }
-            return post;
-          });
+            // Calculate engagement tier
+            let engagementTier = "Tier 5";
+            if (engagementPercent >= 7) engagementTier = "Tier 1";
+            else if (engagementPercent >= 5) engagementTier = "Tier 2";
+            else if (engagementPercent >= 3) engagementTier = "Tier 3";
+            else if (engagementPercent >= 1) engagementTier = "Tier 4";
 
-          setTopPosts(enhancedTopPosts);
-        } else {
-          setTopPosts(topPostsData);
-        }
+            return {
+              id: content.id,
+              link: content.url || "",
+              views,
+              engagement_percent: parseFloat(engagementPercent.toFixed(2)),
+              platform: "Youtube",
+              followers: youtubeFollowers,
+              reach_tier: reachTier,
+              engagement_tier: engagementTier,
+              influence: Math.min(Math.ceil(views / 100) + (engagementPercent >= 3 ? 1 : 0), 5),
+            };
+          })
+          .filter((post: TopPost) => post.views > 0 && !existingYoutubeLinks.has(post.link));
+
+        // Merge and sort by views + engagement
+        allTopPosts = [...allTopPosts, ...youtubeTopPosts];
       }
+
+      // Update followers for any YouTube posts with 0 followers
+      const enhancedTopPosts = allTopPosts.map((post) => {
+        if ((post.platform?.toLowerCase() === "youtube" || post.platform === "Youtube") && post.followers === 0) {
+          return { ...post, followers: youtubeFollowers };
+        }
+        return post;
+      });
+
+      // Sort by engagement percentage descending
+      enhancedTopPosts.sort((a, b) => (b.engagement_percent || 0) - (a.engagement_percent || 0));
+
+      setTopPosts(enhancedTopPosts);
 
       // Fetch platform data
       const { data: platformDataResult, error: platformError } = await supabase

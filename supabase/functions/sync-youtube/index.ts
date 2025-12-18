@@ -274,6 +274,7 @@ serve(async (req) => {
     // Insert top performing YouTube posts
     if (reportId) {
       // Calculate reach and engagement tiers for each video
+      // Sort by a combination of views and engagement to get truly "top performing" posts
       const topPostsToInsert = videoStats
         .map((video) => {
           const stats = video.statistics || {};
@@ -296,12 +297,17 @@ serve(async (req) => {
           else if (engagementPercent >= 3) engagementTier = "Tier 3";
           else if (engagementPercent >= 1) engagementTier = "Tier 4";
 
-          // Calculate influence score (1-5)
+          // Calculate influence score (1-5) based on multiple factors
+          const avgViews = videoStats.reduce((sum, v) => sum + parseInt(v.statistics?.viewCount || "0"), 0) / videoStats.length;
           let influence = 1;
-          if (reachTier === "Tier 4" || reachTier === "Tier 5") influence++;
-          if (engagementTier === "Tier 1" || engagementTier === "Tier 2") influence++;
-          if (views >= videoStats.reduce((sum, v) => sum + parseInt(v.statistics?.viewCount || "0"), 0) / videoStats.length) influence++;
+          if (views >= avgViews * 2) influence++; // 2x above average
+          if (views >= avgViews) influence++; // Above average
+          if (engagementPercent >= 3) influence++; // Good engagement
+          if (engagementPercent >= 5) influence++; // Great engagement
           influence = Math.min(influence, 5);
+
+          // Calculate a composite score for ranking (views weighted + engagement bonus)
+          const compositeScore = views + (engagementPercent * 100);
 
           return {
             report_id: reportId,
@@ -309,14 +315,17 @@ serve(async (req) => {
             views,
             engagement_percent: parseFloat(engagementPercent.toFixed(2)),
             platform: "Youtube",
-            followers: subscriberCount,
+            followers: subscriberCount, // Use the actual subscriber count
             reach_tier: reachTier,
             engagement_tier: engagementTier,
             influence,
+            compositeScore, // For sorting
           };
         })
-        .sort((a, b) => b.engagement_percent - a.engagement_percent)
-        .slice(0, 10); // Top 10 posts
+        .filter((post) => post.views > 0) // Only include posts with views
+        .sort((a, b) => b.compositeScore - a.compositeScore) // Sort by composite score
+        .slice(0, 10) // Top 10 posts
+        .map(({ compositeScore, ...post }) => post); // Remove compositeScore before insert
 
       // Delete existing YouTube posts for this report to avoid duplicates
       await supabase
@@ -334,7 +343,7 @@ serve(async (req) => {
         if (topPostsError) {
           console.error("Error inserting top performing posts:", topPostsError);
         } else {
-          console.log(`Inserted ${topPostsToInsert.length} top performing YouTube posts`);
+          console.log(`Inserted ${topPostsToInsert.length} top performing YouTube posts with subscriber count: ${subscriberCount}`);
         }
       }
     }
