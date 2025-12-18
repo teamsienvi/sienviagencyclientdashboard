@@ -14,35 +14,41 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const youtubeApiKey = Deno.env.get("YOUTUBE_API_KEY");
+    
+    if (!youtubeApiKey) {
+      console.error("YOUTUBE_API_KEY is not configured");
+      return new Response(
+        JSON.stringify({ success: false, error: "YouTube API key not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { clientId, accountId, platform, accessToken, accountExternalId, periodStart, periodEnd } = await req.json();
+    const { clientId, accountId, channelId, periodStart, periodEnd } = await req.json();
 
-    if (!accessToken || !accountExternalId) {
+    if (!channelId) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing access token or channel ID" }),
+        JSON.stringify({ success: false, error: "Missing channel ID" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Syncing YouTube data for channel ${accountExternalId}`);
+    console.log(`Syncing YouTube data for channel ${channelId}`);
 
     let recordsSynced = 0;
 
-    // Fetch channel statistics
-    const channelUrl = `https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${accountExternalId}&key=${accessToken}`;
+    // Fetch channel statistics using API key
+    const channelUrl = `https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${channelId}&key=${youtubeApiKey}`;
     
     console.log("Fetching channel statistics...");
-    const channelResponse = await fetch(channelUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const channelResponse = await fetch(channelUrl);
 
     if (!channelResponse.ok) {
       const errorText = await channelResponse.text();
       console.error("YouTube API error:", errorText);
-      throw new Error(`YouTube API error: ${channelResponse.status}`);
+      throw new Error(`YouTube API error: ${channelResponse.status} - ${errorText}`);
     }
 
     const channelData = await channelResponse.json();
@@ -56,15 +62,13 @@ serve(async (req) => {
     const videoCount = parseInt(channel.statistics?.videoCount || "0");
     const viewCount = parseInt(channel.statistics?.viewCount || "0");
 
+    console.log(`Channel found: ${channel.snippet?.title}, Subscribers: ${subscriberCount}`);
+
     // Fetch recent videos using YouTube Data API
-    const videosUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${accountExternalId}&type=video&order=date&publishedAfter=${periodStart}T00:00:00Z&publishedBefore=${periodEnd}T23:59:59Z&maxResults=50`;
+    const videosUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&order=date&publishedAfter=${periodStart}T00:00:00Z&publishedBefore=${periodEnd}T23:59:59Z&maxResults=50&key=${youtubeApiKey}`;
 
     console.log("Fetching recent videos...");
-    const videosResponse = await fetch(videosUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const videosResponse = await fetch(videosUrl);
 
     if (!videosResponse.ok) {
       const errorText = await videosResponse.text();
@@ -74,19 +78,17 @@ serve(async (req) => {
     const videosData = videosResponse.ok ? await videosResponse.json() : { items: [] };
     const videoItems = videosData.items || [];
 
+    console.log(`Found ${videoItems.length} videos in date range`);
+
     // Get video IDs for statistics
     const videoIds = videoItems.map((v: any) => v.id.videoId).join(",");
 
     // Fetch video statistics
     let videoStats: any[] = [];
     if (videoIds) {
-      const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails,snippet&id=${videoIds}`;
+      const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails,snippet&id=${videoIds}&key=${youtubeApiKey}`;
       
-      const statsResponse = await fetch(statsUrl, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const statsResponse = await fetch(statsUrl);
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
@@ -190,10 +192,13 @@ serve(async (req) => {
         success: true,
         recordsSynced,
         platform: "youtube",
+        channelName: channel.snippet?.title,
         accountMetrics: {
           subscribers: subscriberCount,
+          totalVideos: videoCount,
+          totalViews: viewCount,
           engagementRate,
-          totalContent: videoStats.length,
+          contentInPeriod: videoStats.length,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
