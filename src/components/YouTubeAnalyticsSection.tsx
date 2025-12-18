@@ -48,6 +48,14 @@ interface YouTubeStats {
   totalShares: number;
   avgRetentionRate: number;
   engagementRate: number;
+  // Previous period stats for comparison
+  prevTotalViews: number;
+  prevTotalLikes: number;
+  prevTotalComments: number;
+  prevTotalShares: number;
+  prevTotalVideos: number;
+  prevEngagementRate: number;
+  prevAvgRetentionRate: number;
 }
 
 interface VideoData {
@@ -119,6 +127,11 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     try {
       setIsLoading(true);
       const { start, end } = getDateRangeFilter();
+      
+      // Calculate previous period for comparison
+      const periodDuration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - periodDuration);
+      const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
 
       // Fetch account metrics
       const { data: accountMetrics } = await supabase
@@ -133,7 +146,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       const previousFollowers = accountMetrics?.[1]?.followers || currentFollowers;
       const newFollowers = currentFollowers - previousFollowers;
 
-      // Fetch content with metrics
+      // Fetch content with metrics for current period
       const { data: contentData } = await supabase
         .from("social_content")
         .select(`
@@ -155,6 +168,24 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         .gte("published_at", start.toISOString())
         .lte("published_at", end.toISOString())
         .order("published_at", { ascending: false });
+
+      // Fetch content with metrics for previous period
+      const { data: prevContentData } = await supabase
+        .from("social_content")
+        .select(`
+          id,
+          content_type,
+          social_content_metrics (
+            views,
+            likes,
+            comments,
+            shares
+          )
+        `)
+        .eq("client_id", clientId)
+        .eq("platform", "youtube")
+        .gte("published_at", prevStart.toISOString())
+        .lte("published_at", prevEnd.toISOString());
 
       let totalViews = 0;
       let totalLikes = 0;
@@ -206,6 +237,35 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         });
       });
 
+      // Calculate previous period totals
+      let prevTotalViews = 0;
+      let prevTotalLikes = 0;
+      let prevTotalComments = 0;
+      let prevTotalShares = 0;
+      let prevShortCount = 0;
+      let prevVideoCount = 0;
+
+      prevContentData?.forEach((content: any) => {
+        const metrics = content.social_content_metrics?.[0];
+        prevTotalViews += metrics?.views || 0;
+        prevTotalLikes += metrics?.likes || 0;
+        prevTotalComments += metrics?.comments || 0;
+        prevTotalShares += metrics?.shares || 0;
+        
+        if (content.content_type?.toLowerCase() === "short") {
+          prevShortCount++;
+        } else {
+          prevVideoCount++;
+        }
+      });
+
+      const prevTotalVideos = (prevContentData?.length || 0);
+      const prevTotalContent = prevShortCount + prevVideoCount;
+      const prevAvgRetention = prevTotalContent > 0 
+        ? ((prevShortCount * 75) + (prevVideoCount * 40)) / prevTotalContent 
+        : 0;
+      const prevEngagementRate = computeEngagementRate(prevTotalLikes, prevTotalComments, prevTotalShares, prevTotalViews);
+
       // Calculate weighted average retention rate
       const totalContent = shortCount + videoCount;
       const avgRetention = totalContent > 0 
@@ -223,6 +283,13 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         totalShares,
         avgRetentionRate: avgRetention,
         engagementRate: computeEngagementRate(totalLikes, totalComments, totalShares, totalViews, newFollowers),
+        prevTotalViews,
+        prevTotalLikes,
+        prevTotalComments,
+        prevTotalShares,
+        prevTotalVideos,
+        prevEngagementRate,
+        prevAvgRetentionRate: prevAvgRetention,
       });
     } catch (err: any) {
       console.error("Error fetching YouTube data:", err);
@@ -389,7 +456,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                       "text-xs font-medium flex items-center",
                       stats.newFollowers > 0 ? "text-green-500" : "text-red-500"
                     )}>
-                      {stats.newFollowers > 0 ? "+" : ""}{stats.newFollowers}
+                      {stats.newFollowers > 0 ? "+" : ""}{stats.newFollowers.toLocaleString()}
                       {stats.newFollowers > 0 ? (
                         <TrendingUp className="h-3 w-3 ml-0.5" />
                       ) : (
@@ -407,7 +474,33 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   <Eye className="h-4 w-4" />
                   <span className="text-xs">Total Views</span>
                 </div>
-                <p className="text-2xl font-bold">{stats.totalViews.toLocaleString()}</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold">{stats.totalViews.toLocaleString()}</p>
+                  {(() => {
+                    const viewsChange = stats.totalViews - stats.prevTotalViews;
+                    if (viewsChange !== 0) {
+                      return (
+                        <span className={cn(
+                          "text-xs font-medium flex items-center",
+                          viewsChange > 0 ? "text-green-500" : "text-red-500"
+                        )}>
+                          {viewsChange > 0 ? "+" : ""}{viewsChange.toLocaleString()}
+                          {viewsChange > 0 ? (
+                            <TrendingUp className="h-3 w-3 ml-0.5" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3 ml-0.5" />
+                          )}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                {stats.prevTotalViews > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Last period: {stats.prevTotalViews.toLocaleString()}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -417,7 +510,28 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   <Clock className="h-4 w-4" />
                   <span className="text-xs">Avg. View Duration</span>
                 </div>
-                <p className="text-2xl font-bold">{stats.avgRetentionRate.toFixed(0)}%</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold">{stats.avgRetentionRate.toFixed(0)}%</p>
+                  {(() => {
+                    const retentionChange = stats.avgRetentionRate - stats.prevAvgRetentionRate;
+                    if (stats.prevAvgRetentionRate > 0 && Math.abs(retentionChange) >= 1) {
+                      return (
+                        <span className={cn(
+                          "text-xs font-medium flex items-center",
+                          retentionChange > 0 ? "text-green-500" : "text-red-500"
+                        )}>
+                          {retentionChange > 0 ? "+" : ""}{retentionChange.toFixed(0)}%
+                          {retentionChange > 0 ? (
+                            <TrendingUp className="h-3 w-3 ml-0.5" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3 ml-0.5" />
+                          )}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               </CardContent>
             </Card>
 
@@ -429,12 +543,35 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 </div>
                 <div className="flex items-baseline gap-2">
                   <p className="text-2xl font-bold">{stats.engagementRate.toFixed(2)}%</p>
-                  {stats.engagementRate >= 3 ? (
-                    <TrendingUp className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <TrendingDown className="h-4 w-4 text-red-500" />
-                  )}
+                  {(() => {
+                    const engagementChange = stats.engagementRate - stats.prevEngagementRate;
+                    if (stats.prevEngagementRate > 0) {
+                      return (
+                        <span className={cn(
+                          "text-xs font-medium flex items-center",
+                          engagementChange >= 0 ? "text-green-500" : "text-red-500"
+                        )}>
+                          {engagementChange >= 0 ? "+" : ""}{engagementChange.toFixed(2)}%
+                          {engagementChange >= 0 ? (
+                            <TrendingUp className="h-3 w-3 ml-0.5" />
+                          ) : (
+                            <TrendingDown className="h-3 w-3 ml-0.5" />
+                          )}
+                        </span>
+                      );
+                    }
+                    return stats.engagementRate >= 3 ? (
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <TrendingDown className="h-4 w-4 text-red-500" />
+                    );
+                  })()}
                 </div>
+                {stats.prevEngagementRate > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Last period: {stats.prevEngagementRate.toFixed(2)}%
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -445,6 +582,25 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               <CardContent className="py-4 text-center">
                 <ThumbsUp className="h-4 w-4 mx-auto mb-1 text-blue-500" />
                 <p className="text-lg font-semibold">{stats.totalLikes.toLocaleString()}</p>
+                {(() => {
+                  const likesChange = stats.totalLikes - stats.prevTotalLikes;
+                  if (likesChange !== 0) {
+                    return (
+                      <span className={cn(
+                        "text-xs font-medium flex items-center justify-center",
+                        likesChange > 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {likesChange > 0 ? "+" : ""}{likesChange.toLocaleString()}
+                        {likesChange > 0 ? (
+                          <TrendingUp className="h-3 w-3 ml-0.5" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 ml-0.5" />
+                        )}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
                 <p className="text-xs text-muted-foreground">Likes</p>
               </CardContent>
             </Card>
@@ -452,6 +608,25 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               <CardContent className="py-4 text-center">
                 <MessageCircle className="h-4 w-4 mx-auto mb-1 text-green-500" />
                 <p className="text-lg font-semibold">{stats.totalComments.toLocaleString()}</p>
+                {(() => {
+                  const commentsChange = stats.totalComments - stats.prevTotalComments;
+                  if (commentsChange !== 0) {
+                    return (
+                      <span className={cn(
+                        "text-xs font-medium flex items-center justify-center",
+                        commentsChange > 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {commentsChange > 0 ? "+" : ""}{commentsChange.toLocaleString()}
+                        {commentsChange > 0 ? (
+                          <TrendingUp className="h-3 w-3 ml-0.5" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 ml-0.5" />
+                        )}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
                 <p className="text-xs text-muted-foreground">Comments</p>
               </CardContent>
             </Card>
@@ -459,6 +634,25 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               <CardContent className="py-4 text-center">
                 <Share2 className="h-4 w-4 mx-auto mb-1 text-purple-500" />
                 <p className="text-lg font-semibold">{stats.totalShares.toLocaleString()}</p>
+                {(() => {
+                  const sharesChange = stats.totalShares - stats.prevTotalShares;
+                  if (sharesChange !== 0) {
+                    return (
+                      <span className={cn(
+                        "text-xs font-medium flex items-center justify-center",
+                        sharesChange > 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {sharesChange > 0 ? "+" : ""}{sharesChange.toLocaleString()}
+                        {sharesChange > 0 ? (
+                          <TrendingUp className="h-3 w-3 ml-0.5" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 ml-0.5" />
+                        )}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
                 <p className="text-xs text-muted-foreground">Shares</p>
               </CardContent>
             </Card>
@@ -466,6 +660,25 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               <CardContent className="py-4 text-center">
                 <PlayCircle className="h-4 w-4 mx-auto mb-1 text-red-500" />
                 <p className="text-lg font-semibold">{stats.totalVideos}</p>
+                {(() => {
+                  const videosChange = stats.totalVideos - stats.prevTotalVideos;
+                  if (videosChange !== 0) {
+                    return (
+                      <span className={cn(
+                        "text-xs font-medium flex items-center justify-center",
+                        videosChange > 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {videosChange > 0 ? "+" : ""}{videosChange}
+                        {videosChange > 0 ? (
+                          <TrendingUp className="h-3 w-3 ml-0.5" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 ml-0.5" />
+                        )}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
                 <p className="text-xs text-muted-foreground">Videos</p>
               </CardContent>
             </Card>
