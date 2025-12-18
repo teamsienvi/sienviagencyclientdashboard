@@ -330,11 +330,13 @@ const DynamicReport = () => {
     return date.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
   };
 
-  const filteredTopPosts = topPosts.filter(
-    (post) =>
-      post.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      post.link.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTopPosts = topPosts
+    .filter(
+      (post) =>
+        post.platform.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        post.link.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .slice(0, 3); // Limit to top 3 performing posts
 
   const getChartData = () => {
     return platformData.map((pd) => {
