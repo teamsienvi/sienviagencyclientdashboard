@@ -188,7 +188,10 @@ const DynamicReport = () => {
       Reel: "bg-violet-500 text-white",
       Photo: "bg-secondary text-secondary-foreground",
       Post: "bg-secondary text-secondary-foreground",
-      Video: "bg-violet-500 text-white",
+      Video: "bg-red-500 text-white",
+      video: "bg-red-500 text-white",
+      Short: "bg-pink-500 text-white",
+      short: "bg-pink-500 text-white",
     };
     return colors[type] || "bg-secondary text-secondary-foreground";
   };
@@ -268,9 +271,10 @@ const DynamicReport = () => {
   const currentContent = platformContent[activePlatform] || [];
   const filteredContent = currentContent.filter(
     (c) =>
-      (contentFilter === "All" || c.content_type === contentFilter) &&
+      (contentFilter === "All" || c.content_type.toLowerCase() === contentFilter.toLowerCase()) &&
       (c.content_type.toLowerCase().includes(contentSearchTerm.toLowerCase()) ||
-        c.post_date.includes(contentSearchTerm))
+        c.post_date.includes(contentSearchTerm) ||
+        (c.title && c.title.toLowerCase().includes(contentSearchTerm.toLowerCase())))
   );
 
   return (
@@ -547,12 +551,15 @@ const DynamicReport = () => {
                         />
                       </div>
                       <div className="flex gap-2">
-                        {["All", "Reel", "Post"].map((filter) => (
+                        {(pd.platform === "YouTube" || pd.platform === "Youtube" 
+                          ? ["All", "Video", "Short"] 
+                          : ["All", "Reel", "Post"]
+                        ).map((filter) => (
                           <Button
                             key={filter}
                             variant={contentFilter === filter ? "default" : "outline"}
                             size="sm"
-                            onClick={() => setContentFilter(filter)}
+                            onClick={() => setContentFilter(filter.toLowerCase() === "all" ? "All" : filter.toLowerCase())}
                           >
                             {filter}
                           </Button>
@@ -610,7 +617,7 @@ const DynamicReport = () => {
                             <TableRow key={content.id}>
                               <TableCell>
                                 <Badge className={getTypeBadgeColor(content.content_type)}>
-                                  {content.content_type}
+                                  {content.content_type.charAt(0).toUpperCase() + content.content_type.slice(1).toLowerCase()}
                                 </Badge>
                               </TableCell>
                               {(pd.platform === "YouTube" || pd.platform === "Youtube") && (
