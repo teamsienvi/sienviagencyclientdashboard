@@ -656,7 +656,7 @@ const DynamicReport = () => {
                                   <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
                                   <TableCell>{content.played_to_watch_percent ? `${content.played_to_watch_percent}%` : "-"}</TableCell>
                                   <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{content.watch_time_hours ? `${content.watch_time_hours}%` : "-"}</TableCell>
+                                  <TableCell>{content.watch_time_hours ? `${Number(content.watch_time_hours).toFixed(1)}h` : "-"}</TableCell>
                                   <TableCell>{(content.subscribers || 0).toLocaleString()}</TableCell>
                                   <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
                                 </>
