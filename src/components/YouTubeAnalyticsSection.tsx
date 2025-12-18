@@ -252,7 +252,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
       // Check for connected YouTube account first
       if (accounts && accounts.length > 0) {
-        channelHandle = accounts[0].account_name || accounts[0].account_id;
+        // account_id stores the actual YouTube handle (e.g., @CissiePryorPresents)
+        // account_name is just the display name
+        channelHandle = accounts[0].account_id;
         accountId = accounts[0].id;
       } else if (propChannelHandle) {
         // Use the channel handle passed as prop
