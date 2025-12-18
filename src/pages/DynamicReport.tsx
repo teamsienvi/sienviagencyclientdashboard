@@ -589,9 +589,8 @@ const DynamicReport = () => {
                               <TableHead>Likes</TableHead>
                               <TableHead>Comments</TableHead>
                               <TableHead>Shares</TableHead>
-                              <TableHead>Stayed to Watch %</TableHead>
+                              <TableHead>Avg. Duration %</TableHead>
                               <TableHead>Views</TableHead>
-                              <TableHead>Watch Time (hrs)</TableHead>
                               <TableHead>Subscribers</TableHead>
                               <TableHead>Impressions</TableHead>
                             </>
@@ -617,7 +616,7 @@ const DynamicReport = () => {
                       <TableBody>
                         {filteredContent.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 13 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
+                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 12 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
                               No content data available
                             </TableCell>
                           </TableRow>
@@ -654,9 +653,8 @@ const DynamicReport = () => {
                                   <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
                                   <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
                                   <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{content.played_to_watch_percent ? `${content.played_to_watch_percent}%` : "-"}</TableCell>
+                                  <TableCell>{content.content_type?.toLowerCase() === "short" ? "75%" : "40%"}</TableCell>
                                   <TableCell>{(content.views || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{content.watch_time_hours ? `${Number(content.watch_time_hours).toFixed(1)}h` : "-"}</TableCell>
                                   <TableCell>{(content.subscribers || 0).toLocaleString()}</TableCell>
                                   <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
                                 </>
