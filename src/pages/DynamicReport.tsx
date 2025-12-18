@@ -69,6 +69,9 @@ interface PlatformContent {
   watch_time_hours: number | null;
   subscribers: number | null;
   click_through_rate: number | null;
+  // Link and title fields
+  url: string | null;
+  title: string | null;
 }
 
 interface Report {
@@ -562,6 +565,7 @@ const DynamicReport = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Type</TableHead>
+                          <TableHead>Video</TableHead>
                           <TableHead>Date</TableHead>
                           {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
                             <>
@@ -597,7 +601,7 @@ const DynamicReport = () => {
                       <TableBody>
                         {filteredContent.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 11 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
+                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 13 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
                               No content data available
                             </TableCell>
                           </TableRow>
@@ -609,6 +613,24 @@ const DynamicReport = () => {
                                   {content.content_type}
                                 </Badge>
                               </TableCell>
+                              {(pd.platform === "YouTube" || pd.platform === "Youtube") && (
+                                <TableCell>
+                                  {content.url ? (
+                                    <a
+                                      href={content.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary hover:underline flex items-center gap-1 max-w-[200px] truncate"
+                                      title={content.title || "View Video"}
+                                    >
+                                      {content.title || "View Video"}
+                                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                </TableCell>
+                              )}
                               <TableCell>{formatDate(content.post_date)}</TableCell>
                               {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
                                 <>

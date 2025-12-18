@@ -91,6 +91,8 @@ export type Database = {
           reach: number | null
           shares: number | null
           subscribers: number | null
+          title: string | null
+          url: string | null
           views: number | null
           watch_time_hours: number | null
         }
@@ -113,6 +115,8 @@ export type Database = {
           reach?: number | null
           shares?: number | null
           subscribers?: number | null
+          title?: string | null
+          url?: string | null
           views?: number | null
           watch_time_hours?: number | null
         }
@@ -135,6 +139,8 @@ export type Database = {
           reach?: number | null
           shares?: number | null
           subscribers?: number | null
+          title?: string | null
+          url?: string | null
           views?: number | null
           watch_time_hours?: number | null
         }
