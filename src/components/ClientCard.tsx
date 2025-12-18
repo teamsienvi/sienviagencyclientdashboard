@@ -14,6 +14,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
 import { Skeleton } from "@/components/ui/skeleton";
+import { YouTubeAnalyticsCard } from "@/components/YouTubeAnalyticsCard";
 
 interface ClientCardProps {
   client: Client;
@@ -316,6 +317,11 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
               </div>
             )}
           </div>
+        )}
+
+        {/* YouTube Analytics Section */}
+        {clientId && (
+          <YouTubeAnalyticsCard clientId={clientId} clientName={client.name} />
         )}
       </div>
     </div>
