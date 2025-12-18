@@ -271,11 +271,17 @@ const YouTubeAnalyticsSection = ({ clientId, clientName }: YouTubeAnalyticsSecti
   };
 
   const formatWatchTime = (hours: number): string => {
-    if (hours < 1) {
-      const minutes = Math.round(hours * 60);
-      return `${minutes}m`;
+    if (hours === 0) return "0m";
+    if (hours >= 1) {
+      return `${hours.toFixed(1)}h`;
     }
-    return `${hours.toFixed(1)}h`;
+    const minutes = hours * 60;
+    if (minutes >= 1) {
+      return `${Math.round(minutes)}m`;
+    }
+    // Show seconds for very small values
+    const seconds = Math.round(minutes * 60);
+    return seconds > 0 ? `${seconds}s` : "0m";
   };
 
   const getTypeBadgeColor = (type: string) => {
