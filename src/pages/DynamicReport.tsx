@@ -137,7 +137,37 @@ const DynamicReport = () => {
         .select("*")
         .eq("report_id", reportId);
 
-      if (!topPostsError) setTopPosts(topPostsData || []);
+      if (!topPostsError && topPostsData) {
+        // For YouTube posts with 0 followers, try to get subscriber count from social_account_metrics
+        const youtubePostsWithZeroFollowers = topPostsData.filter(
+          (p) => (p.platform?.toLowerCase() === "youtube" || p.platform?.toLowerCase() === "Youtube") && p.followers === 0
+        );
+
+        if (youtubePostsWithZeroFollowers.length > 0 && reportData.client_id) {
+          // Fetch the latest YouTube account metrics for this client
+          const { data: youtubeMetrics } = await supabase
+            .from("social_account_metrics")
+            .select("followers")
+            .eq("client_id", reportData.client_id)
+            .eq("platform", "youtube")
+            .order("collected_at", { ascending: false })
+            .limit(1);
+
+          const youtubeFollowers = youtubeMetrics?.[0]?.followers || 0;
+
+          // Update followers for YouTube posts
+          const enhancedTopPosts = topPostsData.map((post) => {
+            if ((post.platform?.toLowerCase() === "youtube" || post.platform?.toLowerCase() === "Youtube") && post.followers === 0) {
+              return { ...post, followers: youtubeFollowers };
+            }
+            return post;
+          });
+
+          setTopPosts(enhancedTopPosts);
+        } else {
+          setTopPosts(topPostsData);
+        }
+      }
 
       // Fetch platform data
       const { data: platformDataResult, error: platformError } = await supabase
