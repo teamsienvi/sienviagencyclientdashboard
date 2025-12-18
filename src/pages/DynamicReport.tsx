@@ -21,7 +21,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info, ArrowLeft } from "lucide-react";
+import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info, ArrowLeft, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import YouTubeAnalyticsSection from "@/components/YouTubeAnalyticsSection";
@@ -97,6 +97,7 @@ const DynamicReport = () => {
   const [platformData, setPlatformData] = useState<PlatformData[]>([]);
   const [platformContent, setPlatformContent] = useState<Record<string, PlatformContent[]>>({});
   const [loading, setLoading] = useState(true);
+  const [refreshingFollowers, setRefreshingFollowers] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [contentSearchTerm, setContentSearchTerm] = useState("");
   const [contentFilter, setContentFilter] = useState("All");
@@ -198,6 +199,46 @@ const DynamicReport = () => {
       console.error("Error fetching report:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshFollowerCounts = async () => {
+    if (!report?.client_id) return;
+    
+    setRefreshingFollowers(true);
+    try {
+      // Fetch latest social account metrics for all platforms
+      const { data: latestMetrics } = await supabase
+        .from("social_account_metrics")
+        .select("platform, followers")
+        .eq("client_id", report.client_id)
+        .order("collected_at", { ascending: false });
+
+      if (latestMetrics && latestMetrics.length > 0) {
+        // Create a map of platform -> followers
+        const followerMap: Record<string, number> = {};
+        latestMetrics.forEach((m) => {
+          if (!followerMap[m.platform]) {
+            followerMap[m.platform] = m.followers || 0;
+          }
+        });
+
+        // Update top posts with latest follower counts
+        const updatedTopPosts = topPosts.map((post) => {
+          const platformKey = post.platform.toLowerCase();
+          const matchedFollowers = followerMap[platformKey];
+          if (matchedFollowers !== undefined && post.followers === 0) {
+            return { ...post, followers: matchedFollowers };
+          }
+          return post;
+        });
+
+        setTopPosts(updatedTopPosts);
+      }
+    } catch (error) {
+      console.error("Error refreshing follower counts:", error);
+    } finally {
+      setRefreshingFollowers(false);
     }
   };
 
@@ -327,13 +368,14 @@ const DynamicReport = () => {
         </div>
 
         {/* Top Performing Insights */}
+        <TooltipProvider>
         <Card className="mb-8">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5 text-primary" />
               Top Performing Insights
             </CardTitle>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -343,6 +385,21 @@ const DynamicReport = () => {
                   className="pl-10 w-48"
                 />
               </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={refreshFollowerCounts}
+                    disabled={refreshingFollowers}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${refreshingFollowers ? "animate-spin" : ""}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Refresh follower counts from latest metrics</p>
+                </TooltipContent>
+              </Tooltip>
               <Button
                 variant="outline"
                 size="sm"
@@ -368,7 +425,6 @@ const DynamicReport = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <TooltipProvider>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -451,9 +507,9 @@ const DynamicReport = () => {
                   )}
                 </TableBody>
               </Table>
-            </TooltipProvider>
           </CardContent>
         </Card>
+        </TooltipProvider>
 
         {/* Platform Performance Overview Chart */}
         {platformData.length > 0 && (
