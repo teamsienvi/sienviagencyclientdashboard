@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Client } from "@/data/clients";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,6 +14,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ClientCardProps {
   client: Client;
@@ -53,6 +54,26 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
+  const [hasXAccount, setHasXAccount] = useState(false);
+  
+  // Check if client has connected X account
+  useEffect(() => {
+    const checkXAccount = async () => {
+      if (!clientId) return;
+      
+      const { data } = await supabase
+        .from("social_accounts")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .eq("is_active", true)
+        .limit(1);
+      
+      setHasXAccount(data && data.length > 0);
+    };
+    
+    checkXAccount();
+  }, [clientId]);
   
   // Fetch website analytics if websiteAnalyticsId is provided
   const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useClientAnalytics({
@@ -150,9 +171,13 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
           </div>
         </div>
         
-        {/* Socials Analytics Section */}
+        {/* CSV Upload Analytics Section */}
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-foreground">Social Media Analytics</h4>
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <h4 className="text-sm font-medium text-foreground">Weekly Reports</h4>
+            <span className="text-xs text-muted-foreground">(CSV Upload)</span>
+          </div>
           
           {/* Action Buttons */}
           <div className="flex gap-2">
@@ -244,118 +269,119 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
           )}
         </div>
 
-        {/* Website Analytics Section */}
-        {websiteAnalyticsId && (
-          <div className="pt-4 border-t border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-foreground">Website Analytics</h4>
-              <DateRangeSelector 
-                value={dateRange} 
-                onChange={handleDateRangeChange}
-                customRange={customRange}
-              />
+        {/* Automated Analytics Section */}
+        {(websiteAnalyticsId || clientId) && (
+          <div className="pt-4 border-t border-border space-y-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <h4 className="text-sm font-medium text-foreground">Automated Analytics</h4>
+              <span className="text-xs text-muted-foreground">(API)</span>
             </div>
-            
-            {analyticsLoading ? (
-              <div className="grid grid-cols-2 gap-3">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="bg-accent/50 rounded-lg p-3 space-y-2">
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-6 w-12" />
-                  </div>
-                ))}
-              </div>
-            ) : analyticsError ? (
-              <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                <p className="text-xs text-destructive">Failed to load analytics</p>
-              </div>
-            ) : analyticsData?.analytics ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-accent/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <Users className="h-3 w-3" />
-                    <span className="text-xs">Visitors</span>
-                  </div>
-                  <p className="text-lg font-semibold">
-                    {analyticsData.analytics.visitors.toLocaleString()}
-                  </p>
+
+            {/* Website Analytics */}
+            {websiteAnalyticsId && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Website</span>
+                  <DateRangeSelector 
+                    value={dateRange} 
+                    onChange={handleDateRangeChange}
+                    customRange={customRange}
+                  />
                 </div>
-                <div className="bg-accent/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <Eye className="h-3 w-3" />
-                    <span className="text-xs">Page Views</span>
+                
+                {analyticsLoading ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="bg-accent/50 rounded-lg p-3 space-y-2">
+                        <Skeleton className="h-3 w-16" />
+                        <Skeleton className="h-6 w-12" />
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-lg font-semibold">
-                    {analyticsData.analytics.pageViews.toLocaleString()}
-                  </p>
-                </div>
-                <div className="bg-accent/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <Clock className="h-3 w-3" />
-                    <span className="text-xs">Avg Duration</span>
+                ) : analyticsError ? (
+                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
+                    <p className="text-xs text-destructive">Failed to load analytics</p>
                   </div>
-                  <p className="text-lg font-semibold">
-                    {analyticsData.analytics.avgDuration < 60 
-                      ? `${Math.round(analyticsData.analytics.avgDuration)}s`
-                      : `${Math.floor(analyticsData.analytics.avgDuration / 60)}m ${Math.round(analyticsData.analytics.avgDuration % 60)}s`
-                    }
-                  </p>
-                </div>
-                <div className="bg-accent/50 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <TrendingDown className="h-3 w-3" />
-                    <span className="text-xs">Bounce Rate</span>
+                ) : analyticsData?.analytics ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-accent/50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Users className="h-3 w-3" />
+                        <span className="text-xs">Visitors</span>
+                      </div>
+                      <p className="text-lg font-semibold">
+                        {analyticsData.analytics.visitors.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-accent/50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Eye className="h-3 w-3" />
+                        <span className="text-xs">Page Views</span>
+                      </div>
+                      <p className="text-lg font-semibold">
+                        {analyticsData.analytics.pageViews.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-accent/50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Clock className="h-3 w-3" />
+                        <span className="text-xs">Avg Duration</span>
+                      </div>
+                      <p className="text-lg font-semibold">
+                        {analyticsData.analytics.avgDuration < 60 
+                          ? `${Math.round(analyticsData.analytics.avgDuration)}s`
+                          : `${Math.floor(analyticsData.analytics.avgDuration / 60)}m ${Math.round(analyticsData.analytics.avgDuration % 60)}s`
+                        }
+                      </p>
+                    </div>
+                    <div className="bg-accent/50 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <TrendingDown className="h-3 w-3" />
+                        <span className="text-xs">Bounce Rate</span>
+                      </div>
+                      <p className="text-lg font-semibold">
+                        {analyticsData.analytics.bounceRate.toFixed(1)}%
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-lg font-semibold">
-                    {analyticsData.analytics.bounceRate.toFixed(1)}%
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-xs text-muted-foreground">No analytics configured</p>
+                ) : (
+                  <div className="bg-muted/50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-muted-foreground">No analytics configured</p>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* YouTube Analytics Section */}
-        {clientId && (
-          <div className="pt-4 border-t border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-foreground">YouTube Analytics</h4>
-            </div>
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              onClick={() => navigate(`/youtube-analytics/${clientId}`)}
-            >
-              <span className="flex items-center gap-2">
-                <Youtube className="h-4 w-4 text-red-500" />
-                View YouTube Analytics
-              </span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
+            {/* YouTube Analytics */}
+            {clientId && (
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => navigate(`/youtube-analytics/${clientId}`)}
+              >
+                <span className="flex items-center gap-2">
+                  <Youtube className="h-4 w-4 text-red-500" />
+                  View YouTube Analytics
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
 
-        {/* X (Twitter) Analytics Section */}
-        {clientId && (
-          <div className="pt-4 border-t border-border space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-foreground">X Analytics</h4>
-            </div>
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              onClick={() => navigate(`/x-analytics/${clientId}`)}
-            >
-              <span className="flex items-center gap-2">
-                <Twitter className="h-4 w-4 text-foreground" />
-                View X Analytics
-              </span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            {/* X (Twitter) Analytics - Only show if account is connected */}
+            {clientId && hasXAccount && (
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => navigate(`/x-analytics/${clientId}`)}
+              >
+                <span className="flex items-center gap-2">
+                  <Twitter className="h-4 w-4 text-foreground" />
+                  View X Analytics
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         )}
       </div>
