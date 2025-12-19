@@ -74,7 +74,7 @@ serve(async (req) => {
     // Group events by visitor_id since session_id is often null
     const visitorEvents: Record<string, any[]> = {};
     for (const pv of pageViews) {
-      const visitorId = pv.visitor_id;
+      const visitorId = pv.visitor_id || pv.session_id;
       if (!visitorId) continue;
       if (!visitorEvents[visitorId]) {
         visitorEvents[visitorId] = [];
@@ -87,6 +87,8 @@ serve(async (req) => {
     let bounces = 0;
     const visitorIds = Object.keys(visitorEvents);
 
+    console.log(`Processing ${visitorIds.length} unique visitors/sessions`);
+
     for (const visitorId of visitorIds) {
       const events = visitorEvents[visitorId];
       
@@ -98,17 +100,27 @@ serve(async (req) => {
       // Duration: time between first and last event for this visitor
       if (events.length > 1) {
         const timestamps = events
-          .map((e: any) => new Date(e.created_at || e.viewed_at).getTime())
-          .sort((a: number, b: number) => a - b);
+          .map((e: any) => {
+            const ts = e.created_at || e.viewed_at || e.timestamp;
+            if (!ts) return null;
+            const time = new Date(ts).getTime();
+            return isNaN(time) ? null : time;
+          })
+          .filter((t): t is number => t !== null)
+          .sort((a, b) => a - b);
         
-        const duration = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
-        // Only count reasonable durations (less than 2 hours)
-        if (duration > 0 && duration < 7200) {
-          totalDuration += duration;
-          sessionsWithDuration++;
+        if (timestamps.length >= 2) {
+          const duration = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
+          // Only count reasonable durations (less than 2 hours)
+          if (duration > 0 && duration < 7200) {
+            totalDuration += duration;
+            sessionsWithDuration++;
+          }
         }
       }
     }
+
+    console.log(`Duration calculation: ${sessionsWithDuration} sessions with duration, total: ${totalDuration}s`);
 
     const avgDuration = sessionsWithDuration > 0 ? totalDuration / sessionsWithDuration : 0;
     const bounceRate = visitorIds.length > 0 ? (bounces / visitorIds.length) * 100 : 0;
