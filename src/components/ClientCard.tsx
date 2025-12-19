@@ -456,81 +456,19 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
               </Button>
             )}
 
-            {/* Meta Analytics (Facebook & Instagram) */}
+            {/* Meta Analytics */}
             {clientId && (
-              <div className="space-y-2">
-              <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Meta Analytics</span>
-                </div>
-                
-                {/* Facebook */}
-                <div className="flex items-center justify-between bg-accent/30 rounded-lg p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-blue-500/10 p-1.5">
-                      <Facebook className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <span className="text-sm font-medium">Facebook</span>
-                    {metaAccounts.facebook && (
-                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Connected
-                      </Badge>
-                    )}
-                  </div>
-                  {!metaAccounts.facebook && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleConnectMeta("facebook")}
-                      disabled={connectingPlatform === "facebook"}
-                    >
-                      {connectingPlatform === "facebook" ? "Connecting..." : "Connect"}
-                    </Button>
-                  )}
-                </div>
-
-                {/* Instagram */}
-                <div className="flex items-center justify-between bg-accent/30 rounded-lg p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-1.5">
-                      <Instagram className="h-4 w-4 text-pink-500" />
-                    </div>
-                    <span className="text-sm font-medium">Instagram</span>
-                    {metaAccounts.instagram && (
-                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Connected
-                      </Badge>
-                    )}
-                  </div>
-                  {!metaAccounts.instagram && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleConnectMeta("instagram")}
-                      disabled={connectingPlatform === "instagram"}
-                    >
-                      {connectingPlatform === "instagram" ? "Connecting..." : "Connect"}
-                    </Button>
-                  )}
-                </div>
-
-                {/* View Meta Analytics button */}
-                {(metaAccounts.facebook || metaAccounts.instagram) && (
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-between mt-2"
-                    onClick={() => window.location.href = `/meta-analytics/${clientId}`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-foreground" />
-                      View Meta Analytics
-                    </span>
-                    <ArrowRight className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
+              <Button
+                variant="ghost"
+                className="w-full justify-between"
+                onClick={() => window.location.href = `/meta-analytics/${clientId}`}
+              >
+                <span className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-foreground" />
+                  View Meta Analytics
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             )}
           </div>
         )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
@@ -51,27 +52,41 @@ interface MetaContentMetrics {
   interactions: number | null;
 }
 
+interface OAuthAccount {
+  id: string;
+  access_token: string;
+  instagram_business_id: string | null;
+  page_id: string | null;
+  is_active: boolean;
+}
+
 type DateRangePreset = "7d" | "30d" | "custom";
 type MetaPlatform = "instagram" | "facebook";
 
 const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [activePlatform, setActivePlatform] = useState<MetaPlatform>("instagram");
+  
+  // OAuth account data
+  const [oauthAccount, setOauthAccount] = useState<OAuthAccount | null>(null);
   
   // Instagram data
   const [instagramMetrics, setInstagramMetrics] = useState<MetaAccountMetrics | null>(null);
   const [instagramContent, setInstagramContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
-  const [instagramAccount, setInstagramAccount] = useState<{ id: string; account_id: string; access_token?: string } | null>(null);
+  const [instagramAccount, setInstagramAccount] = useState<{ id: string; account_id: string } | null>(null);
   
   // Facebook data
   const [facebookMetrics, setFacebookMetrics] = useState<MetaAccountMetrics | null>(null);
   const [facebookContent, setFacebookContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
-  const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string; access_token?: string } | null>(null);
+  const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
   
   // Date range state
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+
+  const isConnected = oauthAccount !== null && oauthAccount.is_active;
 
   const getDateRange = () => {
     const today = new Date();
@@ -93,6 +108,18 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     fetchData();
   }, [clientId, dateRangePreset, customDateRange]);
 
+  const fetchOAuthAccount = async () => {
+    const { data } = await supabase
+      .from("social_oauth_accounts")
+      .select("id, access_token, instagram_business_id, page_id, is_active")
+      .eq("client_id", clientId)
+      .eq("is_active", true)
+      .maybeSingle();
+    
+    setOauthAccount(data);
+    return data;
+  };
+
   const fetchPlatformData = async (platform: MetaPlatform, startDate: string, endDate: string) => {
     // Fetch social account
     const { data: accountData } = await supabase
@@ -102,19 +129,6 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .eq("platform", platform)
       .eq("is_active", true)
       .maybeSingle();
-
-    // Also check OAuth accounts for access token
-    const { data: oauthData } = await supabase
-      .from("social_oauth_accounts")
-      .select("id, access_token, instagram_business_id, page_id")
-      .eq("client_id", clientId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    const account = accountData ? {
-      ...accountData,
-      access_token: oauthData?.access_token,
-    } : null;
 
     // Fetch latest account metrics that overlap with selected range
     const { data: metricsData } = await supabase
@@ -147,7 +161,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       metrics: item.social_content_metrics?.[0] || null,
     })) || [];
 
-    return { account, metrics: metricsData, content: contentWithMetrics };
+    return { account: accountData, metrics: metricsData, content: contentWithMetrics };
   };
 
   const fetchData = async () => {
@@ -157,8 +171,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const startDate = format(startOfDay(start), "yyyy-MM-dd");
       const endDate = format(endOfDay(end), "yyyy-MM-dd");
 
-      // Fetch both platforms in parallel
-      const [instagramData, facebookData] = await Promise.all([
+      // Fetch OAuth account and platform data in parallel
+      const [oauth, instagramData, facebookData] = await Promise.all([
+        fetchOAuthAccount(),
         fetchPlatformData("instagram", startDate, endDate),
         fetchPlatformData("facebook", startDate, endDate),
       ]);
@@ -177,35 +192,44 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     }
   };
 
-  const handleSync = async (platform: MetaPlatform) => {
-    const account = platform === "instagram" ? instagramAccount : facebookAccount;
-    
-    if (!account) {
-      toast.error(`No ${platform === "instagram" ? "Instagram" : "Facebook"} account connected`);
-      return;
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("meta-oauth-init", {
+        body: { clientId, platform: "instagram" },
+      });
+
+      if (error) throw error;
+
+      if (data?.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        toast.error("Failed to get authorization URL");
+      }
+    } catch (error: any) {
+      console.error("Connect error:", error);
+      toast.error(error.message || "Failed to connect to Meta");
+    } finally {
+      setConnecting(false);
     }
+  };
 
-    // Check for OAuth token
-    const { data: oauthData } = await supabase
-      .from("social_oauth_accounts")
-      .select("access_token, instagram_business_id, page_id")
-      .eq("client_id", clientId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (!oauthData?.access_token) {
-      toast.error("No access token found. Please reconnect your Meta account.");
+  const handleSync = async (platform: MetaPlatform) => {
+    if (!oauthAccount?.access_token) {
+      toast.error("No access token found. Please connect your Meta account first.");
       return;
     }
 
     const externalId = platform === "instagram" 
-      ? oauthData.instagram_business_id 
-      : oauthData.page_id;
+      ? oauthAccount.instagram_business_id 
+      : oauthAccount.page_id;
 
     if (!externalId) {
       toast.error(`No ${platform} account ID found. Please reconnect your Meta account.`);
       return;
     }
+
+    const account = platform === "instagram" ? instagramAccount : facebookAccount;
 
     setSyncing(true);
     try {
@@ -216,9 +240,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const { data, error } = await supabase.functions.invoke("sync-meta", {
         body: {
           clientId,
-          accountId: account.id,
+          accountId: account?.id,
           platform,
-          accessToken: oauthData.access_token,
+          accessToken: oauthAccount.access_token,
           accountExternalId: externalId,
           periodStart: lastWeek.toISOString().split("T")[0],
           periodEnd: today.toISOString().split("T")[0],
@@ -261,6 +285,37 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         return "📷";
     }
   };
+
+  const renderConnectionCard = () => (
+    <Card className="border-dashed">
+      <CardHeader className="text-center pb-2">
+        <div className="flex justify-center gap-4 mb-4">
+          <div className="rounded-full bg-blue-500/10 p-4">
+            <Facebook className="h-8 w-8 text-blue-500" />
+          </div>
+          <div className="rounded-full bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-4">
+            <Instagram className="h-8 w-8 text-pink-500" />
+          </div>
+        </div>
+        <CardTitle>Connect Your Meta Accounts</CardTitle>
+        <CardDescription className="max-w-md mx-auto">
+          Connect your Facebook Page and Instagram Business account to view analytics, 
+          track engagement, and monitor your social media performance.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex justify-center pt-4">
+        <Button 
+          onClick={handleConnect} 
+          disabled={connecting}
+          size="lg"
+          className="gap-2"
+        >
+          <Link2 className="h-4 w-4" />
+          {connecting ? "Connecting..." : "Connect with Meta"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
 
   const renderMetricsCards = (metrics: MetaAccountMetrics | null, platform: MetaPlatform) => (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -324,9 +379,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No {platform === "instagram" ? "Instagram" : "Facebook"} posts synced yet</p>
             <p className="text-sm mt-2">
-              {(platform === "instagram" ? instagramAccount : facebookAccount)
-                ? `Click 'Sync from ${platform === "instagram" ? "Instagram" : "Facebook"}' to fetch your latest posts`
-                : `Connect a ${platform === "instagram" ? "Instagram" : "Facebook"} account to see analytics`}
+              Click 'Sync' to fetch your latest posts
             </p>
           </div>
         ) : (
@@ -427,8 +480,33 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     );
   }
 
+  // Show connection card if not connected
+  if (!isConnected) {
+    return renderConnectionCard();
+  }
+
   return (
     <div className="space-y-6">
+      {/* Connection Status */}
+      <div className="flex items-center gap-2">
+        <Badge variant="outline" className="text-green-600 border-green-600">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Meta Connected
+        </Badge>
+        {oauthAccount?.instagram_business_id && (
+          <Badge variant="secondary" className="gap-1">
+            <Instagram className="h-3 w-3" />
+            Instagram
+          </Badge>
+        )}
+        {oauthAccount?.page_id && (
+          <Badge variant="secondary" className="gap-1">
+            <Facebook className="h-3 w-3" />
+            Facebook
+          </Badge>
+        )}
+      </div>
+
       {/* Header with date range */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <DateRangeSelector
@@ -442,11 +520,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       <Tabs value={activePlatform} onValueChange={(v) => setActivePlatform(v as MetaPlatform)}>
         <div className="flex items-center justify-between">
           <TabsList>
-            <TabsTrigger value="instagram" className="flex items-center gap-2">
-              <span>📸</span> Instagram
+            <TabsTrigger value="instagram" className="flex items-center gap-2" disabled={!oauthAccount?.instagram_business_id}>
+              <Instagram className="h-4 w-4" /> Instagram
             </TabsTrigger>
-            <TabsTrigger value="facebook" className="flex items-center gap-2">
-              <span>📘</span> Facebook
+            <TabsTrigger value="facebook" className="flex items-center gap-2" disabled={!oauthAccount?.page_id}>
+              <Facebook className="h-4 w-4" /> Facebook
             </TabsTrigger>
           </TabsList>
           
@@ -457,24 +535,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             disabled={syncing}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing..." : `Sync from ${activePlatform === "instagram" ? "Instagram" : "Facebook"}`}
+            {syncing ? "Syncing..." : "Sync"}
           </Button>
         </div>
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>📸</span>
-            <span>{instagramAccount ? "Account connected" : "No account connected"}</span>
-          </div>
           {renderMetricsCards(instagramMetrics, "instagram")}
           {renderContentTable(instagramContent, "instagram")}
         </TabsContent>
 
         <TabsContent value="facebook" className="space-y-6 mt-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>📘</span>
-            <span>{facebookAccount ? "Account connected" : "No account connected"}</span>
-          </div>
           {renderMetricsCards(facebookMetrics, "facebook")}
           {renderContentTable(facebookContent, "facebook")}
         </TabsContent>
