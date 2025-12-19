@@ -100,14 +100,14 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
       setSocialAccount(accountData);
 
-      // Fetch latest account metrics for the date range
+      // Fetch latest account metrics - get most recent that overlaps with selected range
       const { data: metricsData } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", "x")
-        .gte("period_start", startDate)
-        .lte("period_end", endDate)
+        .lte("period_start", endDate)
+        .gte("period_end", startDate)
         .order("collected_at", { ascending: false })
         .limit(1)
         .maybeSingle();
