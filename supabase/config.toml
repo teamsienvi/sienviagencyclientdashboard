@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.sync-linkedin]
 verify_jwt = false
+
+[functions.meta-oauth-init]
+verify_jwt = false
+
+[functions.meta-oauth-callback]
+verify_jwt = false
