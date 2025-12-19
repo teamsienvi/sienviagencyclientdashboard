@@ -483,6 +483,62 @@ export type Database = {
           },
         ]
       }
+      social_oauth_accounts: {
+        Row: {
+          access_token: string
+          client_id: string
+          connected_at: string
+          created_at: string
+          id: string
+          instagram_business_id: string | null
+          is_active: boolean
+          meta_user_id: string
+          page_id: string | null
+          platform: string
+          refresh_token: string | null
+          token_expires_at: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          client_id: string
+          connected_at?: string
+          created_at?: string
+          id?: string
+          instagram_business_id?: string | null
+          is_active?: boolean
+          meta_user_id: string
+          page_id?: string | null
+          platform: string
+          refresh_token?: string | null
+          token_expires_at: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          client_id?: string
+          connected_at?: string
+          created_at?: string
+          id?: string
+          instagram_business_id?: string | null
+          is_active?: boolean
+          meta_user_id?: string
+          page_id?: string | null
+          platform?: string
+          refresh_token?: string | null
+          token_expires_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_oauth_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_sync_logs: {
         Row: {
           client_id: string
