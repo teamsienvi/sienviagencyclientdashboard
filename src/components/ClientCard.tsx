@@ -9,13 +9,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter, TestTube2, Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface ClientCardProps {
   client: Client;
@@ -56,9 +55,6 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
   const [hasXAccount, setHasXAccount] = useState(false);
-  const [testResult, setTestResult] = useState<{ status: string; data: unknown } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-  const [isTestOpen, setIsTestOpen] = useState(false);
   
   // Check if client has connected X account
   useEffect(() => {
@@ -95,37 +91,26 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
     }
   };
 
-  // Test connection to client analytics endpoint
-  const handleTestConnection = async () => {
-    if (!websiteAnalyticsId) return;
+  // Normalize analytics data - handle different response shapes
+  // Some clients return { analytics: {...} }, others return { success: true, data: {...} }
+  const normalizedAnalytics = useMemo(() => {
+    if (!analyticsData?.analytics) return null;
     
-    setIsTesting(true);
-    setTestResult(null);
-    setIsTestOpen(true);
+    const raw = analyticsData.analytics as unknown as Record<string, unknown>;
     
-    try {
-      const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      
-      const { data, error } = await supabase.functions.invoke("fetch-client-analytics", {
-        body: {
-          clientId: websiteAnalyticsId,
-          startDate: sevenDaysAgo.toISOString().split("T")[0],
-          endDate: now.toISOString().split("T")[0],
-        },
-      });
-      
-      if (error) {
-        setTestResult({ status: "error", data: { error: error.message } });
-      } else {
-        setTestResult({ status: data?.ok === false ? "fail" : "success", data });
-      }
-    } catch (err) {
-      setTestResult({ status: "error", data: { error: err instanceof Error ? err.message : "Unknown error" } });
-    } finally {
-      setIsTesting(false);
+    // If the response has { success: true, data: {...} } shape (like Luxxe)
+    if (raw.success && raw.data) {
+      return raw.data as { visitors?: number; pageViews?: number; avgDuration?: number; bounceRate?: number };
     }
-  };
+    
+    // If the response has nested { analytics: {...} } shape
+    if (raw.analytics) {
+      return raw.analytics as { visitors?: number; pageViews?: number; avgDuration?: number; bounceRate?: number };
+    }
+    
+    // Direct shape
+    return raw as { visitors?: number; pageViews?: number; avgDuration?: number; bounceRate?: number };
+  }, [analyticsData]);
 
   // Group reports by month
   const reportsByMonth = useMemo(() => {
@@ -345,7 +330,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         : "Failed to load analytics"}
                     </p>
                   </div>
-                ) : analyticsData?.analytics ? (
+                ) : normalizedAnalytics ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-accent/50 rounded-lg p-3">
                       <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -353,7 +338,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Visitors</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {(analyticsData.analytics.visitors ?? 0).toLocaleString()}
+                        {(normalizedAnalytics.visitors ?? 0).toLocaleString()}
                       </p>
                     </div>
                     <div className="bg-accent/50 rounded-lg p-3">
@@ -362,7 +347,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Page Views</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {(analyticsData.analytics.pageViews ?? 0).toLocaleString()}
+                        {(normalizedAnalytics.pageViews ?? 0).toLocaleString()}
                       </p>
                     </div>
                     <div className="bg-accent/50 rounded-lg p-3">
@@ -371,9 +356,9 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Avg Duration</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {(analyticsData.analytics.avgDuration ?? 0) < 60 
-                          ? `${Math.round(analyticsData.analytics.avgDuration ?? 0)}s`
-                          : `${Math.floor((analyticsData.analytics.avgDuration ?? 0) / 60)}m ${Math.round((analyticsData.analytics.avgDuration ?? 0) % 60)}s`
+                        {(normalizedAnalytics.avgDuration ?? 0) < 60 
+                          ? `${Math.round(normalizedAnalytics.avgDuration ?? 0)}s`
+                          : `${Math.floor((normalizedAnalytics.avgDuration ?? 0) / 60)}m ${Math.round((normalizedAnalytics.avgDuration ?? 0) % 60)}s`
                         }
                       </p>
                     </div>
@@ -383,7 +368,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Bounce Rate</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {(analyticsData.analytics.bounceRate ?? 0).toFixed(1)}%
+                        {(normalizedAnalytics.bounceRate ?? 0).toFixed(1)}%
                       </p>
                     </div>
                   </div>
@@ -392,57 +377,6 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                     <p className="text-xs text-muted-foreground">No analytics configured</p>
                   </div>
                 )}
-
-                {/* Test Connection Button */}
-                <Collapsible open={isTestOpen} onOpenChange={setIsTestOpen}>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs h-7 px-2"
-                      onClick={handleTestConnection}
-                      disabled={isTesting}
-                    >
-                      {isTesting ? (
-                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                      ) : (
-                        <TestTube2 className="h-3 w-3 mr-1" />
-                      )}
-                      Test Connection
-                    </Button>
-                    {testResult && (
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 px-1">
-                          {isTestOpen ? (
-                            <ChevronUp className="h-3 w-3" />
-                          ) : (
-                            <ChevronDown className="h-3 w-3" />
-                          )}
-                        </Button>
-                      </CollapsibleTrigger>
-                    )}
-                    {testResult && (
-                      <span className={`text-xs font-medium ${
-                        testResult.status === "success" 
-                          ? "text-green-600" 
-                          : testResult.status === "fail" 
-                            ? "text-amber-600" 
-                            : "text-destructive"
-                      }`}>
-                        {testResult.status === "success" ? "OK" : testResult.status === "fail" ? "Failed" : "Error"}
-                      </span>
-                    )}
-                  </div>
-                  <CollapsibleContent>
-                    {testResult && (
-                      <div className="mt-2 bg-muted/50 rounded-lg p-2 overflow-auto max-h-48">
-                        <pre className="text-[10px] text-muted-foreground whitespace-pre-wrap break-all">
-                          {JSON.stringify(testResult.data, null, 2)}
-                        </pre>
-                      </div>
-                    )}
-                  </CollapsibleContent>
-                </Collapsible>
               </div>
             )}
 
