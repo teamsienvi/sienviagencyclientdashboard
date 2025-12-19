@@ -16,11 +16,14 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { clientId, accountId, platform, accessToken, accountExternalId, periodStart, periodEnd } = await req.json();
+    const { clientId, accountId, accountExternalId, periodStart, periodEnd } = await req.json();
+
+    // Use the stored bearer token from secrets
+    const accessToken = Deno.env.get("X_BEARER_TOKEN");
 
     if (!accessToken) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing access token" }),
+        JSON.stringify({ success: false, error: "X_BEARER_TOKEN not configured" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
