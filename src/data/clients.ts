@@ -6,6 +6,8 @@ import oxisureTechLogo from "@/assets/oxisure-tech-logo.png";
 import theHavenAtDeerParkLogo from "@/assets/the-haven-at-deer-park-logo.jpg";
 import bsueBrowLashLogo from "@/assets/bsue-brow-lash-logo.png";
 import cissiePryorPresentsLogo from "@/assets/cissie-pryor-presents-logo.jpg";
+import sienviLogo from "@/assets/sienvi-logo.jpg";
+import luxxeAutoLogo from "@/assets/luxxe-auto-logo.jpg";
 
 export interface Report {
   dateRange: string;
@@ -115,12 +117,14 @@ export const clientsData: Client[] = [
   },
   {
     name: "Sienvi Agency",
+    logo: sienviLogo,
     reports: [
       { dateRange: "Dec 15-21", link: "/dynamic-report/975335f0-11f1-4174-bd09-3b891cbbc1bb", isInternal: true },
     ],
   },
   {
     name: "Luxxe Auto Accessories",
+    logo: luxxeAutoLogo,
     reports: [
       { dateRange: "Dec 15-21", link: "/dynamic-report/93f12543-d997-43c1-b29a-9af23509af80", isInternal: true },
     ],
