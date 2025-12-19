@@ -195,8 +195,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const handleConnect = async () => {
     setConnecting(true);
     try {
+      const redirectUri = `${window.location.origin}/oauth/meta/callback`;
+      
       const { data, error } = await supabase.functions.invoke("meta-oauth-init", {
-        body: { clientId, platform: "instagram" },
+        body: { clientId, platform: "instagram", redirectUri },
       });
 
       if (error) throw error;
