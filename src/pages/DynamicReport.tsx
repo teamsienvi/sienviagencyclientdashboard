@@ -630,14 +630,6 @@ const DynamicReport = () => {
 
                 {platformData.map((pd) => (
                   <TabsContent key={pd.id} value={pd.platform}>
-                    {/* YouTube uses dedicated analytics section */}
-                    {(pd.platform === "YouTube" || pd.platform === "Youtube") ? (
-                      <YouTubeAnalyticsSection 
-                        clientId={report?.client_id || ""} 
-                        clientName={client?.name || ""} 
-                      />
-                    ) : (
-                      <>
                     {/* Metrics Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                       <Card className="bg-card">
@@ -844,13 +836,19 @@ const DynamicReport = () => {
                         )}
                       </TableBody>
                     </Table>
-                      </>
-                    )}
                   </TabsContent>
                 ))}
               </Tabs>
             </CardContent>
           </Card>
+        )}
+
+        {/* YouTube Analytics Section - separate from platform tabs */}
+        {client && report && (
+          <YouTubeAnalyticsSection 
+            clientId={report.client_id} 
+            clientName={client.name} 
+          />
         )}
       </main>
     </div>
