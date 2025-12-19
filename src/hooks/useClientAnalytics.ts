@@ -82,6 +82,17 @@ export const useClientAnalytics = ({
         throw new Error(error.message || "Failed to fetch analytics");
       }
 
+      // Check if the response contains an error from the client's endpoint
+      if (data?.error) {
+        const status = data.status || "unknown";
+        const errorMessage = status === 401 
+          ? `Unauthorized (401) - Check API key configuration`
+          : status === 404
+          ? `Endpoint not found (404)`
+          : `Error ${status}: ${data.error}`;
+        throw new Error(errorMessage);
+      }
+
       // Handle nested analytics structure from the edge function
       const analytics = data.analytics?.analytics || data.analytics;
       
