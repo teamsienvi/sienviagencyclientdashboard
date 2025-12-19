@@ -737,7 +737,9 @@ const DynamicReport = () => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Type</TableHead>
-                          <TableHead>Video</TableHead>
+                          {(pd.platform === "YouTube" || pd.platform === "Youtube" || pd.platform === "X") && (
+                            <TableHead>{pd.platform === "X" ? "Post" : "Video"}</TableHead>
+                          )}
                           <TableHead>Date</TableHead>
                           {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
                             <>
@@ -754,8 +756,9 @@ const DynamicReport = () => {
                             <>
                               <TableHead>Impressions</TableHead>
                               <TableHead>Engagements</TableHead>
-                              <TableHead>Profile Visits</TableHead>
-                              <TableHead>Link Clicks</TableHead>
+                              <TableHead>Likes</TableHead>
+                              <TableHead>Comments</TableHead>
+                              <TableHead>Shares</TableHead>
                             </>
                           ) : (
                             <>
@@ -772,7 +775,7 @@ const DynamicReport = () => {
                       <TableBody>
                         {filteredContent.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 12 : pd.platform === "X" ? 6 : 8} className="text-center text-muted-foreground">
+                            <TableCell colSpan={pd.platform === "YouTube" || pd.platform === "Youtube" ? 12 : pd.platform === "X" ? 8 : 8} className="text-center text-muted-foreground">
                               No content data available
                             </TableCell>
                           </TableRow>
@@ -802,6 +805,25 @@ const DynamicReport = () => {
                                   )}
                                 </TableCell>
                               )}
+                              {pd.platform === "X" && (
+                                <TableCell>
+                                  {content.url ? (
+                                    <a
+                                      href={content.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary hover:underline flex items-center gap-1 max-w-[200px] truncate"
+                                      title={content.title || "View Post"}
+                                    >
+                                      {content.title?.substring(0, 30) || "View Post"}
+                                      {content.title && content.title.length > 30 ? "..." : ""}
+                                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-muted-foreground">-</span>
+                                  )}
+                                </TableCell>
+                              )}
                               <TableCell>{formatDate(content.post_date)}</TableCell>
                               {pd.platform === "YouTube" || pd.platform === "Youtube" ? (
                                 <>
@@ -818,8 +840,9 @@ const DynamicReport = () => {
                                 <>
                                   <TableCell>{(content.impressions || 0).toLocaleString()}</TableCell>
                                   <TableCell>{(content.engagements || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.profile_visits || 0).toLocaleString()}</TableCell>
-                                  <TableCell>{(content.link_clicks || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.likes || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.comments || 0).toLocaleString()}</TableCell>
+                                  <TableCell>{(content.shares || 0).toLocaleString()}</TableCell>
                                 </>
                               ) : (
                                 <>
