@@ -11,6 +11,7 @@ export default function MetaOAuthCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [clientId, setClientId] = useState<string | null>(null);
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -30,6 +31,16 @@ export default function MetaOAuthCallback() {
         setStatus("error");
         setErrorMessage("Missing authorization code or state");
         return;
+      }
+
+      // Decode state to get clientId for navigation
+      try {
+        const decodedState = JSON.parse(atob(decodeURIComponent(state)));
+        if (decodedState.clientId) {
+          setClientId(decodedState.clientId);
+        }
+      } catch (e) {
+        console.error("Failed to decode state:", e);
       }
 
       try {
@@ -60,6 +71,14 @@ export default function MetaOAuthCallback() {
     handleCallback();
   }, [searchParams]);
 
+  const handleNavigate = () => {
+    if (clientId) {
+      navigate(`/meta-analytics/${clientId}`);
+    } else {
+      navigate("/");
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md">
@@ -87,10 +106,10 @@ export default function MetaOAuthCallback() {
           )}
 
           <Button
-            onClick={() => navigate("/admin")}
+            onClick={handleNavigate}
             variant={status === "error" ? "outline" : "default"}
           >
-            {status === "error" ? "Try Again" : "Go to Admin"}
+            {status === "error" ? "Try Again" : "View Meta Analytics"}
           </Button>
         </CardContent>
       </Card>
