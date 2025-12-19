@@ -459,9 +459,9 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
             {/* Meta Analytics (Facebook & Instagram) */}
             {clientId && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-2">
-                  <Link2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Meta Platforms</span>
+              <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Meta Analytics</span>
                 </div>
                 
                 {/* Facebook */}

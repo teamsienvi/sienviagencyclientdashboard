@@ -18,10 +18,10 @@ serve(async (req) => {
       throw new Error('META_APP_ID not configured');
     }
 
-    // Define scopes based on platform
+    // Define scopes - include both Facebook and Instagram permissions for full access
     const scopes = platform === 'instagram' 
-      ? 'instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement'
-      : 'pages_show_list,pages_read_engagement,pages_manage_posts,read_insights';
+      ? 'instagram_basic,instagram_manage_insights,business_management,pages_show_list,pages_read_engagement'
+      : 'pages_show_list,pages_read_engagement,pages_manage_posts,read_insights,instagram_basic,instagram_manage_insights';
 
     // Build Meta OAuth URL
     const state = JSON.stringify({ clientId, platform });
