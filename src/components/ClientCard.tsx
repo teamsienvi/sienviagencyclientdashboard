@@ -301,7 +301,12 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                   </div>
                 ) : analyticsError ? (
                   <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                    <p className="text-xs text-destructive">Failed to load analytics</p>
+                    <p className="text-xs text-destructive font-medium">Analytics Error</p>
+                    <p className="text-xs text-destructive/80 mt-1">
+                      {analyticsError instanceof Error 
+                        ? analyticsError.message 
+                        : "Failed to load analytics"}
+                    </p>
                   </div>
                 ) : analyticsData?.analytics ? (
                   <div className="grid grid-cols-2 gap-3">
