@@ -459,7 +459,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
             {/* Meta Analytics */}
             {clientId && (
               <Button
-                variant="ghost"
+                variant="outline"
                 className="w-full justify-between"
                 onClick={() => window.location.href = `/meta-analytics/${clientId}`}
               >
