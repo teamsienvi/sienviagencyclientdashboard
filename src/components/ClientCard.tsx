@@ -18,7 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface ClientCardProps {
   client: Client;
   clientIndex: number;
-  clientId?: string; // Database ID for fetching analytics
+  clientId?: string; // Database ID for YouTube analytics
+  websiteAnalyticsId?: string; // Database ID for website analytics (only if supabase_url is set)
 }
 
 type DateRangePreset = "7d" | "30d" | "custom";
@@ -47,19 +48,19 @@ const getMonthFromDateRange = (dateRange: string): string => {
   return dateRange;
 };
 
-export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) => {
+export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }: ClientCardProps) => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
   
-  // Fetch analytics if clientId is provided
+  // Fetch website analytics if websiteAnalyticsId is provided
   const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useClientAnalytics({
-    clientId: clientId || "",
+    clientId: websiteAnalyticsId || "",
     dateRange,
     startDate: customRange?.start,
     endDate: customRange?.end,
-    enabled: !!clientId,
+    enabled: !!websiteAnalyticsId,
   });
 
   const handleDateRangeChange = (preset: DateRangePreset, custom?: { start: Date; end: Date }) => {
@@ -243,8 +244,8 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
           )}
         </div>
 
-        {/* Analytics Section */}
-        {clientId && (
+        {/* Website Analytics Section */}
+        {websiteAnalyticsId && (
           <div className="pt-4 border-t border-border space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-medium text-foreground">Website Analytics</h4>

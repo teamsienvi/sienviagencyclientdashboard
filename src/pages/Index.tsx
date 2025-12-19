@@ -23,8 +23,17 @@ const Index = () => {
     },
   });
   
-  // Map client names to their database IDs
+  // Map client names to their database IDs (for YouTube analytics)
   const clientIdMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    dbClients?.forEach((client) => {
+      map[client.name] = client.id;
+    });
+    return map;
+  }, [dbClients]);
+
+  // Map client names to their database IDs (only those with website analytics configured)
+  const websiteAnalyticsMap = useMemo(() => {
     const map: Record<string, string> = {};
     dbClients?.forEach((client) => {
       if (client.supabase_url) {
@@ -67,6 +76,7 @@ const Index = () => {
                 client={client} 
                 clientIndex={index} 
                 clientId={clientIdMap[client.name]}
+                websiteAnalyticsId={websiteAnalyticsMap[client.name]}
               />
             ))}
           </div>
