@@ -24,7 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info, ArrowLeft, RefreshCw } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
-import YouTubeAnalyticsSection from "@/components/YouTubeAnalyticsSection";
+
 
 interface TopPost {
   id: string;
@@ -843,13 +843,6 @@ const DynamicReport = () => {
           </Card>
         )}
 
-        {/* YouTube Analytics Section - separate from platform tabs */}
-        {client && report && (
-          <YouTubeAnalyticsSection 
-            clientId={report.client_id} 
-            clientName={client.name} 
-          />
-        )}
       </main>
     </div>
   );
