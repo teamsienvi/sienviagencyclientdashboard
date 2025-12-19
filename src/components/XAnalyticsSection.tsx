@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -14,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Twitter, Heart, Repeat2, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { DateRangeSelector } from "@/components/DateRangeSelector";
+import { subDays, format, startOfDay, endOfDay } from "date-fns";
 
 interface XAnalyticsSectionProps {
   clientId: string;
@@ -48,20 +49,46 @@ interface XContentMetrics {
   shares: number | null;
 }
 
+type DateRangePreset = "7d" | "30d" | "custom";
+
 const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [accountMetrics, setAccountMetrics] = useState<XAccountMetrics | null>(null);
   const [content, setContent] = useState<(XContent & { metrics?: XContentMetrics })[]>([]);
   const [socialAccount, setSocialAccount] = useState<{ id: string; account_id: string } | null>(null);
+  
+  // Date range state
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+
+  const getDateRange = () => {
+    const today = new Date();
+    if (dateRangePreset === "custom" && customDateRange) {
+      return { start: customDateRange.start, end: customDateRange.end };
+    }
+    const days = dateRangePreset === "30d" ? 30 : 7;
+    return { start: subDays(today, days), end: today };
+  };
+
+  const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
+    setDateRangePreset(preset);
+    if (preset === "custom" && customRange) {
+      setCustomDateRange(customRange);
+    }
+  };
 
   useEffect(() => {
     fetchData();
-  }, [clientId]);
+  }, [clientId, dateRangePreset, customDateRange]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      const { start, end } = getDateRange();
+      const startDate = format(startOfDay(start), "yyyy-MM-dd");
+      const endDate = format(endOfDay(end), "yyyy-MM-dd");
+
       // Fetch social account for X
       const { data: accountData } = await supabase
         .from("social_accounts")
@@ -73,19 +100,21 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
       setSocialAccount(accountData);
 
-      // Fetch latest account metrics
+      // Fetch latest account metrics for the date range
       const { data: metricsData } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", "x")
+        .gte("period_start", startDate)
+        .lte("period_end", endDate)
         .order("collected_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       setAccountMetrics(metricsData);
 
-      // Fetch content with metrics
+      // Fetch content with metrics filtered by date range, sorted by most recent
       const { data: contentData } = await supabase
         .from("social_content")
         .select(`
@@ -94,6 +123,8 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         `)
         .eq("client_id", clientId)
         .eq("platform", "x")
+        .gte("published_at", startDate)
+        .lte("published_at", endDate + "T23:59:59")
         .order("published_at", { ascending: false })
         .limit(50);
 
@@ -181,13 +212,20 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
   return (
     <div className="space-y-6">
-      {/* Header with sync button */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Twitter className="h-5 w-5" />
-          <span className="text-sm text-muted-foreground">
-            {socialAccount ? "Account connected" : "No account connected"}
-          </span>
+      {/* Header with date range and sync button */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Twitter className="h-5 w-5" />
+            <span className="text-sm text-muted-foreground">
+              {socialAccount ? "Account connected" : "No account connected"}
+            </span>
+          </div>
+          <DateRangeSelector
+            value={dateRangePreset}
+            onChange={handleDateRangeChange}
+            customRange={customDateRange}
+          />
         </div>
         <Button
           variant="outline"
