@@ -21,5 +21,8 @@ verify_jwt = false
 [functions.sync-x]
 verify_jwt = false
 
+[functions.lookup-x-user]
+verify_jwt = false
+
 [functions.sync-linkedin]
 verify_jwt = false
