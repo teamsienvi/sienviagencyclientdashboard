@@ -1,7 +1,7 @@
 import { Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import sienviLogo from "@/assets/sienvi-logo.jpg";
+import sienviLogo from "@/assets/sienvi-agency-client-logo.jpg";
 
 export const Header = () => {
   return (
