@@ -113,4 +113,16 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 8-14", link: "/dynamic-report/4590d61c-60de-43d1-be67-c01a391f2bd7", isInternal: true },
     ],
   },
+  {
+    name: "Sienvi Agency",
+    reports: [
+      { dateRange: "Dec 15-21", link: "/dynamic-report/975335f0-11f1-4174-bd09-3b891cbbc1bb", isInternal: true },
+    ],
+  },
+  {
+    name: "Luxxe Auto Accessories",
+    reports: [
+      { dateRange: "Dec 15-21", link: "/dynamic-report/93f12543-d997-43c1-b29a-9af23509af80", isInternal: true },
+    ],
+  },
 ];
