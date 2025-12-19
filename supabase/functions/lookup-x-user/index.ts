@@ -11,7 +11,11 @@ serve(async (req) => {
   }
 
   try {
-    const bearerToken = Deno.env.get("X_BEARER_TOKEN");
+    const bearerToken = Deno.env.get("X_BEARER_TOKEN")?.trim();
+    
+    console.log("Bearer token exists:", !!bearerToken);
+    console.log("Bearer token length:", bearerToken?.length || 0);
+    console.log("Bearer token preview:", bearerToken?.substring(0, 10) + "...");
     
     if (!bearerToken) {
       return new Response(
