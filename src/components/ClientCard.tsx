@@ -9,12 +9,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter, TestTube2, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface ClientCardProps {
   client: Client;
@@ -55,6 +56,9 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
   const [hasXAccount, setHasXAccount] = useState(false);
+  const [testResult, setTestResult] = useState<{ status: string; data: unknown } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [isTestOpen, setIsTestOpen] = useState(false);
   
   // Check if client has connected X account
   useEffect(() => {
@@ -90,6 +94,39 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
       setCustomRange(custom);
     }
   };
+
+  // Test connection to client analytics endpoint
+  const handleTestConnection = async () => {
+    if (!websiteAnalyticsId) return;
+    
+    setIsTesting(true);
+    setTestResult(null);
+    setIsTestOpen(true);
+    
+    try {
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      
+      const { data, error } = await supabase.functions.invoke("fetch-client-analytics", {
+        body: {
+          clientId: websiteAnalyticsId,
+          startDate: sevenDaysAgo.toISOString().split("T")[0],
+          endDate: now.toISOString().split("T")[0],
+        },
+      });
+      
+      if (error) {
+        setTestResult({ status: "error", data: { error: error.message } });
+      } else {
+        setTestResult({ status: data?.ok === false ? "fail" : "success", data });
+      }
+    } catch (err) {
+      setTestResult({ status: "error", data: { error: err instanceof Error ? err.message : "Unknown error" } });
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
   // Group reports by month
   const reportsByMonth = useMemo(() => {
     const grouped: Record<string, { index: number; report: typeof client.reports[0] }[]> = {};
@@ -355,6 +392,57 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                     <p className="text-xs text-muted-foreground">No analytics configured</p>
                   </div>
                 )}
+
+                {/* Test Connection Button */}
+                <Collapsible open={isTestOpen} onOpenChange={setIsTestOpen}>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7 px-2"
+                      onClick={handleTestConnection}
+                      disabled={isTesting}
+                    >
+                      {isTesting ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      ) : (
+                        <TestTube2 className="h-3 w-3 mr-1" />
+                      )}
+                      Test Connection
+                    </Button>
+                    {testResult && (
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-7 px-1">
+                          {isTestOpen ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </CollapsibleTrigger>
+                    )}
+                    {testResult && (
+                      <span className={`text-xs font-medium ${
+                        testResult.status === "success" 
+                          ? "text-green-600" 
+                          : testResult.status === "fail" 
+                            ? "text-amber-600" 
+                            : "text-destructive"
+                      }`}>
+                        {testResult.status === "success" ? "OK" : testResult.status === "fail" ? "Failed" : "Error"}
+                      </span>
+                    )}
+                  </div>
+                  <CollapsibleContent>
+                    {testResult && (
+                      <div className="mt-2 bg-muted/50 rounded-lg p-2 overflow-auto max-h-48">
+                        <pre className="text-[10px] text-muted-foreground whitespace-pre-wrap break-all">
+                          {JSON.stringify(testResult.data, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
             )}
 
