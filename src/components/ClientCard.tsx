@@ -316,7 +316,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Visitors</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {analyticsData.analytics.visitors.toLocaleString()}
+                        {(analyticsData.analytics.visitors ?? 0).toLocaleString()}
                       </p>
                     </div>
                     <div className="bg-accent/50 rounded-lg p-3">
@@ -325,7 +325,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Page Views</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {analyticsData.analytics.pageViews.toLocaleString()}
+                        {(analyticsData.analytics.pageViews ?? 0).toLocaleString()}
                       </p>
                     </div>
                     <div className="bg-accent/50 rounded-lg p-3">
@@ -334,9 +334,9 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Avg Duration</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {analyticsData.analytics.avgDuration < 60 
-                          ? `${Math.round(analyticsData.analytics.avgDuration)}s`
-                          : `${Math.floor(analyticsData.analytics.avgDuration / 60)}m ${Math.round(analyticsData.analytics.avgDuration % 60)}s`
+                        {(analyticsData.analytics.avgDuration ?? 0) < 60 
+                          ? `${Math.round(analyticsData.analytics.avgDuration ?? 0)}s`
+                          : `${Math.floor((analyticsData.analytics.avgDuration ?? 0) / 60)}m ${Math.round((analyticsData.analytics.avgDuration ?? 0) % 60)}s`
                         }
                       </p>
                     </div>
@@ -346,7 +346,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                         <span className="text-xs">Bounce Rate</span>
                       </div>
                       <p className="text-lg font-semibold">
-                        {analyticsData.analytics.bounceRate.toFixed(1)}%
+                        {(analyticsData.analytics.bounceRate ?? 0).toFixed(1)}%
                       </p>
                     </div>
                   </div>
