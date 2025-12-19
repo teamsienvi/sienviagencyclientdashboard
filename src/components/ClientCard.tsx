@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
@@ -315,6 +315,26 @@ export const ClientCard = ({ client, clientIndex, clientId }: ClientCardProps) =
                 <p className="text-xs text-muted-foreground">No analytics configured</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* YouTube Analytics Section */}
+        {clientId && (
+          <div className="pt-4 border-t border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-foreground">YouTube Analytics</h4>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => navigate(`/youtube-analytics/${clientId}`)}
+            >
+              <span className="flex items-center gap-2">
+                <Youtube className="h-4 w-4 text-red-500" />
+                View YouTube Analytics
+              </span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
           </div>
         )}
       </div>
