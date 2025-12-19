@@ -515,6 +515,21 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                     </Button>
                   )}
                 </div>
+
+                {/* View Meta Analytics button */}
+                {(metaAccounts.facebook || metaAccounts.instagram) && (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between mt-2"
+                    onClick={() => window.location.href = `/meta-analytics/${clientId}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-foreground" />
+                      View Meta Analytics
+                    </span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             )}
           </div>
