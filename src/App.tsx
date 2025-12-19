@@ -9,6 +9,7 @@ import DynamicReport from "./pages/DynamicReport";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import YouTubeAnalytics from "./pages/YouTubeAnalytics";
+import XAnalytics from "./pages/XAnalytics";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
 import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
 import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
@@ -38,6 +39,7 @@ const App = () => (
           <Route path="/report/:clientId/:reportId" element={<Report />} />
           <Route path="/dynamic-report/:reportId" element={<DynamicReport />} />
           <Route path="/youtube-analytics/:clientId" element={<YouTubeAnalytics />} />
+          <Route path="/x-analytics/:clientId" element={<XAnalytics />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
           <Route path="/snarky-humans-nov24-30" element={<SnarkyHumansNov24to30 />} />

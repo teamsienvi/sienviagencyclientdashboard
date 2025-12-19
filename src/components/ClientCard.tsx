@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
@@ -333,6 +333,26 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
               <span className="flex items-center gap-2">
                 <Youtube className="h-4 w-4 text-red-500" />
                 View YouTube Analytics
+              </span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
+        {/* X (Twitter) Analytics Section */}
+        {clientId && (
+          <div className="pt-4 border-t border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-medium text-foreground">X Analytics</h4>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => navigate(`/x-analytics/${clientId}`)}
+            >
+              <span className="flex items-center gap-2">
+                <Twitter className="h-4 w-4 text-foreground" />
+                View X Analytics
               </span>
               <ArrowRight className="h-4 w-4" />
             </Button>
