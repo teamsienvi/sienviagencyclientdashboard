@@ -76,8 +76,16 @@ serve(async (req) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Some client projects validate the key via headers rather than body
+        'x-api-key': client.api_key,
+        Authorization: `Bearer ${client.api_key}`,
       },
-      body: JSON.stringify({ startDate, endDate, apiKey: client.api_key }),
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        apiKey: client.api_key,
+        api_key: client.api_key,
+      }),
     });
 
     if (!analyticsResponse.ok) {
