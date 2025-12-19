@@ -91,13 +91,19 @@ serve(async (req) => {
     if (!analyticsResponse.ok) {
       const errorText = await analyticsResponse.text();
       console.error('Analytics endpoint error:', analyticsResponse.status, errorText);
+
+      // IMPORTANT: return 200 so the frontend can render a friendly error state
+      // without Supabase invoke surfacing a hard "Edge function returned <status>" runtime error.
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
+          ok: false,
           error: 'Failed to fetch analytics from client',
           details: errorText,
-          status: analyticsResponse.status
+          status: analyticsResponse.status,
+          clientId: client.id,
+          clientName: client.name,
         }),
-        { status: analyticsResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
