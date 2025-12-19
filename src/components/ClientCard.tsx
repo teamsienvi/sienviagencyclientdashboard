@@ -9,12 +9,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter, Facebook, Instagram, Link2, CheckCircle2 } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 interface ClientCardProps {
   client: Client;
@@ -55,13 +57,16 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
   const [hasXAccount, setHasXAccount] = useState(false);
+  const [metaAccounts, setMetaAccounts] = useState<{ facebook: boolean; instagram: boolean }>({ facebook: false, instagram: false });
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   
-  // Check if client has connected X account
+  // Check if client has connected social accounts
   useEffect(() => {
-    const checkXAccount = async () => {
+    const checkSocialAccounts = async () => {
       if (!clientId) return;
       
-      const { data } = await supabase
+      // Check X account
+      const { data: xData } = await supabase
         .from("social_accounts")
         .select("id")
         .eq("client_id", clientId)
@@ -69,10 +74,24 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
         .eq("is_active", true)
         .limit(1);
       
-      setHasXAccount(data && data.length > 0);
+      setHasXAccount(xData && xData.length > 0);
+      
+      // Check Meta OAuth accounts
+      const { data: metaData } = await supabase
+        .from("social_oauth_accounts")
+        .select("platform")
+        .eq("client_id", clientId)
+        .eq("is_active", true);
+      
+      if (metaData) {
+        setMetaAccounts({
+          facebook: metaData.some(acc => acc.platform === "facebook"),
+          instagram: metaData.some(acc => acc.platform === "instagram"),
+        });
+      }
     };
     
-    checkXAccount();
+    checkSocialAccounts();
   }, [clientId]);
   
   // Fetch website analytics if websiteAnalyticsId is provided
@@ -138,6 +157,33 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
     return reportsByMonth[selectedMonth] || [];
   }, [selectedMonth, reportsByMonth]);
   
+  const handleConnectMeta = async (platform: "facebook" | "instagram") => {
+    if (!clientId) return;
+    
+    setConnectingPlatform(platform);
+    try {
+      const redirectUri = `${window.location.origin}/oauth/meta/callback`;
+      
+      const { data, error } = await supabase.functions.invoke("meta-oauth-init", {
+        body: {
+          clientId,
+          redirectUri,
+          platform,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (err) {
+      console.error("OAuth init error:", err);
+      toast.error("Failed to start Meta connection");
+      setConnectingPlatform(null);
+    }
+  };
+
   const handleWeekSelect = (value: string) => {
     const reportIndex = parseInt(value);
     const report = client.reports[reportIndex];
@@ -408,6 +454,68 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
+            )}
+
+            {/* Meta Analytics (Facebook & Instagram) */}
+            {clientId && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <Link2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Meta Platforms</span>
+                </div>
+                
+                {/* Facebook */}
+                <div className="flex items-center justify-between bg-accent/30 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-blue-500/10 p-1.5">
+                      <Facebook className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <span className="text-sm font-medium">Facebook</span>
+                    {metaAccounts.facebook && (
+                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                    )}
+                  </div>
+                  {!metaAccounts.facebook && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleConnectMeta("facebook")}
+                      disabled={connectingPlatform === "facebook"}
+                    >
+                      {connectingPlatform === "facebook" ? "Connecting..." : "Connect"}
+                    </Button>
+                  )}
+                </div>
+
+                {/* Instagram */}
+                <div className="flex items-center justify-between bg-accent/30 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-1.5">
+                      <Instagram className="h-4 w-4 text-pink-500" />
+                    </div>
+                    <span className="text-sm font-medium">Instagram</span>
+                    {metaAccounts.instagram && (
+                      <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Connected
+                      </Badge>
+                    )}
+                  </div>
+                  {!metaAccounts.instagram && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleConnectMeta("instagram")}
+                      disabled={connectingPlatform === "instagram"}
+                    >
+                      {connectingPlatform === "instagram" ? "Connecting..." : "Connect"}
+                    </Button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
