@@ -280,13 +280,24 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .limit(1)
       .maybeSingle();
 
-    // Fetch previous period metrics for comparison (trend indicators)
+    // Calculate previous week's date range for comparison
+    const currentStart = new Date(startDate);
+    const prevWeekEnd = new Date(currentStart);
+    prevWeekEnd.setDate(prevWeekEnd.getDate() - 1); // Day before current start
+    const prevWeekStart = new Date(prevWeekEnd);
+    prevWeekStart.setDate(prevWeekStart.getDate() - 6); // 7 days back
+
+    const prevStartStr = prevWeekStart.toISOString().split("T")[0];
+    const prevEndStr = prevWeekEnd.toISOString().split("T")[0];
+
+    // Fetch previous week's metrics for comparison (trend indicators)
     const { data: prevMetricsData } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", platform)
-      .lt("period_end", startDate)
+      .lte("period_start", prevEndStr)
+      .gte("period_end", prevStartStr)
       .order("collected_at", { ascending: false })
       .limit(1)
       .maybeSingle();
