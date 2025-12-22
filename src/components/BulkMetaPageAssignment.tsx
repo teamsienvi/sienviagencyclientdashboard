@@ -41,6 +41,8 @@ interface Client {
   instagramUsername: string | null;
   instagramBusinessId: string | null;
   pageAccessToken: string | null;
+  lastSyncAt: string | null;
+  lastSyncPlatform: string | null;
 }
 
 interface SyncStatus {
@@ -81,6 +83,27 @@ export const BulkMetaPageAssignment = () => {
 
       if (assignmentsError) throw assignmentsError;
 
+      // Fetch last sync timestamps for each client
+      const { data: syncLogs, error: syncLogsError } = await supabase
+        .from("social_sync_logs")
+        .select("client_id, platform, completed_at, status")
+        .in("platform", ["instagram", "facebook"])
+        .eq("status", "success")
+        .order("completed_at", { ascending: false });
+
+      if (syncLogsError) throw syncLogsError;
+
+      // Get latest sync per client
+      const latestSyncByClient: Record<string, { timestamp: string; platform: string }> = {};
+      syncLogs?.forEach(log => {
+        if (!latestSyncByClient[log.client_id] && log.completed_at) {
+          latestSyncByClient[log.client_id] = { 
+            timestamp: log.completed_at, 
+            platform: log.platform 
+          };
+        }
+      });
+
       // Fetch Meta pages
       const { data: pagesData, error: pagesError } = await supabase.functions.invoke("fetch-meta-pages");
 
@@ -98,6 +121,7 @@ export const BulkMetaPageAssignment = () => {
       const clientsWithAssignments = (clientsData || []).map(client => {
         const assignment = (assignments || []).find(a => a.client_id === client.id);
         const page = (pagesData.pages || []).find((p: MetaPage) => p.pageId === assignment?.page_id);
+        const lastSync = latestSyncByClient[client.id];
         return {
           ...client,
           assignedPageId: assignment?.page_id || null,
@@ -105,6 +129,8 @@ export const BulkMetaPageAssignment = () => {
           instagramUsername: page?.instagramUsername || null,
           instagramBusinessId: page?.instagramBusinessId || null,
           pageAccessToken: page?.pageAccessToken || null,
+          lastSyncAt: lastSync?.timestamp || null,
+          lastSyncPlatform: lastSync?.platform || null,
         };
       });
 
@@ -404,6 +430,7 @@ export const BulkMetaPageAssignment = () => {
                   <TableRow>
                     <TableHead>Client</TableHead>
                     <TableHead>Current Assignment</TableHead>
+                    <TableHead>Last Sync</TableHead>
                     <TableHead>Assign Page</TableHead>
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
@@ -436,6 +463,20 @@ export const BulkMetaPageAssignment = () => {
                           </div>
                         ) : (
                           <span className="text-muted-foreground text-sm">Not assigned</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {client.lastSyncAt ? (
+                          <div className="flex flex-col">
+                            <span className="text-sm">
+                              {new Date(client.lastSyncAt).toLocaleDateString()}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(client.lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">Never</span>
                         )}
                       </TableCell>
                       <TableCell>
