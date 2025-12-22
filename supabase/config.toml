@@ -32,3 +32,18 @@ verify_jwt = false
 
 [functions.meta-oauth-callback]
 verify_jwt = false
+
+[functions.fetch-meta-pages]
+verify_jwt = false
+
+[functions.assign-meta-page]
+verify_jwt = false
+
+[functions.fetch-instagram-profile]
+verify_jwt = false
+
+[functions.fetch-facebook-page]
+verify_jwt = false
+
+[functions.get-analytics]
+verify_jwt = false

@@ -12,7 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus, RotateCcw } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus, RotateCcw, Settings2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ import {
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { subDays, format, startOfDay, endOfDay, formatDistanceToNow } from "date-fns";
+import { MetaPageSelector } from "@/components/MetaPageSelector";
 
 interface MetaAnalyticsSectionProps {
   clientId: string;
@@ -111,6 +112,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
+  const [showingPageSelector, setShowingPageSelector] = useState(false);
   const [activePlatform, setActivePlatform] = useState<MetaPlatform>("instagram");
   
   // OAuth account data
@@ -699,35 +701,52 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     }
   };
 
+  const [showPageSelector, setShowPageSelector] = useState(true);
+
   const renderConnectionCard = () => (
-    <Card className="border-dashed">
-      <CardHeader className="text-center pb-2">
-        <div className="flex justify-center gap-4 mb-4">
-          <div className="rounded-full bg-blue-500/10 p-4">
-            <Facebook className="h-8 w-8 text-blue-500" />
+    <div className="space-y-4">
+      {/* Page Selector - try to use existing connection first */}
+      {showPageSelector && (
+        <MetaPageSelector
+          clientId={clientId}
+          clientName={clientName}
+          onPageAssigned={() => {
+            fetchData();
+          }}
+        />
+      )}
+      
+      {/* Fallback: Manual OAuth connection */}
+      <Card className="border-dashed">
+        <CardHeader className="text-center pb-2">
+          <div className="flex justify-center gap-4 mb-4">
+            <div className="rounded-full bg-blue-500/10 p-4">
+              <Facebook className="h-8 w-8 text-blue-500" />
+            </div>
+            <div className="rounded-full bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-4">
+              <Instagram className="h-8 w-8 text-pink-500" />
+            </div>
           </div>
-          <div className="rounded-full bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-4">
-            <Instagram className="h-8 w-8 text-pink-500" />
-          </div>
-        </div>
-        <CardTitle>Connect Your Meta Accounts</CardTitle>
-        <CardDescription className="max-w-md mx-auto">
-          Connect your Facebook Page and Instagram Business account to view analytics, 
-          track engagement, and monitor your social media performance.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex justify-center pt-4">
-        <Button 
-          onClick={handleConnect} 
-          disabled={connecting}
-          size="lg"
-          className="gap-2"
-        >
-          <Link2 className="h-4 w-4" />
-          {connecting ? "Connecting..." : "Connect with Meta"}
-        </Button>
-      </CardContent>
-    </Card>
+          <CardTitle>Or Connect a New Meta Account</CardTitle>
+          <CardDescription className="max-w-md mx-auto">
+            If the page you need isn't listed above, connect a new Meta account.
+            This will refresh all available pages.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center pt-4">
+          <Button 
+            onClick={handleConnect} 
+            disabled={connecting}
+            size="lg"
+            variant="outline"
+            className="gap-2"
+          >
+            <Link2 className="h-4 w-4" />
+            {connecting ? "Connecting..." : "Connect with Meta"}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
   );
 
   const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false, isNumeric = false) => {
@@ -802,7 +821,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <span className="text-xs text-muted-foreground">
                   vs {prevFollowers.toLocaleString()} (prev week)
                 </span>
-                {renderTrendIndicator(currentFollowers, prevFollowers)}
+                {renderTrendIndicator(currentFollowers, prevFollowers, false, true)}
               </div>
             )}
           </CardContent>
@@ -1150,6 +1169,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               variant="outline"
               size="sm"
               className="gap-2"
+              onClick={() => setShowingPageSelector(!showingPageSelector)}
+            >
+              <Settings2 className="h-4 w-4" />
+              {showingPageSelector ? "Hide Pages" : "Change Page"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
               onClick={handleReconnect}
               disabled={reconnecting}
             >
@@ -1185,6 +1213,18 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             </AlertDialog>
           </div>
         </div>
+      )}
+
+      {/* Page Selector - shown when "Change Page" is clicked */}
+      {showingPageSelector && isConnected && (
+        <MetaPageSelector
+          clientId={clientId}
+          clientName={clientName}
+          onPageAssigned={() => {
+            setShowingPageSelector(false);
+            fetchData();
+          }}
+        />
       )}
 
       {/* Header with date range */}
