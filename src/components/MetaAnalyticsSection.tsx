@@ -698,29 +698,58 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
       {/* Connection Status Badges */}
       {!instagramProfile && (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-green-600 border-green-600">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Meta Connected
-          </Badge>
-          {loadingProfile && (
-            <Badge variant="secondary" className="gap-1">
-              <RefreshCw className="h-3 w-3 animate-spin" />
-              Loading profile...
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-green-600 border-green-600">
+              <CheckCircle2 className="h-3 w-3 mr-1" />
+              Meta Connected
             </Badge>
-          )}
-          {oauthAccount?.instagram_business_id && !loadingProfile && (
-            <Badge variant="secondary" className="gap-1">
-              <Instagram className="h-3 w-3" />
-              Instagram
-            </Badge>
-          )}
-          {oauthAccount?.page_id && (
-            <Badge variant="secondary" className="gap-1">
-              <Facebook className="h-3 w-3" />
-              Facebook
-            </Badge>
-          )}
+            {loadingProfile && (
+              <Badge variant="secondary" className="gap-1">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Loading profile...
+              </Badge>
+            )}
+            {oauthAccount?.instagram_business_id && !loadingProfile && (
+              <Badge variant="secondary" className="gap-1">
+                <Instagram className="h-3 w-3" />
+                Instagram
+              </Badge>
+            )}
+            {oauthAccount?.page_id && (
+              <Badge variant="secondary" className="gap-1">
+                <Facebook className="h-3 w-3" />
+                Facebook
+              </Badge>
+            )}
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-muted-foreground hover:text-destructive gap-2">
+                <Unlink className="h-4 w-4" />
+                Disconnect
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Disconnect Meta Account?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will disconnect the Meta account from {clientName}. 
+                  You can reconnect a different account afterwards.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {disconnecting ? "Disconnecting..." : "Disconnect"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 
