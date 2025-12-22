@@ -12,7 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog,
@@ -110,6 +110,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [activePlatform, setActivePlatform] = useState<MetaPlatform>("instagram");
   
   // OAuth account data
@@ -411,6 +412,50 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       toast.error(error.message || "Failed to disconnect Meta account");
     } finally {
       setDisconnecting(false);
+    }
+  };
+
+  const handleReconnect = async () => {
+    if (!oauthAccount?.id) return;
+
+    setReconnecting(true);
+    try {
+      // Step 1: Disconnect current account
+      const { error } = await supabase
+        .from("social_oauth_accounts")
+        .update({ is_active: false })
+        .eq("id", oauthAccount.id);
+
+      if (error) throw error;
+
+      // Clear local state
+      setOauthAccount(null);
+      setInstagramProfile(null);
+      setFacebookPage(null);
+      setInstagramMetrics(null);
+      setFacebookMetrics(null);
+      setInstagramContent([]);
+      setFacebookContent([]);
+
+      // Step 2: Start new connect flow
+      const redirectUri = `${window.location.origin}/oauth/meta/callback`;
+
+      const { data, error: initError } = await supabase.functions.invoke("meta-oauth-init", {
+        body: { clientId, platform: "instagram", redirectUri },
+      });
+
+      if (initError) throw initError;
+
+      if (data?.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        toast.error("Failed to get authorization URL");
+        setReconnecting(false);
+      }
+    } catch (err: any) {
+      console.error("Reconnect error:", err);
+      toast.error(err.message || "Failed to reconnect Meta account");
+      setReconnecting(false);
     }
   };
 
@@ -883,33 +928,45 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               </Badge>
             )}
           </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="text-muted-foreground hover:text-destructive gap-2">
-                <Unlink className="h-4 w-4" />
-                Disconnect
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Disconnect Meta Account?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will disconnect the Meta account from {clientName}. 
-                  You can reconnect a different account afterwards.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={handleDisconnect}
-                  disabled={disconnecting}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {disconnecting ? "Disconnecting..." : "Disconnect"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={handleReconnect}
+              disabled={reconnecting}
+            >
+              <RotateCcw className={`h-4 w-4 ${reconnecting ? "animate-spin" : ""}`} />
+              {reconnecting ? "Reconnecting..." : "Reconnect Meta"}
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="text-muted-foreground hover:text-destructive gap-2">
+                  <Unlink className="h-4 w-4" />
+                  Disconnect
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Disconnect Meta Account?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will disconnect the Meta account from {clientName}. 
+                    You can reconnect a different account afterwards.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleDisconnect}
+                    disabled={disconnecting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {disconnecting ? "Disconnecting..." : "Disconnect"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         </div>
       )}
 
