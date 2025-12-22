@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ArrowLeft } from "lucide-react";
 import MetaAnalyticsSection from "@/components/MetaAnalyticsSection";
+import { MetaOAuthDebug } from "@/components/MetaOAuthDebug";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,10 +90,15 @@ const MetaAnalytics = () => {
           </div>
         </div>
 
-        <MetaAnalyticsSection 
-          clientId={clientId || ""} 
-          clientName={client.name} 
-        />
+        {/* Debug Panel */}
+        <MetaOAuthDebug />
+        
+        <div className="mt-8">
+          <MetaAnalyticsSection 
+            clientId={clientId || ""} 
+            clientName={client.name} 
+          />
+        </div>
       </main>
     </div>
   );
