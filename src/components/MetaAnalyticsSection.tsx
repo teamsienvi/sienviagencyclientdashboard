@@ -674,7 +674,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     </Card>
   );
 
-  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false) => {
+  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false, isNumeric = false) => {
     if (current == null || previous == null) {
       return null;
     }
@@ -686,14 +686,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       return (
         <div className="flex items-center text-xs text-green-500 gap-0.5">
           <ArrowUp className="h-3 w-3" />
-          <span>{isPercentage ? `+${diff.toFixed(2)}%` : `+${percentChange}%`}</span>
+          <span>{isPercentage ? `+${diff.toFixed(2)}%` : isNumeric ? `+${diff}` : `+${percentChange}%`}</span>
         </div>
       );
     } else if (diff < 0) {
       return (
         <div className="flex items-center text-xs text-red-500 gap-0.5">
           <ArrowDown className="h-3 w-3" />
-          <span>{isPercentage ? `${diff.toFixed(2)}%` : `${percentChange}%`}</span>
+          <span>{isPercentage ? `${diff.toFixed(2)}%` : isNumeric ? `${diff}` : `${percentChange}%`}</span>
         </div>
       );
     }
@@ -701,7 +701,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return (
       <div className="flex items-center text-xs text-muted-foreground gap-0.5">
         <Minus className="h-3 w-3" />
-        <span>0%</span>
+        <span>{isNumeric ? "0" : "0%"}</span>
       </div>
     );
   };
@@ -784,7 +784,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <span className="text-xs text-muted-foreground">
                   vs {prevTotalPosts} (prev week)
                 </span>
-                {renderTrendIndicator(currentTotalPosts, prevTotalPosts)}
+                {renderTrendIndicator(currentTotalPosts, prevTotalPosts, false, true)}
               </div>
             )}
           </CardContent>
@@ -798,9 +798,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <p className="text-sm font-medium text-primary">
               {reportData ? "Weekly Report" : "API Data"}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {currentLabel} vs prev week
-            </p>
+            <div className="group relative">
+              <p className="text-xs text-muted-foreground mt-1 cursor-help underline decoration-dotted">
+                {currentLabel}
+              </p>
+              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
+                <div className="bg-popover text-popover-foreground text-xs rounded-md px-3 py-2 shadow-lg border whitespace-nowrap">
+                  <p>Compared to: {compLabel}</p>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
