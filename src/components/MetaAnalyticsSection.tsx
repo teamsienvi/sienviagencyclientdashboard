@@ -135,28 +135,43 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [facebookContent, setFacebookContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
   
-  // Date range state - dynamically calculate current and previous week
+  // Date range state - weekly reports reset every Tuesday
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
 
   const isConnected = oauthAccount !== null && oauthAccount.is_active;
 
-  // Get current period (this week: last 7 days ending today)
+  // Get the most recent Tuesday (reporting day)
+  const getMostRecentTuesday = (fromDate: Date = new Date()) => {
+    const date = new Date(fromDate);
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 2 = Tuesday
+    const daysToSubtract = dayOfWeek >= 2 ? dayOfWeek - 2 : dayOfWeek + 5;
+    date.setDate(date.getDate() - daysToSubtract);
+    date.setHours(0, 0, 0, 0);
+    return date;
+  };
+
+  // Get current week (from most recent Tuesday to today/Monday)
   const getDateRange = () => {
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
     }
+    if (dateRangePreset === "30d") {
+      const today = new Date();
+      return { start: subDays(today, 30), end: today };
+    }
+    // Weekly: Tuesday to Monday cycle
     const today = new Date();
-    const days = dateRangePreset === "30d" ? 30 : 7;
-    return { start: subDays(today, days), end: today };
+    const currentTuesday = getMostRecentTuesday(today);
+    return { start: currentTuesday, end: today };
   };
 
-  // Get comparison period (previous week: 7 days before current period)
+  // Get previous week (Tuesday to Monday before current week)
   const getComparisonDateRange = () => {
-    const { start } = getDateRange();
-    const compEnd = subDays(start, 1); // Day before current period starts
-    const compStart = subDays(compEnd, 6); // 7 days back
-    return { start: compStart, end: compEnd };
+    const { start: currentStart } = getDateRange();
+    const prevMonday = subDays(currentStart, 1); // Monday before current Tuesday
+    const prevTuesday = subDays(currentStart, 7); // Previous Tuesday
+    return { start: prevTuesday, end: prevMonday };
   };
 
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
