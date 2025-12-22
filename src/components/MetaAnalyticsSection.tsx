@@ -137,26 +137,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const fetchInstagramProfile = async (accessToken: string, instagramBusinessId: string) => {
     setLoadingProfile(true);
     try {
-      const response = await fetch(
-        `https://graph.facebook.com/v21.0/${instagramBusinessId}?fields=username,name,profile_picture_url,followers_count,media_count,biography&access_token=${accessToken}`
-      );
+      const { data, error } = await supabase.functions.invoke("fetch-instagram-profile", {
+        body: { accessToken, instagramBusinessId },
+      });
       
-      if (!response.ok) {
-        console.error("Failed to fetch Instagram profile:", await response.text());
+      if (error) {
+        console.error("Failed to fetch Instagram profile:", error);
         return null;
       }
       
-      const data = await response.json();
-      const profile: InstagramProfile = {
-        username: data.username || null,
-        name: data.name || null,
-        profile_picture_url: data.profile_picture_url || null,
-        followers_count: data.followers_count || null,
-        media_count: data.media_count || null,
-        biography: data.biography || null,
-      };
-      setInstagramProfile(profile);
-      return profile;
+      if (data?.profile) {
+        setInstagramProfile(data.profile);
+        return data.profile;
+      }
+      return null;
     } catch (error) {
       console.error("Error fetching Instagram profile:", error);
       return null;
