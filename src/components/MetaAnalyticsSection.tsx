@@ -159,17 +159,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   const isConnected = oauthAccount !== null && oauthAccount.is_active;
 
-  // Get the most recent Tuesday (reporting day)
-  const getMostRecentTuesday = (fromDate: Date = new Date()) => {
+  // Get the most recent Monday (start of reporting week)
+  const getMostRecentMonday = (fromDate: Date = new Date()) => {
     const date = new Date(fromDate);
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 2 = Tuesday
-    const daysToSubtract = dayOfWeek >= 2 ? dayOfWeek - 2 : dayOfWeek + 5;
+    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     date.setDate(date.getDate() - daysToSubtract);
     date.setHours(0, 0, 0, 0);
     return date;
   };
 
-  // Get current week (from most recent Tuesday to today/Monday)
+  // Get current week (from most recent Monday to Sunday)
   const getDateRange = () => {
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
@@ -178,18 +178,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const today = new Date();
       return { start: subDays(today, 30), end: today };
     }
-    // Weekly: Tuesday to Monday cycle
+    // Weekly: Monday to Sunday cycle
     const today = new Date();
-    const currentTuesday = getMostRecentTuesday(today);
-    return { start: currentTuesday, end: today };
+    const currentMonday = getMostRecentMonday(today);
+    const currentSunday = new Date(currentMonday);
+    currentSunday.setDate(currentMonday.getDate() + 6);
+    return { start: currentMonday, end: currentSunday };
   };
 
-  // Get previous week (Tuesday to Monday before current week)
+  // Get previous week (Monday to Sunday before current week)
   const getComparisonDateRange = () => {
     const { start: currentStart } = getDateRange();
-    const prevMonday = subDays(currentStart, 1); // Monday before current Tuesday
-    const prevTuesday = subDays(currentStart, 7); // Previous Tuesday
-    return { start: prevTuesday, end: prevMonday };
+    const prevMonday = subDays(currentStart, 7); // Previous Monday
+    const prevSunday = subDays(currentStart, 1); // Sunday before current Monday
+    return { start: prevMonday, end: prevSunday };
   };
 
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
