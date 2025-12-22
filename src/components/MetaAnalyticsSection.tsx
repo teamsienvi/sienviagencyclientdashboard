@@ -901,9 +901,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-lg">{facebookPage.name}</h3>
-                  <Badge variant="outline" className="text-blue-600 border-blue-600">
-                    <Facebook className="h-3 w-3 mr-1" />
-                    Page
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
                   </Badge>
                 </div>
                 <a 
@@ -920,6 +920,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <div>
                   <p className="text-2xl font-bold">{(facebookPage.followers_count || facebookPage.fan_count)?.toLocaleString() || "—"}</p>
                   <p className="text-xs text-muted-foreground">Followers</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{facebookContent.length || "—"}</p>
+                  <p className="text-xs text-muted-foreground">Posts</p>
                 </div>
               </div>
             </div>
@@ -1018,57 +1022,6 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           </TabsList>
           
           <div className="flex items-center gap-3">
-            {/* Sync Status Display */}
-            {(() => {
-              const syncLog = activePlatform === "instagram" ? instagramSyncLog : facebookSyncLog;
-              if (syncing) {
-                return (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-                    <span>Syncing...</span>
-                  </div>
-                );
-              }
-              if (syncLog) {
-                const isError = syncLog.status === "failed" || syncLog.status === "error";
-                const isPending = syncLog.status === "pending" || syncLog.status === "in_progress";
-                return (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    {isError ? (
-                      <AlertCircle className="h-4 w-4 text-destructive" />
-                    ) : isPending ? (
-                      <RefreshCw className="h-4 w-4 animate-spin text-primary" />
-                    ) : (
-                      <Clock className="h-4 w-4" />
-                    )}
-                    <span>
-                      {isPending ? (
-                        "Syncing..."
-                      ) : isError ? (
-                        <span className="text-destructive">Last sync failed</span>
-                      ) : syncLog.completed_at ? (
-                        <>Last synced {formatDistanceToNow(new Date(syncLog.completed_at), { addSuffix: true })}</>
-                      ) : (
-                        <>Started {formatDistanceToNow(new Date(syncLog.started_at), { addSuffix: true })}</>
-                      )}
-                    </span>
-                    {syncLog.records_synced !== null && syncLog.status === "completed" && (
-                      <Badge variant="secondary" className="text-xs">
-                        {syncLog.records_synced} posts
-                      </Badge>
-                    )}
-                  </div>
-                );
-              }
-              // No sync logs yet
-              return (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span>Never synced</span>
-                </div>
-              );
-            })()}
-            
             <div className="flex items-center gap-2">
               <Button
                 variant="outline"
