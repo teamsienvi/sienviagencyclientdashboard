@@ -172,11 +172,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return data;
   };
 
-  const fetchInstagramProfile = async (accessToken: string, instagramBusinessId: string) => {
+  const fetchInstagramProfile = async (accessToken: string, instagramBusinessId: string, pageId?: string | null) => {
     setLoadingProfile(true);
     try {
       const { data, error } = await supabase.functions.invoke("fetch-instagram-profile", {
-        body: { accessToken, instagramBusinessId },
+        body: { accessToken, instagramBusinessId, pageId },
       });
       
       if (error) {
@@ -335,7 +335,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       // Fetch Instagram profile and Facebook page if we have the OAuth data
       if (oauth?.access_token) {
         if (oauth.instagram_business_id) {
-          fetchInstagramProfile(oauth.access_token, oauth.instagram_business_id);
+          fetchInstagramProfile(oauth.access_token, oauth.instagram_business_id, oauth.page_id);
         }
         if (oauth.page_id) {
           fetchFacebookPage(oauth.access_token, oauth.page_id);
