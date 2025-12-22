@@ -195,8 +195,9 @@ serve(async (req) => {
       console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
       for (const item of mediaItems) {
         try {
-          // Facebook post insights: post_impressions, post_engaged_users, post_reactions_by_type_total
-          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions,post_impressions_unique,post_engaged_users&access_token=${accessToken}`;
+          // Facebook post insights (reach/impressions)
+          // Note: Many older metrics are deprecated; use lifetime period for post-level insights.
+          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions,post_impressions_unique&period=lifetime&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
           
           if (insightsResp.ok) {
@@ -221,16 +222,28 @@ serve(async (req) => {
 
       const { data: content, error: contentError } = await supabase
         .from("social_content")
-        .upsert({
-          client_id: clientId,
-          social_account_id: accountId,
-          platform: platform,
-          content_id: item.id,
-          content_type: contentType,
-          published_at: item.timestamp || new Date().toISOString(),
-          url: item.permalink || item.media_url,
-          title: item.caption?.substring(0, 100),
-        }, { onConflict: 'client_id,platform,content_id' })
+        .upsert(
+          {
+            client_id: clientId,
+            social_account_id: accountId,
+            platform: platform,
+            content_id: item.id,
+            content_type: contentType,
+            published_at:
+              platform === "instagram"
+                ? (item.timestamp || new Date().toISOString())
+                : ((item as any).created_time || new Date().toISOString()),
+            url:
+              platform === "instagram"
+                ? (item.permalink || item.media_url || null)
+                : ((item as any).permalink_url || null),
+            title:
+              platform === "instagram"
+                ? (item.caption?.substring(0, 100) || null)
+                : ((item as any).message?.substring(0, 100) || null),
+          },
+          { onConflict: "client_id,platform,content_id" },
+        )
         .select()
         .single();
 
@@ -273,11 +286,12 @@ serve(async (req) => {
           const value = insight.values?.[0]?.value || 0;
           if (insight.name === 'post_impressions') impressions = value;
           if (insight.name === 'post_impressions_unique') reach = value;
-          if (insight.name === 'post_engaged_users') interactions = value;
         }
       }
 
-      interactions = likes + comments + shares;
+      if (interactions === 0) {
+        interactions = likes + comments + shares;
+      }
 
       // Insert metrics snapshot
       const { error: metricsError } = await supabase
