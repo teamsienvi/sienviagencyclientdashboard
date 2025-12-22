@@ -18,16 +18,24 @@ serve(async (req) => {
       throw new Error('META_APP_ID not configured');
     }
 
-    // Define scopes - include both Facebook and Instagram permissions for full access
-    const scopes = platform === 'instagram' 
-      ? 'instagram_basic,instagram_manage_insights,business_management,pages_show_list,pages_read_engagement'
-      : 'pages_show_list,pages_read_engagement,pages_manage_posts,read_insights,instagram_basic,instagram_manage_insights';
+    // Define scopes - include comprehensive Facebook and Instagram permissions
+    // Required permissions for Instagram Business accounts accessed via Facebook Pages
+    const scopes = [
+      'instagram_basic',
+      'instagram_manage_insights', 
+      'business_management',
+      'pages_show_list',
+      'pages_read_engagement',
+      'pages_read_user_content',
+      'pages_manage_metadata',
+      'read_insights'
+    ].join(',');
 
     // Build Meta OAuth URL
     const state = JSON.stringify({ clientId, platform });
     const encodedState = encodeURIComponent(btoa(state));
     
-    const authUrl = new URL('https://www.facebook.com/v18.0/dialog/oauth');
+    const authUrl = new URL('https://www.facebook.com/v21.0/dialog/oauth');
     authUrl.searchParams.set('client_id', metaAppId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('scope', scopes);
