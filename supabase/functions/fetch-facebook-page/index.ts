@@ -22,10 +22,26 @@ serve(async (req) => {
 
     console.log(`Fetching Facebook page for ID: ${pageId}`);
 
-    const response = await fetch(
-      `https://graph.facebook.com/v21.0/${pageId}?fields=name,id,followers_count,fan_count,picture.width(200).height(200)&access_token=${accessToken}`
-    );
+    // Prefer a Page access token (user tokens can cause "impersonating a user's page" errors)
+    let tokenToUse = accessToken;
+    try {
+      const accountsResp = await fetch(
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,access_token&access_token=${accessToken}`,
+      );
+      if (accountsResp.ok) {
+        const accountsJson = await accountsResp.json();
+        const match = (accountsJson.data || []).find((p: any) => p.id === pageId);
+        if (match?.access_token) {
+          tokenToUse = match.access_token;
+        }
+      }
+    } catch (e) {
+      console.log("Could not resolve Page access token (continuing):", e);
+    }
 
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${pageId}?fields=name,id,followers_count,fan_count,picture.width(200).height(200)&access_token=${tokenToUse}`
+    );
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Facebook API error:", errorText);

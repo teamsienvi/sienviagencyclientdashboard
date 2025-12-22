@@ -12,21 +12,37 @@ serve(async (req) => {
   }
 
   try {
-    const { accessToken, instagramBusinessId } = await req.json();
+    const { accessToken, instagramBusinessId, pageId } = await req.json();
 
     if (!accessToken || !instagramBusinessId) {
       return new Response(
         JSON.stringify({ error: "Missing accessToken or instagramBusinessId" }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
-
     console.log(`Fetching Instagram profile for ID: ${instagramBusinessId}`);
 
-    const response = await fetch(
-      `https://graph.facebook.com/v21.0/${instagramBusinessId}?fields=username,name,profile_picture_url,followers_count,media_count,biography&access_token=${accessToken}`
-    );
+    // Prefer a Page access token (IG Business accounts are tied to Pages)
+    let tokenToUse = accessToken;
+    try {
+      const accountsResp = await fetch(
+        `https://graph.facebook.com/v21.0/me/accounts?fields=id,access_token&access_token=${accessToken}`,
+      );
+      if (accountsResp.ok) {
+        const accountsJson = await accountsResp.json();
+        const accounts = accountsJson.data || [];
+        const match = pageId ? accounts.find((p: any) => p.id === pageId) : accounts[0];
+        if (match?.access_token) {
+          tokenToUse = match.access_token;
+        }
+      }
+    } catch (e) {
+      console.log("Could not resolve Page access token (continuing):", e);
+    }
 
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${instagramBusinessId}?fields=username,name,profile_picture_url,followers_count,media_count,biography&access_token=${tokenToUse}`
+    );
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Facebook API error:", errorText);

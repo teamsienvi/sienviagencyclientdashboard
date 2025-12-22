@@ -21,27 +21,29 @@ serve(async (req) => {
     // Define scopes - include comprehensive Facebook and Instagram permissions
     // Required permissions for Instagram Business accounts accessed via Facebook Pages
     const scopes = [
-      'instagram_basic',
-      'instagram_manage_insights', 
-      'business_management',
-      'pages_show_list',
-      'pages_read_engagement',
-      'pages_read_user_content',
-      'pages_manage_metadata',
-      'read_insights'
-    ].join(',');
-
+      "instagram_basic",
+      "instagram_manage_insights",
+      "business_management",
+      "pages_show_list",
+      "pages_read_engagement",
+      "pages_read_user_content",
+      "pages_manage_metadata",
+      "pages_manage_ads",
+      "pages_messaging",
+      "read_insights",
+    ].join(",");
     // Build Meta OAuth URL
     const state = JSON.stringify({ clientId, platform });
     const encodedState = encodeURIComponent(btoa(state));
     
-    const authUrl = new URL('https://www.facebook.com/v21.0/dialog/oauth');
-    authUrl.searchParams.set('client_id', metaAppId);
-    authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('scope', scopes);
-    authUrl.searchParams.set('state', encodedState);
-    authUrl.searchParams.set('response_type', 'code');
-
+    const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+    authUrl.searchParams.set("client_id", metaAppId);
+    authUrl.searchParams.set("redirect_uri", redirectUri);
+    authUrl.searchParams.set("scope", scopes);
+    authUrl.searchParams.set("state", encodedState);
+    authUrl.searchParams.set("response_type", "code");
+    // Force re-prompt if permissions were previously declined
+    authUrl.searchParams.set("auth_type", "rerequest");
     console.log('Generated Meta OAuth URL for platform:', platform);
 
     return new Response(

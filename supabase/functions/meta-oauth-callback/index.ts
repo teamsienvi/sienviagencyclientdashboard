@@ -30,12 +30,11 @@ serve(async (req) => {
     console.log('Processing OAuth callback for client:', clientId, 'platform:', platform);
 
     // Exchange code for access token
-    const tokenUrl = new URL('https://graph.facebook.com/v18.0/oauth/access_token');
-    tokenUrl.searchParams.set('client_id', metaAppId);
-    tokenUrl.searchParams.set('client_secret', metaAppSecret);
-    tokenUrl.searchParams.set('redirect_uri', redirectUri);
-    tokenUrl.searchParams.set('code', code);
-
+    const tokenUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
+    tokenUrl.searchParams.set("client_id", metaAppId);
+    tokenUrl.searchParams.set("client_secret", metaAppSecret);
+    tokenUrl.searchParams.set("redirect_uri", redirectUri);
+    tokenUrl.searchParams.set("code", code);
     const tokenResponse = await fetch(tokenUrl.toString());
     const tokenData = await tokenResponse.json();
 
@@ -47,12 +46,11 @@ serve(async (req) => {
     const { access_token: shortLivedToken } = tokenData;
 
     // Exchange for long-lived token
-    const longLivedUrl = new URL('https://graph.facebook.com/v18.0/oauth/access_token');
-    longLivedUrl.searchParams.set('grant_type', 'fb_exchange_token');
-    longLivedUrl.searchParams.set('client_id', metaAppId);
-    longLivedUrl.searchParams.set('client_secret', metaAppSecret);
-    longLivedUrl.searchParams.set('fb_exchange_token', shortLivedToken);
-
+    const longLivedUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
+    longLivedUrl.searchParams.set("grant_type", "fb_exchange_token");
+    longLivedUrl.searchParams.set("client_id", metaAppId);
+    longLivedUrl.searchParams.set("client_secret", metaAppSecret);
+    longLivedUrl.searchParams.set("fb_exchange_token", shortLivedToken);
     const longLivedResponse = await fetch(longLivedUrl.toString());
     const longLivedData = await longLivedResponse.json();
 
@@ -78,31 +76,50 @@ serve(async (req) => {
 
     // Get user's pages
     const pagesResponse = await fetch(
-      `https://graph.facebook.com/v18.0/me/accounts?access_token=${longLivedToken}`
+      `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token&access_token=${longLivedToken}`,
     );
     const pagesData = await pagesResponse.json();
 
+    if (pagesData?.error) {
+      console.error("Pages list error:", pagesData.error);
+      throw new Error(
+        "Meta permissions missing for Pages access. Please disconnect and reconnect to grant Facebook Pages permissions.",
+      );
+    }
     if (pagesData.data && pagesData.data.length > 0) {
       const page = pagesData.data[0];
       pageId = page.id;
+
+      if (!page.access_token) {
+        throw new Error(
+          "Meta did not return a Page access token. Please reconnect and ensure you approve all requested permissions.",
+        );
+      }
+
       pageAccessToken = page.access_token;
 
-      console.log('Found page:', pageId);
+      console.log("Found page:", pageId);
 
       // Get Instagram business account if platform is instagram
-      if (platform === 'instagram') {
+      if (platform === "instagram") {
         const igResponse = await fetch(
-          `https://graph.facebook.com/v18.0/${pageId}?fields=instagram_business_account&access_token=${pageAccessToken}`
+          `https://graph.facebook.com/v21.0/${pageId}?fields=instagram_business_account&access_token=${pageAccessToken}`,
         );
         const igData = await igResponse.json();
-        
+
+        if (igData?.error) {
+          console.error("Instagram business lookup error:", igData.error);
+          throw new Error(
+            "Unable to access Instagram business account. Please reconnect and grant Instagram + Pages permissions.",
+          );
+        }
+
         if (igData.instagram_business_account) {
           instagramBusinessId = igData.instagram_business_account.id;
-          console.log('Found Instagram business account:', instagramBusinessId);
+          console.log("Found Instagram business account:", instagramBusinessId);
         }
       }
     }
-
     // Store in database
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
