@@ -138,6 +138,24 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   // Date range state - weekly reports reset every Tuesday
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+  
+  // Report-based comparison data (from CSV uploads)
+  const [instagramReportData, setInstagramReportData] = useState<{
+    engagement_rate: number | null;
+    last_week_engagement_rate: number | null;
+    total_content: number | null;
+    last_week_total_content: number | null;
+    followers: number | null;
+    new_followers: number | null;
+  } | null>(null);
+  const [facebookReportData, setFacebookReportData] = useState<{
+    engagement_rate: number | null;
+    last_week_engagement_rate: number | null;
+    total_content: number | null;
+    last_week_total_content: number | null;
+    followers: number | null;
+    new_followers: number | null;
+  } | null>(null);
 
   const isConnected = oauthAccount !== null && oauthAccount.is_active;
 
@@ -347,6 +365,53 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
   };
 
+  // Fetch the latest report data from platform_data for comparison
+  const fetchReportComparisonData = async () => {
+    // Get the most recent report for this client
+    const { data: latestReport } = await supabase
+      .from("reports")
+      .select("id, week_start, week_end")
+      .eq("client_id", clientId)
+      .order("week_start", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!latestReport) return;
+
+    // Fetch platform_data for Instagram and Facebook from the latest report
+    const { data: platformData } = await supabase
+      .from("platform_data")
+      .select("platform, engagement_rate, last_week_engagement_rate, total_content, last_week_total_content, followers, new_followers")
+      .eq("report_id", latestReport.id)
+      .in("platform", ["Instagram", "Facebook"]);
+
+    if (platformData) {
+      const igData = platformData.find(p => p.platform === "Instagram");
+      const fbData = platformData.find(p => p.platform === "Facebook");
+      
+      if (igData) {
+        setInstagramReportData({
+          engagement_rate: igData.engagement_rate,
+          last_week_engagement_rate: igData.last_week_engagement_rate,
+          total_content: igData.total_content,
+          last_week_total_content: igData.last_week_total_content,
+          followers: igData.followers,
+          new_followers: igData.new_followers,
+        });
+      }
+      if (fbData) {
+        setFacebookReportData({
+          engagement_rate: fbData.engagement_rate,
+          last_week_engagement_rate: fbData.last_week_engagement_rate,
+          total_content: fbData.total_content,
+          last_week_total_content: fbData.last_week_total_content,
+          followers: fbData.followers,
+          new_followers: fbData.new_followers,
+        });
+      }
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -357,15 +422,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const compStartDate = format(startOfDay(compStart), "yyyy-MM-dd");
       const compEndDate = format(endOfDay(compEnd), "yyyy-MM-dd");
 
-      // Fetch OAuth account, platform data, and sync logs in parallel
+      // Fetch OAuth account, platform data, report comparison data, and sync logs in parallel
       const [oauth, instagramData, facebookData] = await Promise.all([
         fetchOAuthAccount(),
         fetchPlatformData("instagram", startDate, endDate, compStartDate, compEndDate),
         fetchPlatformData("facebook", startDate, endDate, compStartDate, compEndDate),
       ]);
       
-      // Fetch sync logs separately (non-blocking)
+      // Fetch sync logs and report comparison data separately (non-blocking)
       fetchSyncLogs();
+      fetchReportComparisonData();
 
       setInstagramAccount(instagramData.account);
       setInstagramMetrics(instagramData.metrics);
@@ -651,6 +717,19 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const currentLabel = `${format(currentStart, "MMM d")}-${format(currentEnd, "d")}`;
     const compLabel = `${format(compStart, "MMM d")}-${format(compEnd, "d")}`;
 
+    // Use report data from CSV uploads for comparison (more accurate than API data)
+    const reportData = platform === "instagram" ? instagramReportData : facebookReportData;
+    
+    // Determine which data source to use for current and comparison values
+    const currentEngagement = reportData?.engagement_rate ?? metrics?.engagement_rate;
+    const prevEngagement = reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
+    const currentTotalPosts = reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
+    const prevTotalPosts = reportData?.last_week_total_content ?? prevMetrics?.total_content;
+    const currentFollowers = reportData?.followers ?? metrics?.followers;
+    const prevFollowers = reportData?.new_followers != null && reportData?.followers != null 
+      ? reportData.followers - reportData.new_followers 
+      : prevMetrics?.followers;
+
     return (
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -660,14 +739,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               <span className="text-sm">Followers</span>
             </div>
             <p className="text-2xl font-bold">
-              {metrics?.followers?.toLocaleString() || "—"}
+              {currentFollowers?.toLocaleString() || "—"}
             </p>
-            {prevMetrics?.followers != null && (
+            {prevFollowers != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.followers.toLocaleString()} ({compLabel})
+                  vs {prevFollowers.toLocaleString()} (prev week)
                 </span>
-                {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
+                {renderTrendIndicator(currentFollowers, prevFollowers)}
               </div>
             )}
           </CardContent>
@@ -679,14 +758,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               <span className="text-sm">Engagement Rate</span>
             </div>
             <p className="text-2xl font-bold">
-              {metrics?.engagement_rate?.toFixed(2) || "0"}%
+              {currentEngagement?.toFixed(2) || "0"}%
             </p>
-            {prevMetrics?.engagement_rate != null && (
+            {prevEngagement != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.engagement_rate.toFixed(2)}% ({compLabel})
+                  vs {prevEngagement.toFixed(2)}% (prev week)
                 </span>
-                {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate, true)}
+                {renderTrendIndicator(currentEngagement, prevEngagement, true)}
               </div>
             )}
           </CardContent>
@@ -698,14 +777,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               <span className="text-sm">Total Posts</span>
             </div>
             <p className="text-2xl font-bold">
-              {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
+              {currentTotalPosts || "—"}
             </p>
-            {prevMetrics?.total_content != null && (
+            {prevTotalPosts != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.total_content} ({compLabel})
+                  vs {prevTotalPosts} (prev week)
                 </span>
-                {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
+                {renderTrendIndicator(currentTotalPosts, prevTotalPosts)}
               </div>
             )}
           </CardContent>
@@ -714,13 +793,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Eye className="h-4 w-4" />
-              <span className="text-sm">Comparing</span>
+              <span className="text-sm">Data Source</span>
             </div>
             <p className="text-sm font-medium text-primary">
-              {currentLabel}
+              {reportData ? "Weekly Report" : "API Data"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              vs {compLabel}
+              {currentLabel} vs prev week
             </p>
           </CardContent>
         </Card>
