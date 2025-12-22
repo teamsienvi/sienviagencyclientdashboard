@@ -1,34 +1,66 @@
 import { Users, FileText, Clock } from "lucide-react";
-import { clientsData } from "@/data/clients";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export const DashboardStats = () => {
-  const totalClients = clientsData.length;
-  const totalReports = clientsData.reduce((acc, client) => acc + client.reports.length, 0);
-  
-  // Get the latest report - it's always the last report of the first client (since all clients have same weeks)
-  const latestReport = clientsData[0]?.reports[clientsData[0].reports.length - 1];
+  // Fetch real stats from database
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      // Fetch total active clients
+      const { count: clientCount, error: clientError } = await supabase
+        .from("clients")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true);
 
-  const stats = [
+      if (clientError) throw clientError;
+
+      // Fetch total reports
+      const { count: reportCount, error: reportError } = await supabase
+        .from("reports")
+        .select("*", { count: "exact", head: true });
+
+      if (reportError) throw reportError;
+
+      // Fetch latest report date
+      const { data: latestReport, error: latestError } = await supabase
+        .from("reports")
+        .select("date_range, week_end")
+        .order("week_end", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestError) throw latestError;
+
+      return {
+        totalClients: clientCount || 0,
+        totalReports: reportCount || 0,
+        latestUpdate: latestReport?.date_range || "N/A",
+      };
+    },
+  });
+
+  const statsData = [
     {
       label: "Total Clients",
-      value: totalClients,
+      value: stats?.totalClients ?? 0,
       icon: Users,
     },
     {
       label: "Total Reports",
-      value: totalReports,
+      value: stats?.totalReports ?? 0,
       icon: FileText,
     },
     {
       label: "Latest Update",
-      value: latestReport?.dateRange || "N/A",
+      value: stats?.latestUpdate ?? "N/A",
       icon: Clock,
     },
   ];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10 animate-fade-in">
-      {stats.map((stat, index) => (
+      {statsData.map((stat, index) => (
         <div
           key={stat.label}
           className="group flex items-center gap-4 bg-card border border-border rounded-xl p-5 hover:shadow-md hover:border-primary/20 transition-all duration-300"
