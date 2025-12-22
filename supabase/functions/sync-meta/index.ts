@@ -104,6 +104,27 @@ serve(async (req) => {
         const errorText = await pageInfoResponse.text();
         console.error("Facebook page info error (non-fatal):", errorText);
       }
+
+      // Fetch Facebook page insights for reach/impressions
+      try {
+        const fbInsightsUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions,page_post_engagements,page_fans&period=week&access_token=${accessToken}`;
+        console.log("Fetching Facebook page insights...");
+        const fbInsightsResp = await fetch(fbInsightsUrl);
+        
+        if (fbInsightsResp.ok) {
+          const fbInsightsData = await fbInsightsResp.json();
+          for (const insight of fbInsightsData.data || []) {
+            const value = insight.values?.[insight.values.length - 1]?.value || 0;
+            if (insight.name === 'page_impressions') totalImpressions = value;
+            if (insight.name === 'page_fans') totalFollowers = totalFollowers || value;
+          }
+          console.log(`Facebook page insights: impressions=${totalImpressions}, followers=${totalFollowers}`);
+        } else {
+          console.log("Facebook insights failed (non-fatal):", await fbInsightsResp.text());
+        }
+      } catch (e) {
+        console.log("Error fetching Facebook page insights:", e);
+      }
     }
 
     // Fetch media/posts
@@ -169,6 +190,26 @@ serve(async (req) => {
           console.error(`Error fetching insights for post ${item.id}:`, e);
         }
       }
+    } else {
+      // Fetch Facebook post insights for reach
+      console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
+      for (const item of mediaItems) {
+        try {
+          // Facebook post insights: post_impressions, post_engaged_users, post_reactions_by_type_total
+          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions,post_impressions_unique,post_engaged_users&access_token=${accessToken}`;
+          const insightsResp = await fetch(postInsightsUrl);
+          
+          if (insightsResp.ok) {
+            const insightsJson = await insightsResp.json();
+            (item as any).fbInsights = insightsJson.data || [];
+            console.log(`Got insights for FB post ${item.id}: ${(item as any).fbInsights.length} metrics`);
+          } else {
+            console.log(`FB post insights failed for ${item.id}: ${await insightsResp.text()}`);
+          }
+        } catch (e) {
+          console.error(`Error fetching FB post insights for ${item.id}:`, e);
+        }
+      }
     }
 
     // Store content and metrics
@@ -225,6 +266,15 @@ serve(async (req) => {
         likes = (item as any).reactions?.summary?.total_count || 0;
         comments = (item as any).comments?.summary?.total_count || 0;
         shares = (item as any).shares?.count || 0;
+        
+        // Extract Facebook post insights
+        const fbInsights = (item as any).fbInsights || [];
+        for (const insight of fbInsights) {
+          const value = insight.values?.[0]?.value || 0;
+          if (insight.name === 'post_impressions') impressions = value;
+          if (insight.name === 'post_impressions_unique') reach = value;
+          if (insight.name === 'post_engaged_users') interactions = value;
+        }
       }
 
       interactions = likes + comments + shares;
