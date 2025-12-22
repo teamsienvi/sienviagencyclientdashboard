@@ -591,36 +591,41 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     </Card>
   );
 
-  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined) => {
-    if (current == null || previous == null || previous === 0) {
+  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false) => {
+    if (current == null || previous == null) {
       return null;
     }
     
     const diff = current - previous;
-    const percentChange = ((diff / previous) * 100).toFixed(1);
+    const percentChange = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : "0";
     
     if (diff > 0) {
       return (
-        <span className="flex items-center text-xs text-green-500 gap-0.5 ml-2">
+        <div className="flex items-center text-xs text-green-500 gap-0.5">
           <ArrowUp className="h-3 w-3" />
-          {percentChange}%
-        </span>
+          <span>{isPercentage ? `+${diff.toFixed(2)}%` : `+${percentChange}%`}</span>
+        </div>
       );
     } else if (diff < 0) {
       return (
-        <span className="flex items-center text-xs text-red-500 gap-0.5 ml-2">
+        <div className="flex items-center text-xs text-red-500 gap-0.5">
           <ArrowDown className="h-3 w-3" />
-          {Math.abs(parseFloat(percentChange))}%
-        </span>
+          <span>{isPercentage ? `${diff.toFixed(2)}%` : `${percentChange}%`}</span>
+        </div>
       );
     }
     
     return (
-      <span className="flex items-center text-xs text-muted-foreground gap-0.5 ml-2">
+      <div className="flex items-center text-xs text-muted-foreground gap-0.5">
         <Minus className="h-3 w-3" />
-        0%
-      </span>
+        <span>0%</span>
+      </div>
     );
+  };
+
+  const formatComparisonValue = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false) => {
+    if (previous == null) return null;
+    return isPercentage ? `${previous.toFixed(2)}%` : previous.toLocaleString();
   };
 
   const renderMetricsCards = (metrics: MetaAccountMetrics | null, prevMetrics: MetaAccountMetrics | null, platform: MetaPlatform) => (
@@ -631,12 +636,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <Users className="h-4 w-4" />
             <span className="text-sm">Followers</span>
           </div>
-          <div className="flex items-center">
-            <p className="text-2xl font-bold">
-              {metrics?.followers?.toLocaleString() || "—"}
-            </p>
-            {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
-          </div>
+          <p className="text-2xl font-bold">
+            {metrics?.followers?.toLocaleString() || "—"}
+          </p>
+          {prevMetrics?.followers != null && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-muted-foreground">
+                vs {prevMetrics.followers.toLocaleString()} last week
+              </span>
+              {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -645,12 +655,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <TrendingUp className="h-4 w-4" />
             <span className="text-sm">Engagement Rate</span>
           </div>
-          <div className="flex items-center">
-            <p className="text-2xl font-bold">
-              {metrics?.engagement_rate?.toFixed(2) || "0"}%
-            </p>
-            {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate)}
-          </div>
+          <p className="text-2xl font-bold">
+            {metrics?.engagement_rate?.toFixed(2) || "0"}%
+          </p>
+          {prevMetrics?.engagement_rate != null && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-muted-foreground">
+                vs {prevMetrics.engagement_rate.toFixed(2)}% last week
+              </span>
+              {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate, true)}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -659,12 +674,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <ImageIcon className="h-4 w-4" />
             <span className="text-sm">Total Posts</span>
           </div>
-          <div className="flex items-center">
-            <p className="text-2xl font-bold">
-              {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
-            </p>
-            {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
-          </div>
+          <p className="text-2xl font-bold">
+            {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
+          </p>
+          {prevMetrics?.total_content != null && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-muted-foreground">
+                vs {prevMetrics.total_content} last week
+              </span>
+              {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
+            </div>
+          )}
         </CardContent>
       </Card>
       <Card>
@@ -678,6 +698,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               ? `${formatDate(metrics.period_start)} - ${formatDate(metrics.period_end)}`
               : "—"}
           </p>
+          {prevMetrics?.period_start && prevMetrics?.period_end && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Compared to {formatDate(prevMetrics.period_start)} - {formatDate(prevMetrics.period_end)}
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>
