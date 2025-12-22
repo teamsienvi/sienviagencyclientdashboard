@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Header } from "@/components/Header";
 import { ClientManagement } from "@/components/ClientManagement";
 import { BulkMetaSync } from "@/components/BulkMetaSync";
+import { BulkMetaPageAssignment } from "@/components/BulkMetaPageAssignment";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -78,7 +79,8 @@ const Admin = () => {
           </Button>
         </div>
         
-        <div className="mb-8">
+        <div className="space-y-8 mb-8">
+          <BulkMetaPageAssignment />
           <BulkMetaSync />
         </div>
         
