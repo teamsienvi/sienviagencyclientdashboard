@@ -684,6 +684,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             {/* Sync Status Display */}
             {(() => {
               const syncLog = activePlatform === "instagram" ? instagramSyncLog : facebookSyncLog;
+              if (syncing) {
+                return (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                    <span>Syncing...</span>
+                  </div>
+                );
+              }
               if (syncLog) {
                 const isError = syncLog.status === "failed" || syncLog.status === "error";
                 const isPending = syncLog.status === "pending" || syncLog.status === "in_progress";
@@ -715,7 +723,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   </div>
                 );
               }
-              return null;
+              // No sync logs yet
+              return (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Clock className="h-4 w-4" />
+                  <span>Never synced</span>
+                </div>
+              );
             })()}
             
             <Button
