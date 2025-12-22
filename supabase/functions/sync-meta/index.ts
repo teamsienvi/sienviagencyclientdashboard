@@ -282,8 +282,8 @@ serve(async (req) => {
         const fbInsights = (item as any).fbInsights || [];
         for (const insight of fbInsights) {
           const value = insight.values?.[0]?.value || 0;
-          if (insight.name === 'post_media_view' || insight.name === 'post_impressions') impressions = value;
-          if (insight.name === 'post_impressions_unique') reach = value;
+          // post_media_view represents views -> store as reach
+          if (insight.name === 'post_media_view' || insight.name === 'post_impressions_unique') reach = value;
         }
       }
 
