@@ -472,7 +472,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     }
   };
 
-  const handleSync = async (platform: MetaPlatform) => {
+  const handleSync = async (platform: MetaPlatform, syncLastWeek = false) => {
     if (!oauthAccount?.access_token) {
       toast.error("No access token found. Please connect your Meta account first.");
       return;
@@ -491,9 +491,21 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
     setSyncing(true);
     try {
-      const today = new Date();
-      const lastWeek = new Date(today);
-      lastWeek.setDate(lastWeek.getDate() - 7);
+      let periodEnd: Date;
+      let periodStart: Date;
+
+      if (syncLastWeek) {
+        // Sync previous week (8-14 days ago)
+        periodEnd = new Date();
+        periodEnd.setDate(periodEnd.getDate() - 7);
+        periodStart = new Date(periodEnd);
+        periodStart.setDate(periodStart.getDate() - 7);
+      } else {
+        // Sync current week (0-7 days ago)
+        periodEnd = new Date();
+        periodStart = new Date(periodEnd);
+        periodStart.setDate(periodStart.getDate() - 7);
+      }
 
       const { data, error } = await supabase.functions.invoke("sync-meta", {
         body: {
@@ -502,25 +514,26 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           platform,
           accessToken: oauthAccount.access_token,
           accountExternalId: externalId,
-          periodStart: lastWeek.toISOString().split("T")[0],
-          periodEnd: today.toISOString().split("T")[0],
+          periodStart: periodStart.toISOString().split("T")[0],
+          periodEnd: periodEnd.toISOString().split("T")[0],
         },
       });
 
       if (error) throw error;
 
       if (data?.success) {
-        toast.success(`Synced ${data.recordsSynced} posts from ${platform === "instagram" ? "Instagram" : "Facebook"}`);
+        const weekLabel = syncLastWeek ? "last week" : "this week";
+        toast.success(`Synced ${data.recordsSynced} posts from ${platform === "instagram" ? "Instagram" : "Facebook"} (${weekLabel})`);
         fetchData();
-        fetchSyncLogs(); // Refresh sync logs
+        fetchSyncLogs();
       } else {
         toast.error(data?.error || `Failed to sync ${platform} data`);
-        fetchSyncLogs(); // Refresh to show error status
+        fetchSyncLogs();
       }
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(error.message || `Failed to sync ${platform} analytics`);
-      fetchSyncLogs(); // Refresh to show error status
+      fetchSyncLogs();
     } finally {
       setSyncing(false);
     }
@@ -1056,15 +1069,26 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               );
             })()}
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleSync(activePlatform)}
-              disabled={syncing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Syncing..." : "Sync Now"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSync(activePlatform, true)}
+                disabled={syncing}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+                Sync Last Week
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSync(activePlatform, false)}
+                disabled={syncing}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Syncing..." : "Sync Now"}
+              </Button>
+            </div>
           </div>
         </div>
 
