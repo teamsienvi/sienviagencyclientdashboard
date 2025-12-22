@@ -138,6 +138,38 @@ serve(async (req) => {
     const mediaData = mediaResponse.ok ? await mediaResponse.json() : { data: [] };
     const mediaItems: MetaMediaItem[] = mediaData.data || [];
 
+    // For Instagram, fetch insights for each post to get reach/impressions
+    if (platform === 'instagram') {
+      console.log(`Fetching insights for ${mediaItems.length} Instagram posts...`);
+      for (const item of mediaItems) {
+        try {
+          // Different metrics for different media types
+          const isReel = item.media_type === 'VIDEO';
+          const insightMetrics = isReel 
+            ? 'reach,plays,likes,comments,shares,saved'
+            : 'reach,impressions,likes,comments,shares,saved';
+          
+          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=${insightMetrics}&access_token=${accessToken}`;
+          const insightsResp = await fetch(postInsightsUrl);
+          
+          if (insightsResp.ok) {
+            const insightsJson = await insightsResp.json();
+            item.insights = insightsJson;
+          } else {
+            // Fallback: try alternative metrics for stories/carousels
+            const altMetrics = 'reach,impressions';
+            const altUrl = `${baseUrl}/${item.id}/insights?metric=${altMetrics}&access_token=${accessToken}`;
+            const altResp = await fetch(altUrl);
+            if (altResp.ok) {
+              item.insights = await altResp.json();
+            }
+          }
+        } catch (e) {
+          console.error(`Error fetching insights for post ${item.id}:`, e);
+        }
+      }
+    }
+
     // Store content and metrics
     for (const item of mediaItems) {
       // Upsert content

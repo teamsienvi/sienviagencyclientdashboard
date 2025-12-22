@@ -93,6 +93,14 @@ interface SyncLog {
   error_message: string | null;
 }
 
+interface FacebookPage {
+  name: string | null;
+  id: string | null;
+  followers_count: number | null;
+  fan_count: number | null;
+  picture_url: string | null;
+}
+
 type DateRangePreset = "7d" | "30d" | "custom";
 type MetaPlatform = "instagram" | "facebook";
 
@@ -106,8 +114,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   // OAuth account data
   const [oauthAccount, setOauthAccount] = useState<OAuthAccount | null>(null);
   const [instagramProfile, setInstagramProfile] = useState<InstagramProfile | null>(null);
+  const [facebookPage, setFacebookPage] = useState<FacebookPage | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
-  
+
   // Sync logs
   const [instagramSyncLog, setInstagramSyncLog] = useState<SyncLog | null>(null);
   const [facebookSyncLog, setFacebookSyncLog] = useState<SyncLog | null>(null);
@@ -182,6 +191,28 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       return null;
     } finally {
       setLoadingProfile(false);
+    }
+  };
+
+  const fetchFacebookPage = async (accessToken: string, pageId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-facebook-page", {
+        body: { accessToken, pageId },
+      });
+      
+      if (error) {
+        console.error("Failed to fetch Facebook page:", error);
+        return null;
+      }
+      
+      if (data?.page) {
+        setFacebookPage(data.page);
+        return data.page;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching Facebook page:", error);
+      return null;
     }
   };
 
@@ -278,9 +309,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       setFacebookMetrics(facebookData.metrics);
       setFacebookContent(facebookData.content);
 
-      // Fetch Instagram profile if we have the OAuth data
-      if (oauth?.access_token && oauth?.instagram_business_id) {
-        fetchInstagramProfile(oauth.access_token, oauth.instagram_business_id);
+      // Fetch Instagram profile and Facebook page if we have the OAuth data
+      if (oauth?.access_token) {
+        if (oauth.instagram_business_id) {
+          fetchInstagramProfile(oauth.access_token, oauth.instagram_business_id);
+        }
+        if (oauth.page_id) {
+          fetchFacebookPage(oauth.access_token, oauth.page_id);
+        }
       }
     } catch (error) {
       console.error("Error fetching Meta analytics:", error);
@@ -328,6 +364,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       toast.success("Meta account disconnected successfully");
       setOauthAccount(null);
       setInstagramProfile(null);
+      setFacebookPage(null);
       setInstagramMetrics(null);
       setFacebookMetrics(null);
       setInstagramContent([]);
@@ -691,6 +728,51 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Connected Facebook Page Card */}
+      {facebookPage && (
+        <Card className="bg-gradient-to-r from-blue-500/5 to-blue-600/5 border-blue-200/50 dark:border-blue-800/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              {facebookPage.picture_url ? (
+                <img 
+                  src={facebookPage.picture_url} 
+                  alt={facebookPage.name || "Page"} 
+                  className="h-16 w-16 rounded-full object-cover ring-2 ring-blue-500/30"
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                  <Facebook className="h-8 w-8 text-white" />
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-lg">{facebookPage.name}</h3>
+                  <Badge variant="outline" className="text-blue-600 border-blue-600">
+                    <Facebook className="h-3 w-3 mr-1" />
+                    Page
+                  </Badge>
+                </div>
+                <a 
+                  href={`https://facebook.com/${facebookPage.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-muted-foreground hover:text-blue-500 transition-colors flex items-center gap-1"
+                >
+                  View Page
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <div className="hidden sm:flex gap-6 text-center">
+                <div>
+                  <p className="text-2xl font-bold">{(facebookPage.followers_count || facebookPage.fan_count)?.toLocaleString() || "—"}</p>
+                  <p className="text-xs text-muted-foreground">Followers</p>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
