@@ -75,30 +75,19 @@ serve(async (req) => {
 
     // Different handling for Instagram vs Facebook
     if (platform === 'instagram') {
-      // Fetch Instagram account insights
-      const insightsUrl = `${baseUrl}/${accountExternalId}/insights?metric=follower_count,impressions,reach,profile_views&period=day&since=${periodStart}&until=${periodEnd}&access_token=${accessToken}`;
+      // Fetch Instagram account info for follower count (insights API is unreliable)
+      const accountInfoUrl = `${baseUrl}/${accountExternalId}?fields=followers_count,media_count&access_token=${accessToken}`;
       
-      console.log(`Fetching Instagram insights...`);
-      const insightsResponse = await fetch(insightsUrl);
+      console.log(`Fetching Instagram account info...`);
+      const accountInfoResponse = await fetch(accountInfoUrl);
       
-      if (insightsResponse.ok) {
-        const insightsData = await insightsResponse.json();
-        
-        if (insightsData.data) {
-          for (const metric of insightsData.data) {
-            const latestValue = metric.values?.[metric.values.length - 1]?.value || 0;
-            if (metric.name.includes('follower')) {
-              totalFollowers = latestValue;
-            } else if (metric.name.includes('reach')) {
-              totalReach += metric.values.reduce((sum: number, v: { value: number }) => sum + (v.value || 0), 0);
-            } else if (metric.name.includes('impression')) {
-              totalImpressions += metric.values.reduce((sum: number, v: { value: number }) => sum + (v.value || 0), 0);
-            }
-          }
-        }
+      if (accountInfoResponse.ok) {
+        const accountInfo = await accountInfoResponse.json();
+        totalFollowers = accountInfo.followers_count || 0;
+        console.log(`Instagram followers: ${totalFollowers}`);
       } else {
-        const errorText = await insightsResponse.text();
-        console.error("Instagram insights error (non-fatal):", errorText);
+        const errorText = await accountInfoResponse.text();
+        console.error("Instagram account info error:", errorText);
       }
     } else {
       // For Facebook Pages, get basic info first
@@ -143,11 +132,21 @@ serve(async (req) => {
       console.log(`Fetching insights for ${mediaItems.length} Instagram posts...`);
       for (const item of mediaItems) {
         try {
-          // Different metrics for different media types
-          const isReel = item.media_type === 'VIDEO';
-          const insightMetrics = isReel 
-            ? 'reach,plays,likes,comments,shares,saved'
-            : 'reach,impressions,likes,comments,shares,saved';
+          // Use the correct metrics based on media type
+          // For Reels (VIDEO): reach, plays, likes, comments, shares, saved, total_interactions
+          // For Images/Carousels: reach, saved, likes, comments, shares, total_interactions
+          let insightMetrics: string;
+          
+          if (item.media_type === 'VIDEO') {
+            // Reels use 'plays' instead of 'impressions'
+            insightMetrics = 'reach,plays,saved,total_interactions';
+          } else if (item.media_type === 'CAROUSEL_ALBUM') {
+            // Carousels have limited insights
+            insightMetrics = 'reach,saved,total_interactions';
+          } else {
+            // Regular images
+            insightMetrics = 'reach,saved,total_interactions';
+          }
           
           const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=${insightMetrics}&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
@@ -155,13 +154,15 @@ serve(async (req) => {
           if (insightsResp.ok) {
             const insightsJson = await insightsResp.json();
             item.insights = insightsJson;
+            console.log(`Got insights for ${item.id}: ${JSON.stringify(insightsJson.data?.map((d: any) => d.name))}`);
           } else {
-            // Fallback: try alternative metrics for stories/carousels
-            const altMetrics = 'reach,impressions';
-            const altUrl = `${baseUrl}/${item.id}/insights?metric=${altMetrics}&access_token=${accessToken}`;
-            const altResp = await fetch(altUrl);
-            if (altResp.ok) {
-              item.insights = await altResp.json();
+            const errText = await insightsResp.text();
+            console.log(`Insights failed for ${item.id} (${item.media_type}): ${errText.substring(0, 100)}`);
+            // Try minimal fallback
+            const fallbackUrl = `${baseUrl}/${item.id}/insights?metric=reach&access_token=${accessToken}`;
+            const fallbackResp = await fetch(fallbackUrl);
+            if (fallbackResp.ok) {
+              item.insights = await fallbackResp.json();
             }
           }
         } catch (e) {
@@ -198,7 +199,7 @@ serve(async (req) => {
       }
 
       // Extract metrics
-      let reach = 0, impressions = 0, likes = 0, comments = 0, shares = 0, interactions = 0;
+      let reach = 0, impressions = 0, likes = 0, comments = 0, shares = 0, interactions = 0, saved = 0;
 
       if (platform === 'instagram') {
         likes = item.like_count || 0;
@@ -206,10 +207,18 @@ serve(async (req) => {
         
         if (item.insights?.data) {
           for (const insight of item.insights.data) {
-            if (insight.name === 'reach') reach = insight.values[0]?.value || 0;
-            if (insight.name === 'impressions') impressions = insight.values[0]?.value || 0;
-            if (insight.name === 'shares') shares = insight.values[0]?.value || 0;
+            const value = insight.values?.[0]?.value || 0;
+            if (insight.name === 'reach') reach = value;
+            if (insight.name === 'plays') impressions = value; // Reels use 'plays' 
+            if (insight.name === 'saved') saved = value;
+            if (insight.name === 'shares') shares = value;
+            if (insight.name === 'total_interactions') interactions = value;
           }
+        }
+        
+        // If total_interactions wasn't in insights, calculate it
+        if (interactions === 0) {
+          interactions = likes + comments + shares + saved;
         }
       } else {
         // Facebook
