@@ -792,15 +792,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Eye className="h-4 w-4" />
-              <span className="text-sm">Data Source</span>
+              <Clock className="h-4 w-4" />
+              <span className="text-sm">Reporting Period</span>
             </div>
-            <p className="text-sm font-medium text-primary">
-              {reportData ? "Weekly Report" : "API Data"}
+            <p className="text-lg font-semibold text-foreground">
+              {currentLabel}
             </p>
             <div className="group relative">
               <p className="text-xs text-muted-foreground mt-1 cursor-help underline decoration-dotted">
-                {currentLabel}
+                vs previous week
               </p>
               <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
                 <div className="bg-popover text-popover-foreground text-xs rounded-md px-3 py-2 shadow-lg border whitespace-nowrap">
