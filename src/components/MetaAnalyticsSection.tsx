@@ -281,7 +281,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .from("social_content")
       .select(`
         id, content_id, title, url, published_at, content_type,
-        social_content_metrics(social_content_id, reach, impressions, likes, comments, shares, interactions)
+        social_content_metrics(social_content_id, reach, impressions, likes, comments, shares, interactions, collected_at, period_start, period_end)
       `)
       .eq("client_id", clientId)
       .eq("platform", platform)
@@ -290,10 +290,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .order("published_at", { ascending: false })
       .limit(50);
 
-    const contentWithMetrics = contentData?.map((item: any) => ({
-      ...item,
-      metrics: item.social_content_metrics?.[0] || null,
-    })) || [];
+    const contentWithMetrics = contentData?.map((item: any) => {
+      const metricsList = item.social_content_metrics || [];
+      const latest = metricsList
+        .slice()
+        .sort((a: any, b: any) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime())[0];
+
+      return {
+        ...item,
+        metrics: latest || null,
+      };
+    }) || [];
 
     return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
   };
