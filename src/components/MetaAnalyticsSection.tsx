@@ -12,7 +12,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog,
@@ -37,6 +37,7 @@ interface MetaAnalyticsSectionProps {
 interface MetaAccountMetrics {
   id: string;
   followers: number | null;
+  new_followers: number | null;
   engagement_rate: number | null;
   total_content: number | null;
   period_start: string;
@@ -123,11 +124,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   
   // Instagram data
   const [instagramMetrics, setInstagramMetrics] = useState<MetaAccountMetrics | null>(null);
+  const [instagramPrevMetrics, setInstagramPrevMetrics] = useState<MetaAccountMetrics | null>(null);
   const [instagramContent, setInstagramContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [instagramAccount, setInstagramAccount] = useState<{ id: string; account_id: string } | null>(null);
   
   // Facebook data
   const [facebookMetrics, setFacebookMetrics] = useState<MetaAccountMetrics | null>(null);
+  const [facebookPrevMetrics, setFacebookPrevMetrics] = useState<MetaAccountMetrics | null>(null);
   const [facebookContent, setFacebookContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
   
@@ -262,6 +265,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .limit(1)
       .maybeSingle();
 
+    // Fetch previous period metrics for comparison (trend indicators)
+    const { data: prevMetricsData } = await supabase
+      .from("social_account_metrics")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("platform", platform)
+      .lt("period_end", startDate)
+      .order("collected_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     // Fetch content with metrics filtered by date range
     const { data: contentData } = await supabase
       .from("social_content")
@@ -281,7 +295,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       metrics: item.social_content_metrics?.[0] || null,
     })) || [];
 
-    return { account: accountData, metrics: metricsData, content: contentWithMetrics };
+    return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
   };
 
   const fetchData = async () => {
@@ -303,10 +317,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
       setInstagramAccount(instagramData.account);
       setInstagramMetrics(instagramData.metrics);
+      setInstagramPrevMetrics(instagramData.prevMetrics);
       setInstagramContent(instagramData.content);
 
       setFacebookAccount(facebookData.account);
       setFacebookMetrics(facebookData.metrics);
+      setFacebookPrevMetrics(facebookData.prevMetrics);
       setFacebookContent(facebookData.content);
 
       // Fetch Instagram profile and Facebook page if we have the OAuth data
@@ -483,7 +499,39 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     </Card>
   );
 
-  const renderMetricsCards = (metrics: MetaAccountMetrics | null, platform: MetaPlatform) => (
+  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined) => {
+    if (current == null || previous == null || previous === 0) {
+      return null;
+    }
+    
+    const diff = current - previous;
+    const percentChange = ((diff / previous) * 100).toFixed(1);
+    
+    if (diff > 0) {
+      return (
+        <span className="flex items-center text-xs text-green-500 gap-0.5 ml-2">
+          <ArrowUp className="h-3 w-3" />
+          {percentChange}%
+        </span>
+      );
+    } else if (diff < 0) {
+      return (
+        <span className="flex items-center text-xs text-red-500 gap-0.5 ml-2">
+          <ArrowDown className="h-3 w-3" />
+          {Math.abs(parseFloat(percentChange))}%
+        </span>
+      );
+    }
+    
+    return (
+      <span className="flex items-center text-xs text-muted-foreground gap-0.5 ml-2">
+        <Minus className="h-3 w-3" />
+        0%
+      </span>
+    );
+  };
+
+  const renderMetricsCards = (metrics: MetaAccountMetrics | null, prevMetrics: MetaAccountMetrics | null, platform: MetaPlatform) => (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
       <Card>
         <CardContent className="pt-6">
@@ -491,9 +539,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <Users className="h-4 w-4" />
             <span className="text-sm">Followers</span>
           </div>
-          <p className="text-2xl font-bold">
-            {metrics?.followers?.toLocaleString() || "—"}
-          </p>
+          <div className="flex items-center">
+            <p className="text-2xl font-bold">
+              {metrics?.followers?.toLocaleString() || "—"}
+            </p>
+            {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
+          </div>
         </CardContent>
       </Card>
       <Card>
@@ -502,9 +553,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <TrendingUp className="h-4 w-4" />
             <span className="text-sm">Engagement Rate</span>
           </div>
-          <p className="text-2xl font-bold">
-            {metrics?.engagement_rate?.toFixed(2) || "0"}%
-          </p>
+          <div className="flex items-center">
+            <p className="text-2xl font-bold">
+              {metrics?.engagement_rate?.toFixed(2) || "0"}%
+            </p>
+            {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate)}
+          </div>
         </CardContent>
       </Card>
       <Card>
@@ -513,9 +567,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <ImageIcon className="h-4 w-4" />
             <span className="text-sm">Total Posts</span>
           </div>
-          <p className="text-2xl font-bold">
-            {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
-          </p>
+          <div className="flex items-center">
+            <p className="text-2xl font-bold">
+              {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
+            </p>
+            {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
+          </div>
         </CardContent>
       </Card>
       <Card>
@@ -921,12 +978,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         </div>
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
-          {renderMetricsCards(instagramMetrics, "instagram")}
+          {renderMetricsCards(instagramMetrics, instagramPrevMetrics, "instagram")}
           {renderContentTable(instagramContent, "instagram")}
         </TabsContent>
 
         <TabsContent value="facebook" className="space-y-6 mt-4">
-          {renderMetricsCards(facebookMetrics, "facebook")}
+          {renderMetricsCards(facebookMetrics, facebookPrevMetrics, "facebook")}
           {renderContentTable(facebookContent, "facebook")}
         </TabsContent>
       </Tabs>
