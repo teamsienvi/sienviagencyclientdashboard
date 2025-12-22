@@ -58,6 +58,18 @@ interface OAuthAccount {
   instagram_business_id: string | null;
   page_id: string | null;
   is_active: boolean;
+  platform: string;
+  connected_at: string;
+  token_expires_at: string;
+}
+
+interface InstagramProfile {
+  username: string | null;
+  name: string | null;
+  profile_picture_url: string | null;
+  followers_count: number | null;
+  media_count: number | null;
+  biography: string | null;
 }
 
 type DateRangePreset = "7d" | "30d" | "custom";
@@ -71,6 +83,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   
   // OAuth account data
   const [oauthAccount, setOauthAccount] = useState<OAuthAccount | null>(null);
+  const [instagramProfile, setInstagramProfile] = useState<InstagramProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   
   // Instagram data
   const [instagramMetrics, setInstagramMetrics] = useState<MetaAccountMetrics | null>(null);
@@ -111,13 +125,44 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const fetchOAuthAccount = async () => {
     const { data } = await supabase
       .from("social_oauth_accounts")
-      .select("id, access_token, instagram_business_id, page_id, is_active")
+      .select("id, access_token, instagram_business_id, page_id, is_active, platform, connected_at, token_expires_at")
       .eq("client_id", clientId)
       .eq("is_active", true)
       .maybeSingle();
     
     setOauthAccount(data);
     return data;
+  };
+
+  const fetchInstagramProfile = async (accessToken: string, instagramBusinessId: string) => {
+    setLoadingProfile(true);
+    try {
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/${instagramBusinessId}?fields=username,name,profile_picture_url,followers_count,media_count,biography&access_token=${accessToken}`
+      );
+      
+      if (!response.ok) {
+        console.error("Failed to fetch Instagram profile:", await response.text());
+        return null;
+      }
+      
+      const data = await response.json();
+      const profile: InstagramProfile = {
+        username: data.username || null,
+        name: data.name || null,
+        profile_picture_url: data.profile_picture_url || null,
+        followers_count: data.followers_count || null,
+        media_count: data.media_count || null,
+        biography: data.biography || null,
+      };
+      setInstagramProfile(profile);
+      return profile;
+    } catch (error) {
+      console.error("Error fetching Instagram profile:", error);
+      return null;
+    } finally {
+      setLoadingProfile(false);
+    }
   };
 
   const fetchPlatformData = async (platform: MetaPlatform, startDate: string, endDate: string) => {
@@ -185,6 +230,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       setFacebookAccount(facebookData.account);
       setFacebookMetrics(facebookData.metrics);
       setFacebookContent(facebookData.content);
+
+      // Fetch Instagram profile if we have the OAuth data
+      if (oauth?.access_token && oauth?.instagram_business_id) {
+        fetchInstagramProfile(oauth.access_token, oauth.instagram_business_id);
+      }
     } catch (error) {
       console.error("Error fetching Meta analytics:", error);
     } finally {
@@ -489,25 +539,87 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   return (
     <div className="space-y-6">
-      {/* Connection Status */}
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="text-green-600 border-green-600">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          Meta Connected
-        </Badge>
-        {oauthAccount?.instagram_business_id && (
-          <Badge variant="secondary" className="gap-1">
-            <Instagram className="h-3 w-3" />
-            Instagram
+      {/* Connected Account Card */}
+      {instagramProfile && (
+        <Card className="bg-gradient-to-r from-purple-500/5 to-pink-500/5 border-purple-200/50 dark:border-purple-800/50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-4">
+              {instagramProfile.profile_picture_url ? (
+                <img 
+                  src={instagramProfile.profile_picture_url} 
+                  alt={instagramProfile.username || "Profile"} 
+                  className="h-16 w-16 rounded-full object-cover ring-2 ring-pink-500/30"
+                />
+              ) : (
+                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <Instagram className="h-8 w-8 text-white" />
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-lg">{instagramProfile.name || instagramProfile.username}</h3>
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Connected
+                  </Badge>
+                </div>
+                {instagramProfile.username && (
+                  <a 
+                    href={`https://instagram.com/${instagramProfile.username}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-pink-500 transition-colors flex items-center gap-1"
+                  >
+                    @{instagramProfile.username}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+                {instagramProfile.biography && (
+                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{instagramProfile.biography}</p>
+                )}
+              </div>
+              <div className="hidden sm:flex gap-6 text-center">
+                <div>
+                  <p className="text-2xl font-bold">{instagramProfile.followers_count?.toLocaleString() || "—"}</p>
+                  <p className="text-xs text-muted-foreground">Followers</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{instagramProfile.media_count?.toLocaleString() || "—"}</p>
+                  <p className="text-xs text-muted-foreground">Posts</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Connection Status Badges */}
+      {!instagramProfile && (
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-green-600 border-green-600">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Meta Connected
           </Badge>
-        )}
-        {oauthAccount?.page_id && (
-          <Badge variant="secondary" className="gap-1">
-            <Facebook className="h-3 w-3" />
-            Facebook
-          </Badge>
-        )}
-      </div>
+          {loadingProfile && (
+            <Badge variant="secondary" className="gap-1">
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Loading profile...
+            </Badge>
+          )}
+          {oauthAccount?.instagram_business_id && !loadingProfile && (
+            <Badge variant="secondary" className="gap-1">
+              <Instagram className="h-3 w-3" />
+              Instagram
+            </Badge>
+          )}
+          {oauthAccount?.page_id && (
+            <Badge variant="secondary" className="gap-1">
+              <Facebook className="h-3 w-3" />
+              Facebook
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Header with date range */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
