@@ -46,9 +46,39 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Facebook API error:", errorText);
+
+      // Common Meta error when Pages permissions were not granted
+      try {
+        const parsed = JSON.parse(errorText);
+        const code = parsed?.error?.code;
+        const message: string = parsed?.error?.message || "";
+
+        if (code === 190 && message.toLowerCase().includes("permission")) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              needsReconnect: true,
+              error: "Missing Facebook Pages permissions",
+              requiredPermissions: [
+                "pages_show_list",
+                "pages_read_engagement",
+                "pages_read_user_content",
+                "pages_manage_metadata",
+                "pages_manage_ads",
+                "pages_messaging",
+              ],
+              details: parsed,
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+      } catch {
+        // ignore parse errors
+      }
+
       return new Response(
-        JSON.stringify({ error: "Failed to fetch Instagram profile", details: errorText }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: "Failed to fetch Instagram profile", details: errorText }),
+        { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
