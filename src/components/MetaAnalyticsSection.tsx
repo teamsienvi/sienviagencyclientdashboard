@@ -12,8 +12,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { subDays, format, startOfDay, endOfDay, formatDistanceToNow } from "date-fns";
@@ -89,6 +100,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [activePlatform, setActivePlatform] = useState<MetaPlatform>("instagram");
   
   // OAuth account data
@@ -298,6 +310,33 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       toast.error(error.message || "Failed to connect to Meta");
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!oauthAccount?.id) return;
+    
+    setDisconnecting(true);
+    try {
+      const { error } = await supabase
+        .from("social_oauth_accounts")
+        .update({ is_active: false })
+        .eq("id", oauthAccount.id);
+      
+      if (error) throw error;
+      
+      toast.success("Meta account disconnected successfully");
+      setOauthAccount(null);
+      setInstagramProfile(null);
+      setInstagramMetrics(null);
+      setFacebookMetrics(null);
+      setInstagramContent([]);
+      setFacebookContent([]);
+    } catch (error: any) {
+      console.error("Disconnect error:", error);
+      toast.error(error.message || "Failed to disconnect Meta account");
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -626,6 +665,32 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   <p className="text-xs text-muted-foreground">Posts</p>
                 </div>
               </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive">
+                    <Unlink className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Disconnect Meta Account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will disconnect <strong>{instagramProfile.name || instagramProfile.username}</strong> from {clientName}. 
+                      You can reconnect a different account afterwards.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleDisconnect}
+                      disabled={disconnecting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {disconnecting ? "Disconnecting..." : "Disconnect"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </CardContent>
         </Card>
