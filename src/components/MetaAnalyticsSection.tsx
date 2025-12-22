@@ -369,103 +369,63 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
   };
 
-  // Fetch report data from platform_data for current week and previous week comparison
+  // Fetch report data from platform_data - get the most recent weekly report
+  // This ensures we always have comparison data even if there's no report for the current period
   const fetchReportComparisonData = async () => {
-    const { start: currentStart, end: currentEnd } = getDateRange();
-    const { start: compStart, end: compEnd } = getComparisonDateRange();
-    
-    const currentStartDate = format(currentStart, "yyyy-MM-dd");
-    const currentEndDate = format(currentEnd, "yyyy-MM-dd");
-    const compStartDate = format(compStart, "yyyy-MM-dd");
-    const compEndDate = format(compEnd, "yyyy-MM-dd");
-
-    // Fetch reports that match both the current reporting period and comparison period
+    // Fetch the most recent reports for this client (ordered by week_end descending)
     const { data: reports } = await supabase
       .from("reports")
       .select("id, week_start, week_end")
       .eq("client_id", clientId)
-      .or(`and(week_start.lte.${currentEndDate},week_end.gte.${currentStartDate}),and(week_start.lte.${compEndDate},week_end.gte.${compStartDate})`)
-      .order("week_start", { ascending: false });
+      .order("week_end", { ascending: false })
+      .limit(5);
 
     if (!reports || reports.length === 0) return;
 
-    // Find report that best matches current period and comparison period
-    const currentReport = reports.find(r => 
-      new Date(r.week_start) <= currentEnd && new Date(r.week_end) >= currentStart
-    );
-    const compReport = reports.find(r => 
-      new Date(r.week_start) <= compEnd && new Date(r.week_end) >= compStart
-    );
+    // Filter to only weekly reports (7-day periods)
+    const weeklyReports = reports.filter(r => {
+      const start = new Date(r.week_start);
+      const end = new Date(r.week_end);
+      const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      return days >= 6 && days <= 8; // Allow for small variations
+    });
 
-    // Fetch platform data for all relevant reports
-    const reportIds = [...new Set([currentReport?.id, compReport?.id].filter(Boolean))];
-    if (reportIds.length === 0) return;
+    if (weeklyReports.length === 0) return;
+
+    // Use the most recent weekly report
+    const mostRecentReport = weeklyReports[0];
 
     const { data: platformData } = await supabase
       .from("platform_data")
       .select("report_id, platform, engagement_rate, last_week_engagement_rate, total_content, last_week_total_content, followers, new_followers")
-      .in("report_id", reportIds)
+      .eq("report_id", mostRecentReport.id)
       .in("platform", ["Instagram", "Facebook"]);
 
     if (!platformData) return;
 
     // Process Instagram data
-    const currentIgData = currentReport 
-      ? platformData.find(p => p.report_id === currentReport.id && p.platform === "Instagram")
-      : null;
-    const compIgData = compReport 
-      ? platformData.find(p => p.report_id === compReport.id && p.platform === "Instagram")
-      : null;
-
-    // Process Facebook data
-    const currentFbData = currentReport 
-      ? platformData.find(p => p.report_id === currentReport.id && p.platform === "Facebook")
-      : null;
-    const compFbData = compReport 
-      ? platformData.find(p => p.report_id === compReport.id && p.platform === "Facebook")
-      : null;
-
-    // For comparison: if we have a current week report, use its last_week_* fields
-    // If no current week report but we have comparison week report, use that report's current values
-    if (currentIgData) {
+    const igData = platformData.find(p => p.platform === "Instagram");
+    if (igData) {
       setInstagramReportData({
-        engagement_rate: currentIgData.engagement_rate,
-        last_week_engagement_rate: currentIgData.last_week_engagement_rate,
-        total_content: currentIgData.total_content,
-        last_week_total_content: currentIgData.last_week_total_content,
-        followers: currentIgData.followers,
-        new_followers: currentIgData.new_followers,
-      });
-    } else if (compIgData) {
-      // No current week report - use comparison week's data as the "current" for display
-      // and its last_week_* fields for the comparison
-      setInstagramReportData({
-        engagement_rate: compIgData.engagement_rate,
-        last_week_engagement_rate: compIgData.last_week_engagement_rate,
-        total_content: compIgData.total_content,
-        last_week_total_content: compIgData.last_week_total_content,
-        followers: compIgData.followers,
-        new_followers: compIgData.new_followers,
+        engagement_rate: igData.engagement_rate,
+        last_week_engagement_rate: igData.last_week_engagement_rate,
+        total_content: igData.total_content,
+        last_week_total_content: igData.last_week_total_content,
+        followers: igData.followers,
+        new_followers: igData.new_followers,
       });
     }
 
-    if (currentFbData) {
+    // Process Facebook data
+    const fbData = platformData.find(p => p.platform === "Facebook");
+    if (fbData) {
       setFacebookReportData({
-        engagement_rate: currentFbData.engagement_rate,
-        last_week_engagement_rate: currentFbData.last_week_engagement_rate,
-        total_content: currentFbData.total_content,
-        last_week_total_content: currentFbData.last_week_total_content,
-        followers: currentFbData.followers,
-        new_followers: currentFbData.new_followers,
-      });
-    } else if (compFbData) {
-      setFacebookReportData({
-        engagement_rate: compFbData.engagement_rate,
-        last_week_engagement_rate: compFbData.last_week_engagement_rate,
-        total_content: compFbData.total_content,
-        last_week_total_content: compFbData.last_week_total_content,
-        followers: compFbData.followers,
-        new_followers: compFbData.new_followers,
+        engagement_rate: fbData.engagement_rate,
+        last_week_engagement_rate: fbData.last_week_engagement_rate,
+        total_content: fbData.total_content,
+        last_week_total_content: fbData.last_week_total_content,
+        followers: fbData.followers,
+        new_followers: fbData.new_followers,
       });
     }
   };

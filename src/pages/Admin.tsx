@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Header } from "@/components/Header";
 import { ClientManagement } from "@/components/ClientManagement";
+import { BulkMetaSync } from "@/components/BulkMetaSync";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -72,10 +73,15 @@ const Admin = () => {
             <p className="text-sm text-muted-foreground">Signed in as: {user?.email}</p>
           </div>
           <Button variant="outline" onClick={signOut}>
-            <LogOut className="mr-2 h-4 w-4" />
+          <LogOut className="mr-2 h-4 w-4" />
             Sign Out
           </Button>
         </div>
+        
+        <div className="mb-8">
+          <BulkMetaSync />
+        </div>
+        
         <ClientManagement />
       </main>
     </div>
