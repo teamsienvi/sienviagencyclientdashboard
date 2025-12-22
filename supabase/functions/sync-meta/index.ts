@@ -51,50 +51,64 @@ serve(async (req) => {
     console.log(`Syncing ${platform} data for account ${accountExternalId}`);
 
     let recordsSynced = 0;
-    const baseUrl = "https://graph.facebook.com/v18.0";
+    const baseUrl = "https://graph.facebook.com/v21.0";
 
-    // Fetch account insights (followers, engagement)
-    const insightsMetrics = platform === 'instagram' 
-      ? "follower_count,impressions,reach,profile_views"
-      : "page_followers,page_impressions,page_post_engagements";
-    
-    const insightsUrl = `${baseUrl}/${accountExternalId}/insights?metric=${insightsMetrics}&period=day&since=${periodStart}&until=${periodEnd}&access_token=${accessToken}`;
-    
-    console.log(`Fetching account insights...`);
-    const insightsResponse = await fetch(insightsUrl);
-    
-    if (!insightsResponse.ok) {
-      const errorText = await insightsResponse.text();
-      console.error("Meta API error:", errorText);
-      throw new Error(`Meta API error: ${insightsResponse.status}`);
-    }
-
-    const insightsData = await insightsResponse.json();
-    
-    // Calculate totals from insights
     let totalFollowers = 0;
     let totalReach = 0;
     let totalImpressions = 0;
 
-    if (insightsData.data) {
-      for (const metric of insightsData.data) {
-        const latestValue = metric.values?.[metric.values.length - 1]?.value || 0;
-        if (metric.name.includes('follower')) {
-          totalFollowers = latestValue;
-        } else if (metric.name.includes('reach')) {
-          totalReach += metric.values.reduce((sum: number, v: { value: number }) => sum + (v.value || 0), 0);
-        } else if (metric.name.includes('impression')) {
-          totalImpressions += metric.values.reduce((sum: number, v: { value: number }) => sum + (v.value || 0), 0);
+    // Different handling for Instagram vs Facebook
+    if (platform === 'instagram') {
+      // Fetch Instagram account insights
+      const insightsUrl = `${baseUrl}/${accountExternalId}/insights?metric=follower_count,impressions,reach,profile_views&period=day&since=${periodStart}&until=${periodEnd}&access_token=${accessToken}`;
+      
+      console.log(`Fetching Instagram insights...`);
+      const insightsResponse = await fetch(insightsUrl);
+      
+      if (insightsResponse.ok) {
+        const insightsData = await insightsResponse.json();
+        
+        if (insightsData.data) {
+          for (const metric of insightsData.data) {
+            const latestValue = metric.values?.[metric.values.length - 1]?.value || 0;
+            if (metric.name.includes('follower')) {
+              totalFollowers = latestValue;
+            } else if (metric.name.includes('reach')) {
+              totalReach += metric.values.reduce((sum: number, v: { value: number }) => sum + (v.value || 0), 0);
+            } else if (metric.name.includes('impression')) {
+              totalImpressions += metric.values.reduce((sum: number, v: { value: number }) => sum + (v.value || 0), 0);
+            }
+          }
         }
+      } else {
+        const errorText = await insightsResponse.text();
+        console.error("Instagram insights error (non-fatal):", errorText);
+      }
+    } else {
+      // For Facebook Pages, get basic info first
+      const pageInfoUrl = `${baseUrl}/${accountExternalId}?fields=followers_count,fan_count&access_token=${accessToken}`;
+      
+      console.log(`Fetching Facebook page info...`);
+      const pageInfoResponse = await fetch(pageInfoUrl);
+      
+      if (pageInfoResponse.ok) {
+        const pageInfo = await pageInfoResponse.json();
+        totalFollowers = pageInfo.followers_count || pageInfo.fan_count || 0;
+        console.log(`Facebook page followers: ${totalFollowers}`);
+      } else {
+        const errorText = await pageInfoResponse.text();
+        console.error("Facebook page info error (non-fatal):", errorText);
       }
     }
 
     // Fetch media/posts
     const mediaFields = platform === 'instagram'
-      ? "id,media_type,permalink,timestamp,caption,like_count,comments_count,insights.metric(reach,impressions,engagement,saved,shares)"
+      ? "id,media_type,permalink,timestamp,caption,like_count,comments_count"
       : "id,message,permalink_url,created_time,reactions.summary(total_count),comments.summary(total_count),shares";
     
-    const mediaUrl = `${baseUrl}/${accountExternalId}/${platform === 'instagram' ? 'media' : 'posts'}?fields=${mediaFields}&since=${periodStart}&until=${periodEnd}&access_token=${accessToken}`;
+    // For Instagram, use the media endpoint; for Facebook, use posts
+    const mediaEndpoint = platform === 'instagram' ? 'media' : 'posts';
+    const mediaUrl = `${baseUrl}/${accountExternalId}/${mediaEndpoint}?fields=${mediaFields}&limit=50&access_token=${accessToken}`;
     
     console.log(`Fetching media/posts...`);
     const mediaResponse = await fetch(mediaUrl);
