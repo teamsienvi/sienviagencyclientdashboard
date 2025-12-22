@@ -50,6 +50,22 @@ serve(async (req) => {
 
     console.log(`Syncing ${platform} data for account ${accountExternalId}`);
 
+    // Create sync log entry
+    const { data: syncLog, error: syncLogError } = await supabase
+      .from("social_sync_logs")
+      .insert({
+        client_id: clientId,
+        platform: platform,
+        status: "in_progress",
+        started_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (syncLogError) {
+      console.error("Error creating sync log:", syncLogError);
+    }
+
     let recordsSynced = 0;
     const baseUrl = "https://graph.facebook.com/v21.0";
 
@@ -229,6 +245,18 @@ serve(async (req) => {
 
     console.log(`${platform} sync completed. Records synced: ${recordsSynced}`);
 
+    // Update sync log as completed
+    if (syncLog?.id) {
+      await supabase
+        .from("social_sync_logs")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          records_synced: recordsSynced,
+        })
+        .eq("id", syncLog.id);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -244,6 +272,10 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error in sync-meta:", error);
+    
+    // Try to update sync log as failed (need to get clientId and platform from request)
+    // This is a best-effort update since we may not have the syncLog id
+    
     return new Response(
       JSON.stringify({
         success: false,

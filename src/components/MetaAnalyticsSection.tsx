@@ -12,11 +12,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2 } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
-import { subDays, format, startOfDay, endOfDay } from "date-fns";
+import { subDays, format, startOfDay, endOfDay, formatDistanceToNow } from "date-fns";
 
 interface MetaAnalyticsSectionProps {
   clientId: string;
@@ -72,6 +72,16 @@ interface InstagramProfile {
   biography: string | null;
 }
 
+interface SyncLog {
+  id: string;
+  platform: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  records_synced: number | null;
+  error_message: string | null;
+}
+
 type DateRangePreset = "7d" | "30d" | "custom";
 type MetaPlatform = "instagram" | "facebook";
 
@@ -85,6 +95,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [oauthAccount, setOauthAccount] = useState<OAuthAccount | null>(null);
   const [instagramProfile, setInstagramProfile] = useState<InstagramProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  
+  // Sync logs
+  const [instagramSyncLog, setInstagramSyncLog] = useState<SyncLog | null>(null);
+  const [facebookSyncLog, setFacebookSyncLog] = useState<SyncLog | null>(null);
   
   // Instagram data
   const [instagramMetrics, setInstagramMetrics] = useState<MetaAccountMetrics | null>(null);
@@ -159,6 +173,30 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     }
   };
 
+  const fetchSyncLogs = async () => {
+    // Fetch latest sync logs for both platforms
+    const { data: instagramLog } = await supabase
+      .from("social_sync_logs")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("platform", "instagram")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    const { data: facebookLog } = await supabase
+      .from("social_sync_logs")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("platform", "facebook")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    setInstagramSyncLog(instagramLog);
+    setFacebookSyncLog(facebookLog);
+  };
+
   const fetchPlatformData = async (platform: MetaPlatform, startDate: string, endDate: string) => {
     // Fetch social account
     const { data: accountData } = await supabase
@@ -210,12 +248,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const startDate = format(startOfDay(start), "yyyy-MM-dd");
       const endDate = format(endOfDay(end), "yyyy-MM-dd");
 
-      // Fetch OAuth account and platform data in parallel
+      // Fetch OAuth account, platform data, and sync logs in parallel
       const [oauth, instagramData, facebookData] = await Promise.all([
         fetchOAuthAccount(),
         fetchPlatformData("instagram", startDate, endDate),
         fetchPlatformData("facebook", startDate, endDate),
       ]);
+      
+      // Fetch sync logs separately (non-blocking)
+      fetchSyncLogs();
 
       setInstagramAccount(instagramData.account);
       setInstagramMetrics(instagramData.metrics);
@@ -300,12 +341,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       if (data?.success) {
         toast.success(`Synced ${data.recordsSynced} posts from ${platform === "instagram" ? "Instagram" : "Facebook"}`);
         fetchData();
+        fetchSyncLogs(); // Refresh sync logs
       } else {
         toast.error(data?.error || `Failed to sync ${platform} data`);
+        fetchSyncLogs(); // Refresh to show error status
       }
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(error.message || `Failed to sync ${platform} analytics`);
+      fetchSyncLogs(); // Refresh to show error status
     } finally {
       setSyncing(false);
     }
@@ -626,7 +670,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
       {/* Platform Tabs */}
       <Tabs value={activePlatform} onValueChange={(v) => setActivePlatform(v as MetaPlatform)}>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <TabsList>
             <TabsTrigger value="instagram" className="flex items-center gap-2" disabled={!oauthAccount?.instagram_business_id}>
               <Instagram className="h-4 w-4" /> Instagram
@@ -636,15 +680,54 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             </TabsTrigger>
           </TabsList>
           
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSync(activePlatform)}
-            disabled={syncing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing..." : "Sync"}
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Sync Status Display */}
+            {(() => {
+              const syncLog = activePlatform === "instagram" ? instagramSyncLog : facebookSyncLog;
+              if (syncLog) {
+                const isError = syncLog.status === "failed" || syncLog.status === "error";
+                const isPending = syncLog.status === "pending" || syncLog.status === "in_progress";
+                return (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    {isError ? (
+                      <AlertCircle className="h-4 w-4 text-destructive" />
+                    ) : isPending ? (
+                      <RefreshCw className="h-4 w-4 animate-spin text-primary" />
+                    ) : (
+                      <Clock className="h-4 w-4" />
+                    )}
+                    <span>
+                      {isPending ? (
+                        "Syncing..."
+                      ) : isError ? (
+                        <span className="text-destructive">Last sync failed</span>
+                      ) : syncLog.completed_at ? (
+                        <>Last synced {formatDistanceToNow(new Date(syncLog.completed_at), { addSuffix: true })}</>
+                      ) : (
+                        <>Started {formatDistanceToNow(new Date(syncLog.started_at), { addSuffix: true })}</>
+                      )}
+                    </span>
+                    {syncLog.records_synced !== null && syncLog.status === "completed" && (
+                      <Badge variant="secondary" className="text-xs">
+                        {syncLog.records_synced} posts
+                      </Badge>
+                    )}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSync(activePlatform)}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing..." : "Sync Now"}
+            </Button>
+          </div>
         </div>
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
