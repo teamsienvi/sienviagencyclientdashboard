@@ -305,17 +305,19 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .order("published_at", { ascending: false })
       .limit(50);
 
-    const contentWithMetrics = contentData?.map((item: any) => {
-      const metricsList = item.social_content_metrics || [];
-      const latest = metricsList
-        .slice()
-        .sort((a: any, b: any) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime())[0];
+    const contentWithMetrics = (contentData || [])
+      .filter((item: any) => item.title || item.url) // Hide posts without title or URL
+      .map((item: any) => {
+        const metricsList = item.social_content_metrics || [];
+        const latest = metricsList
+          .slice()
+          .sort((a: any, b: any) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime())[0];
 
-      return {
-        ...item,
-        metrics: latest || null,
-      };
-    }) || [];
+        return {
+          ...item,
+          metrics: latest || null,
+        };
+      });
 
     return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
   };
