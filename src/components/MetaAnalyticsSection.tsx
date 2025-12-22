@@ -136,18 +136,29 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
   
   // Date range state
-  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
-  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("custom");
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date }>({
+    start: new Date(2024, 11, 15), // Dec 15
+    end: new Date(2024, 11, 19),   // Dec 19
+  });
+  const [comparisonDateRange, setComparisonDateRange] = useState<{ start: Date; end: Date }>({
+    start: new Date(2024, 11, 8),  // Dec 8
+    end: new Date(2024, 11, 12),   // Dec 12
+  });
 
   const isConnected = oauthAccount !== null && oauthAccount.is_active;
 
   const getDateRange = () => {
-    const today = new Date();
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
     }
+    const today = new Date();
     const days = dateRangePreset === "30d" ? 30 : 7;
     return { start: subDays(today, days), end: today };
+  };
+
+  const getComparisonDateRange = () => {
+    return { start: comparisonDateRange.start, end: comparisonDateRange.end };
   };
 
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
@@ -159,7 +170,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   useEffect(() => {
     fetchData();
-  }, [clientId, dateRangePreset, customDateRange]);
+  }, [clientId, dateRangePreset, customDateRange, comparisonDateRange]);
 
   const fetchOAuthAccount = async () => {
     const { data } = await supabase
@@ -258,7 +269,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setFacebookSyncLog(facebookLog);
   };
 
-  const fetchPlatformData = async (platform: MetaPlatform, startDate: string, endDate: string) => {
+  const fetchPlatformData = async (platform: MetaPlatform, startDate: string, endDate: string, compStartDate: string, compEndDate: string) => {
     // Fetch social account
     const { data: accountData } = await supabase
       .from("social_accounts")
@@ -280,24 +291,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .limit(1)
       .maybeSingle();
 
-    // Calculate previous week's date range for comparison
-    const currentStart = new Date(startDate);
-    const prevWeekEnd = new Date(currentStart);
-    prevWeekEnd.setDate(prevWeekEnd.getDate() - 1); // Day before current start
-    const prevWeekStart = new Date(prevWeekEnd);
-    prevWeekStart.setDate(prevWeekStart.getDate() - 6); // 7 days back
-
-    const prevStartStr = prevWeekStart.toISOString().split("T")[0];
-    const prevEndStr = prevWeekEnd.toISOString().split("T")[0];
-
-    // Fetch previous week's metrics for comparison (trend indicators)
+    // Fetch comparison period metrics
     const { data: prevMetricsData } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", platform)
-      .lte("period_start", prevEndStr)
-      .gte("period_end", prevStartStr)
+      .lte("period_start", compEndDate)
+      .gte("period_end", compStartDate)
       .order("collected_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -337,14 +338,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setLoading(true);
     try {
       const { start, end } = getDateRange();
+      const { start: compStart, end: compEnd } = getComparisonDateRange();
       const startDate = format(startOfDay(start), "yyyy-MM-dd");
       const endDate = format(endOfDay(end), "yyyy-MM-dd");
+      const compStartDate = format(startOfDay(compStart), "yyyy-MM-dd");
+      const compEndDate = format(endOfDay(compEnd), "yyyy-MM-dd");
 
       // Fetch OAuth account, platform data, and sync logs in parallel
       const [oauth, instagramData, facebookData] = await Promise.all([
         fetchOAuthAccount(),
-        fetchPlatformData("instagram", startDate, endDate),
-        fetchPlatformData("facebook", startDate, endDate),
+        fetchPlatformData("instagram", startDate, endDate, compStartDate, compEndDate),
+        fetchPlatformData("facebook", startDate, endDate, compStartDate, compEndDate),
       ]);
       
       // Fetch sync logs separately (non-blocking)
@@ -642,7 +646,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           {prevMetrics?.followers != null && (
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">
-                vs {prevMetrics.followers.toLocaleString()} last week
+                vs {prevMetrics.followers.toLocaleString()} (Dec 8-12)
               </span>
               {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
             </div>
@@ -661,7 +665,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           {prevMetrics?.engagement_rate != null && (
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">
-                vs {prevMetrics.engagement_rate.toFixed(2)}% last week
+                vs {prevMetrics.engagement_rate.toFixed(2)}% (Dec 8-12)
               </span>
               {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate, true)}
             </div>
@@ -680,7 +684,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           {prevMetrics?.total_content != null && (
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs text-muted-foreground">
-                vs {prevMetrics.total_content} last week
+                vs {prevMetrics.total_content} (Dec 8-12)
               </span>
               {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
             </div>
@@ -691,18 +695,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         <CardContent className="pt-6">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
             <Eye className="h-4 w-4" />
-            <span className="text-sm">Period</span>
+            <span className="text-sm">Comparing</span>
           </div>
-          <p className="text-sm font-medium">
-            {metrics?.period_start && metrics?.period_end
-              ? `${formatDate(metrics.period_start)} - ${formatDate(metrics.period_end)}`
-              : "—"}
+          <p className="text-sm font-medium text-primary">
+            Dec 15-19
           </p>
-          {prevMetrics?.period_start && prevMetrics?.period_end && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Compared to {formatDate(prevMetrics.period_start)} - {formatDate(prevMetrics.period_end)}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            vs Dec 8-12
+          </p>
         </CardContent>
       </Card>
     </div>
