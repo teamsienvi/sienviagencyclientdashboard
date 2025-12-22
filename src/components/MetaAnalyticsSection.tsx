@@ -135,19 +135,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [facebookContent, setFacebookContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
   
-  // Date range state
-  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("custom");
-  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date }>({
-    start: new Date(2024, 11, 15), // Dec 15
-    end: new Date(2024, 11, 19),   // Dec 19
-  });
-  const [comparisonDateRange, setComparisonDateRange] = useState<{ start: Date; end: Date }>({
-    start: new Date(2024, 11, 8),  // Dec 8
-    end: new Date(2024, 11, 12),   // Dec 12
-  });
+  // Date range state - dynamically calculate current and previous week
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
 
   const isConnected = oauthAccount !== null && oauthAccount.is_active;
 
+  // Get current period (this week: last 7 days ending today)
   const getDateRange = () => {
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
@@ -157,8 +151,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return { start: subDays(today, days), end: today };
   };
 
+  // Get comparison period (previous week: 7 days before current period)
   const getComparisonDateRange = () => {
-    return { start: comparisonDateRange.start, end: comparisonDateRange.end };
+    const { start } = getDateRange();
+    const compEnd = subDays(start, 1); // Day before current period starts
+    const compStart = subDays(compEnd, 6); // 7 days back
+    return { start: compStart, end: compEnd };
   };
 
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
@@ -170,7 +168,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   useEffect(() => {
     fetchData();
-  }, [clientId, dateRangePreset, customDateRange, comparisonDateRange]);
+  }, [clientId, dateRangePreset, customDateRange]);
 
   const fetchOAuthAccount = async () => {
     const { data } = await supabase
@@ -632,81 +630,88 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return isPercentage ? `${previous.toFixed(2)}%` : previous.toLocaleString();
   };
 
-  const renderMetricsCards = (metrics: MetaAccountMetrics | null, prevMetrics: MetaAccountMetrics | null, platform: MetaPlatform) => (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Users className="h-4 w-4" />
-            <span className="text-sm">Followers</span>
-          </div>
-          <p className="text-2xl font-bold">
-            {metrics?.followers?.toLocaleString() || "—"}
-          </p>
-          {prevMetrics?.followers != null && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted-foreground">
-                vs {prevMetrics.followers.toLocaleString()} (Dec 8-12)
-              </span>
-              {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
+  const renderMetricsCards = (metrics: MetaAccountMetrics | null, prevMetrics: MetaAccountMetrics | null, platform: MetaPlatform) => {
+    const { start: currentStart, end: currentEnd } = getDateRange();
+    const { start: compStart, end: compEnd } = getComparisonDateRange();
+    const currentLabel = `${format(currentStart, "MMM d")}-${format(currentEnd, "d")}`;
+    const compLabel = `${format(compStart, "MMM d")}-${format(compEnd, "d")}`;
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Users className="h-4 w-4" />
+              <span className="text-sm">Followers</span>
             </div>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <TrendingUp className="h-4 w-4" />
-            <span className="text-sm">Engagement Rate</span>
-          </div>
-          <p className="text-2xl font-bold">
-            {metrics?.engagement_rate?.toFixed(2) || "0"}%
-          </p>
-          {prevMetrics?.engagement_rate != null && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted-foreground">
-                vs {prevMetrics.engagement_rate.toFixed(2)}% (Dec 8-12)
-              </span>
-              {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate, true)}
+            <p className="text-2xl font-bold">
+              {metrics?.followers?.toLocaleString() || "—"}
+            </p>
+            {prevMetrics?.followers != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.followers.toLocaleString()} ({compLabel})
+                </span>
+                {renderTrendIndicator(metrics?.followers, prevMetrics?.followers)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-sm">Engagement Rate</span>
             </div>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <ImageIcon className="h-4 w-4" />
-            <span className="text-sm">Total Posts</span>
-          </div>
-          <p className="text-2xl font-bold">
-            {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
-          </p>
-          {prevMetrics?.total_content != null && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-muted-foreground">
-                vs {prevMetrics.total_content} (Dec 8-12)
-              </span>
-              {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
+            <p className="text-2xl font-bold">
+              {metrics?.engagement_rate?.toFixed(2) || "0"}%
+            </p>
+            {prevMetrics?.engagement_rate != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.engagement_rate.toFixed(2)}% ({compLabel})
+                </span>
+                {renderTrendIndicator(metrics?.engagement_rate, prevMetrics?.engagement_rate, true)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <ImageIcon className="h-4 w-4" />
+              <span className="text-sm">Total Posts</span>
             </div>
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Eye className="h-4 w-4" />
-            <span className="text-sm">Comparing</span>
-          </div>
-          <p className="text-sm font-medium text-primary">
-            Dec 15-19
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            vs Dec 8-12
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
+            <p className="text-2xl font-bold">
+              {metrics?.total_content || (platform === "instagram" ? instagramContent.length : facebookContent.length) || "—"}
+            </p>
+            {prevMetrics?.total_content != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.total_content} ({compLabel})
+                </span>
+                {renderTrendIndicator(metrics?.total_content, prevMetrics?.total_content)}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Eye className="h-4 w-4" />
+              <span className="text-sm">Comparing</span>
+            </div>
+            <p className="text-sm font-medium text-primary">
+              {currentLabel}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              vs {compLabel}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   const renderContentTable = (content: (MetaContent & { metrics?: MetaContentMetrics })[], platform: MetaPlatform) => (
     <Card>
