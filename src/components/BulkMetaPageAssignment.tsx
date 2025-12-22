@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink } from "lucide-react";
+import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink, Play, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table,
@@ -39,6 +39,15 @@ interface Client {
   assignedPageId: string | null;
   assignedPageName: string | null;
   instagramUsername: string | null;
+  instagramBusinessId: string | null;
+  pageAccessToken: string | null;
+}
+
+interface SyncStatus {
+  clientId: string;
+  platform: "instagram" | "facebook";
+  status: "pending" | "syncing" | "success" | "error";
+  message?: string;
 }
 
 export const BulkMetaPageAssignment = () => {
@@ -47,6 +56,8 @@ export const BulkMetaPageAssignment = () => {
   const [metaUserId, setMetaUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -92,6 +103,8 @@ export const BulkMetaPageAssignment = () => {
           assignedPageId: assignment?.page_id || null,
           assignedPageName: page?.pageName || null,
           instagramUsername: page?.instagramUsername || null,
+          instagramBusinessId: page?.instagramBusinessId || null,
+          pageAccessToken: page?.pageAccessToken || null,
         };
       });
 
@@ -141,7 +154,9 @@ export const BulkMetaPageAssignment = () => {
               ...c, 
               assignedPageId: page.pageId, 
               assignedPageName: page.pageName,
-              instagramUsername: page.instagramUsername
+              instagramUsername: page.instagramUsername,
+              instagramBusinessId: page.instagramBusinessId,
+              pageAccessToken: page.pageAccessToken,
             } 
           : c
       ));
@@ -168,7 +183,7 @@ export const BulkMetaPageAssignment = () => {
       // Update local state
       setClients(prev => prev.map(c => 
         c.id === clientId 
-          ? { ...c, assignedPageId: null, assignedPageName: null, instagramUsername: null } 
+          ? { ...c, assignedPageId: null, assignedPageName: null, instagramUsername: null, instagramBusinessId: null, pageAccessToken: null } 
           : c
       ));
 
@@ -180,6 +195,116 @@ export const BulkMetaPageAssignment = () => {
       setAssigning(null);
     }
   };
+
+  const handleSyncAll = async () => {
+    const assignedClients = clients.filter(c => c.assignedPageId);
+    if (assignedClients.length === 0) {
+      toast.error("No clients have pages assigned");
+      return;
+    }
+
+    setSyncing(true);
+
+    // Initialize sync statuses
+    const initialStatuses: SyncStatus[] = [];
+    assignedClients.forEach(client => {
+      if (client.instagramBusinessId) {
+        initialStatuses.push({ clientId: client.id, platform: "instagram", status: "pending" });
+      }
+      if (client.assignedPageId) {
+        initialStatuses.push({ clientId: client.id, platform: "facebook", status: "pending" });
+      }
+    });
+    setSyncStatuses(initialStatuses);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Fetch OAuth accounts to get access tokens
+    const { data: oauthAccounts } = await supabase
+      .from("social_oauth_accounts")
+      .select("client_id, access_token, instagram_business_id, page_id")
+      .eq("is_active", true);
+
+    // Fetch social accounts for account IDs
+    const { data: socialAccounts } = await supabase
+      .from("social_accounts")
+      .select("id, client_id, platform")
+      .in("client_id", assignedClients.map(c => c.id))
+      .in("platform", ["instagram", "facebook"])
+      .eq("is_active", true);
+
+    for (let i = 0; i < initialStatuses.length; i++) {
+      const status = initialStatuses[i];
+      const client = assignedClients.find(c => c.id === status.clientId);
+      const oauth = oauthAccounts?.find(a => a.client_id === status.clientId);
+      
+      if (!client || !oauth) {
+        setSyncStatuses(prev => prev.map((s, idx) => 
+          idx === i ? { ...s, status: "error", message: "No OAuth token" } : s
+        ));
+        errorCount++;
+        continue;
+      }
+
+      // Update status to syncing
+      setSyncStatuses(prev => prev.map((s, idx) => 
+        idx === i ? { ...s, status: "syncing" } : s
+      ));
+
+      const externalId = status.platform === "instagram" ? oauth.instagram_business_id : oauth.page_id;
+      const socialAccount = socialAccounts?.find(
+        sa => sa.client_id === status.clientId && sa.platform === status.platform
+      );
+
+      const periodEnd = new Date();
+      const periodStart = new Date(periodEnd);
+      periodStart.setDate(periodStart.getDate() - 7);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("sync-meta", {
+          body: {
+            clientId: client.id,
+            accountId: socialAccount?.id,
+            platform: status.platform,
+            accessToken: oauth.access_token,
+            accountExternalId: externalId,
+            periodStart: periodStart.toISOString().split("T")[0],
+            periodEnd: periodEnd.toISOString().split("T")[0],
+          },
+        });
+
+        if (error) throw error;
+
+        setSyncStatuses(prev => prev.map((s, idx) => 
+          idx === i ? { ...s, status: "success", message: `${data?.recordsSynced || 0} records` } : s
+        ));
+        successCount++;
+      } catch (err: any) {
+        setSyncStatuses(prev => prev.map((s, idx) => 
+          idx === i ? { ...s, status: "error", message: err.message || "Sync failed" } : s
+        ));
+        errorCount++;
+      }
+
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    setSyncing(false);
+    toast.success(`Sync completed: ${successCount} successful, ${errorCount} failed`);
+  };
+
+  const getStatusIcon = (status: SyncStatus["status"]) => {
+    switch (status) {
+      case "pending": return <Clock className="h-3 w-3 text-muted-foreground" />;
+      case "syncing": return <RefreshCw className="h-3 w-3 text-primary animate-spin" />;
+      case "success": return <CheckCircle2 className="h-3 w-3 text-green-500" />;
+      case "error": return <XCircle className="h-3 w-3 text-destructive" />;
+    }
+  };
+
+  const assignedCount = clients.filter(c => c.assignedPageId).length;
 
   if (loading) {
     return (
@@ -204,10 +329,25 @@ export const BulkMetaPageAssignment = () => {
               Assign Facebook Pages / Instagram accounts to clients without re-authenticating
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading || syncing}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+            <Button size="sm" onClick={handleSyncAll} disabled={syncing || assignedCount === 0}>
+              {syncing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Sync All ({assignedCount})
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
@@ -226,6 +366,23 @@ export const BulkMetaPageAssignment = () => {
           </div>
         ) : (
           <>
+            {syncStatuses.length > 0 && (
+              <div className="mb-4 p-3 border rounded-lg bg-muted/30">
+                <p className="text-sm font-medium mb-2">Sync Progress</p>
+                <div className="flex flex-wrap gap-2">
+                  {syncStatuses.map((status, idx) => {
+                    const client = clients.find(c => c.id === status.clientId);
+                    return (
+                      <Badge key={idx} variant="outline" className="gap-1">
+                        {getStatusIcon(status.status)}
+                        <span className="text-xs">{client?.name} ({status.platform})</span>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="mb-4 flex flex-wrap gap-2">
               <span className="text-sm text-muted-foreground">Available pages:</span>
               {pages.map(page => (
