@@ -5,10 +5,12 @@ import { toast } from "sonner";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function MetaOAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [clientId, setClientId] = useState<string | null>(null);
@@ -57,6 +59,8 @@ export default function MetaOAuthCallback() {
 
         if (data.success) {
           setStatus("success");
+          // Invalidate oauth-accounts query so the connect component shows the updated status
+          queryClient.invalidateQueries({ queryKey: ["oauth-accounts"] });
           toast.success(`${data.account.platform} account connected successfully!`);
         } else {
           throw new Error(data.error || "Failed to connect account");
