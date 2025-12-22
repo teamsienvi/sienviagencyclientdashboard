@@ -191,19 +191,17 @@ serve(async (req) => {
         }
       }
     } else {
-      // Fetch Facebook post insights for reach
       console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
       for (const item of mediaItems) {
         try {
-          // Facebook post insights (reach/impressions)
-          // Note: Many older metrics are deprecated; use lifetime period for post-level insights.
-          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions,post_impressions_unique&period=lifetime&access_token=${accessToken}`;
+          // Newer Graph API versions may reject deprecated metrics like post_impressions.
+          // Use post_media_view for "impressions" / views.
+          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_media_view&period=lifetime&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
-          
+
           if (insightsResp.ok) {
             const insightsJson = await insightsResp.json();
             (item as any).fbInsights = insightsJson.data || [];
-            console.log(`Got insights for FB post ${item.id}: ${(item as any).fbInsights.length} metrics`);
           } else {
             console.log(`FB post insights failed for ${item.id}: ${await insightsResp.text()}`);
           }
@@ -284,7 +282,7 @@ serve(async (req) => {
         const fbInsights = (item as any).fbInsights || [];
         for (const insight of fbInsights) {
           const value = insight.values?.[0]?.value || 0;
-          if (insight.name === 'post_impressions') impressions = value;
+          if (insight.name === 'post_media_view' || insight.name === 'post_impressions') impressions = value;
           if (insight.name === 'post_impressions_unique') reach = value;
         }
       }
