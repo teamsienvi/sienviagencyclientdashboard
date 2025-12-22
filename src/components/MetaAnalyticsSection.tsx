@@ -169,7 +169,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     return date;
   };
 
-  // Get current week (from most recent Monday to Sunday)
+  // Get the last completed week (previous Monday to Sunday) - updates every Monday
   const getDateRange = () => {
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
@@ -178,19 +178,19 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const today = new Date();
       return { start: subDays(today, 30), end: today };
     }
-    // Weekly: Monday to Sunday cycle
+    // Weekly: Show the last completed week (Mon-Sun), updates each Monday
     const today = new Date();
-    const currentMonday = getMostRecentMonday(today);
-    const currentSunday = new Date(currentMonday);
-    currentSunday.setDate(currentMonday.getDate() + 6);
-    return { start: currentMonday, end: currentSunday };
+    const thisMonday = getMostRecentMonday(today);
+    const prevMonday = subDays(thisMonday, 7); // Previous week's Monday
+    const prevSunday = subDays(thisMonday, 1); // Previous week's Sunday
+    return { start: prevMonday, end: prevSunday };
   };
 
-  // Get previous week (Monday to Sunday before current week)
+  // Get the week before the reporting period for comparison
   const getComparisonDateRange = () => {
     const { start: currentStart } = getDateRange();
-    const prevMonday = subDays(currentStart, 7); // Previous Monday
-    const prevSunday = subDays(currentStart, 1); // Sunday before current Monday
+    const prevMonday = subDays(currentStart, 7); // Two weeks ago Monday
+    const prevSunday = subDays(currentStart, 1); // Two weeks ago Sunday
     return { start: prevMonday, end: prevSunday };
   };
 
