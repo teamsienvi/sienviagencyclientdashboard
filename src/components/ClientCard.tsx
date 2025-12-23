@@ -293,103 +293,92 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
         </div>
 
         {/* Automated Analytics Section */}
-        {(websiteAnalyticsId || clientId) && (
-          <div className="pt-4 border-t border-border space-y-4">
+        {clientId && (
+          <div className="pt-4 border-t border-border space-y-3">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
               <h4 className="text-sm font-medium text-foreground">Automated Analytics</h4>
               <span className="text-xs text-muted-foreground">(API)</span>
             </div>
 
-            {/* Web Analytics */}
-            {websiteAnalyticsId && (
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                onClick={() => navigate("/web-analytics")}
-              >
-                <span className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-blue-500" />
-                  View Web Analytics
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
+            {/* Unified Analytics Button - Primary */}
+            <Button
+              className="w-full justify-between"
+              onClick={() => navigate(`/analytics/${clientId}`)}
+            >
+              <span className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                View All Analytics
+              </span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
 
-            {/* YouTube Analytics */}
-            {clientId && (
+            {/* Individual Platform Buttons - Secondary */}
+            <div className="grid grid-cols-2 gap-2">
+              {websiteAnalyticsId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => navigate(`/web-analytics/${clientId}`)}
+                >
+                  <Eye className="h-4 w-4 mr-2 text-blue-500" />
+                  Web
+                </Button>
+              )}
+
               <Button
                 variant="outline"
-                className="w-full justify-between"
+                size="sm"
+                className="justify-start"
                 onClick={() => navigate(`/youtube-analytics/${clientId}`)}
               >
-                <span className="flex items-center gap-2">
-                  <Youtube className="h-4 w-4 text-red-500" />
-                  View YouTube Analytics
-                </span>
-                <ArrowRight className="h-4 w-4" />
+                <Youtube className="h-4 w-4 mr-2 text-red-500" />
+                YouTube
               </Button>
-            )}
 
-            {/* X (Twitter) Analytics - Only show if account is connected */}
-            {clientId && hasXAccount && (
+              {hasXAccount && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => navigate(`/x-analytics/${clientId}`)}
+                >
+                  <Twitter className="h-4 w-4 mr-2" />
+                  X
+                </Button>
+              )}
+
               <Button
                 variant="outline"
-                className="w-full justify-between"
-                onClick={() => navigate(`/x-analytics/${clientId}`)}
+                size="sm"
+                className="justify-start"
+                onClick={() => navigate(`/meta-analytics/${clientId}`)}
               >
-                <span className="flex items-center gap-2">
-                  <Twitter className="h-4 w-4 text-foreground" />
-                  View X Analytics
-                </span>
-                <ArrowRight className="h-4 w-4" />
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Meta
               </Button>
-            )}
 
-            {/* Meta Analytics */}
-            {clientId && (
               <Button
                 variant="outline"
-                className="w-full justify-between"
-                onClick={() => window.location.href = `/meta-analytics/${clientId}`}
+                size="sm"
+                className="justify-start"
+                onClick={() => navigate(`/tiktok-analytics/${clientId}`)}
               >
-                <span className="flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-foreground" />
-                  View Meta Analytics
-                </span>
-                <ArrowRight className="h-4 w-4" />
+                <Music2 className="h-4 w-4 mr-2" />
+                TikTok
               </Button>
-            )}
 
-            {/* TikTok Analytics */}
-            {clientId && (
               <Button
                 variant="outline"
-                className="w-full justify-between"
-                onClick={() => navigate("/tiktok-analytics")}
+                size="sm"
+                className="justify-start"
+                onClick={() => navigate(`/linkedin-analytics/${clientId}`)}
               >
-                <span className="flex items-center gap-2">
-                  <Music2 className="h-4 w-4" />
-                  View TikTok Analytics
-                </span>
-                <ArrowRight className="h-4 w-4" />
+                <Linkedin className="h-4 w-4 mr-2 text-[#0A66C2]" />
+                LinkedIn
               </Button>
-            )}
-
-            {/* LinkedIn Analytics */}
-            {clientId && (
-              <Button
-                variant="outline"
-                className="w-full justify-between"
-                onClick={() => navigate("/linkedin-analytics")}
-              >
-                <span className="flex items-center gap-2">
-                  <Linkedin className="h-4 w-4 text-[#0A66C2]" />
-                  View LinkedIn Analytics
-                </span>
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            )}
+            </div>
           </div>
         )}
       </div>
