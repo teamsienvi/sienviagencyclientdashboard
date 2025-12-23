@@ -1,59 +1,61 @@
-import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { TikTokOAuthConnect } from "@/components/TikTokOAuthConnect";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Music2, Eye, Heart, MessageCircle, Share2, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Music2, Eye, Heart, MessageCircle, Share2, Users, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 
 const TikTokAnalytics = () => {
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const { clientId } = useParams<{ clientId: string }>();
+  const navigate = useNavigate();
 
-  // Fetch clients
-  const { data: clients } = useQuery({
-    queryKey: ["clients"],
+  // Fetch client details
+  const { data: client, isLoading: isLoadingClient } = useQuery({
+    queryKey: ["client", clientId],
     queryFn: async () => {
+      if (!clientId) return null;
       const { data, error } = await supabase
         .from("clients")
         .select("id, name, logo_url")
-        .eq("is_active", true)
-        .order("name");
+        .eq("id", clientId)
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
+    enabled: !!clientId,
   });
 
-  // Fetch TikTok account for selected client
+  // Fetch TikTok account for client
   const { data: tiktokAccount, isLoading: isLoadingAccount } = useQuery({
-    queryKey: ["tiktok-account", selectedClientId],
+    queryKey: ["tiktok-account", clientId],
     queryFn: async () => {
-      if (!selectedClientId) return null;
+      if (!clientId) return null;
       const { data, error } = await supabase
         .from("social_accounts")
         .select("*")
-        .eq("client_id", selectedClientId)
+        .eq("client_id", clientId)
         .eq("platform", "tiktok")
         .eq("is_active", true)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedClientId,
+    enabled: !!clientId,
   });
 
   // Fetch account metrics
   const { data: accountMetrics } = useQuery({
-    queryKey: ["tiktok-account-metrics", selectedClientId],
+    queryKey: ["tiktok-account-metrics", clientId],
     queryFn: async () => {
-      if (!selectedClientId) return null;
+      if (!clientId) return null;
       const { data, error } = await supabase
         .from("social_account_metrics")
         .select("*")
-        .eq("client_id", selectedClientId)
+        .eq("client_id", clientId)
         .eq("platform", "tiktok")
         .order("period_end", { ascending: false })
         .limit(1)
@@ -61,14 +63,14 @@ const TikTokAnalytics = () => {
       if (error) throw error;
       return data;
     },
-    enabled: !!selectedClientId && !!tiktokAccount,
+    enabled: !!clientId && !!tiktokAccount,
   });
 
   // Fetch content and metrics
   const { data: contentData, isLoading: isLoadingContent } = useQuery({
-    queryKey: ["tiktok-content", selectedClientId],
+    queryKey: ["tiktok-content", clientId],
     queryFn: async () => {
-      if (!selectedClientId) return [];
+      if (!clientId) return [];
       
       const { data: content, error: contentError } = await supabase
         .from("social_content")
@@ -76,7 +78,7 @@ const TikTokAnalytics = () => {
           *,
           social_content_metrics (*)
         `)
-        .eq("client_id", selectedClientId)
+        .eq("client_id", clientId)
         .eq("platform", "tiktok")
         .order("published_at", { ascending: false })
         .limit(50);
@@ -84,54 +86,50 @@ const TikTokAnalytics = () => {
       if (contentError) throw contentError;
       return content || [];
     },
-    enabled: !!selectedClientId && !!tiktokAccount,
+    enabled: !!clientId && !!tiktokAccount,
   });
 
   const isConnected = !!tiktokAccount;
+
+  if (!clientId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              No client specified. Please select a client from the dashboard.
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div>
               <h1 className="text-3xl font-bold flex items-center gap-2">
                 <Music2 className="h-8 w-8" />
-                TikTok Analytics
+                {isLoadingClient ? "Loading..." : client?.name || "TikTok Analytics"}
               </h1>
               <p className="text-muted-foreground mt-1">
-                View TikTok performance metrics and content analytics
+                TikTok performance metrics and content analytics
               </p>
             </div>
           </div>
 
-          {/* Client Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Client</CardTitle>
-              <CardDescription>Choose a client to view their TikTok analytics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                <SelectTrigger className="w-full max-w-sm">
-                  <SelectValue placeholder="Choose a client..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients?.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-
-          {selectedClientId && (
+          {clientId && (
             <>
               {/* Connection Status */}
-              <TikTokOAuthConnect clientId={selectedClientId} />
+              <TikTokOAuthConnect clientId={clientId} />
 
               {isConnected && (
                 <>

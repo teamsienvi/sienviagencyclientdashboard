@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
@@ -6,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
@@ -14,29 +16,31 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 type DateRangePreset = "7d" | "30d" | "custom";
 
 const WebAnalytics = () => {
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const { clientId } = useParams<{ clientId: string }>();
+  const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
 
-  // Fetch clients with supabase_url configured (web analytics enabled)
-  const { data: clients, isLoading: isLoadingClients } = useQuery({
-    queryKey: ["clients-with-web-analytics"],
+  // Fetch client details
+  const { data: client, isLoading: isLoadingClient } = useQuery({
+    queryKey: ["client", clientId],
     queryFn: async () => {
+      if (!clientId) return null;
       const { data, error } = await supabase
         .from("clients")
         .select("id, name, logo_url, supabase_url")
-        .eq("is_active", true)
-        .not("supabase_url", "is", null)
-        .order("name");
+        .eq("id", clientId)
+        .maybeSingle();
       if (error) throw error;
       return data;
     },
+    enabled: !!clientId,
   });
 
-  // Fetch analytics for selected client
+  // Fetch analytics for client
   const { data: analyticsData, isLoading: isLoadingAnalytics, error: analyticsError } = useClientAnalytics({
-    clientId: selectedClientId,
+    clientId: clientId || "",
     dateRange,
-    enabled: !!selectedClientId,
+    enabled: !!clientId,
   });
 
   // Normalize analytics data
@@ -152,7 +156,20 @@ const WebAnalytics = () => {
     return `${mins}m ${secs}s`;
   };
 
-  const selectedClient = clients?.find(c => c.id === selectedClientId);
+  if (!clientId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              No client specified. Please select a client from the dashboard.
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -161,14 +178,19 @@ const WebAnalytics = () => {
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold flex items-center gap-2">
-                <Globe className="h-8 w-8" />
-                Web Analytics
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Comprehensive website traffic and performance analytics
-              </p>
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div>
+                <h1 className="text-3xl font-bold flex items-center gap-2">
+                  <Globe className="h-8 w-8" />
+                  {isLoadingClient ? "Loading..." : client?.name || "Web Analytics"}
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  Website traffic and performance analytics
+                </p>
+              </div>
             </div>
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangePreset)}>
               <SelectTrigger className="w-[180px]">
@@ -181,40 +203,7 @@ const WebAnalytics = () => {
             </Select>
           </div>
 
-          {/* Client Selection */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Client</CardTitle>
-              <CardDescription>Choose a client to view their website analytics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isLoadingClients ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading clients...
-                </div>
-              ) : clients && clients.length > 0 ? (
-                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                  <SelectTrigger className="w-full max-w-sm">
-                    <SelectValue placeholder="Choose a client..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <p className="text-muted-foreground">
-                  No clients with web analytics configured. Add a Supabase URL to a client to enable web analytics.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {selectedClientId && (
+          {clientId && (
             <>
               {/* Tabs */}
               <Tabs defaultValue="overview" className="space-y-6">
