@@ -137,6 +137,7 @@ serve(async (req) => {
       page_id: pageId,
       instagram_business_id: instagramBusinessId,
       access_token: pageAccessToken,
+      user_access_token: longLivedToken, // Store user token for listing all pages
       token_expires_at: tokenExpiresAt.toISOString(),
       is_active: true,
     };

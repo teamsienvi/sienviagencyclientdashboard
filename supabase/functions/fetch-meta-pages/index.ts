@@ -16,19 +16,30 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Get any active OAuth account to use the token (they all share the same meta_user_id)
+    // Get an active OAuth account with user_access_token (needed to list all pages)
+    // The user_access_token can call me/accounts; page access_token cannot.
     const { data: oauthAccount, error: oauthError } = await supabase
       .from('social_oauth_accounts')
-      .select('access_token, meta_user_id, token_expires_at')
+      .select('access_token, user_access_token, meta_user_id, token_expires_at')
       .eq('is_active', true)
+      .not('user_access_token', 'is', null)
       .order('connected_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (oauthError || !oauthAccount) {
-      console.log('No active OAuth account found');
+      console.log('No active OAuth account with user_access_token found');
       return new Response(
-        JSON.stringify({ pages: [], error: 'No active Meta connection found. Connect at least one client first.' }),
+        JSON.stringify({ pages: [], error: 'No active Meta connection found. Reconnect a client to refresh permissions.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Use user_access_token (not page token) to list all pages
+    const userToken = oauthAccount.user_access_token;
+    if (!userToken) {
+      return new Response(
+        JSON.stringify({ pages: [], error: 'Missing user access token. Please reconnect a client.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -42,9 +53,10 @@ serve(async (req) => {
       );
     }
 
-    // Fetch all pages with their Instagram business accounts
+    // Fetch all pages with their Instagram business accounts using USER token
+    console.log('Fetching pages with user_access_token...');
     const pagesResponse = await fetch(
-      `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,picture{url}&access_token=${oauthAccount.access_token}`
+      `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,picture{url}&access_token=${userToken}`
     );
     const pagesData = await pagesResponse.json();
 
