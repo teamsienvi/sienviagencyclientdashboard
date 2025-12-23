@@ -103,6 +103,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 24-30", link: "/the-haven-at-deer-park-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/the-haven-at-deer-park-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/a40e1b54-e594-43e3-afa0-e5d93e0b606b", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/the-haven-at-deer-park-dec15-21", isInternal: true },
     ],
   },
   {
