@@ -16,6 +16,7 @@ import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
 import FatherFigureFormulaDec15to21 from "./pages/FatherFigureFormulaDec15to21";
 import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
 import SnarkyHumansDec1to7 from "./pages/SnarkyHumansDec1to7";
+import SnarkyHumansDec15to21 from "./pages/SnarkyHumansDec15to21";
 import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
 import SnarkyPetsDec1to7 from "./pages/SnarkyPetsDec1to7";
 import SerenityScrollsNov24to30 from "./pages/SerenityScrollsNov24to30";
@@ -49,6 +50,7 @@ const App = () => (
           <Route path="/father-figure-formula-dec15-21" element={<FatherFigureFormulaDec15to21 />} />
           <Route path="/snarky-humans-nov24-30" element={<SnarkyHumansNov24to30 />} />
           <Route path="/snarky-humans-dec1-7" element={<SnarkyHumansDec1to7 />} />
+          <Route path="/snarky-humans-dec15-21" element={<SnarkyHumansDec15to21 />} />
           <Route path="/snarky-pets-nov24-30" element={<SnarkyPetsNov24to30 />} />
           <Route path="/snarky-pets-dec1-7" element={<SnarkyPetsDec1to7 />} />
           <Route path="/serenity-scrolls-nov24-30" element={<SerenityScrollsNov24to30 />} />
