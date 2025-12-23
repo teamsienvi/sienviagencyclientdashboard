@@ -186,7 +186,7 @@ const AdminMetaAssets = () => {
         .from("client_meta_map")
         .upsert({
           client_id: clientId,
-          page_id: asset.platform === "facebook" ? asset.page_id : asset.page_id,
+          page_id: asset.platform === "facebook" ? asset.page_id : null,
           ig_business_id: asset.platform === "instagram" ? asset.ig_business_id : null,
           active: true,
           mapped_at: new Date().toISOString(),

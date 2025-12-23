@@ -95,13 +95,13 @@ serve(async (req) => {
           const ig = igData.instagram_business_account;
           const igName = ig.name || ig.username || `Instagram (${ig.id})`;
           
-          // For Instagram, don't set page_id to avoid unique constraint conflict
-          // Just use ig_business_id as the unique identifier
+          // For Instagram, store parent_page_id instead of page_id to avoid unique constraint
           const { error: igError } = await supabase
             .from('meta_assets')
             .upsert({
               platform: 'instagram',
-              page_id: null, // Don't link to page_id to avoid unique constraint
+              page_id: null, // Don't use page_id for Instagram
+              parent_page_id: page.id, // Store parent Facebook page reference
               ig_business_id: ig.id,
               name: igName,
               picture_url: ig.profile_picture_url || null,
