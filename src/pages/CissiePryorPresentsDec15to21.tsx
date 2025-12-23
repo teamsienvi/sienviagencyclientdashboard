@@ -47,6 +47,29 @@ interface XContent {
   linkClicks: number;
 }
 
+interface InstagramContent {
+  type: string;
+  date: string;
+  reach: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+}
+
+interface FacebookContent {
+  type: string;
+  date: string;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+  linkClicks: number;
+}
+
 interface PlatformData {
   followers: number;
   addedFollowers: number;
@@ -102,6 +125,57 @@ const topPerformingPosts: TopPerformingPost[] = [
   }
 ];
 
+// Instagram Data
+const instagramData: PlatformData = {
+  followers: 9,
+  addedFollowers: 0,
+  engagementRate: 49.63,
+  lastWeekEngagementRate: 35.2,
+  totalContent: 13,
+  lastWeekTotalContent: 10
+};
+
+const instagramContent: InstagramContent[] = [
+  { type: "Photo", date: "Mon Dec 15, 10:00 AM", reach: "No data", views: 7, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Photo", date: "Tue Dec 16, 10:00 AM", reach: "1", views: 10, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Photo", date: "Wed Dec 17, 10:00 AM", reach: "1", views: 9, likes: 7, comments: 6, shares: 0, interactions: 14 },
+  { type: "Photo", date: "Wed Dec 17, 11:22 AM", reach: "1", views: 14, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Reel", date: "Thu Dec 18, 9:50 AM", reach: "1", views: 4, likes: 1, comments: 1, shares: 0, interactions: 2 },
+  { type: "Photo", date: "Thu Dec 18, 10:00 AM", reach: "1", views: 5, likes: 1, comments: 1, shares: 0, interactions: 2 },
+  { type: "Photo", date: "Fri Dec 19, 9:17 AM", reach: "4", views: 4, likes: 0, comments: 2, shares: 0, interactions: 2 },
+  { type: "Reel", date: "Fri Dec 19, 10:16 AM", reach: "105", views: 119, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Photo", date: "Sat Dec 20, 10:00 AM", reach: "3", views: 3, likes: 2, comments: 4, shares: 0, interactions: 6 },
+  { type: "Reel", date: "Sat Dec 20, 10:17 AM", reach: "17", views: 19, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Photo", date: "Sun Dec 21, 10:00 AM", reach: "1", views: 3, likes: 2, comments: 3, shares: 0, interactions: 5 },
+  { type: "Reel", date: "Sun Dec 21, 10:33 AM", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Photo", date: "Mon Dec 22, 10:00 AM", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 }
+];
+
+// Facebook Data
+const facebookData: PlatformData = {
+  followers: 20,
+  addedFollowers: 0,
+  engagementRate: 72.11,
+  lastWeekEngagementRate: 5.59,
+  totalContent: 12,
+  lastWeekTotalContent: 12
+};
+
+const facebookContent: FacebookContent[] = [
+  { type: "Photo", date: "Mon Dec 15, 10:00 AM", reach: 10, views: 13, likes: 10, comments: 0, shares: 0, interactions: 10, linkClicks: 0 },
+  { type: "Photo", date: "Tue Dec 16, 10:00 AM", reach: 10, views: 17, likes: 10, comments: 0, shares: 0, interactions: 10, linkClicks: 0 },
+  { type: "Photo", date: "Wed Dec 17, 10:00 AM", reach: 11, views: 20, likes: 10, comments: 0, shares: 2, interactions: 12, linkClicks: 0 },
+  { type: "Photo", date: "Wed Dec 17, 11:22 AM", reach: 12, views: 26, likes: 11, comments: 1, shares: 12, interactions: 24, linkClicks: 0 },
+  { type: "Reel", date: "Thu Dec 18, 9:46 AM", reach: 13, views: 23, likes: 9, comments: 0, shares: 7, interactions: 16, linkClicks: 0 },
+  { type: "Photo", date: "Thu Dec 18, 10:00 AM", reach: 10, views: 20, likes: 9, comments: 1, shares: 1, interactions: 11, linkClicks: 0 },
+  { type: "Photo", date: "Fri Dec 19, 9:17 AM", reach: 2, views: 4, likes: 1, comments: 0, shares: 8, interactions: 9, linkClicks: 0 },
+  { type: "Reel", date: "Fri Dec 19, 10:16 AM", reach: 27, views: 60, likes: 2, comments: 0, shares: 11, interactions: 13, linkClicks: 0 },
+  { type: "Photo", date: "Sat Dec 20, 10:00 AM", reach: 1, views: 1, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sat Dec 20, 10:17 AM", reach: 45, views: 64, likes: 1, comments: 0, shares: 0, interactions: 1, linkClicks: 0 },
+  { type: "Photo", date: "Sun Dec 21, 10:00 AM", reach: 1, views: 3, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sun Dec 21, 10:29 AM", reach: 5, views: 4, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 }
+];
+
 // X Data
 const xData: PlatformData = {
   followers: 10,
@@ -125,9 +199,11 @@ const xContent: XContent[] = [
   { date: "Dec 21 2025", impressions: 2, engagement: 2, profileVisits: 0, linkClicks: 0 }
 ];
 
-// Chart Data - X only
+// Chart Data
 const chartData = [
-  { platform: "X", followers: 10, impressions: 82, engagement: 34 }
+  { platform: "Instagram", followers: 9, views: 197, interactions: 67 },
+  { platform: "Facebook", followers: 20, views: 255, interactions: 106 },
+  { platform: "X", followers: 10, impressions: 82, interactions: 34 }
 ];
 
 const CissiePryorPresentsDec15to21 = () => {
@@ -199,6 +275,86 @@ const CissiePryorPresentsDec15to21 = () => {
       </CardContent>
     </Card>
   );
+
+  const renderInstagramTable = () => {
+    const filtered = instagramContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderFacebookTable = () => {
+    const filtered = facebookContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+            <TableHead>Link Clicks</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach.toLocaleString()}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+              <TableCell>{item.linkClicks}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
 
   const renderXTable = () => {
     const filtered = xContent.filter(item =>
@@ -393,11 +549,82 @@ const CissiePryorPresentsDec15to21 = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="x" className="w-full">
+            <Tabs defaultValue="instagram" className="w-full">
               <TabsList className="mb-4">
+                <TabsTrigger value="instagram">Instagram</TabsTrigger>
+                <TabsTrigger value="facebook">Facebook</TabsTrigger>
                 <TabsTrigger value="x">X</TabsTrigger>
               </TabsList>
               
+              {/* Instagram Tab */}
+              <TabsContent value="instagram">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <MetricCard 
+                    title="Total Followers" 
+                    value={instagramData.followers} 
+                    added={instagramData.addedFollowers} 
+                  />
+                  <MetricCard 
+                    title="Engagement Rate" 
+                    value={`${instagramData.engagementRate}%`} 
+                    lastWeek={`${instagramData.lastWeekEngagementRate}%`}
+                    showTrend
+                    currentValue={instagramData.engagementRate || 0}
+                    previousValue={instagramData.lastWeekEngagementRate || 0}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={instagramData.totalContent || 0} 
+                    lastWeek={`${instagramData.lastWeekTotalContent || 0}`}
+                    showTrend
+                    currentValue={instagramData.totalContent || 0}
+                    previousValue={instagramData.lastWeekTotalContent || 0}
+                  />
+                  <MetricCard 
+                    title="Total Views" 
+                    value={197} 
+                  />
+                </div>
+                <div className="overflow-x-auto">
+                  {renderInstagramTable()}
+                </div>
+              </TabsContent>
+
+              {/* Facebook Tab */}
+              <TabsContent value="facebook">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <MetricCard 
+                    title="Total Followers" 
+                    value={facebookData.followers} 
+                    added={facebookData.addedFollowers} 
+                  />
+                  <MetricCard 
+                    title="Engagement Rate" 
+                    value={`${facebookData.engagementRate}%`} 
+                    lastWeek={`${facebookData.lastWeekEngagementRate}%`}
+                    showTrend
+                    currentValue={facebookData.engagementRate || 0}
+                    previousValue={facebookData.lastWeekEngagementRate || 0}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={facebookData.totalContent || 0} 
+                    lastWeek={`${facebookData.lastWeekTotalContent || 0}`}
+                    showTrend
+                    currentValue={facebookData.totalContent || 0}
+                    previousValue={facebookData.lastWeekTotalContent || 0}
+                  />
+                  <MetricCard 
+                    title="Total Views" 
+                    value={255} 
+                  />
+                </div>
+                <div className="overflow-x-auto">
+                  {renderFacebookTable()}
+                </div>
+              </TabsContent>
+
+              {/* X Tab */}
               <TabsContent value="x">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <MetricCard 
