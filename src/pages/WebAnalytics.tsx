@@ -48,21 +48,39 @@ const WebAnalytics = () => {
         avgDuration: analytics.avgDuration ?? 0,
         bounceRate: analytics.bounceRate ?? 0,
         pagesPerVisit: analytics.pagesPerVisit ?? (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
+        trafficSources: analytics.trafficSources,
+        deviceBreakdown: analytics.deviceBreakdown,
+        dailyBreakdown: analytics.dailyBreakdown,
       }
     : null;
 
-  // Generate daily data distributed from real totals
+  // Check if we have real data from API
+  const hasRealTrafficSources = normalizedAnalytics?.trafficSources && normalizedAnalytics.trafficSources.length > 0;
+  const hasRealDeviceBreakdown = normalizedAnalytics?.deviceBreakdown && normalizedAnalytics.deviceBreakdown.length > 0;
+  const hasRealDailyBreakdown = normalizedAnalytics?.dailyBreakdown && normalizedAnalytics.dailyBreakdown.length > 0;
+
+  // Generate daily data - use real data if available, otherwise distribute from totals
   const dailyData = useMemo(() => {
+    // If we have real daily breakdown data from API, use it
+    if (hasRealDailyBreakdown && normalizedAnalytics?.dailyBreakdown) {
+      return normalizedAnalytics.dailyBreakdown.map((day) => ({
+        date: format(new Date(day.date), "MMM d"),
+        visitors: day.visitors,
+        sessions: Math.round(day.visitors * 1.2),
+        pageViews: day.pageViews,
+        bounceRate: Math.round((normalizedAnalytics.bounceRate || 45) + (Math.random() - 0.5) * 10),
+      }));
+    }
+
+    // Fallback: Generate synthetic daily data from totals
     const days = dateRange === "30d" ? 30 : 7;
     const totalVisitors = normalizedAnalytics?.visitors || 0;
     const totalPageViews = normalizedAnalytics?.pageViews || 0;
     const avgBounceRate = normalizedAnalytics?.bounceRate || 45;
     
-    // Generate weights for each day (simulating traffic patterns - higher on weekdays)
     const weights = Array.from({ length: days }, (_, i) => {
       const date = subDays(new Date(), days - 1 - i);
       const dayOfWeek = date.getDay();
-      // Weekdays get higher weight
       return dayOfWeek === 0 || dayOfWeek === 6 ? 0.7 : 1.2;
     });
     const totalWeight = weights.reduce((sum, w) => sum + w, 0);
@@ -72,7 +90,7 @@ const WebAnalytics = () => {
       const weight = weights[i] / totalWeight;
       const visitors = Math.round(totalVisitors * weight);
       const pageViews = Math.round(totalPageViews * weight);
-      const sessions = Math.round(visitors * 1.2); // Avg 1.2 sessions per visitor
+      const sessions = Math.round(visitors * 1.2);
       
       return {
         date: format(date, "MMM d"),
@@ -82,10 +100,21 @@ const WebAnalytics = () => {
         bounceRate: Math.round(avgBounceRate + (Math.random() - 0.5) * 10),
       };
     });
-  }, [normalizedAnalytics, dateRange]);
+  }, [normalizedAnalytics, dateRange, hasRealDailyBreakdown]);
 
-  // Estimate traffic sources based on industry averages
+  // Traffic sources - use real data if available
   const trafficSources = useMemo(() => {
+    if (hasRealTrafficSources && normalizedAnalytics?.trafficSources) {
+      const colors = ["bg-primary", "bg-green-500", "bg-blue-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
+      return normalizedAnalytics.trafficSources.map((ts, index) => ({
+        source: ts.source,
+        percentage: ts.percentage,
+        visitors: ts.visitors,
+        color: colors[index % colors.length],
+      }));
+    }
+
+    // Fallback: Estimate based on industry averages
     const total = normalizedAnalytics?.visitors || 0;
     return [
       { source: "Direct", percentage: 42, visitors: Math.round(total * 0.42), color: "bg-primary" },
@@ -93,17 +122,28 @@ const WebAnalytics = () => {
       { source: "Social Media", percentage: 18, visitors: Math.round(total * 0.18), color: "bg-blue-500" },
       { source: "Referral", percentage: 9, visitors: Math.round(total * 0.09), color: "bg-purple-500" },
     ];
-  }, [normalizedAnalytics]);
+  }, [normalizedAnalytics, hasRealTrafficSources]);
 
-  // Estimate device breakdown based on industry averages
+  // Device breakdown - use real data if available
   const deviceBreakdown = useMemo(() => {
+    if (hasRealDeviceBreakdown && normalizedAnalytics?.deviceBreakdown) {
+      const colors = ["bg-primary", "bg-green-500", "bg-blue-500"];
+      return normalizedAnalytics.deviceBreakdown.map((db, index) => ({
+        device: db.device,
+        percentage: db.percentage,
+        visitors: db.visitors,
+        color: colors[index % colors.length],
+      }));
+    }
+
+    // Fallback: Estimate based on industry averages
     const total = normalizedAnalytics?.visitors || 0;
     return [
       { device: "Mobile", percentage: 58, visitors: Math.round(total * 0.58), color: "bg-primary" },
       { device: "Desktop", percentage: 35, visitors: Math.round(total * 0.35), color: "bg-green-500" },
       { device: "Tablet", percentage: 7, visitors: Math.round(total * 0.07), color: "bg-blue-500" },
     ];
-  }, [normalizedAnalytics]);
+  }, [normalizedAnalytics, hasRealDeviceBreakdown]);
 
   const formatDuration = (seconds: number) => {
     if (seconds < 60) return `${Math.round(seconds)}s`;
@@ -388,10 +428,12 @@ const WebAnalytics = () => {
                             <CardTitle>Traffic Sources</CardTitle>
                             <CardDescription>Where your visitors come from</CardDescription>
                           </div>
-                          <Badge variant="secondary" className="text-xs">
-                            <Info className="h-3 w-3 mr-1" />
-                            Estimated
-                          </Badge>
+                          {!hasRealTrafficSources && (
+                            <Badge variant="secondary" className="text-xs">
+                              <Info className="h-3 w-3 mr-1" />
+                              Estimated
+                            </Badge>
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -413,9 +455,11 @@ const WebAnalytics = () => {
                             </div>
                           ))}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-4">
-                          Based on industry-standard distribution patterns
-                        </p>
+                        {!hasRealTrafficSources && (
+                          <p className="text-xs text-muted-foreground mt-4">
+                            Based on industry-standard distribution patterns
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
 
@@ -426,10 +470,12 @@ const WebAnalytics = () => {
                             <CardTitle>Device Breakdown</CardTitle>
                             <CardDescription>Devices used by visitors</CardDescription>
                           </div>
-                          <Badge variant="secondary" className="text-xs">
-                            <Info className="h-3 w-3 mr-1" />
-                            Estimated
-                          </Badge>
+                          {!hasRealDeviceBreakdown && (
+                            <Badge variant="secondary" className="text-xs">
+                              <Info className="h-3 w-3 mr-1" />
+                              Estimated
+                            </Badge>
+                          )}
                         </div>
                       </CardHeader>
                       <CardContent>
@@ -451,9 +497,11 @@ const WebAnalytics = () => {
                             </div>
                           ))}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-4">
-                          Based on industry-standard distribution patterns
-                        </p>
+                        {!hasRealDeviceBreakdown && (
+                          <p className="text-xs text-muted-foreground mt-4">
+                            Based on industry-standard distribution patterns
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   </div>
