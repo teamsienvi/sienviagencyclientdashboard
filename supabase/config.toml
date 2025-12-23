@@ -62,3 +62,15 @@ verify_jwt = false
 
 [functions.linkedin-oauth-callback]
 verify_jwt = false
+
+[functions.meta-agency-oauth-init]
+verify_jwt = false
+
+[functions.meta-agency-oauth-callback]
+verify_jwt = false
+
+[functions.meta-discover]
+verify_jwt = false
+
+[functions.sync-meta-agency]
+verify_jwt = false

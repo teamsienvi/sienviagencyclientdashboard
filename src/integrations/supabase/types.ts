@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_meta_map: {
+        Row: {
+          active: boolean
+          client_id: string
+          created_at: string
+          id: string
+          ig_business_id: string | null
+          mapped_at: string
+          page_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          client_id: string
+          created_at?: string
+          id?: string
+          ig_business_id?: string | null
+          mapped_at?: string
+          page_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          client_id?: string
+          created_at?: string
+          id?: string
+          ig_business_id?: string | null
+          mapped_at?: string
+          page_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_meta_map_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           api_key: string | null
@@ -68,6 +109,72 @@ export type Database = {
           flag_value?: string
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      meta_agency_connection: {
+        Row: {
+          access_token: string
+          connected_at: string
+          id: string
+          meta_user_id: string
+          token_expires_at: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          connected_at?: string
+          id?: string
+          meta_user_id: string
+          token_expires_at: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          connected_at?: string
+          id?: string
+          meta_user_id?: string
+          token_expires_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      meta_assets: {
+        Row: {
+          created_at: string
+          discovered_at: string
+          id: string
+          ig_business_id: string | null
+          last_seen_at: string
+          name: string
+          page_id: string | null
+          permalink: string | null
+          picture_url: string | null
+          platform: string
+        }
+        Insert: {
+          created_at?: string
+          discovered_at?: string
+          id?: string
+          ig_business_id?: string | null
+          last_seen_at?: string
+          name: string
+          page_id?: string | null
+          permalink?: string | null
+          picture_url?: string | null
+          platform: string
+        }
+        Update: {
+          created_at?: string
+          discovered_at?: string
+          id?: string
+          ig_business_id?: string | null
+          last_seen_at?: string
+          name?: string
+          page_id?: string | null
+          permalink?: string | null
+          picture_url?: string | null
+          platform?: string
         }
         Relationships: []
       }

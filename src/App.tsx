@@ -8,6 +8,7 @@ import Report from "./pages/Report";
 import DynamicReport from "./pages/DynamicReport";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
+import AdminMetaAssets from "./pages/AdminMetaAssets";
 import YouTubeAnalytics from "./pages/YouTubeAnalytics";
 import XAnalytics from "./pages/XAnalytics";
 import MetaAnalytics from "./pages/MetaAnalytics";
@@ -40,6 +41,7 @@ import CissiePryorPresentsDec15to21 from "./pages/CissiePryorPresentsDec15to21";
 import SienviAgencyDec15to21 from "./pages/SienviAgencyDec15to21";
 import LuxxeAutoDec15to21 from "./pages/LuxxeAutoDec15to21";
 import MetaOAuthCallback from "./pages/MetaOAuthCallback";
+import MetaAgencyOAuthCallback from "./pages/MetaAgencyOAuthCallback";
 import TikTokOAuthCallback from "./pages/TikTokOAuthCallback";
 import LinkedInOAuthCallback from "./pages/LinkedInOAuthCallback";
 
@@ -54,6 +56,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/meta-assets" element={<AdminMetaAssets />} />
           <Route path="/report/:clientId/:reportId" element={<Report />} />
           <Route path="/dynamic-report/:reportId" element={<DynamicReport />} />
           <Route path="/youtube-analytics/:clientId" element={<YouTubeAnalytics />} />
@@ -88,6 +91,7 @@ const App = () => (
           <Route path="/sienvi-agency-dec15-21" element={<SienviAgencyDec15to21 />} />
           <Route path="/luxxe-auto-dec15-21" element={<LuxxeAutoDec15to21 />} />
           <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+          <Route path="/oauth/meta/agency/callback" element={<MetaAgencyOAuthCallback />} />
           <Route path="/oauth/tiktok/callback" element={<TikTokOAuthCallback />} />
           <Route path="/oauth/linkedin/callback" element={<LinkedInOAuthCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
