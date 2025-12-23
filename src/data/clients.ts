@@ -75,6 +75,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 24-30", link: "/serenity-scrolls-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/serenity-scrolls-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/2a27391a-4671-4470-9a8f-4c397284868a", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/serenity-scrolls-dec15-21", isInternal: true },
     ],
   },
   {
