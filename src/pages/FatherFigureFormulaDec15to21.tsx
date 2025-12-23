@@ -59,6 +59,29 @@ interface LinkedInContent {
   comments: number;
 }
 
+interface InstagramContent {
+  type: string;
+  date: string;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+}
+
+interface FacebookContent {
+  type: string;
+  date: string;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+  linkClicks: number;
+}
+
 interface PlatformData {
   followers: number;
   addedFollowers: number;
@@ -223,6 +246,58 @@ const linkedinContent: LinkedInContent[] = [
   { date: "Sunday, Dec 21", impressions: 4, membersReached: 2, profileViewers: 0, followersGained: 0, reactions: 0, comments: 0 }
 ];
 
+// Instagram Content
+const instagramContent: InstagramContent[] = [
+  { type: "Reel", date: "Monday, Dec 15", reach: 145, views: 165, likes: 7, comments: 0, shares: 1, interactions: 8 },
+  { type: "Reel", date: "Monday, Dec 15", reach: 157, views: 192, likes: 8, comments: 0, shares: 0, interactions: 8 },
+  { type: "Photo", date: "Monday, Dec 15", reach: 7, views: 27, likes: 7, comments: 0, shares: 0, interactions: 7 },
+  { type: "Reel", date: "Tuesday, Dec 16", reach: 4, views: 18, likes: 7, comments: 0, shares: 0, interactions: 7 },
+  { type: "Reel", date: "Tuesday, Dec 16", reach: 210, views: 269, likes: 13, comments: 1, shares: 2, interactions: 16 },
+  { type: "Reel", date: "Tuesday, Dec 16", reach: 107, views: 129, likes: 6, comments: 2, shares: 0, interactions: 8 },
+  { type: "Reel", date: "Wednesday, Dec 17", reach: 137, views: 164, likes: 8, comments: 1, shares: 0, interactions: 9 },
+  { type: "Photo", date: "Wednesday, Dec 17", reach: 8, views: 27, likes: 6, comments: 0, shares: 0, interactions: 6 },
+  { type: "Reel", date: "Wednesday, Dec 17", reach: 145, views: 161, likes: 8, comments: 1, shares: 0, interactions: 9 },
+  { type: "Reel", date: "Thursday, Dec 18", reach: 135, views: 166, likes: 7, comments: 2, shares: 0, interactions: 9 },
+  { type: "Photo", date: "Thursday, Dec 18", reach: 10, views: 33, likes: 1, comments: 0, shares: 0, interactions: 1 },
+  { type: "Carousel", date: "Friday, Dec 19", reach: 44, views: 86, likes: 4, comments: 0, shares: 1, interactions: 5 },
+  { type: "Photo", date: "Saturday, Dec 20", reach: 12, views: 21, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 65, views: 73, likes: 2, comments: 0, shares: 0, interactions: 2 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 155, views: 183, likes: 3, comments: 0, shares: 2, interactions: 5 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 112, views: 124, likes: 0, comments: 0, shares: 0, interactions: 1 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 183, views: 209, likes: 5, comments: 0, shares: 1, interactions: 6 },
+  { type: "Reel", date: "Sunday, Dec 21", reach: 31, views: 37, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Sunday, Dec 21", reach: 174, views: 211, likes: 3, comments: 0, shares: 1, interactions: 4 },
+  { type: "Reel", date: "Sunday, Dec 21", reach: 111, views: 124, likes: 1, comments: 0, shares: 0, interactions: 1 },
+  { type: "Photo", date: "Sunday, Dec 21", reach: 7, views: 17, likes: 2, comments: 0, shares: 0, interactions: 2 }
+];
+
+// Facebook Content
+const facebookContent: FacebookContent[] = [
+  { type: "Reel", date: "Monday, Dec 15", reach: 20, views: 15, likes: 9, comments: 0, shares: 0, interactions: 9, linkClicks: 0 },
+  { type: "Reel", date: "Monday, Dec 15", reach: 17, views: 18, likes: 9, comments: 0, shares: 1, interactions: 10, linkClicks: 0 },
+  { type: "Photo", date: "Monday, Dec 15", reach: 25, views: 37, likes: 9, comments: 0, shares: 1, interactions: 10, linkClicks: 0 },
+  { type: "Reel", date: "Tuesday, Dec 16", reach: 20, views: 33, likes: 9, comments: 0, shares: 3, interactions: 12, linkClicks: 0 },
+  { type: "Reel", date: "Tuesday, Dec 16", reach: 33, views: 46, likes: 14, comments: 1, shares: 5, interactions: 20, linkClicks: 0 },
+  { type: "Reel", date: "Tuesday, Dec 16", reach: 20, views: 52, likes: 10, comments: 1, shares: 6, interactions: 17, linkClicks: 0 },
+  { type: "Reel", date: "Wednesday, Dec 17", reach: 41, views: 74, likes: 12, comments: 1, shares: 13, interactions: 26, linkClicks: 0 },
+  { type: "Photo", date: "Wednesday, Dec 17", reach: 24, views: 47, likes: 9, comments: 1, shares: 5, interactions: 15, linkClicks: 0 },
+  { type: "Reel", date: "Wednesday, Dec 17", reach: 78, views: 124, likes: 9, comments: 0, shares: 4, interactions: 13, linkClicks: 0 },
+  { type: "Photo", date: "Wednesday, Dec 17", reach: 33, views: 73, likes: 12, comments: 2, shares: 9, interactions: 23, linkClicks: 1 },
+  { type: "Reel", date: "Thursday, Dec 18", reach: 27, views: 59, likes: 11, comments: 1, shares: 9, interactions: 21, linkClicks: 0 },
+  { type: "Photo", date: "Thursday, Dec 18", reach: 35, views: 81, likes: 11, comments: 1, shares: 4, interactions: 16, linkClicks: 0 },
+  { type: "Multi media", date: "Friday, Dec 19", reach: 15, views: 29, likes: 4, comments: 1, shares: 13, interactions: 18, linkClicks: 0 },
+  { type: "Photo", date: "Saturday, Dec 20", reach: 4, views: 6, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 3, views: 4, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 4, views: 3, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 4, views: 4, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 3, views: 2, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday, Dec 20", reach: 5, views: 4, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday, Dec 21", reach: 2, views: 5, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday, Dec 21", reach: 5, views: 5, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday, Dec 21", reach: 1, views: 2, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Photo", date: "Sunday, Dec 21", reach: 5, views: 6, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 }
+];
+
 // Chart Data
 const chartData = [
   { platform: "Instagram", followers: 832, views: 2436, interactions: 114 },
@@ -375,6 +450,88 @@ const FatherFigureFormulaDec15to21 = () => {
     );
   };
 
+  const renderInstagramTable = () => {
+    const filtered = instagramContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase()) ||
+      item.type.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach.toLocaleString()}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderFacebookTable = () => {
+    const filtered = facebookContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase()) ||
+      item.type.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+            <TableHead>Link Clicks</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach.toLocaleString()}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+              <TableCell>{item.linkClicks}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -515,17 +672,105 @@ const FatherFigureFormulaDec15to21 = () => {
           </CardContent>
         </Card>
 
-        {/* Platform Content Performance - Only TikTok and LinkedIn */}
+        {/* Platform Content Performance */}
         <Card>
           <CardHeader>
             <CardTitle className="text-xl font-heading">Platform Content Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="tiktok" className="w-full">
+            <Tabs defaultValue="instagram" className="w-full">
               <TabsList className="mb-4">
+                <TabsTrigger value="instagram">Instagram</TabsTrigger>
+                <TabsTrigger value="facebook">Facebook</TabsTrigger>
                 <TabsTrigger value="tiktok">TikTok</TabsTrigger>
                 <TabsTrigger value="linkedin">LinkedIn</TabsTrigger>
               </TabsList>
+
+              {/* Instagram Tab */}
+              <TabsContent value="instagram">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <MetricCard 
+                    title="Followers" 
+                    value={instagramData.followers.toLocaleString()} 
+                    added={instagramData.addedFollowers}
+                  />
+                  <MetricCard 
+                    title="Engagement Rate %" 
+                    value={`${instagramData.engagementRate}%`}
+                    showTrend
+                    currentValue={instagramData.engagementRate}
+                    previousValue={instagramData.lastWeekEngagementRate}
+                    lastWeek={`${instagramData.lastWeekEngagementRate}%`}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={instagramData.totalContent}
+                    showTrend
+                    currentValue={instagramData.totalContent}
+                    previousValue={instagramData.lastWeekTotalContent}
+                    lastWeek={`${instagramData.lastWeekTotalContent}`}
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search content..."
+                      className="pl-10"
+                      value={contentSearch}
+                      onChange={(e) => setContentSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {renderInstagramTable()}
+                </div>
+              </TabsContent>
+
+              {/* Facebook Tab */}
+              <TabsContent value="facebook">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <MetricCard 
+                    title="Followers" 
+                    value={facebookData.followers.toLocaleString()} 
+                    added={facebookData.addedFollowers}
+                  />
+                  <MetricCard 
+                    title="Engagement Rate %" 
+                    value={`${facebookData.engagementRate}%`}
+                    showTrend
+                    currentValue={facebookData.engagementRate}
+                    previousValue={facebookData.lastWeekEngagementRate}
+                    lastWeek={`${facebookData.lastWeekEngagementRate}%`}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={facebookData.totalContent}
+                    showTrend
+                    currentValue={facebookData.totalContent}
+                    previousValue={facebookData.lastWeekTotalContent}
+                    lastWeek={`${facebookData.lastWeekTotalContent}`}
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search content..."
+                      className="pl-10"
+                      value={contentSearch}
+                      onChange={(e) => setContentSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {renderFacebookTable()}
+                </div>
+              </TabsContent>
 
               {/* TikTok Tab */}
               <TabsContent value="tiktok">
