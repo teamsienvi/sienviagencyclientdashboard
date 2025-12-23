@@ -33,6 +33,7 @@ import TheHavenAtDeerParkDec15to21 from "./pages/TheHavenAtDeerParkDec15to21";
 import BsueBrowLashDec1to7 from "./pages/BsueBrowLashDec1to7";
 import BsueBrowLashDec15to21 from "./pages/BsueBrowLashDec15to21";
 import CissiePryorPresentsDec15to21 from "./pages/CissiePryorPresentsDec15to21";
+import SienviAgencyDec15to21 from "./pages/SienviAgencyDec15to21";
 import MetaOAuthCallback from "./pages/MetaOAuthCallback";
 
 const queryClient = new QueryClient();
@@ -73,6 +74,7 @@ const App = () => (
           <Route path="/bsue-brow-lash-dec1-7" element={<BsueBrowLashDec1to7 />} />
           <Route path="/bsue-brow-lash-dec15-21" element={<BsueBrowLashDec15to21 />} />
           <Route path="/cissie-pryor-presents-dec15-21" element={<CissiePryorPresentsDec15to21 />} />
+          <Route path="/sienvi-agency-dec15-21" element={<SienviAgencyDec15to21 />} />
           <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
