@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink, Play, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   Table,
@@ -60,6 +61,7 @@ export const BulkMetaPageAssignment = () => {
   const [assigning, setAssigning] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
@@ -242,6 +244,7 @@ export const BulkMetaPageAssignment = () => {
       }
     });
     setSyncStatuses(initialStatuses);
+    setSyncProgress({ current: 0, total: initialStatuses.length });
 
     let successCount = 0;
     let errorCount = 0;
@@ -305,11 +308,13 @@ export const BulkMetaPageAssignment = () => {
         setSyncStatuses(prev => prev.map((s, idx) => 
           idx === i ? { ...s, status: "success", message: `${data?.recordsSynced || 0} records` } : s
         ));
+        setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
         successCount++;
       } catch (err: any) {
         setSyncStatuses(prev => prev.map((s, idx) => 
           idx === i ? { ...s, status: "error", message: err.message || "Sync failed" } : s
         ));
+        setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
         errorCount++;
       }
 
@@ -394,7 +399,16 @@ export const BulkMetaPageAssignment = () => {
           <>
             {syncStatuses.length > 0 && (
               <div className="mb-4 p-3 border rounded-lg bg-muted/30">
-                <p className="text-sm font-medium mb-2">Sync Progress</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Sync Progress</p>
+                  <span className="text-sm text-muted-foreground">
+                    {syncProgress.current} / {syncProgress.total}
+                  </span>
+                </div>
+                <Progress 
+                  value={syncProgress.total > 0 ? (syncProgress.current / syncProgress.total) * 100 : 0} 
+                  className="h-2 mb-3"
+                />
                 <div className="flex flex-wrap gap-2">
                   {syncStatuses.map((status, idx) => {
                     const client = clients.find(c => c.id === status.clientId);
