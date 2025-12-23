@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ClientManagement } from "@/components/ClientManagement";
 import { BulkMetaSync } from "@/components/BulkMetaSync";
-import { BulkMetaPageAssignment } from "@/components/BulkMetaPageAssignment";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -101,7 +100,6 @@ const Admin = () => {
         </Card>
         
         <div className="space-y-8 mb-8">
-          <BulkMetaPageAssignment />
           <BulkMetaSync />
         </div>
         
