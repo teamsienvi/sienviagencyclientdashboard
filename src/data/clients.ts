@@ -120,6 +120,7 @@ export const clientsData: Client[] = [
     logo: cissiePryorPresentsLogo,
     reports: [
       { dateRange: "Dec 8-14", link: "/dynamic-report/4590d61c-60de-43d1-be67-c01a391f2bd7", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/cissie-pryor-presents-dec15-21", isInternal: true },
     ],
   },
   {
