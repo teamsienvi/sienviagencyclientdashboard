@@ -134,7 +134,7 @@ export const clientsData: Client[] = [
     name: "Luxxe Auto Accessories",
     logo: luxxeAutoLogo,
     reports: [
-      { dateRange: "Dec 15-21", link: "/dynamic-report/93f12543-d997-43c1-b29a-9af23509af80", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/luxxe-auto-dec15-21", isInternal: true },
     ],
   },
 ];
