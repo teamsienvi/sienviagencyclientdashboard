@@ -70,6 +70,7 @@ interface VideoData {
   comments: number;
   shares: number;
   avg_view_duration: number;
+  watch_time_hours: number;
   engagement_rate: number;
 }
 
@@ -209,6 +210,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         const likes = metrics?.likes || 0;
         const comments = metrics?.comments || 0;
         const shares = metrics?.shares || 0;
+        const watchTimeHours = metrics?.watch_time_hours || 0;
         const contentType = content.content_type || "video";
         const avgViewDuration = getEstimatedRetention(contentType);
 
@@ -234,6 +236,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
           comments,
           shares,
           avg_view_duration: avgViewDuration,
+          watch_time_hours: watchTimeHours,
           engagement_rate: computeEngagementRate(likes, comments, shares, views),
         });
       });
@@ -714,7 +717,8 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   <TableHead className="text-right">Likes</TableHead>
                   <TableHead className="text-right">Comments</TableHead>
                   <TableHead className="text-right">Shares</TableHead>
-                  <TableHead className="text-right">Avg. Duration</TableHead>
+                  <TableHead className="text-right">Watch Time</TableHead>
+                  <TableHead className="text-right">Stayed to Watch</TableHead>
                   <TableHead className="text-right">Engagement</TableHead>
                 </TableRow>
               </TableHeader>
@@ -759,6 +763,11 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                     </TableCell>
                     <TableCell className="text-right">
                       {video.shares.toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {video.watch_time_hours > 0 
+                        ? `${video.watch_time_hours.toFixed(1)}h` 
+                        : "-"}
                     </TableCell>
                     <TableCell className="text-right">
                       {video.avg_view_duration}%
