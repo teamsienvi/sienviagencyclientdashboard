@@ -58,6 +58,29 @@ interface XContent {
   type: string;
 }
 
+interface InstagramContent {
+  type: string;
+  date: string;
+  reach: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+}
+
+interface FacebookContent {
+  type: string;
+  date: string;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+  linkClicks: number;
+}
+
 interface PlatformData {
   followers: number;
   addedFollowers: number;
@@ -186,6 +209,42 @@ const xContent: XContent[] = [
   { date: "December 21, 2025", impressions: 2, engagement: 2, profileVisits: 0, linkClicks: 0, type: "Post" }
 ];
 
+// Instagram Content
+const instagramContent: InstagramContent[] = [
+  { type: "Reel", date: "Monday Dec 15 2025", reach: "No data", views: 11, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Photo", date: "Monday Dec 15 2025", reach: "No data", views: 6, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Reel", date: "Tuesday Dec 16 2025", reach: "No data", views: 7, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Photo", date: "Tuesday Dec 16 2025", reach: "No data", views: 7, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Photo", date: "Wednesday Dec 17 2025", reach: "No data", views: 7, likes: 6, comments: 6, shares: 0, interactions: 12 },
+  { type: "Reel", date: "Wednesday Dec 17 2025", reach: "No data", views: 10, likes: 6, comments: 7, shares: 0, interactions: 13 },
+  { type: "Reel", date: "Thursday Dec 18 2025", reach: "No data", views: 4, likes: 2, comments: 1, shares: 0, interactions: 3 },
+  { type: "Photo", date: "Thursday Dec 18 2025", reach: "No data", views: 1, likes: 1, comments: 1, shares: 0, interactions: 2 },
+  { type: "Photo", date: "Saturday Dec 20 2025", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Saturday Dec 20 2025", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Saturday Dec 20 2025", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Photo", date: "Saturday Dec 20 2025", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Sunday Dec 21 2025", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Photo", date: "Sunday Dec 21 2025", reach: "No data", views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 }
+];
+
+// Facebook Content
+const facebookContent: FacebookContent[] = [
+  { type: "Reel", date: "Monday Dec 15 2025", reach: 9, views: 9, likes: 9, comments: 0, shares: 0, interactions: 9, linkClicks: 0 },
+  { type: "Photo", date: "Monday Dec 15 2025", reach: 10, views: 10, likes: 9, comments: 0, shares: 0, interactions: 9, linkClicks: 0 },
+  { type: "Reel", date: "Tuesday Dec 16 2025", reach: 12, views: 13, likes: 9, comments: 0, shares: 0, interactions: 9, linkClicks: 0 },
+  { type: "Photo", date: "Tuesday Dec 16 2025", reach: 11, views: 18, likes: 9, comments: 0, shares: 0, interactions: 9, linkClicks: 0 },
+  { type: "Photo", date: "Wednesday Dec 17 2025", reach: 11, views: 24, likes: 9, comments: 0, shares: 1, interactions: 10, linkClicks: 0 },
+  { type: "Reel", date: "Wednesday Dec 17 2025", reach: 13, views: 30, likes: 9, comments: 0, shares: 6, interactions: 15, linkClicks: 0 },
+  { type: "Reel", date: "Thursday Dec 18 2025", reach: 13, views: 21, likes: 9, comments: 0, shares: 0, interactions: 9, linkClicks: 0 },
+  { type: "Photo", date: "Thursday Dec 18 2025", reach: 12, views: 18, likes: 9, comments: 1, shares: 6, interactions: 16, linkClicks: 0 },
+  { type: "Photo", date: "Saturday Dec 20 2025", reach: 0, views: 0, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday Dec 20 2025", reach: 2, views: 3, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Saturday Dec 20 2025", reach: 0, views: 0, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Photo", date: "Saturday Dec 20 2025", reach: 0, views: 0, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Reel", date: "Sunday Dec 21 2025", reach: 30, views: 30, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 },
+  { type: "Photo", date: "Sunday Dec 21 2025", reach: 0, views: 0, likes: 0, comments: 0, shares: 0, interactions: 0, linkClicks: 0 }
+];
+
 // Chart Data
 const chartData = [
   { platform: "Instagram", followers: 12, views: 29, interactions: 42 },
@@ -294,6 +353,86 @@ const OxiSureTechDec15to21 = () => {
               <TableCell>{item.comments}</TableCell>
               <TableCell>{item.shares}</TableCell>
               <TableCell>{item.addToFavorites}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderInstagramTable = () => {
+    const filtered = instagramContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderFacebookTable = () => {
+    const filtered = facebookContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+            <TableHead>Link Clicks</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach.toLocaleString()}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+              <TableCell>{item.linkClicks}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -482,11 +621,99 @@ const OxiSureTechDec15to21 = () => {
             <CardTitle className="text-xl font-heading">Platform Content Performance</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="tiktok" className="w-full">
+            <Tabs defaultValue="instagram" className="w-full">
               <TabsList className="mb-4">
+                <TabsTrigger value="instagram">Instagram</TabsTrigger>
+                <TabsTrigger value="facebook">Facebook</TabsTrigger>
                 <TabsTrigger value="tiktok">TikTok</TabsTrigger>
                 <TabsTrigger value="x">X</TabsTrigger>
               </TabsList>
+
+              {/* Instagram Tab */}
+              <TabsContent value="instagram">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <MetricCard 
+                    title="Followers" 
+                    value={instagramData.followers.toLocaleString()} 
+                    added={instagramData.addedFollowers}
+                  />
+                  <MetricCard 
+                    title="Engagement Rate %" 
+                    value={instagramData.engagementRate !== null ? `${instagramData.engagementRate}%` : "N/A"}
+                    showTrend
+                    currentValue={instagramData.engagementRate ?? 0}
+                    previousValue={instagramData.lastWeekEngagementRate ?? 0}
+                    lastWeek={instagramData.lastWeekEngagementRate !== null ? `${instagramData.lastWeekEngagementRate}%` : undefined}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={instagramData.totalContent ?? "N/A"}
+                    showTrend
+                    currentValue={instagramData.totalContent ?? 0}
+                    previousValue={instagramData.lastWeekTotalContent ?? 0}
+                    lastWeek={instagramData.lastWeekTotalContent !== null ? `${instagramData.lastWeekTotalContent}` : undefined}
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search content..."
+                      className="pl-10"
+                      value={contentSearch}
+                      onChange={(e) => setContentSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {renderInstagramTable()}
+                </div>
+              </TabsContent>
+
+              {/* Facebook Tab */}
+              <TabsContent value="facebook">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <MetricCard 
+                    title="Followers" 
+                    value={facebookData.followers.toLocaleString()} 
+                    added={facebookData.addedFollowers}
+                  />
+                  <MetricCard 
+                    title="Engagement Rate %" 
+                    value={facebookData.engagementRate !== null ? `${facebookData.engagementRate}%` : "N/A"}
+                    showTrend
+                    currentValue={facebookData.engagementRate ?? 0}
+                    previousValue={facebookData.lastWeekEngagementRate ?? 0}
+                    lastWeek={facebookData.lastWeekEngagementRate !== null ? `${facebookData.lastWeekEngagementRate}%` : undefined}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={facebookData.totalContent ?? "N/A"}
+                    showTrend
+                    currentValue={facebookData.totalContent ?? 0}
+                    previousValue={facebookData.lastWeekTotalContent ?? 0}
+                    lastWeek={facebookData.lastWeekTotalContent !== null ? `${facebookData.lastWeekTotalContent}` : undefined}
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search content..."
+                      className="pl-10"
+                      value={contentSearch}
+                      onChange={(e) => setContentSearch(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {renderFacebookTable()}
+                </div>
+              </TabsContent>
 
               {/* TikTok Tab */}
               <TabsContent value="tiktok">
