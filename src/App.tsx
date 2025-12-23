@@ -19,6 +19,7 @@ import SnarkyHumansDec1to7 from "./pages/SnarkyHumansDec1to7";
 import SnarkyHumansDec15to21 from "./pages/SnarkyHumansDec15to21";
 import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
 import SnarkyPetsDec1to7 from "./pages/SnarkyPetsDec1to7";
+import SnarkyPetsDec15to21 from "./pages/SnarkyPetsDec15to21";
 import SerenityScrollsNov24to30 from "./pages/SerenityScrollsNov24to30";
 import SerenityScrollsNov17to23 from "./pages/SerenityScrollsNov17to23";
 import SerenityScrollsDec1to7 from "./pages/SerenityScrollsDec1to7";
@@ -53,6 +54,7 @@ const App = () => (
           <Route path="/snarky-humans-dec15-21" element={<SnarkyHumansDec15to21 />} />
           <Route path="/snarky-pets-nov24-30" element={<SnarkyPetsNov24to30 />} />
           <Route path="/snarky-pets-dec1-7" element={<SnarkyPetsDec1to7 />} />
+          <Route path="/snarky-pets-dec15-21" element={<SnarkyPetsDec15to21 />} />
           <Route path="/serenity-scrolls-nov24-30" element={<SerenityScrollsNov24to30 />} />
           <Route path="/serenity-scrolls-nov17-23" element={<SerenityScrollsNov17to23 />} />
           <Route path="/serenity-scrolls-dec1-7" element={<SerenityScrollsDec1to7 />} />
