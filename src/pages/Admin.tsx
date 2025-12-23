@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ClientManagement } from "@/components/ClientManagement";
 import { BulkMetaSync } from "@/components/BulkMetaSync";
@@ -6,7 +7,8 @@ import { BulkMetaPageAssignment } from "@/components/BulkMetaPageAssignment";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { LogOut, Shield } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { LogOut, Shield, Facebook, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Admin = () => {
@@ -78,6 +80,25 @@ const Admin = () => {
             Sign Out
           </Button>
         </div>
+
+        {/* Quick Links */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Quick Links</CardTitle>
+            <CardDescription>Access admin tools and management pages</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link to="/admin/meta-assets">
+              <Button variant="outline" className="w-full justify-between">
+                <span className="flex items-center gap-2">
+                  <Facebook className="h-4 w-4 text-blue-600" />
+                  Meta Assets Management
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
         
         <div className="space-y-8 mb-8">
           <BulkMetaPageAssignment />
