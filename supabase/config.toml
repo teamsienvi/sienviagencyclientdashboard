@@ -56,3 +56,9 @@ verify_jwt = false
 
 [functions.tiktok-oauth-callback]
 verify_jwt = false
+
+[functions.linkedin-oauth-init]
+verify_jwt = false
+
+[functions.linkedin-oauth-callback]
+verify_jwt = false
