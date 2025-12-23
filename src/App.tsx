@@ -11,6 +11,7 @@ import Admin from "./pages/Admin";
 import YouTubeAnalytics from "./pages/YouTubeAnalytics";
 import XAnalytics from "./pages/XAnalytics";
 import MetaAnalytics from "./pages/MetaAnalytics";
+import TikTokAnalytics from "./pages/TikTokAnalytics";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
 import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
 import FatherFigureFormulaDec15to21 from "./pages/FatherFigureFormulaDec15to21";
@@ -36,6 +37,7 @@ import CissiePryorPresentsDec15to21 from "./pages/CissiePryorPresentsDec15to21";
 import SienviAgencyDec15to21 from "./pages/SienviAgencyDec15to21";
 import LuxxeAutoDec15to21 from "./pages/LuxxeAutoDec15to21";
 import MetaOAuthCallback from "./pages/MetaOAuthCallback";
+import TikTokOAuthCallback from "./pages/TikTokOAuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +55,7 @@ const App = () => (
           <Route path="/youtube-analytics/:clientId" element={<YouTubeAnalytics />} />
           <Route path="/x-analytics/:clientId" element={<XAnalytics />} />
           <Route path="/meta-analytics/:clientId" element={<MetaAnalytics />} />
+          <Route path="/tiktok-analytics" element={<TikTokAnalytics />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
           <Route path="/father-figure-formula-dec15-21" element={<FatherFigureFormulaDec15to21 />} />
@@ -78,6 +81,7 @@ const App = () => (
           <Route path="/sienvi-agency-dec15-21" element={<SienviAgencyDec15to21 />} />
           <Route path="/luxxe-auto-dec15-21" element={<LuxxeAutoDec15to21 />} />
           <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
+          <Route path="/oauth/tiktok/callback" element={<TikTokOAuthCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
