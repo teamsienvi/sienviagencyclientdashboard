@@ -332,15 +332,17 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         return;
       }
 
-      const { start, end } = getDateRangeFilter();
+      // Standardized analytics period - Dec 15-21, 2024
+      const periodStart = "2024-12-15";
+      const periodEnd = "2024-12-21";
 
       const { data, error } = await supabase.functions.invoke("sync-youtube", {
         body: {
           clientId,
           accountId,
           channelHandle,
-          periodStart: format(start, "yyyy-MM-dd"),
-          periodEnd: format(end, "yyyy-MM-dd"),
+          periodStart,
+          periodEnd,
         },
       });
 

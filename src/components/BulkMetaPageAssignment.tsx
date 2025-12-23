@@ -342,9 +342,9 @@ export const BulkMetaPageAssignment = () => {
         sa => sa.client_id === status.clientId && sa.platform === status.platform
       );
 
-      const periodEnd = new Date();
-      const periodStart = new Date(periodEnd);
-      periodStart.setDate(periodStart.getDate() - 7);
+      // Standardized analytics period - Dec 15-21, 2024
+      const periodStart = "2024-12-15";
+      const periodEnd = "2024-12-21";
 
       try {
         const { data, error } = await supabase.functions.invoke("sync-meta", {
@@ -354,8 +354,8 @@ export const BulkMetaPageAssignment = () => {
             platform: status.platform,
             accessToken,
             accountExternalId: externalId,
-            periodStart: periodStart.toISOString().split("T")[0],
-            periodEnd: periodEnd.toISOString().split("T")[0],
+            periodStart,
+            periodEnd,
           },
         });
 

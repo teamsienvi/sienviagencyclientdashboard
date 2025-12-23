@@ -150,17 +150,17 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
     setSyncing(true);
     try {
-      const today = new Date();
-      const lastWeek = new Date(today);
-      lastWeek.setDate(lastWeek.getDate() - 7);
+      // Standardized analytics period - Dec 15-21, 2024
+      const periodStart = "2024-12-15";
+      const periodEnd = "2024-12-21";
 
       const { data, error } = await supabase.functions.invoke("sync-x", {
         body: {
           clientId,
           accountId: socialAccount.id,
           accountExternalId: socialAccount.account_id,
-          periodStart: lastWeek.toISOString().split("T")[0],
-          periodEnd: today.toISOString().split("T")[0],
+          periodStart,
+          periodEnd,
         },
       });
 
