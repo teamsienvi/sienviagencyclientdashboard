@@ -5,16 +5,16 @@
 
 export const ANALYTICS_PERIOD = {
   // Current week
-  start: '2024-12-15',
-  end: '2024-12-21',
-  startDate: new Date('2024-12-15'),
-  endDate: new Date('2024-12-21'),
+  start: '2025-12-15',
+  end: '2025-12-21',
+  startDate: new Date('2025-12-15'),
+  endDate: new Date('2025-12-21'),
   
   // Previous week for comparison
-  prevStart: '2024-12-08',
-  prevEnd: '2024-12-14',
-  prevStartDate: new Date('2024-12-08'),
-  prevEndDate: new Date('2024-12-14'),
+  prevStart: '2025-12-08',
+  prevEnd: '2025-12-14',
+  prevStartDate: new Date('2025-12-08'),
+  prevEndDate: new Date('2025-12-14'),
 };
 
 export const getStandardPeriod = () => ({
