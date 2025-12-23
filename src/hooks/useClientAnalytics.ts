@@ -2,12 +2,34 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { subDays, format } from "date-fns";
 
+export interface TrafficSource {
+  source: string;
+  visitors: number;
+  percentage: number;
+}
+
+export interface DeviceBreakdown {
+  device: string;
+  visitors: number;
+  percentage: number;
+}
+
+export interface DailyBreakdown {
+  date: string;
+  visitors: number;
+  pageViews: number;
+}
+
 export interface AnalyticsData {
   visitors: number;
   pageViews: number;
   avgDuration: number;
   bounceRate: number;
   pagesPerVisit: number;
+  totalSessions?: number;
+  trafficSources?: TrafficSource[];
+  deviceBreakdown?: DeviceBreakdown[];
+  dailyBreakdown?: DailyBreakdown[];
 }
 
 export interface ClientAnalyticsResponse {
