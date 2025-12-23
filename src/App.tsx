@@ -29,6 +29,7 @@ import OxiSureTechDec1to7 from "./pages/OxiSureTechDec1to7";
 import OxiSureTechDec15to21 from "./pages/OxiSureTechDec15to21";
 import TheHavenAtDeerParkNov24to30 from "./pages/TheHavenAtDeerParkNov24to30";
 import TheHavenAtDeerParkDec1to7 from "./pages/TheHavenAtDeerParkDec1to7";
+import TheHavenAtDeerParkDec15to21 from "./pages/TheHavenAtDeerParkDec15to21";
 import BsueBrowLashDec1to7 from "./pages/BsueBrowLashDec1to7";
 import MetaOAuthCallback from "./pages/MetaOAuthCallback";
 
@@ -66,6 +67,7 @@ const App = () => (
           <Route path="/oxisure-tech-dec15-21" element={<OxiSureTechDec15to21 />} />
           <Route path="/the-haven-at-deer-park-nov24-30" element={<TheHavenAtDeerParkNov24to30 />} />
           <Route path="/the-haven-at-deer-park-dec1-7" element={<TheHavenAtDeerParkDec1to7 />} />
+          <Route path="/the-haven-at-deer-park-dec15-21" element={<TheHavenAtDeerParkDec15to21 />} />
           <Route path="/bsue-brow-lash-dec1-7" element={<BsueBrowLashDec1to7 />} />
           <Route path="/oauth/meta/callback" element={<MetaOAuthCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
