@@ -6,9 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Standard analytics period - Dec 15-21, 2024
-const PERIOD_START = "2024-12-15";
-const PERIOD_END = "2024-12-21";
+// Standard analytics periods - syncs both current and previous week for comparisons
+const CURRENT_PERIOD = { start: "2024-12-15", end: "2024-12-21" };
+const PREVIOUS_PERIOD = { start: "2024-12-08", end: "2024-12-14" };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -20,13 +20,49 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   console.log("Starting scheduled sync for all platforms...");
-  console.log(`Period: ${PERIOD_START} to ${PERIOD_END}`);
+  console.log(`Current Period: ${CURRENT_PERIOD.start} to ${CURRENT_PERIOD.end}`);
+  console.log(`Previous Period: ${PREVIOUS_PERIOD.start} to ${PREVIOUS_PERIOD.end}`);
 
   const results = {
     youtube: { success: 0, failed: 0, errors: [] as string[] },
     x: { success: 0, failed: 0, errors: [] as string[] },
     instagram: { success: 0, failed: 0, errors: [] as string[] },
     facebook: { success: 0, failed: 0, errors: [] as string[] },
+  };
+
+  // Helper to sync a platform for both periods
+  const syncBothPeriods = async (
+    syncFn: (periodStart: string, periodEnd: string) => Promise<{ success: boolean; recordsSynced?: number; error?: string }>,
+    platformKey: keyof typeof results,
+    accountName: string
+  ) => {
+    // Sync current period
+    try {
+      const currentResult = await syncFn(CURRENT_PERIOD.start, CURRENT_PERIOD.end);
+      if (currentResult.success) {
+        console.log(`  ✓ Current period: ${currentResult.recordsSynced || 0} records`);
+      } else {
+        throw new Error(currentResult.error || "Unknown error");
+      }
+    } catch (err: any) {
+      console.error(`  ✗ Current period failed: ${err.message}`);
+      results[platformKey].errors.push(`${accountName} (current): ${err.message}`);
+    }
+
+    // Sync previous period for comparison
+    try {
+      const prevResult = await syncFn(PREVIOUS_PERIOD.start, PREVIOUS_PERIOD.end);
+      if (prevResult.success) {
+        results[platformKey].success++;
+        console.log(`  ✓ Previous period: ${prevResult.recordsSynced || 0} records`);
+      } else {
+        throw new Error(prevResult.error || "Unknown error");
+      }
+    } catch (err: any) {
+      results[platformKey].failed++;
+      console.error(`  ✗ Previous period failed: ${err.message}`);
+      results[platformKey].errors.push(`${accountName} (previous): ${err.message}`);
+    }
   };
 
   try {
@@ -39,32 +75,26 @@ serve(async (req) => {
       .eq("is_active", true);
 
     for (const account of youtubeAccounts || []) {
-      try {
-        console.log(`Syncing YouTube for client ${account.client_id}: ${account.account_name || account.account_id}`);
-        
-        const { data, error } = await supabase.functions.invoke("sync-youtube", {
-          body: {
-            clientId: account.client_id,
-            accountId: account.id,
-            channelHandle: account.account_id,
-            periodStart: PERIOD_START,
-            periodEnd: PERIOD_END,
-          },
-        });
-
-        if (error) throw error;
-        if (data?.success) {
-          results.youtube.success++;
-          console.log(`  ✓ Synced ${data.recordsSynced || 0} videos`);
-        } else {
-          throw new Error(data?.error || "Unknown error");
-        }
-      } catch (err: any) {
-        results.youtube.failed++;
-        results.youtube.errors.push(`${account.account_id}: ${err.message}`);
-        console.error(`  ✗ Failed: ${err.message}`);
-      }
-      // Small delay to avoid rate limiting
+      const accountName = account.account_name || account.account_id;
+      console.log(`Syncing YouTube for client ${account.client_id}: ${accountName}`);
+      
+      await syncBothPeriods(
+        async (periodStart, periodEnd) => {
+          const { data, error } = await supabase.functions.invoke("sync-youtube", {
+            body: {
+              clientId: account.client_id,
+              accountId: account.id,
+              channelHandle: account.account_id,
+              periodStart,
+              periodEnd,
+            },
+          });
+          if (error) throw error;
+          return data;
+        },
+        "youtube",
+        accountName
+      );
       await new Promise(r => setTimeout(r, 500));
     }
 
@@ -77,31 +107,26 @@ serve(async (req) => {
       .eq("is_active", true);
 
     for (const account of xAccounts || []) {
-      try {
-        console.log(`Syncing X for client ${account.client_id}: ${account.account_name || account.account_id}`);
-        
-        const { data, error } = await supabase.functions.invoke("sync-x", {
-          body: {
-            clientId: account.client_id,
-            accountId: account.id,
-            accountExternalId: account.account_id,
-            periodStart: PERIOD_START,
-            periodEnd: PERIOD_END,
-          },
-        });
-
-        if (error) throw error;
-        if (data?.success) {
-          results.x.success++;
-          console.log(`  ✓ Synced ${data.recordsSynced || 0} posts`);
-        } else {
-          throw new Error(data?.error || "Unknown error");
-        }
-      } catch (err: any) {
-        results.x.failed++;
-        results.x.errors.push(`${account.account_id}: ${err.message}`);
-        console.error(`  ✗ Failed: ${err.message}`);
-      }
+      const accountName = account.account_name || account.account_id;
+      console.log(`Syncing X for client ${account.client_id}: ${accountName}`);
+      
+      await syncBothPeriods(
+        async (periodStart, periodEnd) => {
+          const { data, error } = await supabase.functions.invoke("sync-x", {
+            body: {
+              clientId: account.client_id,
+              accountId: account.id,
+              accountExternalId: account.account_id,
+              periodStart,
+              periodEnd,
+            },
+          });
+          if (error) throw error;
+          return data;
+        },
+        "x",
+        accountName
+      );
       await new Promise(r => setTimeout(r, 500));
     }
 
@@ -115,12 +140,11 @@ serve(async (req) => {
       `)
       .eq("is_active", true);
 
-    // Get social account IDs for Meta platforms
     const metaClientIds = (metaOauthAccounts || []).map(a => a.client_id);
     const { data: metaSocialAccounts } = await supabase
       .from("social_accounts")
       .select("id, client_id, platform")
-      .in("client_id", metaClientIds)
+      .in("client_id", metaClientIds.length > 0 ? metaClientIds : ["none"])
       .in("platform", ["instagram", "facebook"])
       .eq("is_active", true);
 
@@ -133,33 +157,26 @@ serve(async (req) => {
           sa => sa.client_id === oauthAccount.client_id && sa.platform === "instagram"
         );
         
-        try {
-          console.log(`Syncing Instagram for ${clientName}`);
-          
-          const { data, error } = await supabase.functions.invoke("sync-meta", {
-            body: {
-              clientId: oauthAccount.client_id,
-              accountId: igSocialAccount?.id,
-              platform: "instagram",
-              accessToken: oauthAccount.access_token,
-              accountExternalId: oauthAccount.instagram_business_id,
-              periodStart: PERIOD_START,
-              periodEnd: PERIOD_END,
-            },
-          });
-
-          if (error) throw error;
-          if (data?.success) {
-            results.instagram.success++;
-            console.log(`  ✓ Synced ${data.recordsSynced || 0} posts`);
-          } else {
-            throw new Error(data?.error || "Unknown error");
-          }
-        } catch (err: any) {
-          results.instagram.failed++;
-          results.instagram.errors.push(`${clientName}: ${err.message}`);
-          console.error(`  ✗ Failed: ${err.message}`);
-        }
+        console.log(`Syncing Instagram for ${clientName}`);
+        await syncBothPeriods(
+          async (periodStart, periodEnd) => {
+            const { data, error } = await supabase.functions.invoke("sync-meta", {
+              body: {
+                clientId: oauthAccount.client_id,
+                accountId: igSocialAccount?.id,
+                platform: "instagram",
+                accessToken: oauthAccount.access_token,
+                accountExternalId: oauthAccount.instagram_business_id,
+                periodStart,
+                periodEnd,
+              },
+            });
+            if (error) throw error;
+            return data;
+          },
+          "instagram",
+          clientName
+        );
         await new Promise(r => setTimeout(r, 500));
       }
 
@@ -169,33 +186,26 @@ serve(async (req) => {
           sa => sa.client_id === oauthAccount.client_id && sa.platform === "facebook"
         );
         
-        try {
-          console.log(`Syncing Facebook for ${clientName}`);
-          
-          const { data, error } = await supabase.functions.invoke("sync-meta", {
-            body: {
-              clientId: oauthAccount.client_id,
-              accountId: fbSocialAccount?.id,
-              platform: "facebook",
-              accessToken: oauthAccount.access_token,
-              accountExternalId: oauthAccount.page_id,
-              periodStart: PERIOD_START,
-              periodEnd: PERIOD_END,
-            },
-          });
-
-          if (error) throw error;
-          if (data?.success) {
-            results.facebook.success++;
-            console.log(`  ✓ Synced ${data.recordsSynced || 0} posts`);
-          } else {
-            throw new Error(data?.error || "Unknown error");
-          }
-        } catch (err: any) {
-          results.facebook.failed++;
-          results.facebook.errors.push(`${clientName}: ${err.message}`);
-          console.error(`  ✗ Failed: ${err.message}`);
-        }
+        console.log(`Syncing Facebook for ${clientName}`);
+        await syncBothPeriods(
+          async (periodStart, periodEnd) => {
+            const { data, error } = await supabase.functions.invoke("sync-meta", {
+              body: {
+                clientId: oauthAccount.client_id,
+                accountId: fbSocialAccount?.id,
+                platform: "facebook",
+                accessToken: oauthAccount.access_token,
+                accountExternalId: oauthAccount.page_id,
+                periodStart,
+                periodEnd,
+              },
+            });
+            if (error) throw error;
+            return data;
+          },
+          "facebook",
+          clientName
+        );
         await new Promise(r => setTimeout(r, 500));
       }
     }
@@ -206,7 +216,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        period: { start: PERIOD_START, end: PERIOD_END },
+        periods: {
+          current: CURRENT_PERIOD,
+          previous: PREVIOUS_PERIOD,
+        },
         results,
         timestamp: new Date().toISOString(),
       }),

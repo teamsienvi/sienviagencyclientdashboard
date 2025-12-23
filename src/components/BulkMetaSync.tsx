@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { RefreshCw, CheckCircle2, XCircle, Clock, Play } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
 
 interface SyncStatus {
   clientId: string;
@@ -117,28 +118,34 @@ export const BulkMetaSync = () => {
 
     if (!externalId) return { success: false, message: "No account ID found" };
 
-    // Standardized analytics period - Dec 15-21, 2024
-    const periodStart = "2024-12-15";
-    const periodEnd = "2024-12-21";
+    // Sync both current and previous periods for comparison
+    const periods = [
+      { start: ANALYTICS_PERIOD.start, end: ANALYTICS_PERIOD.end },
+      { start: ANALYTICS_PERIOD.prevStart, end: ANALYTICS_PERIOD.prevEnd },
+    ];
 
     try {
-      const { data, error } = await supabase.functions.invoke("sync-meta", {
-        body: {
-          clientId: client.clientId,
-          accountId,
-          platform,
-          accessToken: client.accessToken,
-          accountExternalId: externalId,
-          periodStart,
-          periodEnd,
-        },
-      });
+      let totalRecords = 0;
+      for (const period of periods) {
+        const { data, error } = await supabase.functions.invoke("sync-meta", {
+          body: {
+            clientId: client.clientId,
+            accountId,
+            platform,
+            accessToken: client.accessToken,
+            accountExternalId: externalId,
+            periodStart: period.start,
+            periodEnd: period.end,
+          },
+        });
 
-      if (error) throw error;
+        if (error) throw error;
+        totalRecords += data?.recordsSynced || 0;
+      }
 
       return { 
         success: true, 
-        message: `Synced ${data?.recordsSynced || 0} records` 
+        message: `Synced ${totalRecords} records (2 weeks)` 
       };
     } catch (error: any) {
       console.error(`Sync error for ${client.clientName} ${platform}:`, error);

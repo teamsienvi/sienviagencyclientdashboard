@@ -37,6 +37,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, subDays, subMonths, parseISO, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
 
 interface YouTubeStats {
   followers: number;
@@ -319,12 +320,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
       // Check for connected YouTube account first
       if (accounts && accounts.length > 0) {
-        // account_id stores the actual YouTube handle (e.g., @CissiePryorPresents)
-        // account_name is just the display name
         channelHandle = accounts[0].account_id;
         accountId = accounts[0].id;
       } else if (propChannelHandle) {
-        // Use the channel handle passed as prop
         channelHandle = propChannelHandle;
       } else {
         toast.error("No YouTube channel connected. Please add a YouTube account in the admin settings.");
@@ -332,28 +330,34 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         return;
       }
 
-      // Standardized analytics period - Dec 15-21, 2024
-      const periodStart = "2024-12-15";
-      const periodEnd = "2024-12-21";
+      // Sync both current and previous periods for comparison
+      const periods = [
+        { start: ANALYTICS_PERIOD.start, end: ANALYTICS_PERIOD.end },
+        { start: ANALYTICS_PERIOD.prevStart, end: ANALYTICS_PERIOD.prevEnd },
+      ];
 
-      const { data, error } = await supabase.functions.invoke("sync-youtube", {
-        body: {
-          clientId,
-          accountId,
-          channelHandle,
-          periodStart,
-          periodEnd,
-        },
-      });
+      let totalSynced = 0;
+      for (const period of periods) {
+        const { data, error } = await supabase.functions.invoke("sync-youtube", {
+          body: {
+            clientId,
+            accountId,
+            channelHandle,
+            periodStart: period.start,
+            periodEnd: period.end,
+          },
+        });
 
-      if (error) throw error;
-
-      if (data?.success) {
-        toast.success(`Synced ${data.recordsSynced || 0} videos`);
-        await fetchYouTubeData();
-      } else {
-        throw new Error(data?.error || "Sync failed");
+        if (error) throw error;
+        if (data?.success) {
+          totalSynced += data.recordsSynced || 0;
+        } else {
+          throw new Error(data?.error || "Sync failed");
+        }
       }
+
+      toast.success(`Synced ${totalSynced} videos (current + previous week)`);
+      await fetchYouTubeData();
     } catch (error: any) {
       console.error("YouTube sync error:", error);
       toast.error(error.message || "Failed to sync");
