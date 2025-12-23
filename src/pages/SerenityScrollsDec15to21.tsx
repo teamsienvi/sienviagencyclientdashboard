@@ -1,463 +1,578 @@
+import { useState } from "react";
+import { Header } from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, TrendingUp, Users, Eye, Award, ExternalLink, Play, ThumbsUp, MessageCircle, Share2, Bookmark } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from "recharts";
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Activity, Search, Download, TrendingUp, TrendingDown, ExternalLink, Info, ArrowLeft } from "lucide-react";
+import { Link } from "react-router-dom";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 
-// Serenity Scrolls logo
-import serenityScrollsLogo from "@/assets/serenity-scrolls-logo.jpg";
+// TypeScript Interfaces
+interface TopPerformingPost {
+  link: string;
+  views: number;
+  engagementPercent: number;
+  platform: string;
+  followers: number;
+  reachTier: string;
+  engagementTier: string;
+  influence: number;
+  conversion: number;
+  totalScore: number;
+  postTier: string;
+  notes: string;
+}
+
+interface TikTokContent {
+  type: string;
+  date: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  addToFavorites: number;
+}
+
+interface XContent {
+  date: string;
+  impressions: number;
+  engagement: number;
+  profileVisits: number;
+  linkClicks: number;
+}
+
+interface PlatformData {
+  followers: number;
+  addedFollowers: number;
+  engagementRate: number | null;
+  lastWeekEngagementRate: number | null;
+  totalContent: number | null;
+  lastWeekTotalContent: number | null;
+}
+
+// Data from CSV - Dec 15-21
+const topPerformingPosts: TopPerformingPost[] = [
+  {
+    link: "https://www.tiktok.com/@serenity_scrolls/video/7584513030432623886",
+    views: 338,
+    engagementPercent: 10.70,
+    platform: "TikTok",
+    followers: 262,
+    reachTier: "Tier 5",
+    engagementTier: "Tier 1",
+    influence: 5,
+    conversion: 5,
+    totalScore: 58,
+    postTier: "3 (Growth)",
+    notes: "Excellent engagement density for its size; strong audience resonance despite modest reach."
+  },
+  {
+    link: "https://www.tiktok.com/@serenity_scrolls/video/7584513066029632781",
+    views: 335,
+    engagementPercent: 19.40,
+    platform: "TikTok",
+    followers: 262,
+    reachTier: "Tier 5",
+    engagementTier: "Tier 1",
+    influence: 3,
+    conversion: 3,
+    totalScore: 61,
+    postTier: "3 (Growth)",
+    notes: "Standout engagement efficiency—this format clearly triggers interaction and should be scaled."
+  },
+  {
+    link: "https://www.tiktok.com/@serenity_scrolls/video/7584161701583424781",
+    views: 330,
+    engagementPercent: 46.70,
+    platform: "TikTok",
+    followers: 262,
+    reachTier: "Tier 5",
+    engagementTier: "Tier 1",
+    influence: 3,
+    conversion: 3,
+    totalScore: 70,
+    postTier: "Tier 2 (Influence)",
+    notes: "Exceptional interaction and saves signal high intent; this is a breakout post relative to reach."
+  }
+];
+
+// Instagram Data
+const instagramData: PlatformData = {
+  followers: 49,
+  addedFollowers: 1,
+  engagementRate: null,
+  lastWeekEngagementRate: 19.64,
+  totalContent: 21,
+  lastWeekTotalContent: 19
+};
+
+// Facebook Data
+const facebookData: PlatformData = {
+  followers: 26,
+  addedFollowers: 1,
+  engagementRate: 59.21,
+  lastWeekEngagementRate: 56.00,
+  totalContent: 21,
+  lastWeekTotalContent: 20
+};
+
+// TikTok Data
+const tiktokData: PlatformData = {
+  followers: 262,
+  addedFollowers: 35,
+  engagementRate: 19.61,
+  lastWeekEngagementRate: 27.11,
+  totalContent: null,
+  lastWeekTotalContent: 17
+};
+
+const tiktokContent: TikTokContent[] = [
+  { type: "Video", date: "Sunday, Dec 21", views: 233, likes: 22, comments: 3, shares: 0, addToFavorites: 4 },
+  { type: "Video", date: "Sunday, Dec 21", views: 180, likes: 24, comments: 6, shares: 0, addToFavorites: 7 },
+  { type: "Video", date: "Sunday, Dec 21", views: 180, likes: 3, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Sunday, Dec 21", views: 280, likes: 50, comments: 9, shares: 0, addToFavorites: 8 },
+  { type: "Video", date: "Sunday, Dec 21", views: 115, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Saturday, Dec 20", views: 195, likes: 19, comments: 8, shares: 0, addToFavorites: 3 },
+  { type: "Video", date: "Saturday, Dec 20", views: 130, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Saturday, Dec 20", views: 269, likes: 53, comments: 23, shares: 34, addToFavorites: 19 },
+  { type: "Video", date: "Saturday, Dec 20", views: 111, likes: 10, comments: 0, shares: 0, addToFavorites: 1 },
+  { type: "Video", date: "Thursday, Dec 18", views: 317, likes: 34, comments: 3, shares: 4, addToFavorites: 5 },
+  { type: "Video", date: "Thursday, Dec 18", views: 110, likes: 1, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Thursday, Dec 18", views: 216, likes: 18, comments: 1, shares: 7, addToFavorites: 3 },
+  { type: "Video", date: "Wednesday, Dec 17", views: 202, likes: 19, comments: 1, shares: 0, addToFavorites: 3 },
+  { type: "Video", date: "Wednesday, Dec 17", views: 319, likes: 37, comments: 6, shares: 15, addToFavorites: 4 },
+  { type: "Video", date: "Wednesday, Dec 17", views: 118, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Tuesday, Dec 16", views: 89, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Tuesday, Dec 16", views: 335, likes: 44, comments: 9, shares: 8, addToFavorites: 4 },
+  { type: "Video", date: "Tuesday, Dec 16", views: 338, likes: 32, comments: 2, shares: 0, addToFavorites: 2 },
+  { type: "Video", date: "Monday, Dec 15", views: 330, likes: 91, comments: 43, shares: 4, addToFavorites: 16 },
+  { type: "Video", date: "Monday, Dec 15", views: 198, likes: 19, comments: 7, shares: 1, addToFavorites: 2 },
+  { type: "Video", date: "Monday, Dec 15", views: 96, likes: 0, comments: 0, shares: 0, addToFavorites: 0 },
+  { type: "Video", date: "Monday, Dec 15", views: 210, likes: 41, comments: 7, shares: 0, addToFavorites: 6 }
+];
+
+// X Data
+const xData: PlatformData = {
+  followers: 10,
+  addedFollowers: 0,
+  engagementRate: null,
+  lastWeekEngagementRate: 54.00,
+  totalContent: null,
+  lastWeekTotalContent: 16
+};
+
+const xContent: XContent[] = [];
+
+// Chart Data
+const chartData = [
+  { platform: "Instagram", followers: 49, views: 759, interactions: 76 },
+  { platform: "Facebook", followers: 26, views: 137, interactions: 90 },
+  { platform: "TikTok", followers: 262, views: 3258, interactions: 639 },
+  { platform: "X", followers: 10, views: 0, interactions: 0 }
+];
 
 const SerenityScrollsDec15to21 = () => {
-  // Top performing posts data
-  const topPosts = [
-    {
-      link: "https://www.tiktok.com/@serenity_scrolls/video/7584513030432623886",
-      views: 338,
-      engagementPercent: 10.70,
-      platform: "TikTok",
-      followers: 262,
-      reachTier: "Tier 5",
-      engagementTier: "Tier 1",
-      influence: 5,
-      conversion: 5,
-      totalScore: 58,
-      postTier: "3 (Growth)",
-    },
-    {
-      link: "https://www.tiktok.com/@serenity_scrolls/video/7584513066029632781",
-      views: 335,
-      engagementPercent: 19.40,
-      platform: "TikTok",
-      followers: 262,
-      reachTier: "Tier 5",
-      engagementTier: "Tier 1",
-      influence: 3,
-      conversion: 3,
-      totalScore: 61,
-      postTier: "3 (Growth)",
-    },
-    {
-      link: "https://www.tiktok.com/@serenity_scrolls/video/7584161701583424781",
-      views: 330,
-      engagementPercent: 46.70,
-      platform: "TikTok",
-      followers: 262,
-      reachTier: "Tier 5",
-      engagementTier: "Tier 1",
-      influence: 3,
-      conversion: 3,
-      totalScore: 70,
-      postTier: "Tier 2 (Influence)",
-    },
-  ];
+  const [topPostsSearch, setTopPostsSearch] = useState("");
+  const [contentSearch, setContentSearch] = useState("");
 
-  // Platform performance overview data
-  const platformData = [
-    {
-      platform: "Instagram",
-      followers: 49,
-      newFollowers: 1,
-      totalContent: 21,
-      lastWeekContent: 19,
-      engagementRate: null,
-      lastWeekEngagement: 19.64,
-    },
-    {
-      platform: "Facebook",
-      followers: 26,
-      newFollowers: 1,
-      totalContent: 21,
-      lastWeekContent: 20,
-      engagementRate: 59.21,
-      lastWeekEngagement: 56.00,
-    },
-    {
-      platform: "TikTok",
-      followers: 262,
-      newFollowers: 35,
-      totalContent: null,
-      lastWeekContent: 17,
-      engagementRate: 19.61,
-      lastWeekEngagement: 27.11,
-    },
-    {
-      platform: "X",
-      followers: 10,
-      newFollowers: 0,
-      totalContent: null,
-      lastWeekContent: 16,
-      engagementRate: null,
-      lastWeekEngagement: 54.00,
-    },
-  ];
-
-  // Chart data for platform comparison
-  const chartData = [
-    { name: "Instagram", followers: 49, engagement: 0, fill: "#E4405F" },
-    { name: "Facebook", followers: 26, engagement: 59.21, fill: "#1877F2" },
-    { name: "TikTok", followers: 262, engagement: 19.61, fill: "#000000" },
-    { name: "X", followers: 10, engagement: 0, fill: "#1DA1F2" },
-  ];
-
-  // TikTok content data
-  interface TikTokContent {
-    date: string;
-    views: number;
-    likes: number;
-    comments: number;
-    shares: number;
-    bookmarks: number;
-  }
-
-  const tiktokContent: TikTokContent[] = [
-    { date: "Sunday, December 21, 2025", views: 233, likes: 22, comments: 3, shares: 0, bookmarks: 4 },
-    { date: "Sunday, December 21, 2025", views: 180, likes: 24, comments: 6, shares: 0, bookmarks: 7 },
-    { date: "Sunday, December 21, 2025", views: 180, likes: 3, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Sunday, December 21, 2025", views: 280, likes: 50, comments: 9, shares: 0, bookmarks: 8 },
-    { date: "Sunday, December 21, 2025", views: 115, likes: 0, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Saturday, December 20, 2025", views: 195, likes: 19, comments: 8, shares: 0, bookmarks: 3 },
-    { date: "Saturday, December 20, 2025", views: 130, likes: 0, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Saturday, December 20, 2025", views: 269, likes: 53, comments: 23, shares: 34, bookmarks: 19 },
-    { date: "Saturday, December 20, 2025", views: 111, likes: 10, comments: 0, shares: 0, bookmarks: 1 },
-    { date: "Thursday, December 18, 2025", views: 317, likes: 34, comments: 3, shares: 4, bookmarks: 5 },
-    { date: "Thursday, December 18, 2025", views: 110, likes: 1, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Thursday, December 18, 2025", views: 216, likes: 18, comments: 1, shares: 7, bookmarks: 3 },
-    { date: "Wednesday, December 17, 2025", views: 202, likes: 19, comments: 1, shares: 0, bookmarks: 3 },
-    { date: "Wednesday, December 17, 2025", views: 319, likes: 37, comments: 6, shares: 15, bookmarks: 4 },
-    { date: "Wednesday, December 17, 2025", views: 118, likes: 0, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Tuesday, December 16, 2025", views: 89, likes: 0, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Tuesday, December 16, 2025", views: 335, likes: 44, comments: 9, shares: 8, bookmarks: 4 },
-    { date: "Tuesday, December 16, 2025", views: 338, likes: 32, comments: 2, shares: 0, bookmarks: 2 },
-    { date: "Monday, December 15, 2025", views: 330, likes: 91, comments: 43, shares: 4, bookmarks: 16 },
-    { date: "Monday, December 15, 2025", views: 198, likes: 19, comments: 7, shares: 1, bookmarks: 2 },
-    { date: "Monday, December 15, 2025", views: 96, likes: 0, comments: 0, shares: 0, bookmarks: 0 },
-    { date: "Monday, December 15, 2025", views: 210, likes: 41, comments: 7, shares: 0, bookmarks: 6 },
-  ];
-
-  // X content data (no data for this week)
-  interface XContent {
-    date: string;
-    impressions: number;
-    engagement: number;
-    profileVisits: number;
-    linkClicks: number;
-  }
-
-  const xContent: XContent[] = [];
-
-  // Calculate TikTok totals
-  const tiktokTotals = tiktokContent.reduce(
-    (acc, item) => ({
-      views: acc.views + item.views,
-      likes: acc.likes + item.likes,
-      comments: acc.comments + item.comments,
-      shares: acc.shares + item.shares,
-      bookmarks: acc.bookmarks + item.bookmarks,
-    }),
-    { views: 0, likes: 0, comments: 0, shares: 0, bookmarks: 0 }
+  const filteredTopPosts = topPerformingPosts.filter(post =>
+    post.platform.toLowerCase().includes(topPostsSearch.toLowerCase()) ||
+    post.notes.toLowerCase().includes(topPostsSearch.toLowerCase())
   );
 
-  const getPlatformColor = (platform: string) => {
-    const colors: Record<string, string> = {
-      TikTok: "bg-black text-white",
-      Instagram: "bg-gradient-to-r from-purple-500 to-pink-500 text-white",
-      Facebook: "bg-blue-600 text-white",
-      X: "bg-black text-white",
-    };
-    return colors[platform] || "bg-gray-500 text-white";
+  const exportTopPostsCSV = () => {
+    const headers = ["Link", "Views", "Engagement %", "Platform", "Followers", "Reach Tier", "Engagement Tier", "Influence", "Conversion", "Total Score", "Post Tier", "Notes"];
+    const rows = topPerformingPosts.map(post => [
+      post.link, post.views, post.engagementPercent, post.platform, post.followers,
+      post.reachTier, post.engagementTier, post.influence, post.conversion,
+      post.totalScore, post.postTier, post.notes
+    ]);
+    const csv = [headers, ...rows].map(row => row.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "serenity_scrolls_top_posts_dec15-21.csv";
+    a.click();
   };
 
-  const getTierColor = (tier: string) => {
-    if (tier.includes("1") || tier.includes("Influence")) return "bg-yellow-500 text-black";
-    if (tier.includes("2")) return "bg-gray-400 text-black";
-    if (tier.includes("3") || tier.includes("Growth")) return "bg-amber-600 text-white";
-    return "bg-gray-500 text-white";
+  const TrendIndicator = ({ current, previous }: { current: number; previous: number }) => {
+    if (current > previous) {
+      return <TrendingUp className="h-4 w-4 text-green-500" />;
+    } else if (current < previous) {
+      return <TrendingDown className="h-4 w-4 text-red-500" />;
+    }
+    return null;
   };
 
-  const MetricCard = ({ title, value, icon: Icon, subtitle }: { title: string; value: string | number; icon: React.ElementType; subtitle?: string }) => (
+  const MetricCard = ({ 
+    title, 
+    value, 
+    added, 
+    lastWeek, 
+    showTrend = false,
+    currentValue,
+    previousValue 
+  }: { 
+    title: string; 
+    value: string | number; 
+    added?: number; 
+    lastWeek?: string;
+    showTrend?: boolean;
+    currentValue?: number;
+    previousValue?: number;
+  }) => (
     <Card className="bg-card border-border">
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold text-foreground">{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
-          </div>
-          <Icon className="h-8 w-8 text-primary opacity-80" />
+      <CardContent className="p-6">
+        <p className="text-sm text-muted-foreground mb-1">{title}</p>
+        <div className="flex items-center gap-2">
+          <span className="text-3xl font-heading font-bold text-foreground">{value}</span>
+          {added !== undefined && added > 0 && (
+            <span className="text-sm text-green-500 font-medium">+{added}</span>
+          )}
+          {showTrend && currentValue !== undefined && previousValue !== undefined && (
+            <TrendIndicator current={currentValue} previous={previousValue} />
+          )}
         </div>
+        {lastWeek && (
+          <p className="text-xs text-muted-foreground mt-1">Last week: {lastWeek}</p>
+        )}
       </CardContent>
     </Card>
   );
 
-  const renderTikTokTable = () => (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="text-left p-3 text-muted-foreground">Date</th>
-            <th className="text-right p-3 text-muted-foreground">Views</th>
-            <th className="text-right p-3 text-muted-foreground">Likes</th>
-            <th className="text-right p-3 text-muted-foreground">Comments</th>
-            <th className="text-right p-3 text-muted-foreground">Shares</th>
-            <th className="text-right p-3 text-muted-foreground">Bookmarks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tiktokContent.map((item, idx) => (
-            <tr key={idx} className="border-b border-border hover:bg-muted/50">
-              <td className="p-3 text-foreground">{item.date}</td>
-              <td className="p-3 text-right text-foreground">{item.views.toLocaleString()}</td>
-              <td className="p-3 text-right text-foreground">{item.likes.toLocaleString()}</td>
-              <td className="p-3 text-right text-foreground">{item.comments.toLocaleString()}</td>
-              <td className="p-3 text-right text-foreground">{item.shares.toLocaleString()}</td>
-              <td className="p-3 text-right text-foreground">{item.bookmarks.toLocaleString()}</td>
-            </tr>
-          ))}
-          <tr className="bg-muted/30 font-semibold">
-            <td className="p-3 text-foreground">Total</td>
-            <td className="p-3 text-right text-foreground">{tiktokTotals.views.toLocaleString()}</td>
-            <td className="p-3 text-right text-foreground">{tiktokTotals.likes.toLocaleString()}</td>
-            <td className="p-3 text-right text-foreground">{tiktokTotals.comments.toLocaleString()}</td>
-            <td className="p-3 text-right text-foreground">{tiktokTotals.shares.toLocaleString()}</td>
-            <td className="p-3 text-right text-foreground">{tiktokTotals.bookmarks.toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
+  const renderTikTokTable = () => {
+    const filtered = tiktokContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
 
-  const renderXTable = () => (
-    <div className="overflow-x-auto">
-      {xContent.length === 0 ? (
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Add to Favorites</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.addToFavorites}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderXTable = () => {
+    if (xContent.length === 0) {
+      return (
         <div className="text-center py-8 text-muted-foreground">
           No X content data available for this period
         </div>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left p-3 text-muted-foreground">Date</th>
-              <th className="text-right p-3 text-muted-foreground">Impressions</th>
-              <th className="text-right p-3 text-muted-foreground">Engagement</th>
-              <th className="text-right p-3 text-muted-foreground">Profile Visits</th>
-              <th className="text-right p-3 text-muted-foreground">Link Clicks</th>
-            </tr>
-          </thead>
-          <tbody>
-            {xContent.map((item, idx) => (
-              <tr key={idx} className="border-b border-border hover:bg-muted/50">
-                <td className="p-3 text-foreground">{item.date}</td>
-                <td className="p-3 text-right text-foreground">{item.impressions.toLocaleString()}</td>
-                <td className="p-3 text-right text-foreground">{item.engagement.toLocaleString()}</td>
-                <td className="p-3 text-right text-foreground">{item.profileVisits.toLocaleString()}</td>
-                <td className="p-3 text-right text-foreground">{item.linkClicks.toLocaleString()}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
+      );
+    }
+
+    const filtered = xContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Impressions</TableHead>
+            <TableHead>Engagement</TableHead>
+            <TableHead>Profile Visits</TableHead>
+            <TableHead>Link Clicks</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.impressions.toLocaleString()}</TableCell>
+              <TableCell>{item.engagement}</TableCell>
+              <TableCell>{item.profileVisits}</TableCell>
+              <TableCell>{item.linkClicks}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="bg-card border-b border-border sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="h-6 w-6" />
-              </Link>
-              <img
-                src={serenityScrollsLogo}
-                alt="Serenity Scrolls Logo"
-                className="h-12 w-12 rounded-full object-cover"
-              />
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">Serenity Scrolls</h1>
-                <p className="text-muted-foreground">Weekly Performance Report</p>
-              </div>
-            </div>
-            <Badge variant="outline" className="text-lg px-4 py-2">
-              Dec 15 - 21, 2025
-            </Badge>
-          </div>
-        </div>
-      </header>
+      <Header />
+      
+      <main className="container mx-auto px-4 py-8">
+        {/* Back Button */}
+        <Link to="/" className="inline-flex items-center text-primary hover:text-primary/80 mb-6">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Dashboard
+        </Link>
 
-      <main className="container mx-auto px-4 py-8 space-y-8">
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-4xl font-heading font-bold text-foreground mb-2">
+            Serenity Scrolls
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Weekly Performance Insights: December 15-21, 2025
+          </p>
+        </div>
+
         {/* Top Performing Insights */}
-        <section>
-          <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Award className="h-5 w-5 text-primary" />
-            Top Performing Insights
-          </h2>
-          <div className="grid gap-4">
-            {topPosts.map((post, index) => (
-              <Card key={index} className="bg-card border-border hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge className={getPlatformColor(post.platform)}>{post.platform}</Badge>
-                        <Badge className={getTierColor(post.postTier)}>{post.postTier}</Badge>
-                        <Badge variant="outline">Score: {post.totalScore}</Badge>
-                      </div>
-                      <a
-                        href={post.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1 text-sm break-all"
-                      >
-                        <ExternalLink className="h-4 w-4 flex-shrink-0" />
-                        View Post
-                      </a>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                      <div>
-                        <p className="text-2xl font-bold text-foreground">{post.views.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">Views</p>
-                      </div>
-                      <div>
-                        <p className="text-2xl font-bold text-primary">{post.engagementPercent}%</p>
-                        <p className="text-xs text-muted-foreground">Engagement</p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold text-foreground">{post.reachTier}</p>
-                        <p className="text-xs text-muted-foreground">Reach Tier</p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold text-foreground">{post.engagementTier}</p>
-                        <p className="text-xs text-muted-foreground">Eng. Tier</p>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
+        <Card className="mb-8">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-xl font-heading">Top Performing Insights</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-sm">
+                    <p className="text-sm">
+                      <strong>Reach Tiers:</strong> Tier 1: 1M+, Tier 2: 500K-1M, Tier 3: 100K-500K, Tier 4: 50K-100K, Tier 5: &lt;50K<br/>
+                      <strong>Engagement Tiers:</strong> Tier 1: 8%+, Tier 2: 5-8%, Tier 3: 3-5%, Tier 4: 1-3%, Tier 5: &lt;1%
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search posts..."
+                  className="pl-10 w-64"
+                  value={topPostsSearch}
+                  onChange={(e) => setTopPostsSearch(e.target.value)}
+                />
+              </div>
+              <Button variant="outline" size="sm" onClick={exportTopPostsCSV}>
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Link</TableHead>
+                    <TableHead>Views</TableHead>
+                    <TableHead>Engagement %</TableHead>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Followers</TableHead>
+                    <TableHead>Reach Tier</TableHead>
+                    <TableHead>Engagement Tier</TableHead>
+                    <TableHead>Influence</TableHead>
+                    <TableHead>Conversion</TableHead>
+                    <TableHead>Total Score</TableHead>
+                    <TableHead>Post Tier</TableHead>
+                    <TableHead className="max-w-xs">Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTopPosts.map((post, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell>
+                        <a 
+                          href={post.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary/80 flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          View
+                        </a>
+                      </TableCell>
+                      <TableCell>{post.views.toLocaleString()}</TableCell>
+                      <TableCell>{post.engagementPercent}%</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{post.platform}</Badge>
+                      </TableCell>
+                      <TableCell>{post.followers.toLocaleString()}</TableCell>
+                      <TableCell>{post.reachTier}</TableCell>
+                      <TableCell>{post.engagementTier}</TableCell>
+                      <TableCell>{post.influence}</TableCell>
+                      <TableCell>{post.conversion}</TableCell>
+                      <TableCell className="font-bold">{post.totalScore}</TableCell>
+                      <TableCell>{post.postTier}</TableCell>
+                      <TableCell className="max-w-xs text-sm text-muted-foreground">{post.notes}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Platform Performance Overview */}
-        <section>
-          <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" />
-            Platform Performance Overview
-          </h2>
-          <div className="grid lg:grid-cols-2 gap-6">
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-foreground">Followers by Platform</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Bar dataKey="followers" radius={[4, 4, 0, 0]}>
-                      {chartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="text-xl font-heading flex items-center gap-2">
+              <Activity className="h-5 w-5 text-primary" />
+              Platform Performance Overview
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="platform" className="text-muted-foreground" />
+                <YAxis className="text-muted-foreground" />
+                <RechartsTooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                />
+                <Legend />
+                <Bar dataKey="followers" fill="hsl(var(--primary))" name="Followers" />
+                <Bar dataKey="views" fill="hsl(var(--chart-2))" name="Views" />
+                <Bar dataKey="interactions" fill="hsl(var(--chart-3))" name="Interactions" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
 
-            <Card className="bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-foreground">Platform Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {platformData.map((platform, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                      <div className="flex items-center gap-3">
-                        <Badge className={getPlatformColor(platform.platform)}>{platform.platform}</Badge>
-                        <div>
-                          <p className="font-semibold text-foreground">{platform.followers.toLocaleString()} followers</p>
-                          <p className="text-xs text-muted-foreground">
-                            {platform.newFollowers !== null && platform.newFollowers > 0 
-                              ? `+${platform.newFollowers} new` 
-                              : "No change"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-foreground">
-                          {platform.engagementRate !== null ? `${platform.engagementRate}%` : "N/A"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">Engagement</p>
-                      </div>
-                    </div>
-                  ))}
+        {/* Platform Content Performance - TikTok and X */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-xl font-heading">Platform Content Performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="tiktok" className="w-full">
+              <TabsList className="mb-4">
+                <TabsTrigger value="tiktok">TikTok</TabsTrigger>
+                <TabsTrigger value="x">X</TabsTrigger>
+              </TabsList>
+
+              {/* TikTok Tab */}
+              <TabsContent value="tiktok">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <MetricCard 
+                    title="Followers" 
+                    value={tiktokData.followers.toLocaleString()} 
+                    added={tiktokData.addedFollowers}
+                  />
+                  <MetricCard 
+                    title="Engagement Rate %" 
+                    value={tiktokData.engagementRate !== null ? `${tiktokData.engagementRate}%` : "N/A"}
+                    showTrend
+                    currentValue={tiktokData.engagementRate ?? 0}
+                    previousValue={tiktokData.lastWeekEngagementRate ?? 0}
+                    lastWeek={tiktokData.lastWeekEngagementRate !== null ? `${tiktokData.lastWeekEngagementRate}%` : undefined}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={tiktokData.totalContent ?? "N/A"}
+                    showTrend
+                    currentValue={tiktokData.totalContent ?? 0}
+                    previousValue={tiktokData.lastWeekTotalContent ?? 0}
+                    lastWeek={tiktokData.lastWeekTotalContent !== null ? `${tiktokData.lastWeekTotalContent}` : undefined}
+                  />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </section>
-
-        {/* Platform Content Performance */}
-        <section>
-          <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Eye className="h-5 w-5 text-primary" />
-            Platform Content Performance
-          </h2>
-          <Card className="bg-card border-border">
-            <CardContent className="p-6">
-              <Tabs defaultValue="tiktok" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-6">
-                  <TabsTrigger value="tiktok">TikTok</TabsTrigger>
-                  <TabsTrigger value="x">X</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="tiktok">
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-                      <MetricCard title="Total Views" value={tiktokTotals.views.toLocaleString()} icon={Eye} />
-                      <MetricCard title="Total Likes" value={tiktokTotals.likes.toLocaleString()} icon={ThumbsUp} />
-                      <MetricCard title="Total Comments" value={tiktokTotals.comments.toLocaleString()} icon={MessageCircle} />
-                      <MetricCard title="Total Shares" value={tiktokTotals.shares.toLocaleString()} icon={Share2} />
-                      <MetricCard title="Total Bookmarks" value={tiktokTotals.bookmarks.toLocaleString()} icon={Bookmark} />
-                    </div>
-                    {renderTikTokTable()}
+                
+                <div className="mb-4">
+                  <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search content..."
+                      className="pl-10"
+                      value={contentSearch}
+                      onChange={(e) => setContentSearch(e.target.value)}
+                    />
                   </div>
-                </TabsContent>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {renderTikTokTable()}
+                </div>
+              </TabsContent>
 
-                <TabsContent value="x">
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                      <MetricCard title="Total Impressions" value="0" icon={Eye} />
-                      <MetricCard title="Total Engagement" value="0" icon={ThumbsUp} />
-                      <MetricCard title="Profile Visits" value="0" icon={Users} />
-                      <MetricCard title="Link Clicks" value="0" icon={ExternalLink} />
-                    </div>
-                    {renderXTable()}
+              {/* X Tab */}
+              <TabsContent value="x">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <MetricCard 
+                    title="Followers" 
+                    value={xData.followers.toLocaleString()} 
+                    added={xData.addedFollowers}
+                  />
+                  <MetricCard 
+                    title="Engagement Rate %" 
+                    value={xData.engagementRate !== null ? `${xData.engagementRate}%` : "N/A"}
+                    showTrend
+                    currentValue={xData.engagementRate ?? 0}
+                    previousValue={xData.lastWeekEngagementRate ?? 0}
+                    lastWeek={xData.lastWeekEngagementRate !== null ? `${xData.lastWeekEngagementRate}%` : undefined}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={xData.totalContent ?? "N/A"}
+                    showTrend
+                    currentValue={xData.totalContent ?? 0}
+                    previousValue={xData.lastWeekTotalContent ?? 0}
+                    lastWeek={xData.lastWeekTotalContent !== null ? `${xData.lastWeekTotalContent}` : undefined}
+                  />
+                </div>
+                
+                <div className="mb-4">
+                  <div className="relative max-w-sm">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search content..."
+                      className="pl-10"
+                      value={contentSearch}
+                      onChange={(e) => setContentSearch(e.target.value)}
+                    />
                   </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </section>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  {renderXTable()}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
       </main>
     </div>
   );
