@@ -112,6 +112,7 @@ export const clientsData: Client[] = [
     reports: [
       { dateRange: "Dec 1-7", link: "/bsue-brow-lash-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/6c0042b9-f216-4fb1-85ff-31f744122837", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/bsue-brow-lash-dec15-21", isInternal: true },
     ],
   },
   {
