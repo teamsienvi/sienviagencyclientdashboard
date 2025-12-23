@@ -304,6 +304,38 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setFacebookSyncLog(facebookLog);
   };
 
+  // Helper to find metrics for a specific period range
+  const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
+    if (!metrics || metrics.length === 0) return null;
+    
+    // Sort by collected_at descending to get most recent first
+    const sorted = [...metrics].sort((a, b) => 
+      new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+    );
+    
+    // First try to find exact period match
+    const exactMatch = sorted.find(m => 
+      m.period_start === targetStart && m.period_end === targetEnd
+    );
+    if (exactMatch) return exactMatch;
+    
+    // Then try to find overlapping period
+    const targetStartDate = new Date(targetStart);
+    const targetEndDate = new Date(targetEnd);
+    
+    const overlapping = sorted.find(m => {
+      if (!m.period_start || !m.period_end) return false;
+      const periodStart = new Date(m.period_start);
+      const periodEnd = new Date(m.period_end);
+      // Check if periods overlap
+      return periodStart <= targetEndDate && periodEnd >= targetStartDate;
+    });
+    if (overlapping) return overlapping;
+    
+    // Fallback to most recent metrics
+    return sorted[0];
+  };
+
   const fetchPlatformData = async (platform: MetaPlatform, startDate: string, endDate: string, compStartDate: string, compEndDate: string) => {
     // Fetch social account
     const { data: accountData } = await supabase
@@ -338,7 +370,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .limit(1)
       .maybeSingle();
 
-    // Fetch content with metrics filtered by date range
+    // Fetch ALL content for this client/platform with their metrics
+    // We filter by metrics period_start/period_end instead of published_at
     const { data: contentData } = await supabase
       .from("social_content")
       .select(`
@@ -347,24 +380,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       `)
       .eq("client_id", clientId)
       .eq("platform", platform)
-      .gte("published_at", startDate)
-      .lte("published_at", endDate + "T23:59:59")
-      .order("published_at", { ascending: false })
-      .limit(50);
+      .order("published_at", { ascending: false });
 
+    // Filter and process content based on metrics period
     const contentWithMetrics = (contentData || [])
       .filter((item: any) => item.title || item.url) // Hide posts without title or URL
       .map((item: any) => {
-        const metricsList = item.social_content_metrics || [];
-        const latest = metricsList
-          .slice()
-          .sort((a: any, b: any) => new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime())[0];
-
+        const metrics = findMetricsForPeriod(item.social_content_metrics, startDate, endDate);
         return {
           ...item,
-          metrics: latest || null,
+          metrics: metrics || null,
         };
-      });
+      })
+      .filter((item: any) => item.metrics !== null) // Only show content with metrics in the period
+      .slice(0, 50); // Limit to 50 items
 
     return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
   };
