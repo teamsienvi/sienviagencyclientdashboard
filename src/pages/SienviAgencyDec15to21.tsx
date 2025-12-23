@@ -50,6 +50,17 @@ interface InstagramContent {
   interactions: number;
 }
 
+interface FacebookContent {
+  type: string;
+  date: string;
+  reach: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  interactions: number;
+}
+
 interface XContent {
   date: string;
   impressions: number;
@@ -128,6 +139,26 @@ const instagramContent: InstagramContent[] = [
   { type: "Reel", date: "Wed Dec 17, 8:52 AM", reach: 5, views: 20, likes: 6, comments: 0, shares: 0, interactions: 11 }
 ];
 
+// Facebook Data
+const facebookData: PlatformData = {
+  followers: 28,
+  addedFollowers: 0,
+  engagementRate: 44.94,
+  lastWeekEngagementRate: null,
+  totalContent: 7,
+  lastWeekTotalContent: null
+};
+
+const facebookContent: FacebookContent[] = [
+  { type: "Reel", date: "Mon Dec 15, 9:14 AM", reach: 29, views: 31, likes: 9, comments: 0, shares: 1, interactions: 10 },
+  { type: "Reel", date: "Tue Dec 16, 9:16 AM", reach: 30, views: 30, likes: 8, comments: 0, shares: 2, interactions: 10 },
+  { type: "Reel", date: "Wed Dec 17, 8:52 AM", reach: 13, views: 20, likes: 9, comments: 0, shares: 2, interactions: 11 },
+  { type: "Reel", date: "Thu Dec 18, 10:00 AM", reach: 13, views: 18, likes: 8, comments: 0, shares: 1, interactions: 9 },
+  { type: "Reel", date: "Sat Dec 20, 4:50 AM", reach: 1, views: 2, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Sat Dec 20, 9:52 AM", reach: 2, views: 3, likes: 0, comments: 0, shares: 0, interactions: 0 },
+  { type: "Reel", date: "Sun Dec 21, 10:00 AM", reach: 1, views: 0, likes: 0, comments: 0, shares: 0, interactions: 0 }
+];
+
 // X Data
 const xData: PlatformData = {
   followers: 7,
@@ -152,7 +183,8 @@ const xContent: XContent[] = [
 // Chart Data
 const chartData = [
   { platform: "Instagram", followers: 10, views: 42, interactions: 23 },
-  { platform: "X", followers: 7, impressions: 52, engagement: 26 }
+  { platform: "Facebook", followers: 28, views: 104, interactions: 40 },
+  { platform: "X", followers: 7, views: 52, interactions: 26 }
 ];
 
 const SienviAgencyDec15to21 = () => {
@@ -228,6 +260,45 @@ const SienviAgencyDec15to21 = () => {
 
   const renderInstagramTable = () => {
     const filtered = instagramContent.filter(item =>
+      item.date.toLowerCase().includes(contentSearch.toLowerCase())
+    );
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Reach</TableHead>
+            <TableHead>Views</TableHead>
+            <TableHead>Likes</TableHead>
+            <TableHead>Comments</TableHead>
+            <TableHead>Shares</TableHead>
+            <TableHead>Interactions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filtered.map((item, idx) => (
+            <TableRow key={idx}>
+              <TableCell>
+                <Badge variant="default">{item.type}</Badge>
+              </TableCell>
+              <TableCell>{item.date}</TableCell>
+              <TableCell>{item.reach}</TableCell>
+              <TableCell>{item.views.toLocaleString()}</TableCell>
+              <TableCell>{item.likes}</TableCell>
+              <TableCell>{item.comments}</TableCell>
+              <TableCell>{item.shares}</TableCell>
+              <TableCell>{item.interactions}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  const renderFacebookTable = () => {
+    const filtered = facebookContent.filter(item =>
       item.date.toLowerCase().includes(contentSearch.toLowerCase())
     );
 
@@ -461,6 +532,7 @@ const SienviAgencyDec15to21 = () => {
             <Tabs defaultValue="instagram" className="w-full">
               <TabsList className="mb-4">
                 <TabsTrigger value="instagram">Instagram</TabsTrigger>
+                <TabsTrigger value="facebook">Facebook</TabsTrigger>
                 <TabsTrigger value="x">X</TabsTrigger>
               </TabsList>
               
@@ -488,6 +560,33 @@ const SienviAgencyDec15to21 = () => {
                 </div>
                 <div className="overflow-x-auto">
                   {renderInstagramTable()}
+                </div>
+              </TabsContent>
+              
+              <TabsContent value="facebook">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <MetricCard 
+                    title="Total Followers" 
+                    value={facebookData.followers} 
+                    added={facebookData.addedFollowers} 
+                  />
+                  <MetricCard 
+                    title="Engagement Rate" 
+                    value={`${facebookData.engagementRate}%`} 
+                    lastWeek={facebookData.lastWeekEngagementRate ? `${facebookData.lastWeekEngagementRate}%` : "No data"}
+                  />
+                  <MetricCard 
+                    title="Total Content" 
+                    value={facebookData.totalContent || 0} 
+                    lastWeek={facebookData.lastWeekTotalContent ? `${facebookData.lastWeekTotalContent}` : "No data"}
+                  />
+                  <MetricCard 
+                    title="Total Views" 
+                    value={104} 
+                  />
+                </div>
+                <div className="overflow-x-auto">
+                  {renderFacebookTable()}
                 </div>
               </TabsContent>
               
