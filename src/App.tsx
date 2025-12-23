@@ -13,6 +13,7 @@ import XAnalytics from "./pages/XAnalytics";
 import MetaAnalytics from "./pages/MetaAnalytics";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
 import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
+import FatherFigureFormulaDec15to21 from "./pages/FatherFigureFormulaDec15to21";
 import SnarkyHumansNov24to30 from "./pages/SnarkyHumansNov24to30";
 import SnarkyHumansDec1to7 from "./pages/SnarkyHumansDec1to7";
 import SnarkyPetsNov24to30 from "./pages/SnarkyPetsNov24to30";
@@ -45,6 +46,7 @@ const App = () => (
           <Route path="/meta-analytics/:clientId" element={<MetaAnalytics />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
+          <Route path="/father-figure-formula-dec15-21" element={<FatherFigureFormulaDec15to21 />} />
           <Route path="/snarky-humans-nov24-30" element={<SnarkyHumansNov24to30 />} />
           <Route path="/snarky-humans-dec1-7" element={<SnarkyHumansDec1to7 />} />
           <Route path="/snarky-pets-nov24-30" element={<SnarkyPetsNov24to30 />} />
