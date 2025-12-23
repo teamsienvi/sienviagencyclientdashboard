@@ -148,6 +148,7 @@ export type Database = {
           last_seen_at: string
           name: string
           page_id: string | null
+          parent_page_id: string | null
           permalink: string | null
           picture_url: string | null
           platform: string
@@ -160,6 +161,7 @@ export type Database = {
           last_seen_at?: string
           name: string
           page_id?: string | null
+          parent_page_id?: string | null
           permalink?: string | null
           picture_url?: string | null
           platform: string
@@ -172,6 +174,7 @@ export type Database = {
           last_seen_at?: string
           name?: string
           page_id?: string | null
+          parent_page_id?: string | null
           permalink?: string | null
           picture_url?: string | null
           platform?: string

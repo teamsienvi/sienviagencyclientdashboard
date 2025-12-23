@@ -86,6 +86,20 @@ serve(async (req) => {
       pageTokens[page.id] = page.access_token;
     }
 
+    // Fetch meta_assets to get parent_page_id for Instagram accounts
+    const { data: metaAssets } = await supabase
+      .from('meta_assets')
+      .select('ig_business_id, parent_page_id')
+      .eq('platform', 'instagram')
+      .not('parent_page_id', 'is', null);
+
+    const igParentPageMap: Record<string, string> = {};
+    for (const asset of metaAssets || []) {
+      if (asset.ig_business_id && asset.parent_page_id) {
+        igParentPageMap[asset.ig_business_id] = asset.parent_page_id;
+      }
+    }
+
     const results: SyncResult[] = [];
     const now = new Date();
     const periodStart = new Date(now);
@@ -112,17 +126,32 @@ serve(async (req) => {
       }
 
       // Sync Instagram if ig_business_id is mapped
-      if (mapping.ig_business_id && mapping.page_id && pageTokens[mapping.page_id]) {
-        const result = await syncInstagramAccount(
-          supabase,
-          clientId,
-          clientName,
-          mapping.ig_business_id,
-          pageTokens[mapping.page_id],
-          periodStartStr,
-          periodEndStr
-        );
-        results.push(result);
+      if (mapping.ig_business_id) {
+        // Get the parent page from meta_assets
+        const parentPageId = igParentPageMap[mapping.ig_business_id];
+        const accessToken = parentPageId ? pageTokens[parentPageId] : null;
+        
+        if (accessToken) {
+          const result = await syncInstagramAccount(
+            supabase,
+            clientId,
+            clientName,
+            mapping.ig_business_id,
+            accessToken,
+            periodStartStr,
+            periodEndStr
+          );
+          results.push(result);
+        } else {
+          console.log(`No access token found for Instagram ${mapping.ig_business_id} (parent page: ${parentPageId})`);
+          results.push({
+            clientId,
+            clientName,
+            platform: 'instagram',
+            success: false,
+            error: 'No parent page access token found',
+          });
+        }
       }
     }
 
