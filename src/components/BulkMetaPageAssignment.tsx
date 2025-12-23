@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink, Play, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink, Play, CheckCircle2, XCircle, Clock, KeyRound } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -60,6 +60,7 @@ export const BulkMetaPageAssignment = () => {
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [refreshingTokens, setRefreshingTokens] = useState(false);
   const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
   const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
@@ -224,6 +225,62 @@ export const BulkMetaPageAssignment = () => {
     }
   };
 
+  const handleRefreshTokens = async () => {
+    const assignedClients = clients.filter(c => c.assignedPageId);
+    if (assignedClients.length === 0) {
+      toast.error("No clients have pages assigned");
+      return;
+    }
+
+    setRefreshingTokens(true);
+    let updatedCount = 0;
+
+    try {
+      // Fetch fresh page data from Meta
+      const { data: pagesData, error: pagesError } = await supabase.functions.invoke("fetch-meta-pages");
+      
+      if (pagesError || pagesData.error) {
+        throw new Error(pagesData?.error || pagesError?.message || "Failed to fetch pages");
+      }
+
+      const freshPages: MetaPage[] = pagesData.pages || [];
+      
+      // Update tokens for each assigned client
+      for (const client of assignedClients) {
+        const freshPage = freshPages.find(p => p.pageId === client.assignedPageId);
+        if (freshPage && freshPage.pageAccessToken) {
+          const { error: updateError } = await supabase
+            .from("social_oauth_accounts")
+            .update({ 
+              access_token: freshPage.pageAccessToken,
+              instagram_business_id: freshPage.instagramBusinessId,
+              updated_at: new Date().toISOString()
+            })
+            .eq("client_id", client.id)
+            .eq("is_active", true);
+          
+          if (!updateError) {
+            updatedCount++;
+            // Update local state
+            setClients(prev => prev.map(c => 
+              c.id === client.id 
+                ? { ...c, pageAccessToken: freshPage.pageAccessToken, instagramBusinessId: freshPage.instagramBusinessId }
+                : c
+            ));
+          }
+        }
+      }
+
+      setPages(freshPages);
+      toast.success(`Refreshed tokens for ${updatedCount} clients`);
+    } catch (err: any) {
+      console.error("Failed to refresh tokens:", err);
+      toast.error(err.message || "Failed to refresh tokens");
+    } finally {
+      setRefreshingTokens(false);
+    }
+  };
+
   const handleSyncAll = async () => {
     const assignedClients = clients.filter(c => c.assignedPageId);
     if (assignedClients.length === 0) {
@@ -359,11 +416,29 @@ export const BulkMetaPageAssignment = () => {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading || syncing}>
+            <Button variant="outline" size="sm" onClick={fetchData} disabled={loading || syncing || refreshingTokens}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Button size="sm" onClick={handleSyncAll} disabled={syncing || assignedCount === 0}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleRefreshTokens} 
+              disabled={syncing || refreshingTokens || assignedCount === 0}
+            >
+              {refreshingTokens ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Refreshing...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-4 w-4 mr-2" />
+                  Refresh Tokens
+                </>
+              )}
+            </Button>
+            <Button size="sm" onClick={handleSyncAll} disabled={syncing || refreshingTokens || assignedCount === 0}>
               {syncing ? (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
