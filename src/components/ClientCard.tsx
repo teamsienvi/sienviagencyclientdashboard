@@ -9,13 +9,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter, Facebook, Instagram, Link2, CheckCircle2, Music2, Linkedin } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, TrendingUp, FileText, Eye, Youtube, Twitter, Music2, Linkedin } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
-import { DateRangeSelector } from "@/components/DateRangeSelector";
-import { useClientAnalytics } from "@/hooks/useClientAnalytics";
-import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 interface ClientCardProps {
@@ -24,8 +20,6 @@ interface ClientCardProps {
   clientId?: string; // Database ID for YouTube analytics
   websiteAnalyticsId?: string; // Database ID for website analytics (only if supabase_url is set)
 }
-
-type DateRangePreset = "7d" | "30d" | "custom";
 
 // Helper to extract month from date range (e.g., "Nov 24-30" -> "November")
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -54,8 +48,6 @@ const getMonthFromDateRange = (dateRange: string): string => {
 export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }: ClientCardProps) => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
-  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
-  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | undefined>();
   const [hasXAccount, setHasXAccount] = useState(false);
   const [metaAccounts, setMetaAccounts] = useState<{ facebook: boolean; instagram: boolean }>({ facebook: false, instagram: false });
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
@@ -93,43 +85,6 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
     
     checkSocialAccounts();
   }, [clientId]);
-  
-  // Fetch website analytics if websiteAnalyticsId is provided
-  const { data: analyticsData, isLoading: analyticsLoading, error: analyticsError } = useClientAnalytics({
-    clientId: websiteAnalyticsId || "",
-    dateRange,
-    startDate: customRange?.start,
-    endDate: customRange?.end,
-    enabled: !!websiteAnalyticsId,
-  });
-
-  const handleDateRangeChange = (preset: DateRangePreset, custom?: { start: Date; end: Date }) => {
-    setDateRange(preset);
-    if (custom) {
-      setCustomRange(custom);
-    }
-  };
-
-  // Normalize analytics data - handle different response shapes
-  // Some clients return { analytics: {...} }, others return { success: true, data: {...} }
-  const normalizedAnalytics = useMemo(() => {
-    if (!analyticsData?.analytics) return null;
-    
-    const raw = analyticsData.analytics as unknown as Record<string, unknown>;
-    
-    // If the response has { success: true, data: {...} } shape (like Luxxe)
-    if (raw.success && raw.data) {
-      return raw.data as { visitors?: number; pageViews?: number; avgDuration?: number; bounceRate?: number };
-    }
-    
-    // If the response has nested { analytics: {...} } shape
-    if (raw.analytics) {
-      return raw.analytics as { visitors?: number; pageViews?: number; avgDuration?: number; bounceRate?: number };
-    }
-    
-    // Direct shape
-    return raw as { visitors?: number; pageViews?: number; avgDuration?: number; bounceRate?: number };
-  }, [analyticsData]);
 
   // Group reports by month
   const reportsByMonth = useMemo(() => {
@@ -346,84 +301,19 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
               <span className="text-xs text-muted-foreground">(API)</span>
             </div>
 
-            {/* Website Analytics */}
+            {/* Web Analytics */}
             {websiteAnalyticsId && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Website</span>
-                  <DateRangeSelector 
-                    value={dateRange} 
-                    onChange={handleDateRangeChange}
-                    customRange={customRange}
-                  />
-                </div>
-                
-                {analyticsLoading ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="bg-accent/50 rounded-lg p-3 space-y-2">
-                        <Skeleton className="h-3 w-16" />
-                        <Skeleton className="h-6 w-12" />
-                      </div>
-                    ))}
-                  </div>
-                ) : analyticsError ? (
-                  <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-                    <p className="text-xs text-destructive font-medium">Analytics Error</p>
-                    <p className="text-xs text-destructive/80 mt-1">
-                      {analyticsError instanceof Error 
-                        ? analyticsError.message 
-                        : "Failed to load analytics"}
-                    </p>
-                  </div>
-                ) : normalizedAnalytics ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Users className="h-3 w-3" />
-                        <span className="text-xs">Visitors</span>
-                      </div>
-                      <p className="text-lg font-semibold">
-                        {(normalizedAnalytics.visitors ?? 0).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Eye className="h-3 w-3" />
-                        <span className="text-xs">Page Views</span>
-                      </div>
-                      <p className="text-lg font-semibold">
-                        {(normalizedAnalytics.pageViews ?? 0).toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <Clock className="h-3 w-3" />
-                        <span className="text-xs">Avg Duration</span>
-                      </div>
-                      <p className="text-lg font-semibold">
-                        {(normalizedAnalytics.avgDuration ?? 0) < 60 
-                          ? `${Math.round(normalizedAnalytics.avgDuration ?? 0)}s`
-                          : `${Math.floor((normalizedAnalytics.avgDuration ?? 0) / 60)}m ${Math.round((normalizedAnalytics.avgDuration ?? 0) % 60)}s`
-                        }
-                      </p>
-                    </div>
-                    <div className="bg-accent/50 rounded-lg p-3">
-                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                        <TrendingDown className="h-3 w-3" />
-                        <span className="text-xs">Bounce Rate</span>
-                      </div>
-                      <p className="text-lg font-semibold">
-                        {(normalizedAnalytics.bounceRate ?? 0).toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-muted/50 rounded-lg p-3 text-center">
-                    <p className="text-xs text-muted-foreground">No analytics configured</p>
-                  </div>
-                )}
-              </div>
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => navigate("/web-analytics")}
+              >
+                <span className="flex items-center gap-2">
+                  <Eye className="h-4 w-4 text-blue-500" />
+                  View Web Analytics
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             )}
 
             {/* YouTube Analytics */}
