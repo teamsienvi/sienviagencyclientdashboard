@@ -51,5 +51,8 @@ verify_jwt = false
 [functions.scheduled-sync]
 verify_jwt = false
 
-[functions.get-analytics]
+[functions.tiktok-oauth-init]
+verify_jwt = false
+
+[functions.tiktok-oauth-callback]
 verify_jwt = false
