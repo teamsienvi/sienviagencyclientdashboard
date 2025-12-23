@@ -127,7 +127,7 @@ export const clientsData: Client[] = [
     name: "Sienvi Agency",
     logo: sienviClientLogo,
     reports: [
-      { dateRange: "Dec 15-21", link: "/dynamic-report/975335f0-11f1-4174-bd09-3b891cbbc1bb", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/sienvi-agency-dec15-21", isInternal: true },
     ],
   },
   {
