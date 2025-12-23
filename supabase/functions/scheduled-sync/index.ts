@@ -6,9 +6,33 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Standard analytics periods - syncs both current and previous week for comparisons
-const CURRENT_PERIOD = { start: "2025-12-15", end: "2025-12-21" };
-const PREVIOUS_PERIOD = { start: "2025-12-08", end: "2025-12-14" };
+// Dynamic date calculation for current and previous week
+function getAnalyticsPeriods() {
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday
+  
+  // Current week: starts on Sunday
+  const currentWeekStart = new Date(now);
+  currentWeekStart.setDate(now.getDate() - dayOfWeek);
+  currentWeekStart.setHours(0, 0, 0, 0);
+  
+  const currentWeekEnd = new Date(currentWeekStart);
+  currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
+  
+  // Previous week
+  const previousWeekEnd = new Date(currentWeekStart);
+  previousWeekEnd.setDate(currentWeekStart.getDate() - 1);
+  
+  const previousWeekStart = new Date(previousWeekEnd);
+  previousWeekStart.setDate(previousWeekEnd.getDate() - 6);
+  
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+  
+  return {
+    current: { start: formatDate(currentWeekStart), end: formatDate(currentWeekEnd) },
+    previous: { start: formatDate(previousWeekStart), end: formatDate(previousWeekEnd) },
+  };
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -19,15 +43,20 @@ serve(async (req) => {
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  const periods = getAnalyticsPeriods();
+  
   console.log("Starting scheduled sync for all platforms...");
-  console.log(`Current Period: ${CURRENT_PERIOD.start} to ${CURRENT_PERIOD.end}`);
-  console.log(`Previous Period: ${PREVIOUS_PERIOD.start} to ${PREVIOUS_PERIOD.end}`);
+  console.log(`Current Period: ${periods.current.start} to ${periods.current.end}`);
+  console.log(`Previous Period: ${periods.previous.start} to ${periods.previous.end}`);
+  console.log(`Sync started at: ${new Date().toISOString()}`);
 
   const results = {
     youtube: { success: 0, failed: 0, errors: [] as string[] },
     x: { success: 0, failed: 0, errors: [] as string[] },
     instagram: { success: 0, failed: 0, errors: [] as string[] },
     facebook: { success: 0, failed: 0, errors: [] as string[] },
+    tiktok: { success: 0, failed: 0, errors: [] as string[] },
+    linkedin: { success: 0, failed: 0, errors: [] as string[] },
   };
 
   // Helper to sync a platform for both periods
@@ -38,7 +67,7 @@ serve(async (req) => {
   ) => {
     // Sync current period
     try {
-      const currentResult = await syncFn(CURRENT_PERIOD.start, CURRENT_PERIOD.end);
+      const currentResult = await syncFn(periods.current.start, periods.current.end);
       if (currentResult.success) {
         console.log(`  ✓ Current period: ${currentResult.recordsSynced || 0} records`);
       } else {
@@ -51,7 +80,7 @@ serve(async (req) => {
 
     // Sync previous period for comparison
     try {
-      const prevResult = await syncFn(PREVIOUS_PERIOD.start, PREVIOUS_PERIOD.end);
+      const prevResult = await syncFn(periods.previous.start, periods.previous.end);
       if (prevResult.success) {
         results[platformKey].success++;
         console.log(`  ✓ Previous period: ${prevResult.recordsSynced || 0} records`);
@@ -130,7 +159,75 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 500));
     }
 
-    // 3. META (INSTAGRAM & FACEBOOK) SYNC
+    // 3. TIKTOK SYNC
+    console.log("\n=== Syncing TikTok ===");
+    const { data: tiktokAccounts } = await supabase
+      .from("social_accounts")
+      .select("id, client_id, account_id, account_name, access_token_encrypted")
+      .eq("platform", "tiktok")
+      .eq("is_active", true);
+
+    for (const account of tiktokAccounts || []) {
+      const accountName = account.account_name || account.account_id;
+      console.log(`Syncing TikTok for client ${account.client_id}: ${accountName}`);
+      
+      await syncBothPeriods(
+        async (periodStart, periodEnd) => {
+          const { data, error } = await supabase.functions.invoke("sync-tiktok", {
+            body: {
+              clientId: account.client_id,
+              accountId: account.id,
+              platform: "tiktok",
+              accessToken: account.access_token_encrypted,
+              accountExternalId: account.account_id,
+              periodStart,
+              periodEnd,
+            },
+          });
+          if (error) throw error;
+          return data;
+        },
+        "tiktok",
+        accountName
+      );
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 4. LINKEDIN SYNC
+    console.log("\n=== Syncing LinkedIn ===");
+    const { data: linkedinAccounts } = await supabase
+      .from("social_accounts")
+      .select("id, client_id, account_id, account_name, access_token_encrypted")
+      .eq("platform", "linkedin")
+      .eq("is_active", true);
+
+    for (const account of linkedinAccounts || []) {
+      const accountName = account.account_name || account.account_id;
+      console.log(`Syncing LinkedIn for client ${account.client_id}: ${accountName}`);
+      
+      await syncBothPeriods(
+        async (periodStart, periodEnd) => {
+          const { data, error } = await supabase.functions.invoke("sync-linkedin", {
+            body: {
+              clientId: account.client_id,
+              accountId: account.id,
+              platform: "linkedin",
+              accessToken: account.access_token_encrypted,
+              accountExternalId: account.account_id,
+              periodStart,
+              periodEnd,
+            },
+          });
+          if (error) throw error;
+          return data;
+        },
+        "linkedin",
+        accountName
+      );
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 5. META (INSTAGRAM & FACEBOOK) SYNC
     console.log("\n=== Syncing Meta (Instagram & Facebook) ===");
     const { data: metaOauthAccounts } = await supabase
       .from("social_oauth_accounts")
@@ -216,10 +313,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        periods: {
-          current: CURRENT_PERIOD,
-          previous: PREVIOUS_PERIOD,
-        },
+        periods,
         results,
         timestamp: new Date().toISOString(),
       }),
