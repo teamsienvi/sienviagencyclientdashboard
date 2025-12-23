@@ -7,8 +7,8 @@ const corsHeaders = {
 };
 
 // Standard analytics periods - syncs both current and previous week for comparisons
-const CURRENT_PERIOD = { start: "2024-12-15", end: "2024-12-21" };
-const PREVIOUS_PERIOD = { start: "2024-12-08", end: "2024-12-14" };
+const CURRENT_PERIOD = { start: "2025-12-15", end: "2025-12-21" };
+const PREVIOUS_PERIOD = { start: "2025-12-08", end: "2025-12-14" };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
