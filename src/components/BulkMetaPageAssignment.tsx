@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink, Play, CheckCircle2, XCircle, Clock, KeyRound } from "lucide-react";
+import { Loader2, Instagram, Facebook, RefreshCw, Check, Link2, Unlink, Play, CheckCircle2, XCircle, Clock, KeyRound, AlertTriangle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -42,6 +42,7 @@ interface Client {
   instagramUsername: string | null;
   instagramBusinessId: string | null;
   pageAccessToken: string | null;
+  hasUserToken: boolean;
   lastSyncAt: string | null;
   lastSyncPlatform: string | null;
 }
@@ -78,10 +79,10 @@ export const BulkMetaPageAssignment = () => {
 
       if (clientsError) throw clientsError;
 
-      // Fetch current assignments
+      // Fetch current assignments with user_access_token status
       const { data: assignments, error: assignmentsError } = await supabase
         .from("social_oauth_accounts")
-        .select("client_id, page_id, instagram_business_id")
+        .select("client_id, page_id, instagram_business_id, user_access_token")
         .eq("is_active", true);
 
       if (assignmentsError) throw assignmentsError;
@@ -132,6 +133,7 @@ export const BulkMetaPageAssignment = () => {
           instagramUsername: page?.instagramUsername || null,
           instagramBusinessId: page?.instagramBusinessId || null,
           pageAccessToken: page?.pageAccessToken || null,
+          hasUserToken: !!assignment?.user_access_token,
           lastSyncAt: lastSync?.timestamp || null,
           lastSyncPlatform: lastSync?.platform || null,
         };
@@ -391,6 +393,7 @@ export const BulkMetaPageAssignment = () => {
   };
 
   const assignedCount = clients.filter(c => c.assignedPageId).length;
+  const needsReconnectCount = clients.filter(c => c.assignedPageId && !c.hasUserToken).length;
 
   if (loading) {
     return (
@@ -470,6 +473,20 @@ export const BulkMetaPageAssignment = () => {
           </div>
         ) : (
           <>
+            {needsReconnectCount > 0 && (
+              <div className="mb-4 p-3 border border-destructive/50 rounded-lg bg-destructive/10">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <p className="text-sm font-medium text-destructive">
+                    {needsReconnectCount} client{needsReconnectCount > 1 ? 's need' : ' needs'} reconnection
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Reconnect one client via OAuth to refresh the user token, then use "Refresh Tokens" to update all others.
+                </p>
+              </div>
+            )}
+
             {syncStatuses.length > 0 && (
               <div className="mb-4 p-3 border rounded-lg bg-muted/30">
                 <div className="flex items-center justify-between mb-2">
@@ -532,6 +549,12 @@ export const BulkMetaPageAssignment = () => {
                             <AvatarFallback>{client.name.charAt(0)}</AvatarFallback>
                           </Avatar>
                           <span className="font-medium">{client.name}</span>
+                          {client.assignedPageId && !client.hasUserToken && (
+                            <Badge variant="destructive" className="gap-1 text-xs">
+                              <AlertTriangle className="h-3 w-3" />
+                              Reconnect
+                            </Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
