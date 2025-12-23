@@ -90,7 +90,7 @@ export const BulkMetaPageAssignment = () => {
         .from("social_sync_logs")
         .select("client_id, platform, completed_at, status")
         .in("platform", ["instagram", "facebook"])
-        .eq("status", "success")
+        .eq("status", "completed")
         .order("completed_at", { ascending: false });
 
       if (syncLogsError) throw syncLogsError;
@@ -249,12 +249,6 @@ export const BulkMetaPageAssignment = () => {
     let successCount = 0;
     let errorCount = 0;
 
-    // Fetch OAuth accounts to get access tokens
-    const { data: oauthAccounts } = await supabase
-      .from("social_oauth_accounts")
-      .select("client_id, access_token, instagram_business_id, page_id")
-      .eq("is_active", true);
-
     // Fetch social accounts for account IDs
     const { data: socialAccounts } = await supabase
       .from("social_accounts")
@@ -266,22 +260,25 @@ export const BulkMetaPageAssignment = () => {
     for (let i = 0; i < initialStatuses.length; i++) {
       const status = initialStatuses[i];
       const client = assignedClients.find(c => c.id === status.clientId);
-      const oauth = oauthAccounts?.find(a => a.client_id === status.clientId);
-      
-      if (!client || !oauth) {
-        setSyncStatuses(prev => prev.map((s, idx) => 
-          idx === i ? { ...s, status: "error", message: "No OAuth token" } : s
+
+      const accessToken = client?.pageAccessToken || null;
+      const externalId =
+        status.platform === "instagram" ? client?.instagramBusinessId : client?.assignedPageId;
+
+      if (!client || !accessToken || !externalId) {
+        setSyncStatuses(prev => prev.map((s, idx) =>
+          idx === i ? { ...s, status: "error", message: "Missing token / account" } : s
         ));
+        setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
         errorCount++;
         continue;
       }
 
       // Update status to syncing
-      setSyncStatuses(prev => prev.map((s, idx) => 
+      setSyncStatuses(prev => prev.map((s, idx) =>
         idx === i ? { ...s, status: "syncing" } : s
       ));
 
-      const externalId = status.platform === "instagram" ? oauth.instagram_business_id : oauth.page_id;
       const socialAccount = socialAccounts?.find(
         sa => sa.client_id === status.clientId && sa.platform === status.platform
       );
@@ -296,7 +293,7 @@ export const BulkMetaPageAssignment = () => {
             clientId: client.id,
             accountId: socialAccount?.id,
             platform: status.platform,
-            accessToken: oauth.access_token,
+            accessToken,
             accountExternalId: externalId,
             periodStart: periodStart.toISOString().split("T")[0],
             periodEnd: periodEnd.toISOString().split("T")[0],
@@ -305,13 +302,13 @@ export const BulkMetaPageAssignment = () => {
 
         if (error) throw error;
 
-        setSyncStatuses(prev => prev.map((s, idx) => 
+        setSyncStatuses(prev => prev.map((s, idx) =>
           idx === i ? { ...s, status: "success", message: `${data?.recordsSynced || 0} records` } : s
         ));
         setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
         successCount++;
       } catch (err: any) {
-        setSyncStatuses(prev => prev.map((s, idx) => 
+        setSyncStatuses(prev => prev.map((s, idx) =>
           idx === i ? { ...s, status: "error", message: err.message || "Sync failed" } : s
         ));
         setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
@@ -321,6 +318,7 @@ export const BulkMetaPageAssignment = () => {
       // Small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 300));
     }
+
 
     setSyncing(false);
     toast.success(`Sync completed: ${successCount} successful, ${errorCount} failed`);
