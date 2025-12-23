@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { subDays, format, startOfDay, endOfDay } from "date-fns";
+import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
 
 interface XAnalyticsSectionProps {
   clientId: string;
@@ -150,28 +151,35 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
     setSyncing(true);
     try {
-      // Standardized analytics period - Dec 15-21, 2024
-      const periodStart = "2024-12-15";
-      const periodEnd = "2024-12-21";
+      // Sync both current and previous periods for comparison
+      const periods = [
+        { start: ANALYTICS_PERIOD.start, end: ANALYTICS_PERIOD.end },
+        { start: ANALYTICS_PERIOD.prevStart, end: ANALYTICS_PERIOD.prevEnd },
+      ];
 
-      const { data, error } = await supabase.functions.invoke("sync-x", {
-        body: {
-          clientId,
-          accountId: socialAccount.id,
-          accountExternalId: socialAccount.account_id,
-          periodStart,
-          periodEnd,
-        },
-      });
+      let totalSynced = 0;
+      for (const period of periods) {
+        const { data, error } = await supabase.functions.invoke("sync-x", {
+          body: {
+            clientId,
+            accountId: socialAccount.id,
+            accountExternalId: socialAccount.account_id,
+            periodStart: period.start,
+            periodEnd: period.end,
+          },
+        });
 
-      if (error) throw error;
-
-      if (data?.success) {
-        toast.success(`Synced ${data.recordsSynced} posts from X`);
-        fetchData();
-      } else {
-        toast.error(data?.error || "Failed to sync X data");
+        if (error) throw error;
+        if (data?.success) {
+          totalSynced += data.recordsSynced || 0;
+        } else {
+          toast.error(data?.error || "Failed to sync X data");
+          return;
+        }
       }
+
+      toast.success(`Synced ${totalSynced} posts from X (current + previous week)`);
+      fetchData();
     } catch (error: any) {
       console.error("Sync error:", error);
       toast.error(error.message || "Failed to sync X analytics");

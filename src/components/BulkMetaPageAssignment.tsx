@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
 
 interface MetaPage {
   pageId: string;
@@ -342,27 +343,33 @@ export const BulkMetaPageAssignment = () => {
         sa => sa.client_id === status.clientId && sa.platform === status.platform
       );
 
-      // Standardized analytics period - Dec 15-21, 2024
-      const periodStart = "2024-12-15";
-      const periodEnd = "2024-12-21";
+      // Sync both current and previous periods for comparison
+      const periods = [
+        { start: ANALYTICS_PERIOD.start, end: ANALYTICS_PERIOD.end },
+        { start: ANALYTICS_PERIOD.prevStart, end: ANALYTICS_PERIOD.prevEnd },
+      ];
 
       try {
-        const { data, error } = await supabase.functions.invoke("sync-meta", {
-          body: {
-            clientId: client.id,
-            accountId: socialAccount?.id,
-            platform: status.platform,
-            accessToken,
-            accountExternalId: externalId,
-            periodStart,
-            periodEnd,
-          },
-        });
+        let totalRecords = 0;
+        for (const period of periods) {
+          const { data, error } = await supabase.functions.invoke("sync-meta", {
+            body: {
+              clientId: client.id,
+              accountId: socialAccount?.id,
+              platform: status.platform,
+              accessToken,
+              accountExternalId: externalId,
+              periodStart: period.start,
+              periodEnd: period.end,
+            },
+          });
 
-        if (error) throw error;
+          if (error) throw error;
+          totalRecords += data?.recordsSynced || 0;
+        }
 
         setSyncStatuses(prev => prev.map((s, idx) =>
-          idx === i ? { ...s, status: "success", message: `${data?.recordsSynced || 0} records` } : s
+          idx === i ? { ...s, status: "success", message: `${totalRecords} records (2 weeks)` } : s
         ));
         setSyncProgress(prev => ({ ...prev, current: prev.current + 1 }));
         successCount++;
