@@ -26,6 +26,7 @@ import SerenityScrollsDec1to7 from "./pages/SerenityScrollsDec1to7";
 import SerenityScrollsDec15to21 from "./pages/SerenityScrollsDec15to21";
 import OxiSureTechNov24to30 from "./pages/OxiSureTechNov24to30";
 import OxiSureTechDec1to7 from "./pages/OxiSureTechDec1to7";
+import OxiSureTechDec15to21 from "./pages/OxiSureTechDec15to21";
 import TheHavenAtDeerParkNov24to30 from "./pages/TheHavenAtDeerParkNov24to30";
 import TheHavenAtDeerParkDec1to7 from "./pages/TheHavenAtDeerParkDec1to7";
 import BsueBrowLashDec1to7 from "./pages/BsueBrowLashDec1to7";
@@ -62,6 +63,7 @@ const App = () => (
           <Route path="/serenity-scrolls-dec15-21" element={<SerenityScrollsDec15to21 />} />
           <Route path="/oxisure-tech-nov24-30" element={<OxiSureTechNov24to30 />} />
           <Route path="/oxisure-tech-dec1-7" element={<OxiSureTechDec1to7 />} />
+          <Route path="/oxisure-tech-dec15-21" element={<OxiSureTechDec15to21 />} />
           <Route path="/the-haven-at-deer-park-nov24-30" element={<TheHavenAtDeerParkNov24to30 />} />
           <Route path="/the-haven-at-deer-park-dec1-7" element={<TheHavenAtDeerParkDec1to7 />} />
           <Route path="/bsue-brow-lash-dec1-7" element={<BsueBrowLashDec1to7 />} />

@@ -89,6 +89,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 24-30", link: "/oxisure-tech-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/oxisure-tech-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/c36adde3-192c-4eda-8b72-1316a3588346", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/oxisure-tech-dec15-21", isInternal: true },
     ],
   },
   {
