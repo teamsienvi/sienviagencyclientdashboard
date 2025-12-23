@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter, Facebook, Instagram, Link2, CheckCircle2, Music2 } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, Users, TrendingUp, TrendingDown, FileText, Eye, Clock, Layers, Youtube, Twitter, Facebook, Instagram, Link2, CheckCircle2, Music2, Linkedin } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { useClientAnalytics } from "@/hooks/useClientAnalytics";
@@ -481,6 +481,21 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                 <span className="flex items-center gap-2">
                   <Music2 className="h-4 w-4" />
                   View TikTok Analytics
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
+
+            {/* LinkedIn Analytics */}
+            {clientId && (
+              <Button
+                variant="outline"
+                className="w-full justify-between"
+                onClick={() => navigate("/linkedin-analytics")}
+              >
+                <span className="flex items-center gap-2">
+                  <Linkedin className="h-4 w-4 text-[#0A66C2]" />
+                  View LinkedIn Analytics
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
