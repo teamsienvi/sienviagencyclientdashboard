@@ -130,12 +130,18 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       setIsLoading(true);
       const { start, end } = getDateRangeFilter();
       
+      // Format dates for period comparison (YYYY-MM-DD format to match stored periods)
+      const startStr = format(start, 'yyyy-MM-dd');
+      const endStr = format(end, 'yyyy-MM-dd');
+      
       // Calculate previous period for comparison
       const periodDuration = end.getTime() - start.getTime();
       const prevStart = new Date(start.getTime() - periodDuration);
       const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
+      const prevStartStr = format(prevStart, 'yyyy-MM-dd');
+      const prevEndStr = format(prevEnd, 'yyyy-MM-dd');
 
-      // Fetch account metrics
+      // Fetch account metrics - get the most recent ones
       const { data: accountMetrics } = await supabase
         .from("social_account_metrics")
         .select("*")
@@ -148,8 +154,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       const previousFollowers = accountMetrics?.[1]?.followers || currentFollowers;
       const newFollowers = currentFollowers - previousFollowers;
 
-      // Fetch content with metrics for current period
-      const { data: contentData } = await supabase
+      // Fetch ALL content for this client/platform with their metrics
+      // We'll filter by metric period_start/period_end client-side
+      const { data: allContentData } = await supabase
         .from("social_content")
         .select(`
           id,
@@ -162,32 +169,15 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
             likes,
             comments,
             shares,
-            watch_time_hours
+            watch_time_hours,
+            period_start,
+            period_end,
+            collected_at
           )
         `)
         .eq("client_id", clientId)
         .eq("platform", "youtube")
-        .gte("published_at", start.toISOString())
-        .lte("published_at", end.toISOString())
         .order("published_at", { ascending: false });
-
-      // Fetch content with metrics for previous period
-      const { data: prevContentData } = await supabase
-        .from("social_content")
-        .select(`
-          id,
-          content_type,
-          social_content_metrics (
-            views,
-            likes,
-            comments,
-            shares
-          )
-        `)
-        .eq("client_id", clientId)
-        .eq("platform", "youtube")
-        .gte("published_at", prevStart.toISOString())
-        .lte("published_at", prevEnd.toISOString());
 
       let totalViews = 0;
       let totalLikes = 0;
@@ -204,8 +194,41 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         return 40; // Regular videos average ~40%
       };
 
-      contentData?.forEach((content: any) => {
-        const metrics = content.social_content_metrics?.[0];
+      // Helper to find metrics for a specific period range
+      const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
+        if (!metrics || metrics.length === 0) return null;
+        
+        // Sort by collected_at descending to get most recent first
+        const sorted = [...metrics].sort((a, b) => 
+          new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+        );
+        
+        // First try to find exact period match
+        const exactMatch = sorted.find(m => 
+          m.period_start === targetStart && m.period_end === targetEnd
+        );
+        if (exactMatch) return exactMatch;
+        
+        // Then try to find overlapping period
+        const targetStartDate = new Date(targetStart);
+        const targetEndDate = new Date(targetEnd);
+        
+        const overlapping = sorted.find(m => {
+          if (!m.period_start || !m.period_end) return false;
+          const periodStart = new Date(m.period_start);
+          const periodEnd = new Date(m.period_end);
+          // Check if periods overlap
+          return periodStart <= targetEndDate && periodEnd >= targetStartDate;
+        });
+        if (overlapping) return overlapping;
+        
+        // Fallback to most recent metrics
+        return sorted[0];
+      };
+
+      // Process content data - filter and aggregate by selected date range
+      allContentData?.forEach((content: any) => {
+        const metrics = findMetricsForPeriod(content.social_content_metrics, startStr, endStr);
         const views = metrics?.views || 0;
         const likes = metrics?.likes || 0;
         const comments = metrics?.comments || 0;
@@ -249,21 +272,23 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       let prevShortCount = 0;
       let prevVideoCount = 0;
 
-      prevContentData?.forEach((content: any) => {
-        const metrics = content.social_content_metrics?.[0];
-        prevTotalViews += metrics?.views || 0;
-        prevTotalLikes += metrics?.likes || 0;
-        prevTotalComments += metrics?.comments || 0;
-        prevTotalShares += metrics?.shares || 0;
-        
-        if (content.content_type?.toLowerCase() === "short") {
-          prevShortCount++;
-        } else {
-          prevVideoCount++;
+      allContentData?.forEach((content: any) => {
+        const metrics = findMetricsForPeriod(content.social_content_metrics, prevStartStr, prevEndStr);
+        if (metrics) {
+          prevTotalViews += metrics.views || 0;
+          prevTotalLikes += metrics.likes || 0;
+          prevTotalComments += metrics.comments || 0;
+          prevTotalShares += metrics.shares || 0;
+          
+          if (content.content_type?.toLowerCase() === "short") {
+            prevShortCount++;
+          } else {
+            prevVideoCount++;
+          }
         }
       });
 
-      const prevTotalVideos = (prevContentData?.length || 0);
+      const prevTotalVideos = prevShortCount + prevVideoCount;
       const prevTotalContent = prevShortCount + prevVideoCount;
       const prevAvgRetention = prevTotalContent > 0 
         ? ((prevShortCount * 75) + (prevVideoCount * 40)) / prevTotalContent 
