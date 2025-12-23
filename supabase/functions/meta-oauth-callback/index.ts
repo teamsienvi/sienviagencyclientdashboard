@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+declare const EdgeRuntime: {
+  waitUntil(promise: Promise<unknown>): void;
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -165,6 +169,79 @@ serve(async (req) => {
 
     console.log('OAuth account saved successfully');
 
+    // Background task: refresh tokens for all other assigned clients
+    const refreshAllTokens = async () => {
+      try {
+        console.log('Refreshing tokens for all assigned clients...');
+        
+        // Fetch all pages using the new user token
+        const pagesResponse = await fetch(
+          `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token&access_token=${longLivedToken}`
+        );
+        const pagesData = await pagesResponse.json();
+        
+        if (pagesData.error) {
+          console.error('Failed to fetch pages for token refresh:', pagesData.error);
+          return;
+        }
+        
+        const pages = pagesData.data || [];
+        console.log(`Found ${pages.length} pages for token refresh`);
+        
+        // Get all assigned clients (excluding the one we just updated)
+        const { data: assignedAccounts } = await supabase
+          .from('social_oauth_accounts')
+          .select('id, client_id, page_id')
+          .eq('is_active', true)
+          .neq('client_id', clientId);
+        
+        if (!assignedAccounts || assignedAccounts.length === 0) {
+          console.log('No other clients to refresh');
+          return;
+        }
+        
+        let updatedCount = 0;
+        for (const account of assignedAccounts) {
+          const page = pages.find((p: any) => p.id === account.page_id);
+          if (page && page.access_token) {
+            // Get Instagram business ID for this page
+            let igBusinessId = null;
+            try {
+              const igResponse = await fetch(
+                `https://graph.facebook.com/v21.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
+              );
+              const igData = await igResponse.json();
+              igBusinessId = igData.instagram_business_account?.id || null;
+            } catch (e) {
+              console.log(`Could not get IG for page ${page.id}`);
+            }
+            
+            const { error: updateError } = await supabase
+              .from('social_oauth_accounts')
+              .update({
+                access_token: page.access_token,
+                user_access_token: longLivedToken,
+                instagram_business_id: igBusinessId,
+                token_expires_at: tokenExpiresAt.toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', account.id);
+            
+            if (!updateError) {
+              updatedCount++;
+            }
+          }
+        }
+        
+        console.log(`Refreshed tokens for ${updatedCount} other clients`);
+      } catch (err) {
+        console.error('Error refreshing other clients:', err);
+      }
+    };
+
+    // Use waitUntil for background task
+    EdgeRuntime.waitUntil(refreshAllTokens());
+
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -173,7 +250,8 @@ serve(async (req) => {
           pageId,
           instagramBusinessId,
           connected: true
-        }
+        },
+        refreshingOtherClients: true
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
