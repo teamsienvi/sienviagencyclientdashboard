@@ -33,6 +33,7 @@ export const clientsData: Client[] = [
       { dateRange: "Nov 24-30", link: "/snarky-humans-nov24-30", isInternal: true },
       { dateRange: "Dec 1-7", link: "/snarky-humans-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/c05fcbfc-f918-4586-86c1-a752df240e2e", isInternal: true },
+      { dateRange: "Dec 15-21", link: "/snarky-humans-dec15-21", isInternal: true },
     ],
   },
   {
