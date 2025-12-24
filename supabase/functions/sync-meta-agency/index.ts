@@ -252,12 +252,17 @@ async function syncFacebookPage(
           );
           const insightsData = await insightsResponse.json();
           
-          for (const insight of insightsData.data || []) {
-            if (insight.name === 'post_impressions_unique') reach = insight.values?.[0]?.value || 0;
-            if (insight.name === 'post_impressions') impressions = insight.values?.[0]?.value || 0;
+          if (insightsData.error) {
+            console.log(`FB insights error for post ${post.id}: ${insightsData.error.message}`);
+          } else {
+            for (const insight of insightsData.data || []) {
+              if (insight.name === 'post_impressions_unique') reach = insight.values?.[0]?.value || 0;
+              if (insight.name === 'post_impressions') impressions = insight.values?.[0]?.value || 0;
+            }
+            console.log(`Got FB insights for ${post.id}: reach=${reach}, impressions=${impressions}`);
           }
         } catch (e) {
-          console.log(`Could not fetch insights for post ${post.id}:`, e);
+          console.log(`Exception fetching FB insights for post ${post.id}:`, e);
         }
 
         // Insert metrics
@@ -366,6 +371,7 @@ async function syncInstagramAccount(
 
     let recordsSynced = 0;
     let totalEngagement = 0;
+    let totalReach = 0;
 
     for (const media of mediaData.data || []) {
       const likes = media.like_count || 0;
@@ -392,22 +398,36 @@ async function syncInstagramAccount(
         .single();
 
       if (contentData) {
-        // Fetch insights for this media
+        // Fetch insights for this media - metrics vary by media type
         let reach = 0;
         let impressions = 0;
+        let views = 0;
 
         try {
+          // Different metrics for different media types
+          // VIDEO/REELS use 'plays' and 'reach', IMAGE/CAROUSEL use 'impressions' and 'reach'
+          let metrics = 'reach,impressions';
+          if (media.media_type === 'VIDEO' || media.media_type === 'REELS') {
+            metrics = 'reach,plays';
+          }
+          
           const insightsResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${media.id}/insights?metric=reach,impressions&access_token=${accessToken}`
+            `https://graph.facebook.com/v21.0/${media.id}/insights?metric=${metrics}&access_token=${accessToken}`
           );
           const insightsData = await insightsResponse.json();
           
-          for (const insight of insightsData.data || []) {
-            if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
-            if (insight.name === 'impressions') impressions = insight.values?.[0]?.value || 0;
+          if (insightsData.error) {
+            console.log(`Insights error for media ${media.id}: ${insightsData.error.message}`);
+          } else {
+            for (const insight of insightsData.data || []) {
+              if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
+              if (insight.name === 'impressions') impressions = insight.values?.[0]?.value || 0;
+              if (insight.name === 'plays') views = insight.values?.[0]?.value || 0;
+            }
+            console.log(`Got insights for ${media.id}: reach=${reach}, impressions=${impressions}, views=${views}`);
           }
         } catch (e) {
-          // Insights may not be available for all media
+          console.log(`Exception fetching insights for media ${media.id}:`, e);
         }
 
         await supabase.from('social_content_metrics').insert({
@@ -418,9 +438,11 @@ async function syncInstagramAccount(
           likes,
           comments,
           reach,
-          impressions,
+          impressions: impressions || views, // Use views as impressions for videos
+          views,
         });
 
+        totalReach += reach;
         totalEngagement += likes + comments;
         recordsSynced++;
       }
