@@ -55,6 +55,44 @@ export type Database = {
           },
         ]
       }
+      client_youtube_map: {
+        Row: {
+          active: boolean
+          channel_id: string
+          client_id: string
+          created_at: string
+          id: string
+          mapped_at: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          channel_id: string
+          client_id: string
+          created_at?: string
+          id?: string
+          mapped_at?: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          channel_id?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+          mapped_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_youtube_map_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           api_key: string | null
@@ -764,6 +802,45 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      youtube_assets: {
+        Row: {
+          channel_id: string
+          channel_name: string
+          channel_url: string | null
+          created_at: string
+          discovered_at: string
+          id: string
+          last_seen_at: string
+          subscriber_count: number | null
+          thumbnail_url: string | null
+          video_count: number | null
+        }
+        Insert: {
+          channel_id: string
+          channel_name: string
+          channel_url?: string | null
+          created_at?: string
+          discovered_at?: string
+          id?: string
+          last_seen_at?: string
+          subscriber_count?: number | null
+          thumbnail_url?: string | null
+          video_count?: number | null
+        }
+        Update: {
+          channel_id?: string
+          channel_name?: string
+          channel_url?: string | null
+          created_at?: string
+          discovered_at?: string
+          id?: string
+          last_seen_at?: string
+          subscriber_count?: number | null
+          thumbnail_url?: string | null
+          video_count?: number | null
         }
         Relationships: []
       }

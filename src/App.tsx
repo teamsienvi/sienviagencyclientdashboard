@@ -9,6 +9,7 @@ import DynamicReport from "./pages/DynamicReport";
 import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 import AdminMetaAssets from "./pages/AdminMetaAssets";
+import AdminYouTubeAssets from "./pages/AdminYouTubeAssets";
 import YouTubeAnalytics from "./pages/YouTubeAnalytics";
 import XAnalytics from "./pages/XAnalytics";
 import MetaAnalytics from "./pages/MetaAnalytics";
@@ -57,6 +58,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/meta-assets" element={<AdminMetaAssets />} />
+          <Route path="/admin/youtube-assets" element={<AdminYouTubeAssets />} />
           <Route path="/report/:clientId/:reportId" element={<Report />} />
           <Route path="/dynamic-report/:reportId" element={<DynamicReport />} />
           <Route path="/youtube-analytics/:clientId" element={<YouTubeAnalytics />} />
