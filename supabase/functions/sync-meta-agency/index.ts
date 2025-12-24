@@ -211,6 +211,30 @@ async function syncFacebookPage(
 
     const followers = pageData.followers_count || pageData.fan_count || 0;
 
+    // Fetch page-level insights for reach (more reliable than post-level)
+    let pageReach = 0;
+    let pageImpressions = 0;
+    try {
+      const pageInsightsResponse = await fetch(
+        `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions,page_impressions_unique&period=week&access_token=${accessToken}`
+      );
+      const pageInsightsData = await pageInsightsResponse.json();
+      
+      if (!pageInsightsData.error && pageInsightsData.data) {
+        for (const insight of pageInsightsData.data) {
+          if (insight.name === 'page_impressions_unique') {
+            pageReach = insight.values?.[insight.values.length - 1]?.value || 0;
+          }
+          if (insight.name === 'page_impressions') {
+            pageImpressions = insight.values?.[insight.values.length - 1]?.value || 0;
+          }
+        }
+        console.log(`Got page insights for ${pageId}: reach=${pageReach}, impressions=${pageImpressions}`);
+      }
+    } catch (e) {
+      console.log(`Could not fetch page insights:`, e);
+    }
+
     // Fetch posts
     const postsResponse = await fetch(
       `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=25&access_token=${accessToken}`
@@ -218,8 +242,9 @@ async function syncFacebookPage(
     const postsData = await postsResponse.json();
 
     let recordsSynced = 0;
-    let totalReach = 0;
+    let totalReach = pageReach;
     let totalEngagement = 0;
+    const postCount = postsData.data?.length || 1;
 
     for (const post of postsData.data || []) {
       const likes = post.reactions?.summary?.total_count || 0;
@@ -242,28 +267,10 @@ async function syncFacebookPage(
         .single();
 
       if (contentData) {
-        // Fetch insights for this post
-        let reach = 0;
-        let impressions = 0;
-
-        try {
-          const insightsResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions,post_impressions_unique&access_token=${accessToken}`
-          );
-          const insightsData = await insightsResponse.json();
-          
-          if (insightsData.error) {
-            console.log(`FB insights error for post ${post.id}: ${insightsData.error.message}`);
-          } else {
-            for (const insight of insightsData.data || []) {
-              if (insight.name === 'post_impressions_unique') reach = insight.values?.[0]?.value || 0;
-              if (insight.name === 'post_impressions') impressions = insight.values?.[0]?.value || 0;
-            }
-            console.log(`Got FB insights for ${post.id}: reach=${reach}, impressions=${impressions}`);
-          }
-        } catch (e) {
-          console.log(`Exception fetching FB insights for post ${post.id}:`, e);
-        }
+        // Distribute page-level reach across posts as an estimate
+        // Individual post insights are often unavailable in the new Graph API
+        const estimatedReach = Math.round(pageReach / postCount);
+        const estimatedImpressions = Math.round(pageImpressions / postCount);
 
         // Insert metrics
         await supabase.from('social_content_metrics').insert({
@@ -274,11 +281,10 @@ async function syncFacebookPage(
           likes,
           comments,
           shares,
-          reach,
-          impressions,
+          reach: estimatedReach,
+          impressions: estimatedImpressions,
         });
 
-        totalReach += reach;
         totalEngagement += likes + comments + shares;
         recordsSynced++;
       }
