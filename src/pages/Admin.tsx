@@ -7,7 +7,7 @@ import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogOut, Shield, Facebook, ArrowRight } from "lucide-react";
+import { LogOut, Shield, Facebook, Youtube, ArrowRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Admin = () => {
@@ -86,12 +86,21 @@ const Admin = () => {
             <CardTitle>Quick Links</CardTitle>
             <CardDescription>Access admin tools and management pages</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <Link to="/admin/meta-assets">
               <Button variant="outline" className="w-full justify-between">
                 <span className="flex items-center gap-2">
                   <Facebook className="h-4 w-4 text-blue-600" />
                   Meta Assets Management
+                </span>
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link to="/admin/youtube-assets">
+              <Button variant="outline" className="w-full justify-between">
+                <span className="flex items-center gap-2">
+                  <Youtube className="h-4 w-4 text-red-600" />
+                  YouTube Assets Management
                 </span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
