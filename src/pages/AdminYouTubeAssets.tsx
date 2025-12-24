@@ -65,6 +65,7 @@ const AdminYouTubeAssets = () => {
   // Add channel dialog
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newChannelId, setNewChannelId] = useState("");
+  const [assignToClient, setAssignToClient] = useState<string>("");
 
   useEffect(() => {
     if (isAuthenticated && isAdmin) {
@@ -121,8 +122,23 @@ const AdminYouTubeAssets = () => {
 
       if (error) throw error;
       
-      toast.success(`Added channel: ${data.channelName}`);
+      // If a client is selected, also create the mapping
+      if (assignToClient && data.channelId) {
+        await supabase
+          .from("client_youtube_map")
+          .upsert({
+            client_id: assignToClient,
+            channel_id: data.channelId,
+            active: true,
+            mapped_at: new Date().toISOString(),
+          }, {
+            onConflict: "client_id,channel_id",
+          });
+      }
+      
+      toast.success(`Added channel: ${data.channelName}${assignToClient ? ' and assigned to client' : ''}`);
       setNewChannelId("");
+      setAssignToClient("");
       setAddDialogOpen(false);
       await fetchData();
     } catch (error) {
@@ -339,6 +355,21 @@ const AdminYouTubeAssets = () => {
                         onChange={(e) => setNewChannelId(e.target.value)}
                       />
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="assignClient">Assign to Client (Optional)</Label>
+                      <Select value={assignToClient} onValueChange={setAssignToClient}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a client..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clients.map((client) => (
+                            <SelectItem key={client.id} value={client.id}>
+                              {client.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
@@ -495,7 +526,23 @@ const AdminYouTubeAssets = () => {
                         </TableCell>
                         <TableCell>
                           {isAssigned ? (
-                            <span className="text-sm">{getClientName(mapping!.client_id)}</span>
+                            <Select 
+                              value={mapping!.client_id} 
+                              onValueChange={(clientId) => handleAssign(asset.id, clientId)}
+                            >
+                              <SelectTrigger className="w-40 h-8">
+                                <SelectValue>
+                                  {getClientName(mapping!.client_id)}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {clients.map((client) => (
+                                  <SelectItem key={client.id} value={client.id}>
+                                    {client.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <Select onValueChange={(clientId) => handleAssign(asset.id, clientId)}>
                               <SelectTrigger className="w-40 h-8">

@@ -159,7 +159,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     new_followers: number | null;
   } | null>(null);
 
-  const isConnected = oauthAccount !== null && oauthAccount.is_active;
+  // Agency mapping state
+  const [agencyMapping, setAgencyMapping] = useState<{
+    page_id: string | null;
+    ig_business_id: string | null;
+  } | null>(null);
+
+  // isConnected is true if either per-client OAuth OR agency mapping exists
+  const isConnected = (oauthAccount !== null && oauthAccount.is_active) || (agencyMapping !== null);
+  const hasAgencyConnection = agencyMapping !== null;
 
   // Get the most recent Monday (start of reporting week)
   const getMostRecentMonday = (fromDate: Date = new Date()) => {
@@ -217,6 +225,27 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     
     setOauthAccount(data);
     return data;
+  };
+
+  // Fetch agency mapping (from client_meta_map) for this client
+  const fetchAgencyMapping = async () => {
+    const { data } = await supabase
+      .from("client_meta_map")
+      .select("page_id, ig_business_id")
+      .eq("client_id", clientId)
+      .eq("active", true);
+
+    if (data && data.length > 0) {
+      // Combine all mappings - there might be separate FB page and IG mappings
+      const combined = {
+        page_id: data.find(m => m.page_id)?.page_id || null,
+        ig_business_id: data.find(m => m.ig_business_id)?.ig_business_id || null,
+      };
+      setAgencyMapping(combined);
+      return combined;
+    }
+    setAgencyMapping(null);
+    return null;
   };
 
   const fetchInstagramProfile = async (accessToken: string, instagramBusinessId: string, pageId?: string | null) => {
@@ -469,9 +498,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const compStartDate = format(startOfDay(compStart), "yyyy-MM-dd");
       const compEndDate = format(endOfDay(compEnd), "yyyy-MM-dd");
 
-      // Fetch OAuth account, platform data, report comparison data, and sync logs in parallel
-      const [oauth, instagramData, facebookData] = await Promise.all([
+      // Fetch OAuth account, agency mapping, and platform data in parallel
+      const [oauth, agency, instagramData, facebookData] = await Promise.all([
         fetchOAuthAccount(),
+        fetchAgencyMapping(),
         fetchPlatformData("instagram", startDate, endDate, compStartDate, compEndDate),
         fetchPlatformData("facebook", startDate, endDate, compStartDate, compEndDate),
       ]);
@@ -1127,12 +1157,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       )}
 
       {/* Connection Status Badges */}
-      {!instagramProfile && (
+      {!instagramProfile && isConnected && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-green-600 border-green-600">
               <CheckCircle2 className="h-3 w-3 mr-1" />
-              Meta Connected
+              {hasAgencyConnection ? "Agency Connected" : "Meta Connected"}
             </Badge>
             {loadingProfile && (
               <Badge variant="secondary" className="gap-1">
@@ -1140,13 +1170,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 Loading profile...
               </Badge>
             )}
-            {oauthAccount?.instagram_business_id && !loadingProfile && (
+            {(oauthAccount?.instagram_business_id || agencyMapping?.ig_business_id) && !loadingProfile && (
               <Badge variant="secondary" className="gap-1">
                 <Instagram className="h-3 w-3" />
                 Instagram
               </Badge>
             )}
-            {oauthAccount?.page_id && (
+            {(oauthAccount?.page_id || agencyMapping?.page_id) && (
               <Badge variant="secondary" className="gap-1">
                 <Facebook className="h-3 w-3" />
                 Facebook
@@ -1229,36 +1259,47 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       <Tabs value={activePlatform} onValueChange={(v) => setActivePlatform(v as MetaPlatform)}>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <TabsList>
-            <TabsTrigger value="instagram" className="flex items-center gap-2" disabled={!oauthAccount?.instagram_business_id}>
+            <TabsTrigger 
+              value="instagram" 
+              className="flex items-center gap-2" 
+              disabled={!oauthAccount?.instagram_business_id && !agencyMapping?.ig_business_id}
+            >
               <Instagram className="h-4 w-4" /> Instagram
             </TabsTrigger>
-            <TabsTrigger value="facebook" className="flex items-center gap-2" disabled={!oauthAccount?.page_id}>
+            <TabsTrigger 
+              value="facebook" 
+              className="flex items-center gap-2" 
+              disabled={!oauthAccount?.page_id && !agencyMapping?.page_id}
+            >
               <Facebook className="h-4 w-4" /> Facebook
             </TabsTrigger>
           </TabsList>
           
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleSync(activePlatform, true)}
-                disabled={syncing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-                Sync Last Week
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleSync(activePlatform, false)}
-                disabled={syncing}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-                {syncing ? "Syncing..." : "Sync Now"}
-              </Button>
+          {/* Only show sync buttons for per-client OAuth (not agency model) */}
+          {oauthAccount?.access_token && (
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSync(activePlatform, true)}
+                  disabled={syncing}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+                  Sync Last Week
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSync(activePlatform, false)}
+                  disabled={syncing}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+                  {syncing ? "Syncing..." : "Sync Now"}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
