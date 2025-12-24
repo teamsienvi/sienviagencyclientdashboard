@@ -242,6 +242,24 @@ async function syncFacebookPage(
         .single();
 
       if (contentData) {
+        // Fetch insights for this post
+        let reach = 0;
+        let impressions = 0;
+
+        try {
+          const insightsResponse = await fetch(
+            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions,post_impressions_unique&access_token=${accessToken}`
+          );
+          const insightsData = await insightsResponse.json();
+          
+          for (const insight of insightsData.data || []) {
+            if (insight.name === 'post_impressions_unique') reach = insight.values?.[0]?.value || 0;
+            if (insight.name === 'post_impressions') impressions = insight.values?.[0]?.value || 0;
+          }
+        } catch (e) {
+          console.log(`Could not fetch insights for post ${post.id}:`, e);
+        }
+
         // Insert metrics
         await supabase.from('social_content_metrics').insert({
           social_content_id: contentData.id,
@@ -251,10 +269,11 @@ async function syncFacebookPage(
           likes,
           comments,
           shares,
-          reach: 0,
-          impressions: 0,
+          reach,
+          impressions,
         });
 
+        totalReach += reach;
         totalEngagement += likes + comments + shares;
         recordsSynced++;
       }
