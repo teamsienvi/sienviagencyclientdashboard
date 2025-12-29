@@ -12,7 +12,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus, RotateCcw, Settings2 } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Heart, Eye, Share2, Image as ImageIcon, Facebook, Instagram, CheckCircle2, Link2, Clock, AlertCircle, Unlink, ArrowUp, ArrowDown, Minus, RotateCcw, Settings2, Info, Loader2, XCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import {
   AlertDialog,
@@ -170,6 +172,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const isConnected = (oauthAccount !== null && oauthAccount.is_active) || (agencyMapping !== null);
   const hasAgencyConnection = agencyMapping !== null;
 
+  // Bulk sync "in progress" banner state
+  const [bulkSyncRunning, setBulkSyncRunning] = useState(false);
+
+  // Sync details panel state
+  const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
+
   // Get the most recent Monday (start of reporting week)
   const getMostRecentMonday = (fromDate: Date = new Date()) => {
     const date = new Date(fromDate);
@@ -216,17 +224,21 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     fetchData();
   }, [clientId, dateRangePreset, customDateRange]);
 
-  // Listen for bulk sync complete to auto-refresh (works across tabs)
+  // Listen for bulk sync to show/hide banner and auto-refresh (works across tabs)
   useEffect(() => {
     const maybeRefreshFromResults = (results: any[]) => {
       const affectedClient = (results || []).find((r: any) => r.clientId === clientId && r.success);
       if (affectedClient) {
         setSyncingContent(true);
-        fetchData().finally(() => setSyncingContent(false));
+        fetchData().finally(() => {
+          setSyncingContent(false);
+          fetchSyncLogs();
+        });
       }
     };
 
     const handleBulkSyncComplete = (event: CustomEvent) => {
+      setBulkSyncRunning(false);
       maybeRefreshFromResults(event.detail || []);
     };
 
@@ -234,20 +246,27 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       if (e.key !== "meta_bulk_sync" || !e.newValue) return;
       try {
         const payload = JSON.parse(e.newValue);
-        if (payload?.status === "completed") {
-          maybeRefreshFromResults(payload.results || []);
+        if (payload?.status === "running") {
+          setBulkSyncRunning(true);
+        } else if (payload?.status === "completed" || payload?.status === "failed") {
+          setBulkSyncRunning(false);
+          if (payload?.status === "completed") {
+            maybeRefreshFromResults(payload.results || []);
+          }
         }
       } catch {
         // ignore
       }
     };
 
-    // If sync already completed before this tab loaded, pick it up
+    // Check current sync state on mount
     try {
       const raw = localStorage.getItem("meta_bulk_sync");
       if (raw) {
         const payload = JSON.parse(raw);
-        if (payload?.status === "completed") {
+        if (payload?.status === "running") {
+          setBulkSyncRunning(true);
+        } else if (payload?.status === "completed") {
           maybeRefreshFromResults(payload.results || []);
         }
       }
@@ -1068,6 +1087,81 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     </Card>
   );
 
+  // Render sync details panel
+  const renderSyncDetailsPanel = () => {
+    const currentLog = activePlatform === "instagram" ? instagramSyncLog : facebookSyncLog;
+
+    if (!currentLog) return null;
+
+    const isRunning = currentLog.status === "running" || currentLog.status === "in_progress";
+    const isFailed = currentLog.status === "failed";
+    const isCompleted = currentLog.status === "completed";
+
+    return (
+      <Collapsible open={syncDetailsOpen} onOpenChange={setSyncDetailsOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+            <Info className="h-4 w-4" />
+            Last sync details
+            {syncDetailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <div className="flex items-center gap-1.5">
+                {isRunning && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
+                {isCompleted && <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />}
+                {isFailed && <XCircle className="h-3.5 w-3.5 text-destructive" />}
+                <span className={
+                  isRunning ? "text-blue-500" :
+                  isCompleted ? "text-green-500" :
+                  isFailed ? "text-destructive" : ""
+                }>
+                  {currentLog.status}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Started</span>
+              <span>{formatDistanceToNow(new Date(currentLog.started_at), { addSuffix: true })}</span>
+            </div>
+            {currentLog.completed_at && (
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Completed</span>
+                <span>{formatDistanceToNow(new Date(currentLog.completed_at), { addSuffix: true })}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Records synced</span>
+              <span>{currentLog.records_synced ?? 0}</span>
+            </div>
+            {currentLog.error_message && (
+              <div className="mt-2 p-2 rounded bg-destructive/10 text-destructive text-xs">
+                {currentLog.error_message}
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  };
+
+  // Render bulk sync banner
+  const renderBulkSyncBanner = () => {
+    if (!bulkSyncRunning) return null;
+
+    return (
+      <Alert className="border-blue-500/50 bg-blue-500/5">
+        <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+        <AlertDescription className="text-blue-600 dark:text-blue-400">
+          Sync in progress… Data will refresh automatically when complete.
+        </AlertDescription>
+      </Alert>
+    );
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -1097,6 +1191,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   return (
     <div className="space-y-6">
+      {/* Bulk sync in-progress banner */}
+      {renderBulkSyncBanner()}
       {/* Connected Account Card */}
       {instagramProfile && (
         <Card className="bg-gradient-to-r from-purple-500/5 to-pink-500/5 border-purple-200/50 dark:border-purple-800/50">
@@ -1370,6 +1466,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               </div>
             </div>
           )}
+          {/* Sync Details Panel */}
+          {renderSyncDetailsPanel()}
         </div>
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
