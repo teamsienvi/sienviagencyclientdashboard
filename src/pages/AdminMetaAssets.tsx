@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { AuthForm } from "@/components/AuthForm";
+import { BulkMetaSync } from "@/components/BulkMetaSync";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -480,6 +481,11 @@ const AdminMetaAssets = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Bulk Meta Sync */}
+        <div className="mb-6">
+          <BulkMetaSync />
+        </div>
 
         {/* Per-Client Instagram Connections */}
         <Card className="mb-6">

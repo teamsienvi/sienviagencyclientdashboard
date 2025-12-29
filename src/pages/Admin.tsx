@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ClientManagement } from "@/components/ClientManagement";
-import { BulkMetaSync } from "@/components/BulkMetaSync";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -107,10 +106,6 @@ const Admin = () => {
             </Link>
           </CardContent>
         </Card>
-        
-        <div className="space-y-8 mb-8">
-          <BulkMetaSync />
-        </div>
         
         <ClientManagement />
       </main>
