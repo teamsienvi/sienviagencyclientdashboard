@@ -171,15 +171,8 @@ serve(async (req) => {
       console.log(`Fetching insights for ${mediaItems.length} Instagram posts...`);
       for (const item of mediaItems) {
         try {
-          let insightMetrics: string;
-
-          if (item.media_type === 'VIDEO') {
-            insightMetrics = 'reach,saved,total_interactions';
-          } else if (item.media_type === 'CAROUSEL_ALBUM') {
-            insightMetrics = 'reach,saved,total_interactions';
-          } else {
-            insightMetrics = 'reach,saved,total_interactions';
-          }
+          // v22.0+ compatible: use 'reach,views,saved,total_interactions' instead of deprecated 'impressions,plays'
+          const insightMetrics = 'reach,views,saved,total_interactions';
 
           const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=${insightMetrics}&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
@@ -189,7 +182,7 @@ serve(async (req) => {
           if (insightsJson.error) {
             console.log(`IG insights API error for ${item.id} (${item.media_type}): ${insightsJson.error.message?.substring(0, 100)}`);
             
-            // Try fallback with just reach
+            // Try fallback with just reach (most reliable metric)
             const fallbackUrl = `${baseUrl}/${item.id}/insights?metric=reach&access_token=${accessToken}`;
             const fallbackResp = await fetch(fallbackUrl);
             const fallbackJson = await fallbackResp.json();
@@ -294,14 +287,18 @@ serve(async (req) => {
         likes = item.like_count || 0;
         comments = item.comments_count || 0;
 
+        let views = 0;
         if (item.insights?.data) {
           for (const insight of item.insights.data) {
             const value = insight.values?.[0]?.value || 0;
             if (insight.name === 'reach') reach = value;
+            if (insight.name === 'views') views = value; // v22.0+ replaces impressions
             if (insight.name === 'saved') saved = value;
             if (insight.name === 'total_interactions') interactions = value;
           }
         }
+        // Store views as impressions for backward compatibility
+        impressions = views;
 
         if (interactions === 0) {
           interactions = likes + comments + shares + saved;

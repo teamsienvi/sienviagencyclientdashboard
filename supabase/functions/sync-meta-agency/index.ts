@@ -640,12 +640,11 @@ async function syncInstagramAccount(
     let totalEngagement = 0;
     let insightsFailed = 0;
 
-    // Batch fetch post insights with period=lifetime for reliability
+    // Batch fetch post insights - use v22.0 compatible metrics (views instead of deprecated impressions/plays)
     const postInsightsPromises = mediaInPeriod.map(async (post: any) => {
       try {
-        const metrics = post.media_type === 'VIDEO' 
-          ? 'reach,impressions,plays' 
-          : 'reach,impressions';
+        // v22.0+ compatible: use 'reach,views' instead of deprecated 'reach,impressions,plays'
+        const metrics = 'reach,views';
         const resp = await fetch(
           `https://graph.facebook.com/v21.0/${post.id}/insights?metric=${metrics}&access_token=${accessToken}`
         );
@@ -655,7 +654,7 @@ async function syncInstagramAccount(
         if (data.error) {
           console.log(`IG insights API error for ${post.id}: ${data.error.message?.substring(0, 100)}`);
           
-          // Try fallback with just reach
+          // Try fallback with just reach (most reliable metric)
           const fallbackResp = await fetch(
             `https://graph.facebook.com/v21.0/${post.id}/insights?metric=reach&access_token=${accessToken}`
           );
@@ -666,35 +665,35 @@ async function syncInstagramAccount(
             for (const insight of fallbackData.data || []) {
               if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
             }
-            return { postId: post.id, reach, impressions: null, failed: false, fallback: true };
+            return { postId: post.id, reach, views: null, failed: false, fallback: true };
           }
           
-          return { postId: post.id, reach: null, impressions: null, failed: true, reason: data.error.code || 'unknown' };
+          return { postId: post.id, reach: null, views: null, failed: true, reason: data.error.code || 'unknown' };
         }
         
         if (resp.ok && data.data) {
-          let reach = 0, impressions = 0;
+          let reach = 0, views = 0;
           for (const insight of data.data || []) {
             const val = insight.values?.[0]?.value || 0;
             if (insight.name === 'reach') reach = val;
-            if (insight.name === 'impressions') impressions = val;
+            if (insight.name === 'views') views = val;
           }
-          return { postId: post.id, reach, impressions, failed: false };
+          return { postId: post.id, reach, views, failed: false };
         } else {
           console.log(`IG insights failed for ${post.id}: status=${resp.status}`);
-          return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'http_error' };
+          return { postId: post.id, reach: null, views: null, failed: true, reason: 'http_error' };
         }
       } catch (e) {
         console.log(`Could not fetch insights for IG post ${post.id}: ${e}`);
-        return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'exception' };
+        return { postId: post.id, reach: null, views: null, failed: true, reason: 'exception' };
       }
     });
 
     const postInsights = await Promise.all(postInsightsPromises);
-    const insightsMap: Record<string, { reach: number | null; impressions: number | null }> = {};
+    const insightsMap: Record<string, { reach: number | null; views: number | null }> = {};
     const failureReasons: Record<string, number> = {};
     for (const pi of postInsights) {
-      insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
+      insightsMap[pi.postId] = { reach: pi.reach, views: (pi as any).views };
       if (pi.failed) {
         insightsFailed++;
         const reason = (pi as any).reason || 'unknown';
@@ -712,7 +711,7 @@ async function syncInstagramAccount(
       const comments = post.comments_count || 0;
 
       const postReach = insightsMap[post.id]?.reach;
-      const postImpressions = insightsMap[post.id]?.impressions;
+      const postViews = insightsMap[post.id]?.views;
 
       // Map media_type to content_type
       let contentType = 'post';
@@ -735,7 +734,7 @@ async function syncInstagramAccount(
         .single();
 
       if (contentData) {
-        // Insert metrics
+        // Insert metrics - store views as impressions for backward compatibility with UI
         await supabase.from('social_content_metrics').insert({
           social_content_id: contentData.id,
           platform: 'instagram',
@@ -744,7 +743,8 @@ async function syncInstagramAccount(
           likes,
           comments,
           reach: postReach ?? 0,
-          impressions: postImpressions ?? 0,
+          impressions: postViews ?? 0, // views replaces deprecated impressions in v22.0+
+          views: postViews ?? 0,
         });
 
         totalEngagement += likes + comments;
