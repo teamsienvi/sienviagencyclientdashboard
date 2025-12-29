@@ -358,22 +358,39 @@ async function syncFacebookPage(
     const postsData = await postsResponse.json();
 
     let recordsSynced = 0;
-    let totalReach = pageReach;
     let totalEngagement = 0;
     let postsInPeriod = 0;
-    const postCount = postsData.data?.length || 1;
 
     for (const post of postsData.data || []) {
       const postDate = new Date(post.created_time);
       const periodStartDate = new Date(periodStart);
       const periodEndDate = new Date(periodEnd);
-      periodEndDate.setHours(23, 59, 59, 999); // Include end of day
+      periodEndDate.setHours(23, 59, 59, 999);
       
       const isInPeriod = postDate >= periodStartDate && postDate <= periodEndDate;
       
       const likes = post.reactions?.summary?.total_count || 0;
       const comments = post.comments?.summary?.total_count || 0;
       const shares = post.shares?.count || 0;
+
+      // Fetch per-post insights for reach
+      let postReach = 0;
+      let postImpressions = 0;
+      try {
+        const postInsightsResp = await fetch(
+          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`
+        );
+        if (postInsightsResp.ok) {
+          const postInsightsData = await postInsightsResp.json();
+          for (const insight of postInsightsData.data || []) {
+            const val = insight.values?.[0]?.value || 0;
+            if (insight.name === 'post_impressions_unique') postReach = val;
+            if (insight.name === 'post_impressions') postImpressions = val;
+          }
+        }
+      } catch (e) {
+        console.log(`Could not fetch post insights for ${post.id}:`, e);
+      }
 
       // Upsert content
       const { data: contentData } = await supabase
@@ -391,11 +408,7 @@ async function syncFacebookPage(
         .single();
 
       if (contentData) {
-        // Distribute page-level reach across posts as an estimate
-        const estimatedReach = Math.round(pageReach / postCount);
-        const estimatedImpressions = Math.round(pageImpressions / postCount);
-
-        // Insert metrics
+        // Insert metrics with per-post reach
         await supabase.from('social_content_metrics').insert({
           social_content_id: contentData.id,
           platform: 'facebook',
@@ -404,11 +417,10 @@ async function syncFacebookPage(
           likes,
           comments,
           shares,
-          reach: estimatedReach,
-          impressions: estimatedImpressions,
+          reach: postReach,
+          impressions: postImpressions,
         });
 
-        // Only count engagement for posts IN the period
         if (isInPeriod) {
           totalEngagement += likes + comments + shares;
           postsInPeriod++;
