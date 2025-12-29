@@ -303,6 +303,48 @@ serve(async (req) => {
   }
 });
 
+// Helper to fetch posts with pagination until we cover the period
+async function fetchPostsWithPagination(
+  baseUrl: string,
+  accessToken: string,
+  periodStart: Date,
+  maxItems: number = 100
+): Promise<any[]> {
+  const allPosts: any[] = [];
+  let nextUrl: string | null = baseUrl;
+  
+  while (nextUrl && allPosts.length < maxItems) {
+    const resp: Response = await fetch(nextUrl);
+    if (!resp.ok) {
+      console.log(`Failed to fetch posts: ${resp.status}`);
+      break;
+    }
+    
+    const json = await resp.json();
+    if (json.error) {
+      console.log(`API error fetching posts: ${json.error.message}`);
+      break;
+    }
+    
+    const posts = json.data || [];
+    if (posts.length === 0) break;
+    
+    allPosts.push(...posts);
+    
+    // Check if oldest post is before our period start - we can stop
+    const oldestPost = posts[posts.length - 1];
+    const oldestDate = new Date(oldestPost.created_time || oldestPost.timestamp);
+    if (oldestDate < periodStart) {
+      break;
+    }
+    
+    // Get next page URL
+    nextUrl = json.paging?.next || null;
+  }
+  
+  return allPosts;
+}
+
 async function syncFacebookPage(
   supabase: any,
   clientId: string,
@@ -312,8 +354,11 @@ async function syncFacebookPage(
   periodStart: string,
   periodEnd: string
 ): Promise<SyncResult> {
+  let syncLogId: string | null = null;
+  let errorMessages: string[] = [];
+  
   try {
-    console.log(`Syncing Facebook page ${pageId} for client ${clientName}`);
+    console.log(`Syncing Facebook page ${pageId} for client ${clientName} (${periodStart} to ${periodEnd})`);
 
     // Create sync log
     const { data: syncLog } = await supabase
@@ -325,6 +370,8 @@ async function syncFacebookPage(
       })
       .select()
       .single();
+    
+    syncLogId = syncLog?.id;
 
     // Fetch page info
     const pageResponse = await fetch(
@@ -338,22 +385,33 @@ async function syncFacebookPage(
 
     const followers = pageData.followers_count || pageData.fan_count || 0;
 
-    // Fetch posts
-    const postsResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=15&access_token=${accessToken}`
-    );
-    const postsData = await postsResponse.json();
+    // Parse period dates
+    const periodStartDate = new Date(periodStart);
+    const periodEndDate = new Date(periodEnd);
+    periodEndDate.setHours(23, 59, 59, 999);
+
+    // Fetch posts with pagination to cover the period
+    const postsUrl = `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=50&access_token=${accessToken}`;
+    const allPosts = await fetchPostsWithPagination(postsUrl, accessToken, periodStartDate, 100);
+    
+    console.log(`Fetched ${allPosts.length} total Facebook posts`);
+
+    // Filter posts to only those in the requested period
+    const postsInPeriod = allPosts.filter(post => {
+      const postDate = new Date(post.created_time);
+      return postDate >= periodStartDate && postDate <= periodEndDate;
+    });
+    
+    console.log(`Found ${postsInPeriod.length} Facebook posts in period ${periodStart} to ${periodEnd}`);
 
     let recordsSynced = 0;
     let totalEngagement = 0;
-    let postsInPeriod = 0;
+    let insightsFailed = 0;
 
-    const posts = postsData.data || [];
-    
-    // Batch fetch post insights - limit to 10 posts max to avoid timeout
-    const postsToSync = posts.slice(0, 10);
-    const postInsightsPromises = postsToSync.map(async (post: any) => {
+    // Batch fetch post insights - use correct metrics for Facebook
+    const postInsightsPromises = postsInPeriod.map(async (post: any) => {
       try {
+        // Use post_impressions_unique for reach, post_impressions for impressions
         const resp = await fetch(
           `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`
         );
@@ -365,34 +423,36 @@ async function syncFacebookPage(
             if (insight.name === 'post_impressions_unique') reach = val;
             if (insight.name === 'post_impressions') impressions = val;
           }
-          return { postId: post.id, reach, impressions };
+          return { postId: post.id, reach, impressions, failed: false };
+        } else {
+          const errText = await resp.text();
+          console.log(`FB insights failed for ${post.id}: ${errText.substring(0, 100)}`);
+          return { postId: post.id, reach: null, impressions: null, failed: true };
         }
       } catch (e) {
-        console.log(`Could not fetch insights for post ${post.id}`);
+        console.log(`Could not fetch insights for post ${post.id}: ${e}`);
+        return { postId: post.id, reach: null, impressions: null, failed: true };
       }
-      return { postId: post.id, reach: 0, impressions: 0 };
     });
 
     const postInsights = await Promise.all(postInsightsPromises);
-    const insightsMap: Record<string, { reach: number; impressions: number }> = {};
+    const insightsMap: Record<string, { reach: number | null; impressions: number | null }> = {};
     for (const pi of postInsights) {
       insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
+      if (pi.failed) insightsFailed++;
     }
 
-    for (const post of postsToSync) {
-      const postDate = new Date(post.created_time);
-      const periodStartDate = new Date(periodStart);
-      const periodEndDate = new Date(periodEnd);
-      periodEndDate.setHours(23, 59, 59, 999);
-      
-      const isInPeriod = postDate >= periodStartDate && postDate <= periodEndDate;
-      
+    if (insightsFailed > 0) {
+      errorMessages.push(`Insights unavailable for ${insightsFailed}/${postsInPeriod.length} posts`);
+    }
+
+    for (const post of postsInPeriod) {
       const likes = post.reactions?.summary?.total_count || 0;
       const comments = post.comments?.summary?.total_count || 0;
       const shares = post.shares?.count || 0;
 
-      const postReach = insightsMap[post.id]?.reach || 0;
-      const postImpressions = insightsMap[post.id]?.impressions || 0;
+      const postReach = insightsMap[post.id]?.reach;
+      const postImpressions = insightsMap[post.id]?.impressions;
 
       // Upsert content
       const { data: contentData } = await supabase
@@ -410,7 +470,7 @@ async function syncFacebookPage(
         .single();
 
       if (contentData) {
-        // Insert metrics with per-post reach
+        // Insert metrics with per-post reach (null if unavailable)
         await supabase.from('social_content_metrics').insert({
           social_content_id: contentData.id,
           platform: 'facebook',
@@ -419,19 +479,16 @@ async function syncFacebookPage(
           likes,
           comments,
           shares,
-          reach: postReach,
-          impressions: postImpressions,
+          reach: postReach ?? 0,
+          impressions: postImpressions ?? 0,
         });
 
-        if (isInPeriod) {
-          totalEngagement += likes + comments + shares;
-          postsInPeriod++;
-        }
+        totalEngagement += likes + comments + shares;
         recordsSynced++;
       }
     }
 
-    // Insert account metrics - use posts in period, not total fetched
+    // Insert account metrics - use actual posts in period
     const engagementRate = followers > 0 ? (totalEngagement / followers) * 100 : 0;
 
     await supabase.from('social_account_metrics').insert({
@@ -441,19 +498,20 @@ async function syncFacebookPage(
       period_end: periodEnd,
       followers,
       engagement_rate: Math.min(engagementRate, 100), // Cap at 100% for sanity
-      total_content: postsInPeriod, // Use actual posts in period
+      total_content: postsInPeriod.length, // Actual count of posts in period
     });
 
     // Update sync log
-    if (syncLog) {
+    if (syncLogId) {
       await supabase
         .from('social_sync_logs')
         .update({
           status: 'completed',
           records_synced: recordsSynced,
           completed_at: new Date().toISOString(),
+          error_message: errorMessages.length > 0 ? errorMessages.join('; ') : null,
         })
-        .eq('id', syncLog.id);
+        .eq('id', syncLogId);
     }
 
     return {
@@ -465,12 +523,26 @@ async function syncFacebookPage(
     };
   } catch (error) {
     console.error(`Error syncing Facebook for ${clientName}:`, error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Update sync log with error
+    if (syncLogId) {
+      await supabase
+        .from('social_sync_logs')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          error_message: errorMsg,
+        })
+        .eq('id', syncLogId);
+    }
+    
     return {
       clientId,
       clientName,
       platform: 'facebook',
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMsg,
     };
   }
 }
@@ -484,8 +556,11 @@ async function syncInstagramAccount(
   periodStart: string,
   periodEnd: string
 ): Promise<SyncResult> {
+  let syncLogId: string | null = null;
+  let errorMessages: string[] = [];
+  
   try {
-    console.log(`Syncing Instagram account ${igBusinessId} for client ${clientName}`);
+    console.log(`Syncing Instagram account ${igBusinessId} for client ${clientName} (${periodStart} to ${periodEnd})`);
 
     // Create sync log
     const { data: syncLog } = await supabase
@@ -497,6 +572,8 @@ async function syncInstagramAccount(
       })
       .select()
       .single();
+    
+    syncLogId = syncLog?.id;
 
     // Fetch account info
     const accountResponse = await fetch(
@@ -510,21 +587,31 @@ async function syncInstagramAccount(
 
     const followers = accountData.followers_count || 0;
 
-    // Fetch media - limit to 15 posts
-    const mediaResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${igBusinessId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=15&access_token=${accessToken}`
-    );
-    const mediaData = await mediaResponse.json();
+    // Parse period dates
+    const periodStartDate = new Date(periodStart);
+    const periodEndDate = new Date(periodEnd);
+    periodEndDate.setHours(23, 59, 59, 999);
+
+    // Fetch media with pagination to cover the period
+    const mediaUrl = `https://graph.facebook.com/v21.0/${igBusinessId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=50&access_token=${accessToken}`;
+    const allMedia = await fetchPostsWithPagination(mediaUrl, accessToken, periodStartDate, 100);
+    
+    console.log(`Fetched ${allMedia.length} total Instagram posts`);
+
+    // Filter media to only those in the requested period
+    const mediaInPeriod = allMedia.filter(item => {
+      const postDate = new Date(item.timestamp);
+      return postDate >= periodStartDate && postDate <= periodEndDate;
+    });
+    
+    console.log(`Found ${mediaInPeriod.length} Instagram posts in period ${periodStart} to ${periodEnd}`);
 
     let recordsSynced = 0;
     let totalEngagement = 0;
-    let postsInPeriod = 0;
-
-    const posts = mediaData.data || [];
-    const postsToSync = posts.slice(0, 10);
+    let insightsFailed = 0;
 
     // Batch fetch post insights
-    const postInsightsPromises = postsToSync.map(async (post: any) => {
+    const postInsightsPromises = mediaInPeriod.map(async (post: any) => {
       try {
         const metrics = post.media_type === 'VIDEO' 
           ? 'reach,impressions,plays' 
@@ -540,37 +627,49 @@ async function syncInstagramAccount(
             if (insight.name === 'reach') reach = val;
             if (insight.name === 'impressions') impressions = val;
           }
-          return { postId: post.id, reach, impressions };
+          return { postId: post.id, reach, impressions, failed: false };
+        } else {
+          // Try fallback with just reach
+          const fallbackResp = await fetch(
+            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=reach&access_token=${accessToken}`
+          );
+          if (fallbackResp.ok) {
+            const data = await fallbackResp.json();
+            let reach = 0;
+            for (const insight of data.data || []) {
+              if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
+            }
+            return { postId: post.id, reach, impressions: 0, failed: false };
+          }
+          return { postId: post.id, reach: null, impressions: null, failed: true };
         }
       } catch (e) {
-        console.log(`Could not fetch insights for post ${post.id}`);
+        console.log(`Could not fetch insights for IG post ${post.id}: ${e}`);
+        return { postId: post.id, reach: null, impressions: null, failed: true };
       }
-      return { postId: post.id, reach: 0, impressions: 0 };
     });
 
     const postInsights = await Promise.all(postInsightsPromises);
-    const insightsMap: Record<string, { reach: number; impressions: number }> = {};
+    const insightsMap: Record<string, { reach: number | null; impressions: number | null }> = {};
     for (const pi of postInsights) {
       insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
+      if (pi.failed) insightsFailed++;
     }
 
-    for (const post of postsToSync) {
-      const postDate = new Date(post.timestamp);
-      const periodStartDate = new Date(periodStart);
-      const periodEndDate = new Date(periodEnd);
-      periodEndDate.setHours(23, 59, 59, 999);
-      
-      const isInPeriod = postDate >= periodStartDate && postDate <= periodEndDate;
+    if (insightsFailed > 0) {
+      errorMessages.push(`Insights unavailable for ${insightsFailed}/${mediaInPeriod.length} posts`);
+    }
 
+    for (const post of mediaInPeriod) {
       const likes = post.like_count || 0;
       const comments = post.comments_count || 0;
 
-      const postReach = insightsMap[post.id]?.reach || 0;
-      const postImpressions = insightsMap[post.id]?.impressions || 0;
+      const postReach = insightsMap[post.id]?.reach;
+      const postImpressions = insightsMap[post.id]?.impressions;
 
       // Map media_type to content_type
       let contentType = 'post';
-      if (post.media_type === 'VIDEO') contentType = 'video';
+      if (post.media_type === 'VIDEO') contentType = 'reel';
       if (post.media_type === 'CAROUSEL_ALBUM') contentType = 'carousel';
 
       // Upsert content
@@ -597,19 +696,16 @@ async function syncInstagramAccount(
           period_end: periodEnd,
           likes,
           comments,
-          reach: postReach,
-          impressions: postImpressions,
+          reach: postReach ?? 0,
+          impressions: postImpressions ?? 0,
         });
 
-        if (isInPeriod) {
-          totalEngagement += likes + comments;
-          postsInPeriod++;
-        }
+        totalEngagement += likes + comments;
         recordsSynced++;
       }
     }
 
-    // Insert account metrics
+    // Insert account metrics - use actual posts in period
     const engagementRate = followers > 0 ? (totalEngagement / followers) * 100 : 0;
 
     await supabase.from('social_account_metrics').insert({
@@ -619,19 +715,20 @@ async function syncInstagramAccount(
       period_end: periodEnd,
       followers,
       engagement_rate: Math.min(engagementRate, 100),
-      total_content: postsInPeriod,
+      total_content: mediaInPeriod.length, // Actual count of posts in period
     });
 
     // Update sync log
-    if (syncLog) {
+    if (syncLogId) {
       await supabase
         .from('social_sync_logs')
         .update({
           status: 'completed',
           records_synced: recordsSynced,
           completed_at: new Date().toISOString(),
+          error_message: errorMessages.length > 0 ? errorMessages.join('; ') : null,
         })
-        .eq('id', syncLog.id);
+        .eq('id', syncLogId);
     }
 
     return {
@@ -643,12 +740,26 @@ async function syncInstagramAccount(
     };
   } catch (error) {
     console.error(`Error syncing Instagram for ${clientName}:`, error);
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    
+    // Update sync log with error
+    if (syncLogId) {
+      await supabase
+        .from('social_sync_logs')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          error_message: errorMsg,
+        })
+        .eq('id', syncLogId);
+    }
+    
     return {
       clientId,
       clientName,
       platform: 'instagram',
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMsg,
     };
   }
 }

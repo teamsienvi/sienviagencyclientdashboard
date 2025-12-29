@@ -205,17 +205,24 @@ serve(async (req) => {
       console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
       for (const item of mediaItems) {
         try {
-          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_media_view&period=lifetime&access_token=${accessToken}`;
+          // Use post_impressions_unique for reach, post_impressions for impressions
+          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
 
           if (insightsResp.ok) {
             const insightsJson = await insightsResp.json();
             (item as any).fbInsights = insightsJson.data || [];
           } else {
-            console.log(`FB post insights failed for ${item.id}: ${await insightsResp.text()}`);
+            const errText = await insightsResp.text();
+            console.log(`FB post insights failed for ${item.id}: ${errText.substring(0, 100)}`);
+            // Mark as failed but don't break - we'll still have likes/comments
+            (item as any).fbInsights = [];
+            (item as any).insightsFailed = true;
           }
         } catch (e) {
           console.error(`Error fetching FB post insights for ${item.id}:`, e);
+          (item as any).fbInsights = [];
+          (item as any).insightsFailed = true;
         }
       }
     }
@@ -284,7 +291,8 @@ serve(async (req) => {
         const fbInsights = (item as any).fbInsights || [];
         for (const insight of fbInsights) {
           const value = insight.values?.[0]?.value || 0;
-          if (insight.name === 'post_media_view' || insight.name === 'post_impressions_unique') reach = value;
+          if (insight.name === 'post_impressions_unique') reach = value;
+          if (insight.name === 'post_impressions') impressions = value;
         }
       }
 
