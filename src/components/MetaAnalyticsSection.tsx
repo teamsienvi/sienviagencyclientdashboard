@@ -109,6 +109,7 @@ type MetaPlatform = "instagram" | "facebook";
 const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncingContent, setSyncingContent] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -214,6 +215,23 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   useEffect(() => {
     fetchData();
   }, [clientId, dateRangePreset, customDateRange]);
+
+  // Listen for bulk sync complete event to auto-refresh
+  useEffect(() => {
+    const handleBulkSyncComplete = (event: CustomEvent) => {
+      const results = event.detail || [];
+      const affectedClient = results.find((r: any) => r.clientId === clientId && r.success);
+      if (affectedClient) {
+        setSyncingContent(true);
+        fetchData().finally(() => setSyncingContent(false));
+      }
+    };
+
+    window.addEventListener("bulk-meta-sync-complete", handleBulkSyncComplete as EventListener);
+    return () => {
+      window.removeEventListener("bulk-meta-sync-complete", handleBulkSyncComplete as EventListener);
+    };
+  }, [clientId]);
 
   const fetchOAuthAccount = async () => {
     const { data } = await supabase
@@ -650,6 +668,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const account = platform === "instagram" ? instagramAccount : facebookAccount;
 
     setSyncing(true);
+    setSyncingContent(true);
     try {
       let periodEnd: Date;
       let periodStart: Date;
@@ -684,7 +703,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       if (data?.success) {
         const weekLabel = syncLastWeek ? "last week" : "this week";
         toast.success(`Synced ${data.recordsSynced} posts from ${platform === "instagram" ? "Instagram" : "Facebook"} (${weekLabel})`);
-        fetchData();
+        await fetchData();
         fetchSyncLogs();
       } else {
         toast.error(data?.error || `Failed to sync ${platform} data`);
@@ -696,6 +715,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       fetchSyncLogs();
     } finally {
       setSyncing(false);
+      setSyncingContent(false);
     }
   };
 
@@ -911,10 +931,29 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const renderContentTable = (content: (MetaContent & { metrics?: MetaContentMetrics })[], platform: MetaPlatform) => (
     <Card>
       <CardHeader>
-        <CardTitle>Recent Posts</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          Recent Posts
+          {syncingContent && (
+            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        {content.length === 0 ? (
+        {syncingContent ? (
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <Skeleton className="h-4 w-[200px]" />
+                <Skeleton className="h-4 w-[60px]" />
+                <Skeleton className="h-4 w-[80px]" />
+                <Skeleton className="h-4 w-[60px]" />
+                <Skeleton className="h-4 w-[60px]" />
+                <Skeleton className="h-4 w-[60px]" />
+                <Skeleton className="h-4 w-[60px]" />
+              </div>
+            ))}
+          </div>
+        ) : content.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>No {platform === "instagram" ? "Instagram" : "Facebook"} posts synced yet</p>

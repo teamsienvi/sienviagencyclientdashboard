@@ -46,6 +46,9 @@ export const BulkMetaSync = () => {
 
       const successCount = nextResults.filter((r) => r.success).length;
       toast.success(`Bulk sync complete: ${successCount}/${nextResults.length} successful`);
+
+      // Dispatch custom event so individual client pages can auto-refresh
+      window.dispatchEvent(new CustomEvent("bulk-meta-sync-complete", { detail: nextResults }));
     } catch (err: any) {
       console.error("Bulk sync failed:", err);
       toast.error(err?.message || "Bulk sync failed");
