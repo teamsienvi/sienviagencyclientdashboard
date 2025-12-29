@@ -3,6 +3,9 @@ project_id = "ihbdwilzjxivmmmlkuyu"
 [functions.fetch-client-analytics]
 verify_jwt = false
 
+[functions.track-analytics]
+verify_jwt = false
+
 [functions.sync-social-analytics]
 verify_jwt = false
 
@@ -73,4 +76,10 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.sync-meta-agency]
+verify_jwt = false
+
+[functions.youtube-add-channel]
+verify_jwt = false
+
+[functions.sync-youtube-agency]
 verify_jwt = false

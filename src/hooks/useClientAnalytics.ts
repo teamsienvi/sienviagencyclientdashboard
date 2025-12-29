@@ -4,32 +4,53 @@ import { subDays, format } from "date-fns";
 
 export interface TrafficSource {
   source: string;
-  visitors: number;
+  visitors?: number;
+  sessions?: number;
   percentage: number;
 }
 
 export interface DeviceBreakdown {
   device: string;
-  visitors: number;
+  visitors?: number;
+  sessions?: number;
   percentage: number;
 }
 
 export interface DailyBreakdown {
   date: string;
-  visitors: number;
+  visitors?: number;
+  sessions?: number;
   pageViews: number;
 }
 
-export interface AnalyticsData {
-  visitors: number;
-  pageViews: number;
-  avgDuration: number;
-  bounceRate: number;
-  pagesPerVisit: number;
+export interface TopPage {
+  url: string;
+  views: number;
+}
+
+export interface AnalyticsSummary {
   totalSessions?: number;
+  totalPageViews?: number;
+  uniqueVisitors?: number;
+  bounceRate?: number;
+  avgPagesPerSession?: number;
+  avgSessionDuration?: number;
+}
+
+export interface AnalyticsData {
+  // Legacy format (external sources)
+  visitors?: number;
+  pageViews?: number;
+  avgDuration?: number;
+  bounceRate?: number;
+  pagesPerVisit?: number;
+  totalSessions?: number;
+  // New format (local analytics)
+  summary?: AnalyticsSummary;
   trafficSources?: TrafficSource[];
   deviceBreakdown?: DeviceBreakdown[];
   dailyBreakdown?: DailyBreakdown[];
+  topPages?: TopPage[];
 }
 
 export type AnalyticsErrorType = 

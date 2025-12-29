@@ -47,18 +47,22 @@ const WebAnalytics = () => {
   const errorType = analyticsData?.errorType;
   const errorDetails = analyticsData?.errorDetails;
 
-  // Normalize analytics data
+  // Normalize analytics data - handle both legacy external format and new local format
   const analytics = analyticsData?.analytics || null;
   const normalizedAnalytics = analytics 
     ? {
-        visitors: analytics.visitors ?? 0,
-        pageViews: analytics.pageViews ?? 0,
-        avgDuration: analytics.avgDuration ?? 0,
-        bounceRate: analytics.bounceRate ?? 0,
-        pagesPerVisit: analytics.pagesPerVisit ?? (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
+        // Support both legacy (visitors/pageViews) and new format (summary.uniqueVisitors/summary.totalPageViews)
+        visitors: analytics.visitors ?? analytics.summary?.uniqueVisitors ?? 0,
+        pageViews: analytics.pageViews ?? analytics.summary?.totalPageViews ?? 0,
+        totalSessions: analytics.totalSessions ?? analytics.summary?.totalSessions ?? 0,
+        avgDuration: analytics.avgDuration ?? analytics.summary?.avgSessionDuration ?? 0,
+        bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
+        pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ?? 
+          (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
         trafficSources: analytics.trafficSources,
         deviceBreakdown: analytics.deviceBreakdown,
         dailyBreakdown: analytics.dailyBreakdown,
+        topPages: analytics.topPages,
       }
     : null;
 
@@ -103,9 +107,10 @@ const WebAnalytics = () => {
       case 'no_data':
         return {
           title: 'No Data Available',
-          message: 'No website visits have been recorded for this date range.',
+          message: errorDetails || 'No website visits have been recorded for this date range. Install the tracking script on your website to start collecting analytics data.',
           icon: Info,
           color: 'text-muted-foreground',
+          showTrackingScript: true,
         };
       default:
         return {
@@ -128,8 +133,8 @@ const WebAnalytics = () => {
     if (hasRealDailyBreakdown && normalizedAnalytics?.dailyBreakdown) {
       return normalizedAnalytics.dailyBreakdown.map((day) => ({
         date: format(new Date(day.date), "MMM d"),
-        visitors: day.visitors,
-        sessions: Math.round(day.visitors * 1.2),
+        visitors: day.visitors ?? day.sessions ?? 0,
+        sessions: day.sessions ?? day.visitors ?? 0,
         pageViews: day.pageViews,
         bounceRate: Math.round((normalizedAnalytics.bounceRate || 45) + (Math.random() - 0.5) * 10),
       }));
@@ -172,13 +177,13 @@ const WebAnalytics = () => {
       return normalizedAnalytics.trafficSources.map((ts, index) => ({
         source: ts.source,
         percentage: ts.percentage,
-        visitors: ts.visitors,
+        visitors: ts.visitors ?? ts.sessions ?? 0,
         color: colors[index % colors.length],
       }));
     }
 
     // Fallback: Estimate based on industry averages
-    const total = normalizedAnalytics?.visitors || 0;
+    const total = normalizedAnalytics?.visitors || normalizedAnalytics?.totalSessions || 0;
     return [
       { source: "Direct", percentage: 42, visitors: Math.round(total * 0.42), color: "bg-primary" },
       { source: "Organic Search", percentage: 31, visitors: Math.round(total * 0.31), color: "bg-green-500" },
@@ -194,13 +199,13 @@ const WebAnalytics = () => {
       return normalizedAnalytics.deviceBreakdown.map((db, index) => ({
         device: db.device,
         percentage: db.percentage,
-        visitors: db.visitors,
+        visitors: db.visitors ?? db.sessions ?? 0,
         color: colors[index % colors.length],
       }));
     }
 
     // Fallback: Estimate based on industry averages
-    const total = normalizedAnalytics?.visitors || 0;
+    const total = normalizedAnalytics?.visitors || normalizedAnalytics?.totalSessions || 0;
     return [
       { device: "Mobile", percentage: 58, visitors: Math.round(total * 0.58), color: "bg-primary" },
       { device: "Desktop", percentage: 35, visitors: Math.round(total * 0.35), color: "bg-green-500" },
@@ -319,6 +324,15 @@ const WebAnalytics = () => {
                                   <Settings className="h-4 w-4 mr-2" />
                                   Go to Admin Settings
                                 </Button>
+                              )}
+                              {errorType === 'no_data' && clientId && (
+                                <div className="mt-4 p-4 bg-muted rounded-lg text-left max-w-lg">
+                                  <p className="text-sm font-medium mb-2">Tracking Script</p>
+                                  <code className="text-xs break-all block p-2 bg-background rounded">
+                                    {`<script src="https://ihbdwilzjxivmmmlkuyu.supabase.co/functions/v1/track-analytics" data-client-id="${clientId}"></script>`}
+                                  </code>
+                                  <p className="text-xs text-muted-foreground mt-2">Add this to your website's HTML to start tracking.</p>
+                                </div>
                               )}
                             </div>
                           );

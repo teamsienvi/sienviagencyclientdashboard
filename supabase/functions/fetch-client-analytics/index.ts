@@ -66,84 +66,205 @@ serve(async (req) => {
       );
     }
 
-    if (!client.supabase_url || !client.api_key) {
-      console.error('Client missing analytics configuration:', clientId);
+    // Check if client has external analytics configured
+    if (client.supabase_url && client.api_key) {
+      // Try external analytics endpoint
+      console.log('Fetching analytics from external source:', client.supabase_url);
+      const analyticsUrl = `${client.supabase_url}/functions/v1/get-analytics`;
+      
+      try {
+        const analyticsResponse = await fetch(analyticsUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': client.api_key,
+            Authorization: `Bearer ${client.api_key}`,
+          },
+          body: JSON.stringify({
+            startDate,
+            endDate,
+            apiKey: client.api_key,
+            api_key: client.api_key,
+          }),
+        });
+
+        if (analyticsResponse.ok) {
+          const analyticsData = await analyticsResponse.json();
+          console.log('Analytics fetched successfully from external source for client:', client.name);
+          
+          // Check if external returned all zeros (no real data)
+          const data = analyticsData?.data || analyticsData;
+          const hasRealData = data && (
+            (data.visitors && data.visitors > 0) ||
+            (data.pageViews && data.pageViews > 0) ||
+            (data.totalSessions && data.totalSessions > 0)
+          );
+
+          if (!hasRealData) {
+            // External returned zeros - fall through to local or show no_data
+            console.log('External source returned no data, checking local tables...');
+          } else {
+            return new Response(
+              JSON.stringify({ 
+                clientId: client.id,
+                clientName: client.name,
+                analytics: analyticsData,
+                dateRange: { startDate, endDate },
+                source: 'external',
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        } else {
+          console.log('External analytics failed, falling back to local:', analyticsResponse.status);
+          // Fall through to local analytics
+        }
+      } catch (fetchError) {
+        console.log('External analytics fetch error, falling back to local:', fetchError);
+        // Fall through to local analytics
+      }
+    }
+
+    // Fetch from local web_analytics tables
+    console.log('Fetching analytics from local tables for client:', client.name);
+
+    // Fetch sessions for date range
+    const { data: sessions, error: sessionsError } = await supabase
+      .from('web_analytics_sessions')
+      .select('*')
+      .eq('client_id', clientId)
+      .gte('started_at', startDate)
+      .lte('started_at', endDate);
+
+    if (sessionsError) {
+      console.error('Error fetching sessions:', sessionsError);
+    }
+
+    // Fetch page views for date range
+    const { data: pageViews, error: pageViewsError } = await supabase
+      .from('web_analytics_page_views')
+      .select('*')
+      .eq('client_id', clientId)
+      .gte('viewed_at', startDate)
+      .lte('viewed_at', endDate);
+
+    if (pageViewsError) {
+      console.error('Error fetching page views:', pageViewsError);
+    }
+
+    const sessionList = sessions || [];
+    const pageViewList = pageViews || [];
+
+    // Check if there's any data
+    if (sessionList.length === 0 && pageViewList.length === 0) {
+      console.log('No local analytics data for client:', client.name);
       return new Response(
         JSON.stringify({ 
           ok: false,
-          error: 'Web analytics not configured for this client',
-          errorType: 'not_configured',
+          error: 'No analytics data recorded for this period',
+          errorType: 'no_data',
           clientId: client.id,
           clientName: client.name,
-          details: 'This client does not have a Supabase URL or API key configured for web analytics.',
+          details: 'Install the tracking script on your website to start collecting analytics data.',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Call the client's get-analytics endpoint
-    console.log('Fetching analytics from:', client.supabase_url);
-    const analyticsUrl = `${client.supabase_url}/functions/v1/get-analytics`;
-    
-    const analyticsResponse = await fetch(analyticsUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Some client projects validate the key via headers rather than body
-        'x-api-key': client.api_key,
-        Authorization: `Bearer ${client.api_key}`,
-      },
-      body: JSON.stringify({
-        startDate,
-        endDate,
-        apiKey: client.api_key,
-        api_key: client.api_key,
-      }),
+    // Calculate analytics metrics
+    const totalSessions = sessionList.length;
+    const totalPageViews = pageViewList.length;
+    const uniqueVisitors = new Set(sessionList.map(s => s.visitor_id)).size;
+    const bounceSessions = sessionList.filter(s => s.bounce).length;
+    const bounceRate = totalSessions > 0 ? (bounceSessions / totalSessions) * 100 : 0;
+    const avgPagesPerSession = totalSessions > 0 ? totalPageViews / totalSessions : 0;
+
+    // Traffic sources breakdown
+    const trafficSources: Record<string, number> = {};
+    sessionList.forEach(session => {
+      let source = 'Direct';
+      if (session.utm_source) {
+        source = session.utm_source;
+      } else if (session.referrer) {
+        try {
+          const url = new URL(session.referrer);
+          source = url.hostname.replace('www.', '');
+        } catch {
+          source = 'Referral';
+        }
+      }
+      trafficSources[source] = (trafficSources[source] || 0) + 1;
     });
 
-    if (!analyticsResponse.ok) {
-      const errorText = await analyticsResponse.text();
-      console.error('Analytics endpoint error:', analyticsResponse.status, errorText);
+    // Device breakdown
+    const deviceBreakdown: Record<string, number> = { desktop: 0, mobile: 0, tablet: 0 };
+    sessionList.forEach(session => {
+      const device = session.device_type || 'desktop';
+      deviceBreakdown[device] = (deviceBreakdown[device] || 0) + 1;
+    });
 
-      // Determine error type based on status code
-      let errorType = 'fetch_failed';
-      let errorMessage = 'Failed to fetch analytics from client';
-      
-      if (analyticsResponse.status === 401 || analyticsResponse.status === 403) {
-        errorType = 'auth_failed';
-        errorMessage = 'Authentication failed - check API key configuration';
-      } else if (analyticsResponse.status === 404) {
-        errorType = 'no_endpoint';
-        errorMessage = 'Analytics endpoint not found on client project';
-      } else if (analyticsResponse.status >= 500) {
-        errorType = 'server_error';
-        errorMessage = 'Client analytics server error';
-      }
+    // Daily breakdown
+    const dailyData: Record<string, { sessions: number; pageViews: number }> = {};
+    sessionList.forEach(session => {
+      const date = session.started_at.split('T')[0];
+      if (!dailyData[date]) dailyData[date] = { sessions: 0, pageViews: 0 };
+      dailyData[date].sessions++;
+    });
+    pageViewList.forEach(pv => {
+      const date = pv.viewed_at.split('T')[0];
+      if (!dailyData[date]) dailyData[date] = { sessions: 0, pageViews: 0 };
+      dailyData[date].pageViews++;
+    });
 
-      // IMPORTANT: return 200 so the frontend can render a friendly error state
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: errorMessage,
-          errorType,
-          details: errorText,
-          status: analyticsResponse.status,
-          clientId: client.id,
-          clientName: client.name,
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Top pages
+    const pageCounts: Record<string, number> = {};
+    pageViewList.forEach(pv => {
+      const page = pv.page_url;
+      pageCounts[page] = (pageCounts[page] || 0) + 1;
+    });
+    const topPages = Object.entries(pageCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([url, views]) => ({ url, views }));
 
-    const analyticsData = await analyticsResponse.json();
-    console.log('Analytics fetched successfully for client:', client.name);
+    const analyticsData = {
+      summary: {
+        totalSessions,
+        totalPageViews,
+        uniqueVisitors,
+        bounceRate: Math.round(bounceRate * 10) / 10,
+        avgPagesPerSession: Math.round(avgPagesPerSession * 10) / 10,
+        avgSessionDuration: 0, // Would need timestamps to calculate
+      },
+      trafficSources: Object.entries(trafficSources).map(([source, sessions]) => ({
+        source,
+        sessions,
+        percentage: totalSessions > 0 ? Math.round((sessions / totalSessions) * 1000) / 10 : 0,
+      })),
+      deviceBreakdown: Object.entries(deviceBreakdown).map(([device, count]) => ({
+        device,
+        sessions: count,
+        percentage: totalSessions > 0 ? Math.round((count / totalSessions) * 1000) / 10 : 0,
+      })),
+      dailyBreakdown: Object.entries(dailyData)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, data]) => ({
+          date,
+          sessions: data.sessions,
+          pageViews: data.pageViews,
+        })),
+      topPages,
+    };
+
+    console.log('Analytics fetched successfully from local tables for client:', client.name);
 
     return new Response(
       JSON.stringify({ 
         clientId: client.id,
         clientName: client.name,
         analytics: analyticsData,
-        dateRange: { startDate, endDate }
+        dateRange: { startDate, endDate },
+        source: 'local',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
