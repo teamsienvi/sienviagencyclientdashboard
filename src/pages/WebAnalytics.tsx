@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft } from "lucide-react";
+import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { useClientAnalytics } from "@/hooks/useClientAnalytics";
+import { useClientAnalytics, AnalyticsErrorType } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
 
 type DateRangePreset = "7d" | "30d" | "custom";
@@ -43,6 +43,10 @@ const WebAnalytics = () => {
     enabled: !!clientId,
   });
 
+  // Check for error state from hook
+  const errorType = analyticsData?.errorType;
+  const errorDetails = analyticsData?.errorDetails;
+
   // Normalize analytics data
   const analytics = analyticsData?.analytics || null;
   const normalizedAnalytics = analytics 
@@ -57,6 +61,61 @@ const WebAnalytics = () => {
         dailyBreakdown: analytics.dailyBreakdown,
       }
     : null;
+
+  // Helper to get error message and icon based on error type
+  const getErrorDisplay = (type: AnalyticsErrorType) => {
+    switch (type) {
+      case 'not_configured':
+        return {
+          title: 'Web Analytics Not Configured',
+          message: 'This client does not have web analytics set up. To enable analytics, configure a Supabase URL and API key in the client settings.',
+          icon: Settings,
+          color: 'text-muted-foreground',
+        };
+      case 'inactive':
+        return {
+          title: 'Client Inactive',
+          message: 'This client is currently marked as inactive.',
+          icon: AlertCircle,
+          color: 'text-muted-foreground',
+        };
+      case 'auth_failed':
+        return {
+          title: 'Authentication Failed',
+          message: 'Failed to authenticate with the analytics endpoint. Please check the API key configuration.',
+          icon: AlertCircle,
+          color: 'text-destructive',
+        };
+      case 'no_endpoint':
+        return {
+          title: 'Analytics Endpoint Not Found',
+          message: 'The get-analytics edge function was not found on the client\'s project. Ensure the function is deployed.',
+          icon: AlertCircle,
+          color: 'text-destructive',
+        };
+      case 'server_error':
+        return {
+          title: 'Server Error',
+          message: 'The analytics server encountered an error. Please try again later.',
+          icon: AlertCircle,
+          color: 'text-destructive',
+        };
+      case 'no_data':
+        return {
+          title: 'No Data Available',
+          message: 'No website visits have been recorded for this date range.',
+          icon: Info,
+          color: 'text-muted-foreground',
+        };
+      default:
+        return {
+          title: 'Failed to Load Analytics',
+          message: errorDetails || 'An error occurred while fetching analytics data.',
+          icon: AlertCircle,
+          color: 'text-destructive',
+        };
+    }
+  };
 
   // Check if we have real data from API
   const hasRealTrafficSources = normalizedAnalytics?.trafficSources && normalizedAnalytics.trafficSources.length > 0;
@@ -238,6 +297,34 @@ const WebAnalytics = () => {
                         </Card>
                       ))}
                     </div>
+                  ) : errorType ? (
+                    <Card className="border-border">
+                      <CardContent className="py-12 text-center">
+                        {(() => {
+                          const display = getErrorDisplay(errorType);
+                          const IconComponent = display.icon;
+                          return (
+                            <div className="flex flex-col items-center gap-4">
+                              <div className={`p-4 rounded-full bg-muted`}>
+                                <IconComponent className={`h-8 w-8 ${display.color}`} />
+                              </div>
+                              <div>
+                                <h3 className={`text-lg font-semibold ${display.color}`}>{display.title}</h3>
+                                <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                                  {display.message}
+                                </p>
+                              </div>
+                              {errorType === 'not_configured' && (
+                                <Button variant="outline" onClick={() => navigate('/admin')} className="mt-2">
+                                  <Settings className="h-4 w-4 mr-2" />
+                                  Go to Admin Settings
+                                </Button>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </CardContent>
+                    </Card>
                   ) : analyticsError ? (
                     <Card className="border-destructive">
                       <CardContent className="py-8 text-center">
