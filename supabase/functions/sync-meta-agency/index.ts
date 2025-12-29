@@ -13,6 +13,8 @@ interface SyncResult {
   success: boolean;
   recordsSynced?: number;
   error?: string;
+  periodStart?: string;
+  periodEnd?: string;
 }
 
 serve(async (req) => {
@@ -133,42 +135,50 @@ serve(async (req) => {
     // Track clients synced via agency to avoid double-syncing
     const agencySyncedClients = new Set<string>();
 
+    const periods = [
+      { start: periodStartStr, end: periodEndStr },
+      { start: prevPeriodStartStr, end: prevPeriodEndStr },
+    ];
+
     for (const mapping of mappings) {
       const clientId = mapping.client_id;
       const clientName = mapping.clients?.name || 'Unknown';
 
       // Sync Facebook if page_id is mapped
       if (mapping.page_id && pageTokens[mapping.page_id]) {
-        const result = await syncFacebookPage(
-          supabase,
-          clientId,
-          clientName,
-          mapping.page_id,
-          pageTokens[mapping.page_id],
-          periodStartStr,
-          periodEndStr
-        );
-        results.push(result);
+        for (const p of periods) {
+          const result = await syncFacebookPage(
+            supabase,
+            clientId,
+            clientName,
+            mapping.page_id,
+            pageTokens[mapping.page_id],
+            p.start,
+            p.end
+          );
+          results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+        }
         agencySyncedClients.add(`${clientId}_facebook`);
       }
 
       // Sync Instagram if ig_business_id is mapped
       if (mapping.ig_business_id) {
-        // Get the parent page from meta_assets
         const parentPageId = igParentPageMap[mapping.ig_business_id];
         const accessToken = parentPageId ? pageTokens[parentPageId] : null;
-        
+
         if (accessToken) {
-          const result = await syncInstagramAccount(
-            supabase,
-            clientId,
-            clientName,
-            mapping.ig_business_id,
-            accessToken,
-            periodStartStr,
-            periodEndStr
-          );
-          results.push(result);
+          for (const p of periods) {
+            const result = await syncInstagramAccount(
+              supabase,
+              clientId,
+              clientName,
+              mapping.ig_business_id,
+              accessToken,
+              p.start,
+              p.end
+            );
+            results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+          }
           agencySyncedClients.add(`${clientId}_instagram`);
         } else {
           console.log(`No access token found for Instagram ${mapping.ig_business_id} (parent page: ${parentPageId})`);
@@ -178,6 +188,8 @@ serve(async (req) => {
             platform: 'instagram',
             success: false,
             error: 'No parent page access token found',
+            periodStart: periodStartStr,
+            periodEnd: periodEndStr,
           });
         }
       }
@@ -217,33 +229,43 @@ serve(async (req) => {
             platform,
             success: false,
             error: 'Token expired - please reconnect',
+            periodStart: periodStartStr,
+            periodEnd: periodEndStr,
           });
           continue;
         }
 
-        // Sync based on platform
+        const periods = [
+          { start: periodStartStr, end: periodEndStr },
+          { start: prevPeriodStartStr, end: prevPeriodEndStr },
+        ];
+
         if (platform === 'instagram' && account.instagram_business_id) {
-          const result = await syncInstagramAccount(
-            supabase,
-            clientId,
-            clientName,
-            account.instagram_business_id,
-            account.access_token,
-            periodStartStr,
-            periodEndStr
-          );
-          results.push(result);
+          for (const p of periods) {
+            const result = await syncInstagramAccount(
+              supabase,
+              clientId,
+              clientName,
+              account.instagram_business_id,
+              account.access_token,
+              p.start,
+              p.end
+            );
+            results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+          }
         } else if (platform === 'facebook' && account.page_id) {
-          const result = await syncFacebookPage(
-            supabase,
-            clientId,
-            clientName,
-            account.page_id,
-            account.access_token,
-            periodStartStr,
-            periodEndStr
-          );
-          results.push(result);
+          for (const p of periods) {
+            const result = await syncFacebookPage(
+              supabase,
+              clientId,
+              clientName,
+              account.page_id,
+              account.access_token,
+              p.start,
+              p.end
+            );
+            results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+          }
         }
       }
     }

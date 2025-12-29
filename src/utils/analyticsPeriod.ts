@@ -1,21 +1,45 @@
 // Standardized analytics periods for week-over-week comparison
-// Current period: Dec 15-21, 2024
-// Previous period: Dec 8-14, 2024
-// These update weekly on Sundays
+// Uses the last completed week (MonSun) as the "current" period to match the UI.
 
-export const ANALYTICS_PERIOD = {
-  // Current week
-  start: '2025-12-15',
-  end: '2025-12-21',
-  startDate: new Date('2025-12-15'),
-  endDate: new Date('2025-12-21'),
-  
-  // Previous week for comparison
-  prevStart: '2025-12-08',
-  prevEnd: '2025-12-14',
-  prevStartDate: new Date('2025-12-08'),
-  prevEndDate: new Date('2025-12-14'),
+const toDateStr = (d: Date) => d.toISOString().split("T")[0];
+
+const getMostRecentMonday = (fromDate: Date = new Date()) => {
+  const date = new Date(fromDate);
+  const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday
+  const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  date.setDate(date.getDate() - daysToSubtract);
+  date.setHours(0, 0, 0, 0);
+  return date;
 };
+
+const buildAnalyticsPeriod = (now: Date = new Date()) => {
+  const thisMonday = getMostRecentMonday(now);
+
+  // Current period = last completed Mon-Sun
+  const startDate = new Date(thisMonday);
+  startDate.setDate(thisMonday.getDate() - 7);
+  const endDate = new Date(thisMonday);
+  endDate.setDate(thisMonday.getDate() - 1);
+
+  // Previous period = week before that
+  const prevStartDate = new Date(startDate);
+  prevStartDate.setDate(startDate.getDate() - 7);
+  const prevEndDate = new Date(startDate);
+  prevEndDate.setDate(startDate.getDate() - 1);
+
+  return {
+    start: toDateStr(startDate),
+    end: toDateStr(endDate),
+    startDate,
+    endDate,
+    prevStart: toDateStr(prevStartDate),
+    prevEnd: toDateStr(prevEndDate),
+    prevStartDate,
+    prevEndDate,
+  };
+};
+
+export const ANALYTICS_PERIOD = buildAnalyticsPeriod();
 
 export const getStandardPeriod = () => ({
   periodStart: ANALYTICS_PERIOD.start,
