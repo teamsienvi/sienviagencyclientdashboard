@@ -216,20 +216,51 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     fetchData();
   }, [clientId, dateRangePreset, customDateRange]);
 
-  // Listen for bulk sync complete event to auto-refresh
+  // Listen for bulk sync complete to auto-refresh (works across tabs)
   useEffect(() => {
-    const handleBulkSyncComplete = (event: CustomEvent) => {
-      const results = event.detail || [];
-      const affectedClient = results.find((r: any) => r.clientId === clientId && r.success);
+    const maybeRefreshFromResults = (results: any[]) => {
+      const affectedClient = (results || []).find((r: any) => r.clientId === clientId && r.success);
       if (affectedClient) {
         setSyncingContent(true);
         fetchData().finally(() => setSyncingContent(false));
       }
     };
 
+    const handleBulkSyncComplete = (event: CustomEvent) => {
+      maybeRefreshFromResults(event.detail || []);
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== "meta_bulk_sync" || !e.newValue) return;
+      try {
+        const payload = JSON.parse(e.newValue);
+        if (payload?.status === "completed") {
+          maybeRefreshFromResults(payload.results || []);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    // If sync already completed before this tab loaded, pick it up
+    try {
+      const raw = localStorage.getItem("meta_bulk_sync");
+      if (raw) {
+        const payload = JSON.parse(raw);
+        if (payload?.status === "completed") {
+          maybeRefreshFromResults(payload.results || []);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     window.addEventListener("bulk-meta-sync-complete", handleBulkSyncComplete as EventListener);
+    window.addEventListener("storage", handleStorage);
+
     return () => {
       window.removeEventListener("bulk-meta-sync-complete", handleBulkSyncComplete as EventListener);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [clientId]);
 
