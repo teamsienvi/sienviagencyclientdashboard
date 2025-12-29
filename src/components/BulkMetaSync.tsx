@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { RefreshCw, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -22,13 +23,91 @@ type SyncResult = {
 export const BulkMetaSync = () => {
   const [status, setStatus] = useState<SyncStatus>("idle");
   const [results, setResults] = useState<SyncResult[]>([]);
+  const [progress, setProgress] = useState({ current: 0, total: 0, currentClient: "" });
+  const pollInterval = useRef<NodeJS.Timeout | null>(null);
+  const syncStartTime = useRef<string | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollInterval.current) {
+        clearInterval(pollInterval.current);
+      }
+    };
+  }, []);
+
+  const startProgressPolling = async (expectedTotal: number) => {
+    syncStartTime.current = new Date().toISOString();
+    setProgress({ current: 0, total: expectedTotal, currentClient: "Starting..." });
+
+    pollInterval.current = setInterval(async () => {
+      if (!syncStartTime.current) return;
+
+      // Query sync logs created since we started
+      const { data: logs } = await supabase
+        .from("social_sync_logs")
+        .select(`
+          id,
+          platform,
+          status,
+          client_id,
+          clients (name)
+        `)
+        .gte("started_at", syncStartTime.current)
+        .order("started_at", { ascending: false });
+
+      if (logs && logs.length > 0) {
+        const completedCount = logs.filter(l => l.status === "completed").length;
+        const runningLog = logs.find(l => l.status === "running");
+        const currentClient = runningLog 
+          ? `${(runningLog as any).clients?.name || "Unknown"} (${runningLog.platform})`
+          : logs[0] 
+            ? `${(logs[0] as any).clients?.name || "Unknown"} (${logs[0].platform})`
+            : "";
+
+        setProgress({
+          current: completedCount,
+          total: expectedTotal,
+          currentClient,
+        });
+      }
+    }, 1500);
+  };
+
+  const stopProgressPolling = () => {
+    if (pollInterval.current) {
+      clearInterval(pollInterval.current);
+      pollInterval.current = null;
+    }
+    syncStartTime.current = null;
+  };
 
   const handleSyncAll = async () => {
     setStatus("syncing");
     setResults([]);
 
     try {
+      // First, count how many mappings we have to estimate total syncs
+      const { data: mappings } = await supabase
+        .from("client_meta_map")
+        .select("id, page_id, ig_business_id")
+        .eq("active", true);
+
+      // Each mapping syncs 2 periods (current + previous week)
+      // Count FB and IG separately since they're separate syncs
+      let totalSyncs = 0;
+      for (const m of mappings || []) {
+        if (m.page_id) totalSyncs += 2; // FB: 2 periods
+        if (m.ig_business_id) totalSyncs += 2; // IG: 2 periods
+      }
+
+      // Start progress polling
+      startProgressPolling(totalSyncs);
+
       const { data, error } = await supabase.functions.invoke("sync-meta-agency");
+      
+      stopProgressPolling();
+
       if (error) throw error;
 
       const nextResults: SyncResult[] = (data?.results || []).map((r: any) => ({
@@ -43,6 +122,7 @@ export const BulkMetaSync = () => {
       }));
 
       setResults(nextResults);
+      setProgress(prev => ({ ...prev, current: prev.total }));
 
       const successCount = nextResults.filter((r) => r.success).length;
       toast.success(`Bulk sync complete: ${successCount}/${nextResults.length} successful`);
@@ -52,6 +132,7 @@ export const BulkMetaSync = () => {
     } catch (err: any) {
       console.error("Bulk sync failed:", err);
       toast.error(err?.message || "Bulk sync failed");
+      stopProgressPolling();
     } finally {
       setStatus("done");
     }
@@ -76,6 +157,8 @@ export const BulkMetaSync = () => {
       <Badge variant="destructive">Failed</Badge>
     );
   };
+
+  const progressPercent = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
 
   return (
     <Card>
@@ -104,6 +187,23 @@ export const BulkMetaSync = () => {
             )}
           </Button>
         </div>
+
+        {status === "syncing" && progress.total > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Syncing {progress.current} of {progress.total}...
+              </span>
+              <span className="font-medium">{progressPercent}%</span>
+            </div>
+            <Progress value={progressPercent} className="h-2" />
+            {progress.currentClient && (
+              <p className="text-xs text-muted-foreground">
+                Current: {progress.currentClient}
+              </p>
+            )}
+          </div>
+        )}
 
         {results.length > 0 && (
           <div className="border rounded-lg divide-y">
