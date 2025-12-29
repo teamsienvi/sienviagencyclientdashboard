@@ -107,6 +107,9 @@ serve(async (req) => {
     const periodStartStr = periodStart.toISOString().split('T')[0];
     const periodEndStr = now.toISOString().split('T')[0];
 
+    // Track clients synced via agency to avoid double-syncing
+    const agencySyncedClients = new Set<string>();
+
     for (const mapping of mappings) {
       const clientId = mapping.client_id;
       const clientName = mapping.clients?.name || 'Unknown';
@@ -123,6 +126,7 @@ serve(async (req) => {
           periodEndStr
         );
         results.push(result);
+        agencySyncedClients.add(`${clientId}_facebook`);
       }
 
       // Sync Instagram if ig_business_id is mapped
@@ -142,6 +146,7 @@ serve(async (req) => {
             periodEndStr
           );
           results.push(result);
+          agencySyncedClients.add(`${clientId}_instagram`);
         } else {
           console.log(`No access token found for Instagram ${mapping.ig_business_id} (parent page: ${parentPageId})`);
           results.push({
@@ -155,6 +160,71 @@ serve(async (req) => {
       }
     }
 
+    // Now sync clients with individual OAuth accounts (not covered by agency)
+    const { data: oauthAccounts } = await supabase
+      .from('social_oauth_accounts')
+      .select(`
+        *,
+        clients (id, name)
+      `)
+      .eq('is_active', true)
+      .not('access_token', 'is', null);
+
+    if (oauthAccounts && oauthAccounts.length > 0) {
+      console.log(`Found ${oauthAccounts.length} individual OAuth accounts to sync`);
+      
+      for (const account of oauthAccounts) {
+        const clientId = account.client_id;
+        const clientName = account.clients?.name || 'Unknown';
+        const platform = account.platform;
+
+        // Skip if already synced via agency
+        if (agencySyncedClients.has(`${clientId}_${platform}`)) {
+          console.log(`Skipping ${clientName} ${platform} - already synced via agency`);
+          continue;
+        }
+
+        // Check token expiry
+        const tokenExpiry = new Date(account.token_expires_at);
+        if (tokenExpiry < new Date()) {
+          console.log(`Token expired for ${clientName} ${platform}`);
+          results.push({
+            clientId,
+            clientName,
+            platform,
+            success: false,
+            error: 'Token expired - please reconnect',
+          });
+          continue;
+        }
+
+        // Sync based on platform
+        if (platform === 'instagram' && account.instagram_business_id) {
+          const result = await syncInstagramAccount(
+            supabase,
+            clientId,
+            clientName,
+            account.instagram_business_id,
+            account.access_token,
+            periodStartStr,
+            periodEndStr
+          );
+          results.push(result);
+        } else if (platform === 'facebook' && account.page_id) {
+          const result = await syncFacebookPage(
+            supabase,
+            clientId,
+            clientName,
+            account.page_id,
+            account.access_token,
+            periodStartStr,
+            periodEndStr
+          );
+          results.push(result);
+        }
+      }
+    }
+
     const successCount = results.filter(r => r.success).length;
     console.log(`Sync completed: ${successCount}/${results.length} successful`);
 
@@ -162,6 +232,7 @@ serve(async (req) => {
       JSON.stringify({ 
         success: true, 
         totalMappings: mappings.length,
+        totalOAuthAccounts: oauthAccounts?.length || 0,
         results 
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
