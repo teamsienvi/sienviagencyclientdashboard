@@ -140,6 +140,9 @@ serve(async (req) => {
       { start: prevPeriodStartStr, end: prevPeriodEndStr },
     ];
 
+    // Build array of sync tasks to run in parallel batches
+    const syncTasks: Array<() => Promise<SyncResult>> = [];
+
     for (const mapping of mappings) {
       const clientId = mapping.client_id;
       const clientName = mapping.clients?.name || 'Unknown';
@@ -147,7 +150,7 @@ serve(async (req) => {
       // Sync Facebook if page_id is mapped
       if (mapping.page_id && pageTokens[mapping.page_id]) {
         for (const p of periods) {
-          const result = await syncFacebookPage(
+          syncTasks.push(() => syncFacebookPage(
             supabase,
             clientId,
             clientName,
@@ -155,8 +158,7 @@ serve(async (req) => {
             pageTokens[mapping.page_id],
             p.start,
             p.end
-          );
-          results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+          ).then(r => ({ ...r, periodStart: p.start, periodEnd: p.end })));
         }
         agencySyncedClients.add(`${clientId}_facebook`);
       }
@@ -168,7 +170,7 @@ serve(async (req) => {
 
         if (accessToken) {
           for (const p of periods) {
-            const result = await syncInstagramAccount(
+            syncTasks.push(() => syncInstagramAccount(
               supabase,
               clientId,
               clientName,
@@ -176,8 +178,7 @@ serve(async (req) => {
               accessToken,
               p.start,
               p.end
-            );
-            results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+            ).then(r => ({ ...r, periodStart: p.start, periodEnd: p.end })));
           }
           agencySyncedClients.add(`${clientId}_instagram`);
         } else {
@@ -195,6 +196,14 @@ serve(async (req) => {
       }
     }
 
+    // Run sync tasks in parallel batches of 5 to avoid overwhelming APIs
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < syncTasks.length; i += BATCH_SIZE) {
+      const batch = syncTasks.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(task => task()));
+      results.push(...batchResults);
+    }
+
     // Now sync clients with individual OAuth accounts (not covered by agency)
     const { data: oauthAccounts } = await supabase
       .from('social_oauth_accounts')
@@ -207,6 +216,8 @@ serve(async (req) => {
 
     if (oauthAccounts && oauthAccounts.length > 0) {
       console.log(`Found ${oauthAccounts.length} individual OAuth accounts to sync`);
+      
+      const oauthTasks: Array<() => Promise<SyncResult>> = [];
       
       for (const account of oauthAccounts) {
         const clientId = account.client_id;
@@ -235,14 +246,9 @@ serve(async (req) => {
           continue;
         }
 
-        const periods = [
-          { start: periodStartStr, end: periodEndStr },
-          { start: prevPeriodStartStr, end: prevPeriodEndStr },
-        ];
-
         if (platform === 'instagram' && account.instagram_business_id) {
           for (const p of periods) {
-            const result = await syncInstagramAccount(
+            oauthTasks.push(() => syncInstagramAccount(
               supabase,
               clientId,
               clientName,
@@ -250,12 +256,11 @@ serve(async (req) => {
               account.access_token,
               p.start,
               p.end
-            );
-            results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+            ).then(r => ({ ...r, periodStart: p.start, periodEnd: p.end })));
           }
         } else if (platform === 'facebook' && account.page_id) {
           for (const p of periods) {
-            const result = await syncFacebookPage(
+            oauthTasks.push(() => syncFacebookPage(
               supabase,
               clientId,
               clientName,
@@ -263,10 +268,16 @@ serve(async (req) => {
               account.access_token,
               p.start,
               p.end
-            );
-            results.push({ ...result, periodStart: p.start, periodEnd: p.end });
+            ).then(r => ({ ...r, periodStart: p.start, periodEnd: p.end })));
           }
         }
+      }
+
+      // Run OAuth tasks in parallel batches
+      for (let i = 0; i < oauthTasks.length; i += BATCH_SIZE) {
+        const batch = oauthTasks.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(batch.map(task => task()));
+        results.push(...batchResults);
       }
     }
 
@@ -327,33 +338,9 @@ async function syncFacebookPage(
 
     const followers = pageData.followers_count || pageData.fan_count || 0;
 
-    // Fetch page-level insights for reach (more reliable than post-level)
-    let pageReach = 0;
-    let pageImpressions = 0;
-    try {
-      const pageInsightsResponse = await fetch(
-        `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions,page_impressions_unique&period=week&access_token=${accessToken}`
-      );
-      const pageInsightsData = await pageInsightsResponse.json();
-      
-      if (!pageInsightsData.error && pageInsightsData.data) {
-        for (const insight of pageInsightsData.data) {
-          if (insight.name === 'page_impressions_unique') {
-            pageReach = insight.values?.[insight.values.length - 1]?.value || 0;
-          }
-          if (insight.name === 'page_impressions') {
-            pageImpressions = insight.values?.[insight.values.length - 1]?.value || 0;
-          }
-        }
-        console.log(`Got page insights for ${pageId}: reach=${pageReach}, impressions=${pageImpressions}`);
-      }
-    } catch (e) {
-      console.log(`Could not fetch page insights:`, e);
-    }
-
     // Fetch posts
     const postsResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=25&access_token=${accessToken}`
+      `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=15&access_token=${accessToken}`
     );
     const postsData = await postsResponse.json();
 
@@ -361,7 +348,38 @@ async function syncFacebookPage(
     let totalEngagement = 0;
     let postsInPeriod = 0;
 
-    for (const post of postsData.data || []) {
+    const posts = postsData.data || [];
+    
+    // Batch fetch post insights - limit to 10 posts max to avoid timeout
+    const postsToSync = posts.slice(0, 10);
+    const postInsightsPromises = postsToSync.map(async (post: any) => {
+      try {
+        const resp = await fetch(
+          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          let reach = 0, impressions = 0;
+          for (const insight of data.data || []) {
+            const val = insight.values?.[0]?.value || 0;
+            if (insight.name === 'post_impressions_unique') reach = val;
+            if (insight.name === 'post_impressions') impressions = val;
+          }
+          return { postId: post.id, reach, impressions };
+        }
+      } catch (e) {
+        console.log(`Could not fetch insights for post ${post.id}`);
+      }
+      return { postId: post.id, reach: 0, impressions: 0 };
+    });
+
+    const postInsights = await Promise.all(postInsightsPromises);
+    const insightsMap: Record<string, { reach: number; impressions: number }> = {};
+    for (const pi of postInsights) {
+      insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
+    }
+
+    for (const post of postsToSync) {
       const postDate = new Date(post.created_time);
       const periodStartDate = new Date(periodStart);
       const periodEndDate = new Date(periodEnd);
@@ -373,24 +391,8 @@ async function syncFacebookPage(
       const comments = post.comments?.summary?.total_count || 0;
       const shares = post.shares?.count || 0;
 
-      // Fetch per-post insights for reach
-      let postReach = 0;
-      let postImpressions = 0;
-      try {
-        const postInsightsResp = await fetch(
-          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`
-        );
-        if (postInsightsResp.ok) {
-          const postInsightsData = await postInsightsResp.json();
-          for (const insight of postInsightsData.data || []) {
-            const val = insight.values?.[0]?.value || 0;
-            if (insight.name === 'post_impressions_unique') postReach = val;
-            if (insight.name === 'post_impressions') postImpressions = val;
-          }
-        }
-      } catch (e) {
-        console.log(`Could not fetch post insights for ${post.id}:`, e);
-      }
+      const postReach = insightsMap[post.id]?.reach || 0;
+      const postImpressions = insightsMap[post.id]?.impressions || 0;
 
       // Upsert content
       const { data: contentData } = await supabase
@@ -508,32 +510,68 @@ async function syncInstagramAccount(
 
     const followers = accountData.followers_count || 0;
 
-    // Fetch media
+    // Fetch media - limit to 15 posts
     const mediaResponse = await fetch(
-      `https://graph.facebook.com/v21.0/${igBusinessId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=25&access_token=${accessToken}`
+      `https://graph.facebook.com/v21.0/${igBusinessId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=15&access_token=${accessToken}`
     );
     const mediaData = await mediaResponse.json();
 
     let recordsSynced = 0;
     let totalEngagement = 0;
-    let totalReach = 0;
     let postsInPeriod = 0;
 
-    for (const media of mediaData.data || []) {
-      const mediaDate = new Date(media.timestamp);
+    const posts = mediaData.data || [];
+    const postsToSync = posts.slice(0, 10);
+
+    // Batch fetch post insights
+    const postInsightsPromises = postsToSync.map(async (post: any) => {
+      try {
+        const metrics = post.media_type === 'VIDEO' 
+          ? 'reach,impressions,plays' 
+          : 'reach,impressions';
+        const resp = await fetch(
+          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=${metrics}&access_token=${accessToken}`
+        );
+        if (resp.ok) {
+          const data = await resp.json();
+          let reach = 0, impressions = 0;
+          for (const insight of data.data || []) {
+            const val = insight.values?.[0]?.value || 0;
+            if (insight.name === 'reach') reach = val;
+            if (insight.name === 'impressions') impressions = val;
+          }
+          return { postId: post.id, reach, impressions };
+        }
+      } catch (e) {
+        console.log(`Could not fetch insights for post ${post.id}`);
+      }
+      return { postId: post.id, reach: 0, impressions: 0 };
+    });
+
+    const postInsights = await Promise.all(postInsightsPromises);
+    const insightsMap: Record<string, { reach: number; impressions: number }> = {};
+    for (const pi of postInsights) {
+      insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
+    }
+
+    for (const post of postsToSync) {
+      const postDate = new Date(post.timestamp);
       const periodStartDate = new Date(periodStart);
       const periodEndDate = new Date(periodEnd);
-      periodEndDate.setHours(23, 59, 59, 999); // Include end of day
+      periodEndDate.setHours(23, 59, 59, 999);
       
-      const isInPeriod = mediaDate >= periodStartDate && mediaDate <= periodEndDate;
-      
-      const likes = media.like_count || 0;
-      const comments = media.comments_count || 0;
+      const isInPeriod = postDate >= periodStartDate && postDate <= periodEndDate;
 
-      // Determine content type
+      const likes = post.like_count || 0;
+      const comments = post.comments_count || 0;
+
+      const postReach = insightsMap[post.id]?.reach || 0;
+      const postImpressions = insightsMap[post.id]?.impressions || 0;
+
+      // Map media_type to content_type
       let contentType = 'post';
-      if (media.media_type === 'VIDEO') contentType = 'reel';
-      else if (media.media_type === 'CAROUSEL_ALBUM') contentType = 'carousel';
+      if (post.media_type === 'VIDEO') contentType = 'video';
+      if (post.media_type === 'CAROUSEL_ALBUM') contentType = 'carousel';
 
       // Upsert content
       const { data: contentData } = await supabase
@@ -541,40 +579,17 @@ async function syncInstagramAccount(
         .upsert({
           client_id: clientId,
           platform: 'instagram',
-          content_id: media.id,
-          title: media.caption?.substring(0, 100) || null,
-          url: media.permalink,
-          published_at: media.timestamp,
+          content_id: post.id,
+          title: post.caption?.substring(0, 100) || null,
+          url: post.permalink,
+          published_at: post.timestamp,
           content_type: contentType,
         }, { onConflict: 'client_id,platform,content_id' })
         .select()
         .single();
 
       if (contentData) {
-        // Fetch insights for this media
-        let reach = 0;
-        let impressions = 0;
-        let saved = 0;
-
-        try {
-          const insightsResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${media.id}/insights?metric=reach,saved,total_interactions&access_token=${accessToken}`
-          );
-          const insightsData = await insightsResponse.json();
-          
-          if (insightsData.error) {
-            console.log(`Insights error for media ${media.id} (${media.media_type}): ${insightsData.error.message}`);
-          } else {
-            for (const insight of insightsData.data || []) {
-              if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
-              if (insight.name === 'saved') saved = insight.values?.[0]?.value || 0;
-              if (insight.name === 'total_interactions') impressions = insight.values?.[0]?.value || 0;
-            }
-          }
-        } catch (e) {
-          console.log(`Exception fetching insights for media ${media.id}:`, e);
-        }
-
+        // Insert metrics
         await supabase.from('social_content_metrics').insert({
           social_content_id: contentData.id,
           platform: 'instagram',
@@ -582,22 +597,19 @@ async function syncInstagramAccount(
           period_end: periodEnd,
           likes,
           comments,
-          reach,
-          impressions,
-          shares: saved,
+          reach: postReach,
+          impressions: postImpressions,
         });
 
-        // Only count engagement for posts IN the period
         if (isInPeriod) {
-          totalReach += reach;
-          totalEngagement += likes + comments + saved;
+          totalEngagement += likes + comments;
           postsInPeriod++;
         }
         recordsSynced++;
       }
     }
 
-    // Insert account metrics - use posts in period, not total fetched
+    // Insert account metrics
     const engagementRate = followers > 0 ? (totalEngagement / followers) * 100 : 0;
 
     await supabase.from('social_account_metrics').insert({
@@ -606,8 +618,8 @@ async function syncInstagramAccount(
       period_start: periodStart,
       period_end: periodEnd,
       followers,
-      engagement_rate: Math.min(engagementRate, 100), // Cap at 100% for sanity
-      total_content: postsInPeriod, // Use actual posts in period
+      engagement_rate: Math.min(engagementRate, 100),
+      total_content: postsInPeriod,
     });
 
     // Update sync log
