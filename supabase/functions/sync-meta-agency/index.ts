@@ -101,11 +101,34 @@ serve(async (req) => {
     }
 
     const results: SyncResult[] = [];
+    
+    // Calculate the last completed week (Monday-Sunday) to match UI's logic
     const now = new Date();
-    const periodStart = new Date(now);
-    periodStart.setDate(periodStart.getDate() - 7);
-    const periodStartStr = periodStart.toISOString().split('T')[0];
-    const periodEndStr = now.toISOString().split('T')[0];
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
+    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() - daysToSubtract);
+    thisMonday.setHours(0, 0, 0, 0);
+    
+    const prevMonday = new Date(thisMonday);
+    prevMonday.setDate(thisMonday.getDate() - 7);
+    const prevSunday = new Date(thisMonday);
+    prevSunday.setDate(thisMonday.getDate() - 1);
+    
+    const periodStartStr = prevMonday.toISOString().split('T')[0];
+    const periodEndStr = prevSunday.toISOString().split('T')[0];
+    
+    // Previous week for comparison
+    const prevPrevMonday = new Date(prevMonday);
+    prevPrevMonday.setDate(prevMonday.getDate() - 7);
+    const prevPrevSunday = new Date(prevMonday);
+    prevPrevSunday.setDate(prevMonday.getDate() - 1);
+    
+    const prevPeriodStartStr = prevPrevMonday.toISOString().split('T')[0];
+    const prevPeriodEndStr = prevPrevSunday.toISOString().split('T')[0];
+    
+    console.log(`Sync period: ${periodStartStr} to ${periodEndStr}`);
+    console.log(`Comparison period: ${prevPeriodStartStr} to ${prevPeriodEndStr}`);
 
     // Track clients synced via agency to avoid double-syncing
     const agencySyncedClients = new Set<string>();
@@ -315,9 +338,17 @@ async function syncFacebookPage(
     let recordsSynced = 0;
     let totalReach = pageReach;
     let totalEngagement = 0;
+    let postsInPeriod = 0;
     const postCount = postsData.data?.length || 1;
 
     for (const post of postsData.data || []) {
+      const postDate = new Date(post.created_time);
+      const periodStartDate = new Date(periodStart);
+      const periodEndDate = new Date(periodEnd);
+      periodEndDate.setHours(23, 59, 59, 999); // Include end of day
+      
+      const isInPeriod = postDate >= periodStartDate && postDate <= periodEndDate;
+      
       const likes = post.reactions?.summary?.total_count || 0;
       const comments = post.comments?.summary?.total_count || 0;
       const shares = post.shares?.count || 0;
@@ -339,7 +370,6 @@ async function syncFacebookPage(
 
       if (contentData) {
         // Distribute page-level reach across posts as an estimate
-        // Individual post insights are often unavailable in the new Graph API
         const estimatedReach = Math.round(pageReach / postCount);
         const estimatedImpressions = Math.round(pageImpressions / postCount);
 
@@ -356,12 +386,16 @@ async function syncFacebookPage(
           impressions: estimatedImpressions,
         });
 
-        totalEngagement += likes + comments + shares;
+        // Only count engagement for posts IN the period
+        if (isInPeriod) {
+          totalEngagement += likes + comments + shares;
+          postsInPeriod++;
+        }
         recordsSynced++;
       }
     }
 
-    // Insert account metrics
+    // Insert account metrics - use posts in period, not total fetched
     const engagementRate = followers > 0 ? (totalEngagement / followers) * 100 : 0;
 
     await supabase.from('social_account_metrics').insert({
@@ -370,8 +404,8 @@ async function syncFacebookPage(
       period_start: periodStart,
       period_end: periodEnd,
       followers,
-      engagement_rate: engagementRate,
-      total_content: recordsSynced,
+      engagement_rate: Math.min(engagementRate, 100), // Cap at 100% for sanity
+      total_content: postsInPeriod, // Use actual posts in period
     });
 
     // Update sync log
@@ -449,8 +483,16 @@ async function syncInstagramAccount(
     let recordsSynced = 0;
     let totalEngagement = 0;
     let totalReach = 0;
+    let postsInPeriod = 0;
 
     for (const media of mediaData.data || []) {
+      const mediaDate = new Date(media.timestamp);
+      const periodStartDate = new Date(periodStart);
+      const periodEndDate = new Date(periodEnd);
+      periodEndDate.setHours(23, 59, 59, 999); // Include end of day
+      
+      const isInPeriod = mediaDate >= periodStartDate && mediaDate <= periodEndDate;
+      
       const likes = media.like_count || 0;
       const comments = media.comments_count || 0;
 
@@ -476,8 +518,6 @@ async function syncInstagramAccount(
 
       if (contentData) {
         // Fetch insights for this media
-        // v22.0+ deprecates 'plays' and 'impressions' for some media types
-        // Use 'reach', 'saved', 'total_interactions' which work across all types
         let reach = 0;
         let impressions = 0;
         let saved = 0;
@@ -510,16 +550,20 @@ async function syncInstagramAccount(
           comments,
           reach,
           impressions,
-          shares: saved, // Use saved as a proxy for shares/engagement
+          shares: saved,
         });
 
-        totalReach += reach;
-        totalEngagement += likes + comments + saved;
+        // Only count engagement for posts IN the period
+        if (isInPeriod) {
+          totalReach += reach;
+          totalEngagement += likes + comments + saved;
+          postsInPeriod++;
+        }
         recordsSynced++;
       }
     }
 
-    // Insert account metrics
+    // Insert account metrics - use posts in period, not total fetched
     const engagementRate = followers > 0 ? (totalEngagement / followers) * 100 : 0;
 
     await supabase.from('social_account_metrics').insert({
@@ -528,8 +572,8 @@ async function syncInstagramAccount(
       period_start: periodStart,
       period_end: periodEnd,
       followers,
-      engagement_rate: engagementRate,
-      total_content: recordsSynced,
+      engagement_rate: Math.min(engagementRate, 100), // Cap at 100% for sanity
+      total_content: postsInPeriod, // Use actual posts in period
     });
 
     // Update sync log
