@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/Header";
 import { AuthForm } from "@/components/AuthForm";
-import { BulkMetaSync } from "@/components/BulkMetaSync";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -89,6 +89,18 @@ const AdminMetaAssets = () => {
   const [clientConnectDialogOpen, setClientConnectDialogOpen] = useState(false);
   const [clientConnectTarget, setClientConnectTarget] = useState<string>("");
   const [isClientConnecting, setIsClientConnecting] = useState(false);
+  const [syncProgress, setSyncProgress] = useState({ current: 0, total: 0, currentClient: "" });
+  const pollInterval = useRef<NodeJS.Timeout | null>(null);
+  const syncStartTime = useRef<string | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollInterval.current) {
+        clearInterval(pollInterval.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && isAdmin) {
@@ -185,18 +197,79 @@ const AdminMetaAssets = () => {
     }
   };
 
+  const startProgressPolling = async (expectedTotal: number) => {
+    syncStartTime.current = new Date().toISOString();
+    setSyncProgress({ current: 0, total: expectedTotal, currentClient: "Starting..." });
+
+    pollInterval.current = setInterval(async () => {
+      if (!syncStartTime.current) return;
+
+      const { data: logs } = await supabase
+        .from("social_sync_logs")
+        .select(`
+          id,
+          platform,
+          status,
+          client_id,
+          clients (name)
+        `)
+        .gte("started_at", syncStartTime.current)
+        .order("started_at", { ascending: false });
+
+      if (logs && logs.length > 0) {
+        const completedCount = logs.filter(l => l.status === "completed").length;
+        const runningLog = logs.find(l => l.status === "running");
+        const currentClient = runningLog 
+          ? `${(runningLog as any).clients?.name || "Unknown"} (${runningLog.platform})`
+          : logs[0] 
+            ? `${(logs[0] as any).clients?.name || "Unknown"} (${logs[0].platform})`
+            : "";
+
+        setSyncProgress({
+          current: completedCount,
+          total: expectedTotal,
+          currentClient,
+        });
+      }
+    }, 1500);
+  };
+
+  const stopProgressPolling = () => {
+    if (pollInterval.current) {
+      clearInterval(pollInterval.current);
+      pollInterval.current = null;
+    }
+    syncStartTime.current = null;
+  };
+
   const handleSyncAll = async () => {
     setIsSyncing(true);
     try {
+      // Count total expected syncs for progress
+      let totalSyncs = 0;
+      for (const m of mappings) {
+        if (m.page_id) totalSyncs += 2; // FB: 2 periods
+        if (m.ig_business_id) totalSyncs += 2; // IG: 2 periods
+      }
+
+      startProgressPolling(totalSyncs);
+
       const { data, error } = await supabase.functions.invoke("sync-meta-agency");
       
+      stopProgressPolling();
+
       if (error) throw error;
       
       const successCount = data.results?.filter((r: any) => r.success).length || 0;
+      setSyncProgress(prev => ({ ...prev, current: prev.total }));
       toast.success(`Synced ${successCount} of ${data.results?.length || 0} mappings`);
+
+      // Dispatch event for client pages to auto-refresh
+      window.dispatchEvent(new CustomEvent("bulk-meta-sync-complete", { detail: data.results || [] }));
     } catch (error) {
       console.error("Error syncing:", error);
       toast.error(error instanceof Error ? error.message : "Failed to sync");
+      stopProgressPolling();
     } finally {
       setIsSyncing(false);
     }
@@ -453,7 +526,7 @@ const AdminMetaAssets = () => {
                   </Alert>
                 )}
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button onClick={handleConnectAgency} disabled={isConnecting} variant="outline">
                     {isConnecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                     Reconnect
@@ -467,6 +540,23 @@ const AdminMetaAssets = () => {
                     Sync All Clients
                   </Button>
                 </div>
+
+                {isSyncing && syncProgress.total > 0 && (
+                  <div className="space-y-2 mt-4 p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Syncing {syncProgress.current} of {syncProgress.total}...
+                      </span>
+                      <span className="font-medium">{Math.round((syncProgress.current / syncProgress.total) * 100)}%</span>
+                    </div>
+                    <Progress value={(syncProgress.current / syncProgress.total) * 100} className="h-2" />
+                    {syncProgress.currentClient && (
+                      <p className="text-xs text-muted-foreground">
+                        Current: {syncProgress.currentClient}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center py-6">
@@ -481,11 +571,6 @@ const AdminMetaAssets = () => {
             )}
           </CardContent>
         </Card>
-
-        {/* Bulk Meta Sync */}
-        <div className="mb-6">
-          <BulkMetaSync />
-        </div>
 
         {/* Per-Client Instagram Connections */}
         <Card className="mb-6">
