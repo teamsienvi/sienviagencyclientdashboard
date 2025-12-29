@@ -720,20 +720,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setSyncing(true);
     setSyncingContent(true);
     try {
-      let periodEnd: Date;
+      // Use the same Mon-Sun periods as the UI displays
       let periodStart: Date;
+      let periodEnd: Date;
 
       if (syncLastWeek) {
-        // Sync previous week (8-14 days ago)
-        periodEnd = new Date();
-        periodEnd.setDate(periodEnd.getDate() - 7);
-        periodStart = new Date(periodEnd);
-        periodStart.setDate(periodStart.getDate() - 7);
+        // Sync comparison period (the week before the reporting period)
+        const compRange = getComparisonDateRange();
+        periodStart = compRange.start;
+        periodEnd = compRange.end;
       } else {
-        // Sync current week (0-7 days ago)
-        periodEnd = new Date();
-        periodStart = new Date(periodEnd);
-        periodStart.setDate(periodStart.getDate() - 7);
+        // Sync current reporting period (last completed Mon-Sun)
+        const currentRange = getDateRange();
+        periodStart = currentRange.start;
+        periodEnd = currentRange.end;
       }
 
       const { data, error } = await supabase.functions.invoke("sync-meta", {
@@ -1074,7 +1074,25 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     </span>
                   </TableCell>
                   <TableCell>{formatDate(post.published_at)}</TableCell>
-                  <TableCell>{post.metrics?.reach?.toLocaleString() || "—"}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const reach = post.metrics?.reach;
+                      const likes = post.metrics?.likes || 0;
+                      const comments = post.metrics?.comments || 0;
+                      const shares = post.metrics?.shares || 0;
+                      const hasEngagement = likes > 0 || comments > 0 || shares > 0;
+                      
+                      // If reach is 0 or null but has engagement, show N/A with tooltip
+                      if ((reach === 0 || reach == null) && hasEngagement) {
+                        return (
+                          <span className="text-muted-foreground cursor-help" title="Reach unavailable - insights not returned by Meta API">
+                            N/A
+                          </span>
+                        );
+                      }
+                      return reach?.toLocaleString() || "—";
+                    })()}
+                  </TableCell>
                   <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
                   <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
                   <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
