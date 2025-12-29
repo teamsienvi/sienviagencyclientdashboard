@@ -244,7 +244,18 @@ const AdminMetaAssets = () => {
 
   const handleSyncAll = async () => {
     setIsSyncing(true);
+    const startedAt = new Date().toISOString();
+
     try {
+      try {
+        localStorage.setItem(
+          "meta_bulk_sync",
+          JSON.stringify({ status: "running", startedAt })
+        );
+      } catch {
+        // ignore storage failures (privacy mode)
+      }
+
       // Count total expected syncs for progress
       let totalSyncs = 0;
       for (const m of mappings) {
@@ -255,21 +266,50 @@ const AdminMetaAssets = () => {
       startProgressPolling(totalSyncs);
 
       const { data, error } = await supabase.functions.invoke("sync-meta-agency");
-      
+
       stopProgressPolling();
 
       if (error) throw error;
-      
+
       const successCount = data.results?.filter((r: any) => r.success).length || 0;
-      setSyncProgress(prev => ({ ...prev, current: prev.total }));
+      setSyncProgress((prev) => ({ ...prev, current: prev.total }));
       toast.success(`Synced ${successCount} of ${data.results?.length || 0} mappings`);
 
-      // Dispatch event for client pages to auto-refresh
+      // Notify other tabs (Meta Analytics pages) to refresh after bulk sync completes
+      try {
+        localStorage.setItem(
+          "meta_bulk_sync",
+          JSON.stringify({
+            status: "completed",
+            startedAt,
+            completedAt: new Date().toISOString(),
+            results: data.results || [],
+          })
+        );
+      } catch {
+        // ignore storage failures
+      }
+
+      // Same-tab listeners (kept for compatibility)
       window.dispatchEvent(new CustomEvent("bulk-meta-sync-complete", { detail: data.results || [] }));
     } catch (error) {
       console.error("Error syncing:", error);
       toast.error(error instanceof Error ? error.message : "Failed to sync");
       stopProgressPolling();
+
+      try {
+        localStorage.setItem(
+          "meta_bulk_sync",
+          JSON.stringify({
+            status: "failed",
+            startedAt,
+            failedAt: new Date().toISOString(),
+            error: error instanceof Error ? error.message : "Failed to sync",
+          })
+        );
+      } catch {
+        // ignore storage failures
+      }
     } finally {
       setIsSyncing(false);
     }
