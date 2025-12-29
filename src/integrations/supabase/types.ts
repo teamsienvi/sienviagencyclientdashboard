@@ -805,6 +805,124 @@ export type Database = {
         }
         Relationships: []
       }
+      web_analytics_page_views: {
+        Row: {
+          client_id: string
+          created_at: string
+          device_type: string | null
+          id: string
+          page_title: string | null
+          page_url: string
+          referrer: string | null
+          session_id: string | null
+          user_agent: string | null
+          utm_campaign: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          viewed_at: string
+          visitor_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          page_title?: string | null
+          page_url: string
+          referrer?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          viewed_at?: string
+          visitor_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          device_type?: string | null
+          id?: string
+          page_title?: string | null
+          page_url?: string
+          referrer?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          viewed_at?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "web_analytics_page_views_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      web_analytics_sessions: {
+        Row: {
+          bounce: boolean | null
+          client_id: string
+          created_at: string
+          device_type: string | null
+          ended_at: string | null
+          id: string
+          page_count: number | null
+          referrer: string | null
+          session_id: string
+          started_at: string
+          user_agent: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          visitor_id: string
+        }
+        Insert: {
+          bounce?: boolean | null
+          client_id: string
+          created_at?: string
+          device_type?: string | null
+          ended_at?: string | null
+          id?: string
+          page_count?: number | null
+          referrer?: string | null
+          session_id: string
+          started_at?: string
+          user_agent?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_id: string
+        }
+        Update: {
+          bounce?: boolean | null
+          client_id?: string
+          created_at?: string
+          device_type?: string | null
+          ended_at?: string | null
+          id?: string
+          page_count?: number | null
+          referrer?: string | null
+          session_id?: string
+          started_at?: string
+          user_agent?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "web_analytics_sessions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       youtube_assets: {
         Row: {
           channel_id: string
