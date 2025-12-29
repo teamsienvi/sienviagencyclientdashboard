@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -24,7 +25,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Unlink
+  Unlink,
+  UserPlus
 } from "lucide-react";
 
 interface MetaAsset {
@@ -58,12 +60,23 @@ interface AgencyConnection {
   connected_at: string;
 }
 
+interface ClientOAuthAccount {
+  id: string;
+  client_id: string;
+  platform: string;
+  page_id: string | null;
+  instagram_business_id: string | null;
+  token_expires_at: string;
+  is_active: boolean;
+}
+
 const AdminMetaAssets = () => {
   const { user, isAdmin, isLoading: authLoading, signOut, isAuthenticated } = useAuth();
   const [agencyConnection, setAgencyConnection] = useState<AgencyConnection | null>(null);
   const [assets, setAssets] = useState<MetaAsset[]>([]);
   const [mappings, setMappings] = useState<ClientMetaMap[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [clientOAuthAccounts, setClientOAuthAccounts] = useState<ClientOAuthAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -72,6 +85,9 @@ const AdminMetaAssets = () => {
   const [filterTab, setFilterTab] = useState<"all" | "assigned" | "unassigned">("all");
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [bulkAssignClient, setBulkAssignClient] = useState<string>("");
+  const [clientConnectDialogOpen, setClientConnectDialogOpen] = useState(false);
+  const [clientConnectTarget, setClientConnectTarget] = useState<string>("");
+  const [isClientConnecting, setIsClientConnecting] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && isAdmin) {
@@ -115,6 +131,14 @@ const AdminMetaAssets = () => {
         .order("name");
       
       setClients(clientsData || []);
+
+      // Fetch per-client OAuth accounts (for clients with separate IG connections)
+      const { data: oauthData } = await supabase
+        .from("social_oauth_accounts")
+        .select("id, client_id, platform, page_id, instagram_business_id, token_expires_at, is_active")
+        .eq("is_active", true);
+      
+      setClientOAuthAccounts(oauthData || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load data");
@@ -219,6 +243,53 @@ const AdminMetaAssets = () => {
       console.error("Error unassigning:", error);
       toast.error("Failed to unassign asset");
     }
+  };
+
+  // Handle connecting a client's separate Instagram account (not via agency)
+  const handleClientInstagramConnect = async (clientId: string) => {
+    setIsClientConnecting(true);
+    try {
+      const redirectUri = `${window.location.origin}/oauth/meta/callback`;
+      
+      const { data, error } = await supabase.functions.invoke("meta-oauth-init", {
+        body: {
+          clientId,
+          redirectUri,
+          platform: "instagram",
+        },
+      });
+
+      if (error) throw error;
+      if (data?.authUrl) {
+        window.location.href = data.authUrl;
+      }
+    } catch (error) {
+      console.error("Error initiating client OAuth:", error);
+      toast.error("Failed to start Instagram connection");
+      setIsClientConnecting(false);
+    }
+  };
+
+  const handleDisconnectClientOAuth = async (accountId: string) => {
+    try {
+      const { error } = await supabase
+        .from("social_oauth_accounts")
+        .update({ is_active: false })
+        .eq("id", accountId);
+
+      if (error) throw error;
+
+      toast.success("Disconnected client Instagram account");
+      await fetchData();
+    } catch (error) {
+      console.error("Error disconnecting:", error);
+      toast.error("Failed to disconnect");
+    }
+  };
+
+  // Get the client's individual OAuth connection (if any)
+  const getClientOAuthAccount = (clientId: string): ClientOAuthAccount | undefined => {
+    return clientOAuthAccounts.find(a => a.client_id === clientId && a.platform === "instagram");
   };
 
   const handleBulkAssign = async () => {
@@ -407,6 +478,78 @@ const AdminMetaAssets = () => {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Per-Client Instagram Connections */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="h-5 w-5" />
+              Per-Client Instagram Connections
+            </CardTitle>
+            <CardDescription>
+              For clients with Instagram accounts not managed by the agency (e.g., BSUE, Sienvi)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {clients.map((client) => {
+                const oauthAccount = getClientOAuthAccount(client.id);
+                const hasAgencyMapping = mappings.some(m => m.client_id === client.id && m.ig_business_id);
+                
+                // Skip clients that already have agency IG mapping
+                if (hasAgencyMapping) return null;
+
+                return (
+                  <div key={client.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Instagram className="h-5 w-5 text-pink-600" />
+                      <span className="font-medium">{client.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {oauthAccount ? (
+                        <>
+                          <Badge variant="default" className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Connected
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            IG: {oauthAccount.instagram_business_id?.slice(-6) || 'N/A'}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDisconnectClientOAuth(oauthAccount.id)}
+                          >
+                            <Unlink className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleClientInstagramConnect(client.id)}
+                          disabled={isClientConnecting}
+                        >
+                          {isClientConnecting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Instagram className="mr-2 h-4 w-4" />
+                          )}
+                          Connect Instagram
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {clients.filter(c => !mappings.some(m => m.client_id === c.id && m.ig_business_id)).length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  All clients have Instagram connected via agency mapping
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
