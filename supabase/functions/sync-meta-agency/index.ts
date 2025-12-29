@@ -404,33 +404,27 @@ async function syncInstagramAccount(
         .single();
 
       if (contentData) {
-        // Fetch insights for this media - metrics vary by media type
+        // Fetch insights for this media
+        // v22.0+ deprecates 'plays' and 'impressions' for some media types
+        // Use 'reach', 'saved', 'total_interactions' which work across all types
         let reach = 0;
         let impressions = 0;
-        let views = 0;
+        let saved = 0;
 
         try {
-          // Different metrics for different media types
-          // VIDEO/REELS use 'plays' and 'reach', IMAGE/CAROUSEL use 'impressions' and 'reach'
-          let metrics = 'reach,impressions';
-          if (media.media_type === 'VIDEO' || media.media_type === 'REELS') {
-            metrics = 'reach,plays';
-          }
-          
           const insightsResponse = await fetch(
-            `https://graph.facebook.com/v21.0/${media.id}/insights?metric=${metrics}&access_token=${accessToken}`
+            `https://graph.facebook.com/v21.0/${media.id}/insights?metric=reach,saved,total_interactions&access_token=${accessToken}`
           );
           const insightsData = await insightsResponse.json();
           
           if (insightsData.error) {
-            console.log(`Insights error for media ${media.id}: ${insightsData.error.message}`);
+            console.log(`Insights error for media ${media.id} (${media.media_type}): ${insightsData.error.message}`);
           } else {
             for (const insight of insightsData.data || []) {
               if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
-              if (insight.name === 'impressions') impressions = insight.values?.[0]?.value || 0;
-              if (insight.name === 'plays') views = insight.values?.[0]?.value || 0;
+              if (insight.name === 'saved') saved = insight.values?.[0]?.value || 0;
+              if (insight.name === 'total_interactions') impressions = insight.values?.[0]?.value || 0;
             }
-            console.log(`Got insights for ${media.id}: reach=${reach}, impressions=${impressions}, views=${views}`);
           }
         } catch (e) {
           console.log(`Exception fetching insights for media ${media.id}:`, e);
@@ -444,12 +438,12 @@ async function syncInstagramAccount(
           likes,
           comments,
           reach,
-          impressions: impressions || views, // Use views as impressions for videos
-          views,
+          impressions,
+          shares: saved, // Use saved as a proxy for shares/engagement
         });
 
         totalReach += reach;
-        totalEngagement += likes + comments;
+        totalEngagement += likes + comments + saved;
         recordsSynced++;
       }
     }
