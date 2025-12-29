@@ -146,40 +146,51 @@ serve(async (req) => {
     }
 
     const mediaData = mediaResponse.ok ? await mediaResponse.json() : { data: [] };
-    const mediaItems: MetaMediaItem[] = mediaData.data || [];
+    const mediaItemsAll: MetaMediaItem[] = mediaData.data || [];
 
-    // For Instagram, fetch insights for each post to get reach/impressions
+    const periodStartDate = new Date(periodStart);
+    const periodEndDate = new Date(periodEnd);
+    periodEndDate.setHours(23, 59, 59, 999);
+
+    const getItemDate = (item: MetaMediaItem) => {
+      const raw = platform === 'instagram' ? item.timestamp : (item as any).created_time;
+      return raw ? new Date(raw) : null;
+    };
+
+    // Only sync items that fall inside the requested period.
+    const mediaItems: MetaMediaItem[] = mediaItemsAll.filter((item) => {
+      const d = getItemDate(item);
+      if (!d) return false;
+      return d >= periodStartDate && d <= periodEndDate;
+    });
+
+    console.log(`Fetched ${mediaItemsAll.length} items, syncing ${mediaItems.length} in period ${periodStart} to ${periodEnd}`);
+
+    // Fetch insights per item (only for items in the requested period)
     if (platform === 'instagram') {
       console.log(`Fetching insights for ${mediaItems.length} Instagram posts...`);
       for (const item of mediaItems) {
         try {
-          // Use the correct metrics based on media type
-          // For Reels (VIDEO): reach, plays, likes, comments, shares, saved, total_interactions
-          // For Images/Carousels: reach, saved, likes, comments, shares, total_interactions
           let insightMetrics: string;
-          
+
           if (item.media_type === 'VIDEO') {
-            // Reels use 'plays' instead of 'impressions'
-            insightMetrics = 'reach,plays,saved,total_interactions';
+            // Reels use 'plays' in older API versions, but 'total_interactions' is broadly supported
+            insightMetrics = 'reach,saved,total_interactions';
           } else if (item.media_type === 'CAROUSEL_ALBUM') {
-            // Carousels have limited insights
             insightMetrics = 'reach,saved,total_interactions';
           } else {
-            // Regular images
             insightMetrics = 'reach,saved,total_interactions';
           }
-          
+
           const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=${insightMetrics}&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
-          
+
           if (insightsResp.ok) {
             const insightsJson = await insightsResp.json();
             item.insights = insightsJson;
-            console.log(`Got insights for ${item.id}: ${JSON.stringify(insightsJson.data?.map((d: any) => d.name))}`);
           } else {
             const errText = await insightsResp.text();
             console.log(`Insights failed for ${item.id} (${item.media_type}): ${errText.substring(0, 100)}`);
-            // Try minimal fallback
             const fallbackUrl = `${baseUrl}/${item.id}/insights?metric=reach&access_token=${accessToken}`;
             const fallbackResp = await fetch(fallbackUrl);
             if (fallbackResp.ok) {
@@ -194,8 +205,6 @@ serve(async (req) => {
       console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
       for (const item of mediaItems) {
         try {
-          // Newer Graph API versions may reject deprecated metrics like post_impressions.
-          // Use post_media_view for "impressions" / views.
           const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_media_view&period=lifetime&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
 
@@ -213,8 +222,7 @@ serve(async (req) => {
 
     // Store content and metrics
     for (const item of mediaItems) {
-      // Upsert content
-      const contentType = platform === 'instagram' 
+      const contentType = platform === 'instagram'
         ? (item.media_type === 'VIDEO' ? 'reel' : item.media_type === 'CAROUSEL_ALBUM' ? 'carousel' : 'post')
         : 'post';
 
@@ -250,39 +258,32 @@ serve(async (req) => {
         continue;
       }
 
-      // Extract metrics
       let reach = 0, impressions = 0, likes = 0, comments = 0, shares = 0, interactions = 0, saved = 0;
 
       if (platform === 'instagram') {
         likes = item.like_count || 0;
         comments = item.comments_count || 0;
-        
+
         if (item.insights?.data) {
           for (const insight of item.insights.data) {
             const value = insight.values?.[0]?.value || 0;
             if (insight.name === 'reach') reach = value;
-            if (insight.name === 'plays') impressions = value; // Reels use 'plays' 
             if (insight.name === 'saved') saved = value;
-            if (insight.name === 'shares') shares = value;
             if (insight.name === 'total_interactions') interactions = value;
           }
         }
-        
-        // If total_interactions wasn't in insights, calculate it
+
         if (interactions === 0) {
           interactions = likes + comments + shares + saved;
         }
       } else {
-        // Facebook
         likes = (item as any).reactions?.summary?.total_count || 0;
         comments = (item as any).comments?.summary?.total_count || 0;
         shares = (item as any).shares?.count || 0;
-        
-        // Extract Facebook post insights
+
         const fbInsights = (item as any).fbInsights || [];
         for (const insight of fbInsights) {
           const value = insight.values?.[0]?.value || 0;
-          // post_media_view represents views -> store as reach
           if (insight.name === 'post_media_view' || insight.name === 'post_impressions_unique') reach = value;
         }
       }
@@ -291,7 +292,6 @@ serve(async (req) => {
         interactions = likes + comments + shares;
       }
 
-      // Insert metrics snapshot
       const { error: metricsError } = await supabase
         .from("social_content_metrics")
         .insert({
@@ -315,20 +315,22 @@ serve(async (req) => {
       }
     }
 
-    // Calculate engagement rate
+    // Calculate engagement rate for the requested period only
     const totalContent = mediaItems.length;
     const totalInteractions = mediaItems.reduce((sum, item) => {
       if (platform === 'instagram') {
         return sum + (item.like_count || 0) + (item.comments_count || 0);
       }
-      return sum + ((item as any).reactions?.summary?.total_count || 0) + 
-             ((item as any).comments?.summary?.total_count || 0) + 
-             ((item as any).shares?.count || 0);
+      return (
+        sum +
+        ((item as any).reactions?.summary?.total_count || 0) +
+        ((item as any).comments?.summary?.total_count || 0) +
+        ((item as any).shares?.count || 0)
+      );
     }, 0);
-    
+
     const engagementRate = totalFollowers > 0 ? (totalInteractions / totalFollowers) * 100 : 0;
 
-    // Store account metrics
     const { error: accountMetricsError } = await supabase
       .from("social_account_metrics")
       .insert({
@@ -371,7 +373,7 @@ serve(async (req) => {
           totalContent,
         },
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     console.error("Error in sync-meta:", error);
