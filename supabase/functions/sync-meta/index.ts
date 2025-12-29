@@ -174,7 +174,6 @@ serve(async (req) => {
           let insightMetrics: string;
 
           if (item.media_type === 'VIDEO') {
-            // Reels use 'plays' in older API versions, but 'total_interactions' is broadly supported
             insightMetrics = 'reach,saved,total_interactions';
           } else if (item.media_type === 'CAROUSEL_ALBUM') {
             insightMetrics = 'reach,saved,total_interactions';
@@ -184,38 +183,62 @@ serve(async (req) => {
 
           const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=${insightMetrics}&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
+          const insightsJson = await insightsResp.json();
 
-          if (insightsResp.ok) {
-            const insightsJson = await insightsResp.json();
-            item.insights = insightsJson;
-          } else {
-            const errText = await insightsResp.text();
-            console.log(`Insights failed for ${item.id} (${item.media_type}): ${errText.substring(0, 100)}`);
+          // Check for API error in response (Graph API can return 200 with error)
+          if (insightsJson.error) {
+            console.log(`IG insights API error for ${item.id} (${item.media_type}): ${insightsJson.error.message?.substring(0, 100)}`);
+            
+            // Try fallback with just reach
             const fallbackUrl = `${baseUrl}/${item.id}/insights?metric=reach&access_token=${accessToken}`;
             const fallbackResp = await fetch(fallbackUrl);
-            if (fallbackResp.ok) {
-              item.insights = await fallbackResp.json();
+            const fallbackJson = await fallbackResp.json();
+            
+            if (!fallbackJson.error && fallbackJson.data?.length > 0) {
+              item.insights = fallbackJson;
+            } else {
+              (item as any).insightsFailed = true;
             }
+          } else if (insightsResp.ok && insightsJson.data) {
+            item.insights = insightsJson;
+          } else {
+            console.log(`Insights failed for ${item.id} (${item.media_type}): status=${insightsResp.status}`);
+            (item as any).insightsFailed = true;
           }
         } catch (e) {
           console.error(`Error fetching insights for post ${item.id}:`, e);
+          (item as any).insightsFailed = true;
         }
       }
     } else {
       console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
       for (const item of mediaItems) {
         try {
-          // Use post_impressions_unique for reach, post_impressions for impressions
-          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`;
+          // Use post_impressions_unique for reach, post_impressions for impressions with period=lifetime
+          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions_unique,post_impressions&period=lifetime&access_token=${accessToken}`;
           const insightsResp = await fetch(postInsightsUrl);
+          const insightsJson = await insightsResp.json();
 
-          if (insightsResp.ok) {
-            const insightsJson = await insightsResp.json();
+          // Check for API error in response (Graph API can return 200 with error)
+          if (insightsJson.error) {
+            console.log(`FB post insights API error for ${item.id}: ${insightsJson.error.message?.substring(0, 100)}`);
+            
+            // Try fallback with just post_impressions
+            const fallbackUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions&period=lifetime&access_token=${accessToken}`;
+            const fallbackResp = await fetch(fallbackUrl);
+            const fallbackJson = await fallbackResp.json();
+            
+            if (!fallbackJson.error && fallbackJson.data?.length > 0) {
+              (item as any).fbInsights = fallbackJson.data;
+              (item as any).insightsFallback = true;
+            } else {
+              (item as any).fbInsights = [];
+              (item as any).insightsFailed = true;
+            }
+          } else if (insightsResp.ok && insightsJson.data) {
             (item as any).fbInsights = insightsJson.data || [];
           } else {
-            const errText = await insightsResp.text();
-            console.log(`FB post insights failed for ${item.id}: ${errText.substring(0, 100)}`);
-            // Mark as failed but don't break - we'll still have likes/comments
+            console.log(`FB post insights failed for ${item.id}: status=${insightsResp.status}`);
             (item as any).fbInsights = [];
             (item as any).insightsFailed = true;
           }

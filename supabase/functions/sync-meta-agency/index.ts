@@ -408,15 +408,40 @@ async function syncFacebookPage(
     let totalEngagement = 0;
     let insightsFailed = 0;
 
-    // Batch fetch post insights - use correct metrics for Facebook
+    // Batch fetch post insights - use correct metrics for Facebook with period=lifetime
     const postInsightsPromises = postsInPeriod.map(async (post: any) => {
       try {
-        // Use post_impressions_unique for reach, post_impressions for impressions
+        // Use post_impressions_unique for reach, post_impressions for impressions with period=lifetime
         const resp = await fetch(
-          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&access_token=${accessToken}`
+          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&period=lifetime&access_token=${accessToken}`
         );
-        if (resp.ok) {
-          const data = await resp.json();
+        const data = await resp.json();
+        
+        // Check for API error in response (Graph API can return 200 with error)
+        if (data.error) {
+          console.log(`FB insights API error for ${post.id}: ${data.error.message?.substring(0, 100)}`);
+          
+          // Try fallback with just post_impressions (more widely available)
+          const fallbackResp = await fetch(
+            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions&period=lifetime&access_token=${accessToken}`
+          );
+          const fallbackData = await fallbackResp.json();
+          
+          if (!fallbackData.error && fallbackData.data?.length > 0) {
+            let impressions = 0;
+            for (const insight of fallbackData.data || []) {
+              if (insight.name === 'post_impressions') {
+                impressions = insight.values?.[0]?.value || 0;
+              }
+            }
+            // Use impressions as a proxy for reach if unique impressions unavailable
+            return { postId: post.id, reach: impressions, impressions, failed: false, fallback: true };
+          }
+          
+          return { postId: post.id, reach: null, impressions: null, failed: true, reason: data.error.code || 'unknown' };
+        }
+        
+        if (resp.ok && data.data) {
           let reach = 0, impressions = 0;
           for (const insight of data.data || []) {
             const val = insight.values?.[0]?.value || 0;
@@ -425,25 +450,30 @@ async function syncFacebookPage(
           }
           return { postId: post.id, reach, impressions, failed: false };
         } else {
-          const errText = await resp.text();
-          console.log(`FB insights failed for ${post.id}: ${errText.substring(0, 100)}`);
-          return { postId: post.id, reach: null, impressions: null, failed: true };
+          console.log(`FB insights failed for ${post.id}: status=${resp.status}`);
+          return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'http_error' };
         }
       } catch (e) {
         console.log(`Could not fetch insights for post ${post.id}: ${e}`);
-        return { postId: post.id, reach: null, impressions: null, failed: true };
+        return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'exception' };
       }
     });
 
     const postInsights = await Promise.all(postInsightsPromises);
     const insightsMap: Record<string, { reach: number | null; impressions: number | null }> = {};
+    const failureReasons: Record<string, number> = {};
     for (const pi of postInsights) {
       insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
-      if (pi.failed) insightsFailed++;
+      if (pi.failed) {
+        insightsFailed++;
+        const reason = (pi as any).reason || 'unknown';
+        failureReasons[reason] = (failureReasons[reason] || 0) + 1;
+      }
     }
 
     if (insightsFailed > 0) {
-      errorMessages.push(`Insights unavailable for ${insightsFailed}/${postsInPeriod.length} posts`);
+      const reasonSummary = Object.entries(failureReasons).map(([k, v]) => `${k}:${v}`).join(', ');
+      errorMessages.push(`Insights unavailable for ${insightsFailed}/${postsInPeriod.length} posts (${reasonSummary})`);
     }
 
     for (const post of postsInPeriod) {
@@ -610,7 +640,7 @@ async function syncInstagramAccount(
     let totalEngagement = 0;
     let insightsFailed = 0;
 
-    // Batch fetch post insights
+    // Batch fetch post insights with period=lifetime for reliability
     const postInsightsPromises = mediaInPeriod.map(async (post: any) => {
       try {
         const metrics = post.media_type === 'VIDEO' 
@@ -619,8 +649,30 @@ async function syncInstagramAccount(
         const resp = await fetch(
           `https://graph.facebook.com/v21.0/${post.id}/insights?metric=${metrics}&access_token=${accessToken}`
         );
-        if (resp.ok) {
-          const data = await resp.json();
+        const data = await resp.json();
+        
+        // Check for API error in response (Graph API can return 200 with error)
+        if (data.error) {
+          console.log(`IG insights API error for ${post.id}: ${data.error.message?.substring(0, 100)}`);
+          
+          // Try fallback with just reach
+          const fallbackResp = await fetch(
+            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=reach&access_token=${accessToken}`
+          );
+          const fallbackData = await fallbackResp.json();
+          
+          if (!fallbackData.error && fallbackData.data?.length > 0) {
+            let reach = 0;
+            for (const insight of fallbackData.data || []) {
+              if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
+            }
+            return { postId: post.id, reach, impressions: null, failed: false, fallback: true };
+          }
+          
+          return { postId: post.id, reach: null, impressions: null, failed: true, reason: data.error.code || 'unknown' };
+        }
+        
+        if (resp.ok && data.data) {
           let reach = 0, impressions = 0;
           for (const insight of data.data || []) {
             const val = insight.values?.[0]?.value || 0;
@@ -629,35 +681,30 @@ async function syncInstagramAccount(
           }
           return { postId: post.id, reach, impressions, failed: false };
         } else {
-          // Try fallback with just reach
-          const fallbackResp = await fetch(
-            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=reach&access_token=${accessToken}`
-          );
-          if (fallbackResp.ok) {
-            const data = await fallbackResp.json();
-            let reach = 0;
-            for (const insight of data.data || []) {
-              if (insight.name === 'reach') reach = insight.values?.[0]?.value || 0;
-            }
-            return { postId: post.id, reach, impressions: 0, failed: false };
-          }
-          return { postId: post.id, reach: null, impressions: null, failed: true };
+          console.log(`IG insights failed for ${post.id}: status=${resp.status}`);
+          return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'http_error' };
         }
       } catch (e) {
         console.log(`Could not fetch insights for IG post ${post.id}: ${e}`);
-        return { postId: post.id, reach: null, impressions: null, failed: true };
+        return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'exception' };
       }
     });
 
     const postInsights = await Promise.all(postInsightsPromises);
     const insightsMap: Record<string, { reach: number | null; impressions: number | null }> = {};
+    const failureReasons: Record<string, number> = {};
     for (const pi of postInsights) {
       insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
-      if (pi.failed) insightsFailed++;
+      if (pi.failed) {
+        insightsFailed++;
+        const reason = (pi as any).reason || 'unknown';
+        failureReasons[reason] = (failureReasons[reason] || 0) + 1;
+      }
     }
 
     if (insightsFailed > 0) {
-      errorMessages.push(`Insights unavailable for ${insightsFailed}/${mediaInPeriod.length} posts`);
+      const reasonSummary = Object.entries(failureReasons).map(([k, v]) => `${k}:${v}`).join(', ');
+      errorMessages.push(`Insights unavailable for ${insightsFailed}/${mediaInPeriod.length} posts (${reasonSummary})`);
     }
 
     for (const post of mediaInPeriod) {
