@@ -401,7 +401,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setFacebookSyncLog(facebookLog);
   };
 
-  // Helper to find metrics for a specific period range
+  // Helper to find metrics for a specific period range, preferring rows with valid reach
   const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
     if (!metrics || metrics.length === 0) return null;
     
@@ -410,26 +410,49 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
     );
     
-    // First try to find exact period match
+    const targetStartDate = new Date(targetStart);
+    const targetEndDate = new Date(targetEnd);
+    
+    // Helper to check if metrics have valid reach (not null/0 when there's engagement)
+    const hasValidReach = (m: any) => {
+      const reach = m.reach;
+      const hasEngagement = (m.likes || 0) + (m.comments || 0) + (m.shares || 0) > 0;
+      // Valid if reach > 0, or if no engagement (0 reach is expected)
+      return reach > 0 || !hasEngagement;
+    };
+    
+    // 1) Exact period match with valid reach (best)
+    const exactWithReach = sorted.find(m => 
+      m.period_start === targetStart && m.period_end === targetEnd && hasValidReach(m)
+    );
+    if (exactWithReach) return exactWithReach;
+    
+    // 2) Exact period match (any)
     const exactMatch = sorted.find(m => 
       m.period_start === targetStart && m.period_end === targetEnd
     );
     if (exactMatch) return exactMatch;
     
-    // Then try to find overlapping period
-    const targetStartDate = new Date(targetStart);
-    const targetEndDate = new Date(targetEnd);
+    // 3) Overlapping period with valid reach
+    const overlappingWithReach = sorted.find(m => {
+      if (!m.period_start || !m.period_end) return false;
+      const periodStart = new Date(m.period_start);
+      const periodEnd = new Date(m.period_end);
+      const overlaps = periodStart <= targetEndDate && periodEnd >= targetStartDate;
+      return overlaps && hasValidReach(m);
+    });
+    if (overlappingWithReach) return overlappingWithReach;
     
+    // 4) Overlapping period (any)
     const overlapping = sorted.find(m => {
       if (!m.period_start || !m.period_end) return false;
       const periodStart = new Date(m.period_start);
       const periodEnd = new Date(m.period_end);
-      // Check if periods overlap
       return periodStart <= targetEndDate && periodEnd >= targetStartDate;
     });
     if (overlapping) return overlapping;
     
-    // Fallback to most recent metrics
+    // 5) Fallback to most recent metrics
     return sorted[0];
   };
 
