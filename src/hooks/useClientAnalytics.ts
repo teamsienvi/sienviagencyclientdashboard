@@ -32,14 +32,25 @@ export interface AnalyticsData {
   dailyBreakdown?: DailyBreakdown[];
 }
 
+export type AnalyticsErrorType = 
+  | 'not_configured' 
+  | 'inactive' 
+  | 'auth_failed' 
+  | 'no_endpoint' 
+  | 'server_error' 
+  | 'fetch_failed'
+  | 'no_data';
+
 export interface ClientAnalyticsResponse {
   clientId: string;
   clientName: string;
-  analytics: AnalyticsData;
+  analytics: AnalyticsData | null;
   dateRange: {
     startDate: string;
     endDate: string;
   };
+  errorType?: AnalyticsErrorType;
+  errorDetails?: string;
 }
 
 type DateRangePreset = "7d" | "30d" | "custom";
@@ -104,15 +115,16 @@ export const useClientAnalytics = ({
         throw new Error(error.message || "Failed to fetch analytics");
       }
 
-      // Check if the response contains an error from the client's endpoint
-      if (data?.error) {
-        const status = data.status || "unknown";
-        const errorMessage = status === 401 
-          ? `Unauthorized (401) - Check API key configuration`
-          : status === 404
-          ? `Endpoint not found (404)`
-          : `Error ${status}: ${data.error}`;
-        throw new Error(errorMessage);
+      // Check if the response contains an error/not configured state
+      if (data?.ok === false || data?.errorType) {
+        return {
+          clientId: data.clientId || clientId,
+          clientName: data.clientName || '',
+          analytics: null,
+          dateRange: dates,
+          errorType: data.errorType as AnalyticsErrorType,
+          errorDetails: data.details || data.error,
+        };
       }
 
       // Handle nested analytics structure from the edge function

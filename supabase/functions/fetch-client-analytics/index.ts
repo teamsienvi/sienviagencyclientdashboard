@@ -55,16 +55,29 @@ serve(async (req) => {
     if (!client.is_active) {
       console.error('Client is not active:', clientId);
       return new Response(
-        JSON.stringify({ error: 'Client is not active' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          ok: false,
+          error: 'Client is not active',
+          errorType: 'inactive',
+          clientId: client.id,
+          clientName: client.name,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (!client.supabase_url || !client.api_key) {
       console.error('Client missing analytics configuration:', clientId);
       return new Response(
-        JSON.stringify({ error: 'Client analytics not configured' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          ok: false,
+          error: 'Web analytics not configured for this client',
+          errorType: 'not_configured',
+          clientId: client.id,
+          clientName: client.name,
+          details: 'This client does not have a Supabase URL or API key configured for web analytics.',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -92,12 +105,27 @@ serve(async (req) => {
       const errorText = await analyticsResponse.text();
       console.error('Analytics endpoint error:', analyticsResponse.status, errorText);
 
+      // Determine error type based on status code
+      let errorType = 'fetch_failed';
+      let errorMessage = 'Failed to fetch analytics from client';
+      
+      if (analyticsResponse.status === 401 || analyticsResponse.status === 403) {
+        errorType = 'auth_failed';
+        errorMessage = 'Authentication failed - check API key configuration';
+      } else if (analyticsResponse.status === 404) {
+        errorType = 'no_endpoint';
+        errorMessage = 'Analytics endpoint not found on client project';
+      } else if (analyticsResponse.status >= 500) {
+        errorType = 'server_error';
+        errorMessage = 'Client analytics server error';
+      }
+
       // IMPORTANT: return 200 so the frontend can render a friendly error state
-      // without Supabase invoke surfacing a hard "Edge function returned <status>" runtime error.
       return new Response(
         JSON.stringify({
           ok: false,
-          error: 'Failed to fetch analytics from client',
+          error: errorMessage,
+          errorType,
           details: errorText,
           status: analyticsResponse.status,
           clientId: client.id,
