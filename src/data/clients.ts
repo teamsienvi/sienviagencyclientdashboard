@@ -119,6 +119,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/bsue-brow-lash-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/6c0042b9-f216-4fb1-85ff-31f744122837", isInternal: true },
       { dateRange: "Dec 15-21", link: "/bsue-brow-lash-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/865b12b3-793b-4cee-85e7-da052c219f9e", isInternal: true },
     ],
   },
   {
@@ -127,6 +128,7 @@ export const clientsData: Client[] = [
     reports: [
       { dateRange: "Dec 8-14", link: "/dynamic-report/4590d61c-60de-43d1-be67-c01a391f2bd7", isInternal: true },
       { dateRange: "Dec 15-21", link: "/cissie-pryor-presents-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/6afd3cee-c8af-4c41-8d42-35724f9f06dd", isInternal: true },
     ],
   },
   {
@@ -134,6 +136,7 @@ export const clientsData: Client[] = [
     logo: sienviClientLogo,
     reports: [
       { dateRange: "Dec 15-21", link: "/sienvi-agency-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/db81f299-5e34-4507-bc71-6b24af0719a4", isInternal: true },
     ],
   },
   {
@@ -141,6 +144,7 @@ export const clientsData: Client[] = [
     logo: luxxeAutoLogo,
     reports: [
       { dateRange: "Dec 15-21", link: "/luxxe-auto-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/1d31093e-8ec0-41cf-bbf3-3c7e96910cd4", isInternal: true },
     ],
   },
 ];
