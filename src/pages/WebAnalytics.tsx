@@ -371,7 +371,7 @@ const WebAnalytics = () => {
                         </CardHeader>
                         <CardContent>
                           <div className="text-3xl font-bold">
-                            {normalizedAnalytics.pageViews.toLocaleString()}
+                            {normalizedAnalytics.totalSessions.toLocaleString()}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
                             {normalizedAnalytics.pagesPerVisit.toFixed(1)} pages per session

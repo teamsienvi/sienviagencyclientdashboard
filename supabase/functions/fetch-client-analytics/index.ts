@@ -66,11 +66,8 @@ serve(async (req) => {
       );
     }
 
-    // Prefer local tracking for Snarky Humans for now (we're collecting visits into this project's web_analytics tables).
-    const preferLocal = client.name === 'Snarky Humans';
-
     // Check if client has external analytics configured
-    if (!preferLocal && client.supabase_url && client.api_key) {
+    if (client.supabase_url && client.api_key) {
       // Try external analytics endpoint
       console.log('Fetching analytics from external source:', client.supabase_url);
       const analyticsUrl = `${client.supabase_url}/functions/v1/get-analytics`;
@@ -111,7 +108,7 @@ serve(async (req) => {
               JSON.stringify({ 
                 clientId: client.id,
                 clientName: client.name,
-                analytics: analyticsData,
+                analytics: data,
                 dateRange: { startDate, endDate },
                 source: 'external',
               }),
