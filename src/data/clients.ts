@@ -62,6 +62,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/father-figure-formula-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/7614771f-847b-41c5-adc6-fd6574138c61", isInternal: true },
       { dateRange: "Dec 15-21", link: "/father-figure-formula-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/39139d75-cffc-47cb-9c83-6b7937c52a06", isInternal: true },
     ],
   },
   {
