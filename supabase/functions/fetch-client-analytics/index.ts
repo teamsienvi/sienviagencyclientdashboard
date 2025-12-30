@@ -128,13 +128,20 @@ serve(async (req) => {
     // Fetch from local web_analytics tables
     console.log('Fetching analytics from local tables for client:', client.name);
 
+    // Convert date-only inputs into an inclusive UTC range.
+    // startDate/endDate arrive as "YYYY-MM-DD"; using lte(endDate) would exclude the entire end day.
+    const startISO = new Date(`${startDate}T00:00:00.000Z`).toISOString();
+    const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
+    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+    const endISO = endExclusive.toISOString();
+
     // Fetch sessions for date range
     const { data: sessions, error: sessionsError } = await supabase
       .from('web_analytics_sessions')
       .select('*')
       .eq('client_id', clientId)
-      .gte('started_at', startDate)
-      .lte('started_at', endDate);
+      .gte('started_at', startISO)
+      .lt('started_at', endISO);
 
     if (sessionsError) {
       console.error('Error fetching sessions:', sessionsError);
@@ -145,8 +152,8 @@ serve(async (req) => {
       .from('web_analytics_page_views')
       .select('*')
       .eq('client_id', clientId)
-      .gte('viewed_at', startDate)
-      .lte('viewed_at', endDate);
+      .gte('viewed_at', startISO)
+      .lt('viewed_at', endISO);
 
     if (pageViewsError) {
       console.error('Error fetching page views:', pageViewsError);
