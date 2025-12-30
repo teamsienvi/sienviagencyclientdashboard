@@ -280,8 +280,8 @@ const UnifiedAnalytics = () => {
             <TabsContent value="overview" className="space-y-6">
               {/* Platform Cards */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {/* Web Analytics Card */}
-                {client?.supabase_url && (
+                {/* Web Analytics Card - Only for Snarky Humans */}
+                {client?.supabase_url && client?.name === "Snarky Humans" && (
                   <Card className="hover:border-primary/30 transition-colors cursor-pointer" onClick={() => navigate(`/web-analytics/${clientId}`)}>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0">
                       <div className="flex items-center gap-3">

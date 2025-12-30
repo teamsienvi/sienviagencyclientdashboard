@@ -32,11 +32,11 @@ const Index = () => {
     return map;
   }, [dbClients]);
 
-  // Map client names to their database IDs (only those with website analytics configured)
+  // Map client names to their database IDs (only Snarky Humans has website analytics for now)
   const websiteAnalyticsMap = useMemo(() => {
     const map: Record<string, string> = {};
     dbClients?.forEach((client) => {
-      if (client.supabase_url) {
+      if (client.supabase_url && client.name === "Snarky Humans") {
         map[client.name] = client.id;
       }
     });
