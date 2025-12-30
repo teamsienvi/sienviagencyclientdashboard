@@ -79,6 +79,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/serenity-scrolls-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/2a27391a-4671-4470-9a8f-4c397284868a", isInternal: true },
       { dateRange: "Dec 15-21", link: "/serenity-scrolls-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/ca37fd5b-6b2f-4ceb-8557-67c922e5e454", isInternal: true },
     ],
   },
   {
@@ -93,6 +94,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/oxisure-tech-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/c36adde3-192c-4eda-8b72-1316a3588346", isInternal: true },
       { dateRange: "Dec 15-21", link: "/oxisure-tech-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/6fa69ed4-37b6-4953-8ba3-bc6f31965084", isInternal: true },
     ],
   },
   {
@@ -107,6 +109,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/the-haven-at-deer-park-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/a40e1b54-e594-43e3-afa0-e5d93e0b606b", isInternal: true },
       { dateRange: "Dec 15-21", link: "/the-haven-at-deer-park-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/b728ee70-2549-46bd-a1b9-5b9edecf712c", isInternal: true },
     ],
   },
   {
