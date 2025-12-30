@@ -34,6 +34,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/snarky-humans-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/c05fcbfc-f918-4586-86c1-a752df240e2e", isInternal: true },
       { dateRange: "Dec 15-21", link: "/snarky-humans-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/47329503-cfe9-4e0e-8b5b-c0883c81a99b", isInternal: true },
     ],
   },
   {
@@ -48,6 +49,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 1-7", link: "/snarky-pets-dec1-7", isInternal: true },
       { dateRange: "Dec 8-14", link: "/dynamic-report/ab99f7d1-19ed-4d74-b2b2-7c43c03fe313", isInternal: true },
       { dateRange: "Dec 15-21", link: "/snarky-pets-dec15-21", isInternal: true },
+      { dateRange: "Dec 22-28", link: "/dynamic-report/b8e8e056-96b4-417d-812d-68bb95185e0c", isInternal: true },
     ],
   },
   {
