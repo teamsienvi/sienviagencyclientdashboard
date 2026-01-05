@@ -358,15 +358,17 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                 TikTok
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start"
-                onClick={() => navigate(`/linkedin-metricool/${clientId}`)}
-              >
-                <Linkedin className="h-4 w-4 mr-2 text-[#0A66C2]" />
-                LinkedIn
-              </Button>
+              {client.name === "Father Figure Formula" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => navigate(`/linkedin-metricool/${clientId}`)}
+                >
+                  <Linkedin className="h-4 w-4 mr-2 text-[#0A66C2]" />
+                  LinkedIn
+                </Button>
+              )}
             </div>
           </div>
         )}
