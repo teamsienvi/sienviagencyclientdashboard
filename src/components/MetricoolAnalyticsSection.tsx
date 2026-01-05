@@ -181,16 +181,19 @@ export const MetricoolAnalyticsSection = ({
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!config) throw new Error("No configuration found");
+      if (!config.user_id) throw new Error("User ID not configured");
 
       const periodEnd = new Date().toISOString().split('T')[0];
       const periodStart = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+
+      console.log("Syncing with config:", { clientId, platform, userId: config.user_id, blogId: config.blog_id });
 
       const { data, error } = await supabase.functions.invoke("sync-metricool", {
         body: {
           clientId,
           platform,
           userId: config.user_id,
-          blogId: config.blog_id,
+          blogId: config.blog_id || undefined,
           periodStart,
           periodEnd,
         },
