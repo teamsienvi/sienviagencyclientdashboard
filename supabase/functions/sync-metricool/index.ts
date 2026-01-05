@@ -8,6 +8,7 @@ const corsHeaders = {
 
 interface MetricoolBlog {
   id: string;
+  blogId?: string;
   name: string;
   picture: string;
   networks: string[];
@@ -69,15 +70,19 @@ serve(async (req) => {
     // Metricool API base URL
     const baseUrl = "https://app.metricool.com/api";
 
+    // Common headers for Metricool API - use X-Mc-Auth header as per documentation
+    const metricoolHeaders = {
+      "X-Mc-Auth": metricoolToken,
+      "Content-Type": "application/json",
+    };
+
     // Step 1: Get user's blogs if blogId not provided
     let targetBlogId = blogId;
     if (!targetBlogId) {
       console.log("Fetching blogs for user...");
-      const blogsResponse = await fetch(`${baseUrl}/user/blogs?userId=${userId}`, {
-        headers: {
-          "Authorization": `Bearer ${metricoolToken}`,
-          "Content-Type": "application/json",
-        },
+      // Use the correct endpoint: /admin/simpleProfiles
+      const blogsResponse = await fetch(`${baseUrl}/admin/simpleProfiles?userId=${userId}`, {
+        headers: metricoolHeaders,
       });
 
       if (!blogsResponse.ok) {
@@ -87,7 +92,10 @@ serve(async (req) => {
       }
 
       const blogsData = await blogsResponse.json();
-      const blogs: MetricoolBlog[] = blogsData.blogs || [];
+      console.log("Blogs response:", JSON.stringify(blogsData).substring(0, 500));
+      
+      // The API returns profiles/brands, extract the first one or find by network
+      const blogs: MetricoolBlog[] = Array.isArray(blogsData) ? blogsData : (blogsData.blogs || blogsData.profiles || []);
       
       // Find a blog with the target platform
       const platformBlog = blogs.find((blog) => 
@@ -96,11 +104,11 @@ serve(async (req) => {
       );
       
       if (platformBlog) {
-        targetBlogId = platformBlog.id;
-        console.log(`Found blog ${platformBlog.name} with ${platform} network`);
+        targetBlogId = platformBlog.blogId || platformBlog.id;
+        console.log(`Found blog ${platformBlog.name} with ${platform} network, blogId: ${targetBlogId}`);
       } else if (blogs.length > 0) {
-        targetBlogId = blogs[0].id;
-        console.log(`Using first blog: ${blogs[0].name}`);
+        targetBlogId = blogs[0].blogId || blogs[0].id;
+        console.log(`Using first blog: ${blogs[0].name}, blogId: ${targetBlogId}`);
       } else {
         throw new Error("No blogs found for this Metricool user");
       }
@@ -112,14 +120,13 @@ serve(async (req) => {
 
     console.log(`Fetching ${platform} analytics from ${startDate} to ${endDate}...`);
     
-    // Get account stats
-    const statsUrl = `${baseUrl}/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&startDate=${startDate}&endDate=${endDate}`;
+    // Get account stats - include userId and blogId as required params
+    const statsUrl = `${baseUrl}/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&start=${startDate}&end=${endDate}`;
+    
+    console.log("Stats URL:", statsUrl);
     
     const statsResponse = await fetch(statsUrl, {
-      headers: {
-        "Authorization": `Bearer ${metricoolToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: metricoolHeaders,
     });
 
     if (statsResponse.ok) {
@@ -172,24 +179,25 @@ serve(async (req) => {
         console.error("Error inserting account metrics:", metricsError);
       } else {
         recordsSynced++;
+        console.log("Account metrics inserted successfully");
       }
     } else {
-      console.error(`Stats API error: ${statsResponse.status}`);
+      const errorText = await statsResponse.text();
+      console.error(`Stats API error: ${statsResponse.status}`, errorText);
     }
 
     // Step 3: Fetch content/posts
-    const postsUrl = `${baseUrl}/posts/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&startDate=${startDate}&endDate=${endDate}`;
+    const postsUrl = `${baseUrl}/posts/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&start=${startDate}&end=${endDate}`;
+    
+    console.log("Posts URL:", postsUrl);
     
     const postsResponse = await fetch(postsUrl, {
-      headers: {
-        "Authorization": `Bearer ${metricoolToken}`,
-        "Content-Type": "application/json",
-      },
+      headers: metricoolHeaders,
     });
 
     if (postsResponse.ok) {
       const postsData = await postsResponse.json();
-      const posts = postsData.posts || postsData.content || [];
+      const posts = Array.isArray(postsData) ? postsData : (postsData.posts || postsData.content || []);
       
       console.log(`Found ${posts.length} ${platform} posts`);
 
@@ -237,6 +245,9 @@ serve(async (req) => {
           recordsSynced++;
         }
       }
+    } else {
+      const errorText = await postsResponse.text();
+      console.error(`Posts API error: ${postsResponse.status}`, errorText);
     }
 
     // Update sync log
