@@ -15,6 +15,8 @@ import XAnalytics from "./pages/XAnalytics";
 import MetaAnalytics from "./pages/MetaAnalytics";
 import TikTokAnalytics from "./pages/TikTokAnalytics";
 import LinkedInAnalytics from "./pages/LinkedInAnalytics";
+import TikTokMetricoolAnalytics from "./pages/TikTokMetricoolAnalytics";
+import LinkedInMetricoolAnalytics from "./pages/LinkedInMetricoolAnalytics";
 import WebAnalytics from "./pages/WebAnalytics";
 import UnifiedAnalytics from "./pages/UnifiedAnalytics";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
@@ -66,6 +68,8 @@ const App = () => (
           <Route path="/meta-analytics/:clientId" element={<MetaAnalytics />} />
           <Route path="/tiktok-analytics/:clientId" element={<TikTokAnalytics />} />
           <Route path="/linkedin-analytics/:clientId" element={<LinkedInAnalytics />} />
+          <Route path="/tiktok-metricool/:clientId" element={<TikTokMetricoolAnalytics />} />
+          <Route path="/linkedin-metricool/:clientId" element={<LinkedInMetricoolAnalytics />} />
           <Route path="/web-analytics/:clientId" element={<WebAnalytics />} />
           <Route path="/analytics/:clientId" element={<UnifiedAnalytics />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />

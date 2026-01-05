@@ -348,17 +348,25 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                 Meta
               </Button>
 
-              {(client.name === "OxiSure Tech" || client.name === "Father Figure Formula") && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => navigate(`/linkedin-analytics/${clientId}`)}
-                >
-                  <Linkedin className="h-4 w-4 mr-2 text-[#0A66C2]" />
-                  LinkedIn
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start"
+                onClick={() => navigate(`/tiktok-metricool/${clientId}`)}
+              >
+                <Music2 className="h-4 w-4 mr-2 text-pink-500" />
+                TikTok
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="justify-start"
+                onClick={() => navigate(`/linkedin-metricool/${clientId}`)}
+              >
+                <Linkedin className="h-4 w-4 mr-2 text-[#0A66C2]" />
+                LinkedIn
+              </Button>
             </div>
           </div>
         )}
