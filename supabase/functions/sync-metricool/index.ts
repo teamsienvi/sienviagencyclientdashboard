@@ -120,8 +120,10 @@ serve(async (req) => {
 
     console.log(`Fetching ${platform} analytics from ${startDate} to ${endDate}...`);
     
-    // Get account stats - use v2 analytics API with correct endpoint
-    const statsUrl = `${baseUrl}/v2/analytics/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&from=${startDate}&to=${endDate}`;
+    // Get account stats - Metricool uses /stats/timeling/{network} format
+    // For TikTok: /stats/timeling/tiktokFollowers, for LinkedIn: /stats/timeling/linkedinFollowers
+    const networkName = platform.toLowerCase();
+    const statsUrl = `${baseUrl}/stats/timeling/${networkName}Followers?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
     
     console.log("Stats URL:", statsUrl);
     
@@ -186,9 +188,10 @@ serve(async (req) => {
       console.error(`Stats API error: ${statsResponse.status}`, errorText);
     }
 
-    // Step 3: Fetch content/posts - TikTok uses /videos/, others use /posts/
-    const contentEndpoint = platform.toLowerCase() === "tiktok" ? "videos" : "posts";
-    const postsUrl = `${baseUrl}/v2/analytics/${contentEndpoint}/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&from=${startDate}&to=${endDate}`;
+    // Step 3: Fetch content/posts - Metricool uses /posts/{network} or /videos/{network}
+    // TikTok uses /videos/tiktok, LinkedIn uses /posts/linkedin
+    const contentEndpoint = platform.toLowerCase() === "tiktok" ? "videos/tiktok" : `posts/${platform.toLowerCase()}`;
+    const postsUrl = `${baseUrl}/${contentEndpoint}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
     
     console.log("Posts URL:", postsUrl);
     
