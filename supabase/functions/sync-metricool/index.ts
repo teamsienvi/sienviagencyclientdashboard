@@ -120,8 +120,8 @@ serve(async (req) => {
 
     console.log(`Fetching ${platform} analytics from ${startDate} to ${endDate}...`);
     
-    // Get account stats - include userId and blogId as required params
-    const statsUrl = `${baseUrl}/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&start=${startDate}&end=${endDate}`;
+    // Get account stats - use v2 analytics API with correct endpoint
+    const statsUrl = `${baseUrl}/v2/analytics/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&from=${startDate}&to=${endDate}`;
     
     console.log("Stats URL:", statsUrl);
     
@@ -186,8 +186,9 @@ serve(async (req) => {
       console.error(`Stats API error: ${statsResponse.status}`, errorText);
     }
 
-    // Step 3: Fetch content/posts
-    const postsUrl = `${baseUrl}/posts/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&start=${startDate}&end=${endDate}`;
+    // Step 3: Fetch content/posts - TikTok uses /videos/, others use /posts/
+    const contentEndpoint = platform.toLowerCase() === "tiktok" ? "videos" : "posts";
+    const postsUrl = `${baseUrl}/v2/analytics/${contentEndpoint}/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&from=${startDate}&to=${endDate}`;
     
     console.log("Posts URL:", postsUrl);
     
