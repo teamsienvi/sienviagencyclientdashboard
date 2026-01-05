@@ -1,5 +1,8 @@
 project_id = "ihbdwilzjxivmmmlkuyu"
 
+[functions.sync-metricool]
+verify_jwt = false
+
 [functions.fetch-client-analytics]
 verify_jwt = false
 
