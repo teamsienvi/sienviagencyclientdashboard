@@ -301,17 +301,6 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
               <span className="text-xs text-muted-foreground">(API)</span>
             </div>
 
-            {/* Unified Analytics Button - Primary */}
-            <Button
-              className="w-full justify-between"
-              onClick={() => navigate(`/analytics/${clientId}`)}
-            >
-              <span className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                View All Analytics
-              </span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
 
             {/* Individual Platform Buttons - Secondary */}
             <div className="grid grid-cols-2 gap-2">
