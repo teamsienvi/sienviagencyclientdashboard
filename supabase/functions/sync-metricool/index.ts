@@ -76,42 +76,55 @@ serve(async (req) => {
       "Content-Type": "application/json",
     };
 
-    // Step 1: Get user's blogs if blogId not provided
+    // Step 1: Get user's blogs and verify platform is connected
     let targetBlogId = blogId;
+    let platformConnected = false;
+    
+    console.log("Fetching blogs for user...");
+    const blogsResponse = await fetch(`${baseUrl}/admin/simpleProfiles?userId=${userId}`, {
+      headers: metricoolHeaders,
+    });
+
+    if (!blogsResponse.ok) {
+      const errorText = await blogsResponse.text();
+      console.error("Metricool API error fetching blogs:", errorText);
+      throw new Error(`Metricool API error: ${blogsResponse.status}`);
+    }
+
+    const blogsData = await blogsResponse.json();
+    console.log("Full blogs response:", JSON.stringify(blogsData));
+    
+    // The API returns an array of blogs with platform-specific fields
+    const blogs = Array.isArray(blogsData) ? blogsData : (blogsData.blogs || blogsData.profiles || []);
+    
+    if (blogs.length === 0) {
+      throw new Error("No blogs found for this Metricool user");
+    }
+
+    // Check each blog for the target platform
+    for (const blog of blogs) {
+      // Platform fields are named like "tiktok", "linkedin", "instagram", etc.
+      const platformField = blog[platform.toLowerCase()];
+      console.log(`Blog ${blog.id} (${blog.label}): ${platform} = ${platformField}`);
+      
+      if (platformField) {
+        platformConnected = true;
+        if (!targetBlogId) {
+          targetBlogId = blog.id;
+          console.log(`Found blog with ${platform} connected: ${blog.label} (${blog.id})`);
+        }
+        break;
+      }
+    }
+
+    if (!platformConnected) {
+      const blogNames = blogs.map((b: any) => b.label || b.name).join(", ");
+      throw new Error(`${platform} is not connected to any Metricool blog. Available blogs: ${blogNames}. Please connect ${platform} to your Metricool account first.`);
+    }
+
     if (!targetBlogId) {
-      console.log("Fetching blogs for user...");
-      // Use the correct endpoint: /admin/simpleProfiles
-      const blogsResponse = await fetch(`${baseUrl}/admin/simpleProfiles?userId=${userId}`, {
-        headers: metricoolHeaders,
-      });
-
-      if (!blogsResponse.ok) {
-        const errorText = await blogsResponse.text();
-        console.error("Metricool API error fetching blogs:", errorText);
-        throw new Error(`Metricool API error: ${blogsResponse.status}`);
-      }
-
-      const blogsData = await blogsResponse.json();
-      console.log("Blogs response:", JSON.stringify(blogsData).substring(0, 500));
-      
-      // The API returns profiles/brands, extract the first one or find by network
-      const blogs: MetricoolBlog[] = Array.isArray(blogsData) ? blogsData : (blogsData.blogs || blogsData.profiles || []);
-      
-      // Find a blog with the target platform
-      const platformBlog = blogs.find((blog) => 
-        blog.networks?.includes(platform.toLowerCase()) || 
-        blog.networks?.includes(platform)
-      );
-      
-      if (platformBlog) {
-        targetBlogId = platformBlog.blogId || platformBlog.id;
-        console.log(`Found blog ${platformBlog.name} with ${platform} network, blogId: ${targetBlogId}`);
-      } else if (blogs.length > 0) {
-        targetBlogId = blogs[0].blogId || blogs[0].id;
-        console.log(`Using first blog: ${blogs[0].name}, blogId: ${targetBlogId}`);
-      } else {
-        throw new Error("No blogs found for this Metricool user");
-      }
+      targetBlogId = blogs[0].id;
+      console.log(`Using first blog: ${blogs[0].label}, blogId: ${targetBlogId}`);
     }
 
     // Step 2: Fetch analytics for the platform
@@ -119,17 +132,47 @@ serve(async (req) => {
     const endDate = periodEnd || new Date().toISOString().split('T')[0];
 
     console.log(`Fetching ${platform} analytics from ${startDate} to ${endDate}...`);
+    console.log(`Using blogId: ${targetBlogId}`);
     
-    // Get account stats - Metricool uses /stats/timeling/{network} format
-    // For TikTok: /stats/timeling/tiktokFollowers, for LinkedIn: /stats/timeling/linkedinFollowers
-    const networkName = platform.toLowerCase();
-    const statsUrl = `${baseUrl}/stats/timeling/${networkName}Followers?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+    // Try the /stats/overview endpoint which returns all network stats
+    const overviewUrl = `${baseUrl}/stats/overview?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+    console.log("Trying overview URL:", overviewUrl);
     
-    console.log("Stats URL:", statsUrl);
+    const overviewResponse = await fetch(overviewUrl, { headers: metricoolHeaders });
+    if (overviewResponse.ok) {
+      const overviewData = await overviewResponse.json();
+      console.log("Overview response:", JSON.stringify(overviewData).substring(0, 1000));
+    } else {
+      console.log("Overview failed:", overviewResponse.status);
+    }
     
-    const statsResponse = await fetch(statsUrl, {
-      headers: metricoolHeaders,
-    });
+    // Get account stats - try multiple endpoint formats
+    // Format 1: /stats/timeling/{network}Followers
+    const statsUrl1 = `${baseUrl}/stats/timeling/${platform.toLowerCase()}Followers?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+    // Format 2: /stats/{network}
+    const statsUrl2 = `${baseUrl}/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+    // Format 3: /{network}/stats
+    const statsUrl3 = `${baseUrl}/${platform.toLowerCase()}/stats?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+    
+    console.log("Stats URL 1:", statsUrl1);
+    console.log("Stats URL 2:", statsUrl2);
+    console.log("Stats URL 3:", statsUrl3);
+    
+    // Try each URL format
+    let statsResponse = await fetch(statsUrl1, { headers: metricoolHeaders });
+    let statsUrl = statsUrl1;
+    
+    if (!statsResponse.ok) {
+      console.log(`Stats URL 1 failed: ${statsResponse.status}`);
+      statsResponse = await fetch(statsUrl2, { headers: metricoolHeaders });
+      statsUrl = statsUrl2;
+    }
+    
+    if (!statsResponse.ok) {
+      console.log(`Stats URL 2 failed: ${statsResponse.status}`);
+      statsResponse = await fetch(statsUrl3, { headers: metricoolHeaders });
+      statsUrl = statsUrl3;
+    }
 
     if (statsResponse.ok) {
       const statsData = await statsResponse.json();
