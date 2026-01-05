@@ -348,16 +348,6 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                 Meta
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start"
-                onClick={() => navigate(`/tiktok-analytics/${clientId}`)}
-              >
-                <Music2 className="h-4 w-4 mr-2" />
-                TikTok
-              </Button>
-
               {(client.name === "OxiSure Tech" || client.name === "Father Figure Formula") && (
                 <Button
                   variant="outline"
