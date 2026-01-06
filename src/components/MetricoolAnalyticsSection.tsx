@@ -177,34 +177,69 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
-  // Sync mutation
+  // Sync mutation - uses metricool-aggregation edge function
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!config) throw new Error("No configuration found");
       if (!config.user_id) throw new Error("User ID not configured");
 
-      const periodEnd = new Date().toISOString().split('T')[0];
-      const periodStart = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+      // Build ISO date strings with timezone offset (e.g., 2025-12-30T00:00:00+08:00)
+      const now = new Date();
+      const startDate = subDays(now, 7);
+      
+      // Format with timezone offset
+      const formatWithTimezone = (date: Date, isEnd: boolean) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const time = isEnd ? "23:59:59" : "00:00:00";
+        // Use a common timezone offset (e.g., +08:00 for Asia/Shanghai or UTC)
+        const offset = "+00:00";
+        return `${year}-${month}-${day}T${time}${offset}`;
+      };
 
-      console.log("Syncing with config:", { clientId, platform, userId: config.user_id, blogId: config.blog_id });
+      const from = formatWithTimezone(startDate, false);
+      const to = formatWithTimezone(now, true);
 
-      const { data, error } = await supabase.functions.invoke("sync-metricool", {
+      console.log("Syncing with metricool-aggregation:", { 
+        clientId, 
+        platform, 
+        userId: config.user_id, 
+        blogId: config.blog_id,
+        from,
+        to 
+      });
+
+      // Call the new aggregation endpoint
+      const { data, error } = await supabase.functions.invoke("metricool-aggregation", {
         body: {
-          clientId,
-          platform,
+          from,
+          to,
+          metric: "engagement",
+          network: platform,
+          timezone: "UTC",
+          subject: "video",
           userId: config.user_id,
           blogId: config.blog_id || undefined,
-          periodStart,
-          periodEnd,
         },
       });
 
       if (error) throw error;
-      if (!data.success) throw new Error(data.error);
+      
+      // Check for upstream errors
+      if (data.error) {
+        console.error("Metricool upstream error:", data);
+        throw new Error(data.error);
+      }
+      
+      if (!data.success) throw new Error("Sync failed - no data returned");
+      
+      console.log("Metricool aggregation response:", data);
       return data;
     },
     onSuccess: (data) => {
-      toast.success(`Synced ${data.recordsSynced} records from Metricool`);
+      toast.success("Synced analytics from Metricool");
+      console.log("Sync success, data:", data);
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
       queryClient.invalidateQueries({ queryKey: ["metricool-content", clientId, platform] });
     },
