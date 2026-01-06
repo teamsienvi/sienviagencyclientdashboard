@@ -390,6 +390,38 @@ async function syncFacebookPage(
     const periodEndDate = new Date(periodEnd);
     periodEndDate.setHours(23, 59, 59, 999);
 
+    // Fetch PAGE-LEVEL insights for total reach/impressions (more reliable than per-post)
+    let pageReach = 0;
+    let pageImpressions = 0;
+    
+    try {
+      const since = Math.floor(periodStartDate.getTime() / 1000);
+      const until = Math.floor(periodEndDate.getTime() / 1000) + 86400;
+      
+      // Use page_impressions_unique (reach) and page_impressions with day period
+      const pageInsightsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions_unique,page_impressions&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+      console.log(`Fetching page insights for ${clientName}...`);
+      
+      const pageInsightsResp = await fetch(pageInsightsUrl);
+      const pageInsightsData = await pageInsightsResp.json();
+      
+      if (pageInsightsData.error) {
+        console.log(`Page insights error: ${pageInsightsData.error.message}`);
+        errorMessages.push(`Page insights: ${pageInsightsData.error.message?.substring(0, 50)}`);
+      } else if (pageInsightsData.data) {
+        for (const insight of pageInsightsData.data) {
+          // Sum all daily values
+          const totalValue = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+          if (insight.name === 'page_impressions_unique') pageReach = totalValue;
+          if (insight.name === 'page_impressions') pageImpressions = totalValue;
+        }
+        console.log(`${clientName} page reach: ${pageReach}, impressions: ${pageImpressions}`);
+      }
+    } catch (e) {
+      console.log(`Error fetching page insights: ${e}`);
+      errorMessages.push('Could not fetch page-level reach');
+    }
+
     // Fetch posts with pagination to cover the period
     const postsUrl = `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=50&access_token=${accessToken}`;
     const allPosts = await fetchPostsWithPagination(postsUrl, accessToken, periodStartDate, 100);
@@ -406,83 +438,35 @@ async function syncFacebookPage(
 
     let recordsSynced = 0;
     let totalEngagement = 0;
-    let insightsFailed = 0;
 
-    // Batch fetch post insights - use correct metrics for Facebook with period=lifetime
-    const postInsightsPromises = postsInPeriod.map(async (post: any) => {
-      try {
-        // Use post_impressions_unique for reach, post_impressions for impressions with period=lifetime
-        const resp = await fetch(
-          `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions_unique,post_impressions&period=lifetime&access_token=${accessToken}`
-        );
-        const data = await resp.json();
-        
-        // Check for API error in response (Graph API can return 200 with error)
-        if (data.error) {
-          console.log(`FB insights API error for ${post.id}: ${data.error.message?.substring(0, 100)}`);
-          
-          // Try fallback with just post_impressions (more widely available)
-          const fallbackResp = await fetch(
-            `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions&period=lifetime&access_token=${accessToken}`
-          );
-          const fallbackData = await fallbackResp.json();
-          
-          if (!fallbackData.error && fallbackData.data?.length > 0) {
-            let impressions = 0;
-            for (const insight of fallbackData.data || []) {
-              if (insight.name === 'post_impressions') {
-                impressions = insight.values?.[0]?.value || 0;
-              }
-            }
-            // Use impressions as a proxy for reach if unique impressions unavailable
-            return { postId: post.id, reach: impressions, impressions, failed: false, fallback: true };
-          }
-          
-          return { postId: post.id, reach: null, impressions: null, failed: true, reason: data.error.code || 'unknown' };
-        }
-        
-        if (resp.ok && data.data) {
-          let reach = 0, impressions = 0;
-          for (const insight of data.data || []) {
-            const val = insight.values?.[0]?.value || 0;
-            if (insight.name === 'post_impressions_unique') reach = val;
-            if (insight.name === 'post_impressions') impressions = val;
-          }
-          return { postId: post.id, reach, impressions, failed: false };
-        } else {
-          console.log(`FB insights failed for ${post.id}: status=${resp.status}`);
-          return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'http_error' };
-        }
-      } catch (e) {
-        console.log(`Could not fetch insights for post ${post.id}: ${e}`);
-        return { postId: post.id, reach: null, impressions: null, failed: true, reason: 'exception' };
-      }
-    });
-
-    const postInsights = await Promise.all(postInsightsPromises);
-    const insightsMap: Record<string, { reach: number | null; impressions: number | null }> = {};
-    const failureReasons: Record<string, number> = {};
-    for (const pi of postInsights) {
-      insightsMap[pi.postId] = { reach: pi.reach, impressions: pi.impressions };
-      if (pi.failed) {
-        insightsFailed++;
-        const reason = (pi as any).reason || 'unknown';
-        failureReasons[reason] = (failureReasons[reason] || 0) + 1;
-      }
-    }
-
-    if (insightsFailed > 0) {
-      const reasonSummary = Object.entries(failureReasons).map(([k, v]) => `${k}:${v}`).join(', ');
-      errorMessages.push(`Insights unavailable for ${insightsFailed}/${postsInPeriod.length} posts (${reasonSummary})`);
-    }
+    // Calculate total engagement for proportional distribution
+    const totalPostEngagement = postsInPeriod.reduce((sum, post) => {
+      const likes = post.reactions?.summary?.total_count || 0;
+      const comments = post.comments?.summary?.total_count || 0;
+      const shares = post.shares?.count || 0;
+      return sum + likes + comments + shares;
+    }, 0);
 
     for (const post of postsInPeriod) {
       const likes = post.reactions?.summary?.total_count || 0;
       const comments = post.comments?.summary?.total_count || 0;
       const shares = post.shares?.count || 0;
+      const postEngagement = likes + comments + shares;
 
-      const postReach = insightsMap[post.id]?.reach;
-      const postImpressions = insightsMap[post.id]?.impressions;
+      // Distribute page reach/impressions proportionally based on engagement
+      // Posts with more engagement get proportionally more reach attributed
+      let postReach = 0;
+      let postImpressions = 0;
+      
+      if (pageReach > 0 && totalPostEngagement > 0) {
+        const engagementRatio = postEngagement / totalPostEngagement;
+        postReach = Math.round(pageReach * engagementRatio);
+        postImpressions = Math.round(pageImpressions * engagementRatio);
+      } else if (pageReach > 0 && postsInPeriod.length > 0) {
+        // Equal distribution if no engagement data
+        postReach = Math.round(pageReach / postsInPeriod.length);
+        postImpressions = Math.round(pageImpressions / postsInPeriod.length);
+      }
 
       // Upsert content
       const { data: contentData } = await supabase
@@ -500,7 +484,6 @@ async function syncFacebookPage(
         .single();
 
       if (contentData) {
-        // Insert metrics with per-post reach (null if unavailable)
         await supabase.from('social_content_metrics').insert({
           social_content_id: contentData.id,
           platform: 'facebook',
@@ -509,8 +492,8 @@ async function syncFacebookPage(
           likes,
           comments,
           shares,
-          reach: postReach ?? 0,
-          impressions: postImpressions ?? 0,
+          reach: postReach,
+          impressions: postImpressions,
         });
 
         totalEngagement += likes + comments + shares;
@@ -518,7 +501,16 @@ async function syncFacebookPage(
       }
     }
 
-    // Insert account metrics - use actual posts in period
+    // Delete existing account metrics for this period to avoid duplicates
+    await supabase
+      .from('social_account_metrics')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('platform', 'facebook')
+      .eq('period_start', periodStart)
+      .eq('period_end', periodEnd);
+
+    // Insert account metrics with page-level reach
     const engagementRate = followers > 0 ? (totalEngagement / followers) * 100 : 0;
 
     await supabase.from('social_account_metrics').insert({
@@ -527,8 +519,8 @@ async function syncFacebookPage(
       period_start: periodStart,
       period_end: periodEnd,
       followers,
-      engagement_rate: Math.min(engagementRate, 100), // Cap at 100% for sanity
-      total_content: postsInPeriod.length, // Actual count of posts in period
+      engagement_rate: Math.min(engagementRate, 100),
+      total_content: postsInPeriod.length,
     });
 
     // Update sync log
@@ -555,7 +547,6 @@ async function syncFacebookPage(
     console.error(`Error syncing Facebook for ${clientName}:`, error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     
-    // Update sync log with error
     if (syncLogId) {
       await supabase
         .from('social_sync_logs')

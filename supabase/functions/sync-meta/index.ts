@@ -105,47 +105,36 @@ serve(async (req) => {
         console.error("Facebook page info error (non-fatal):", errorText);
       }
 
-      // Fetch Facebook page insights for reach/impressions - try multiple metrics and date ranges
+      // Fetch PAGE-LEVEL insights for reach/impressions (more reliable than per-post)
       try {
-        // First try with day period and date range for more accurate data
         const since = Math.floor(new Date(periodStart).getTime() / 1000);
-        const until = Math.floor(new Date(periodEnd).getTime() / 1000) + 86400; // +1 day to include end date
+        const until = Math.floor(new Date(periodEnd).getTime() / 1000) + 86400;
         
-        // Try page_impressions_unique (reach) with day period
-        const fbReachUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions_unique,page_impressions,page_post_engagements,page_fans&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+        // Use page_impressions_unique (reach) and page_impressions with day period
+        const fbReachUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions_unique,page_impressions,page_fans&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
         console.log("Fetching Facebook page insights with date range...");
         const fbInsightsResp = await fetch(fbReachUrl);
         
         if (fbInsightsResp.ok) {
           const fbInsightsData = await fbInsightsResp.json();
-          for (const insight of fbInsightsData.data || []) {
-            // Sum up all daily values for cumulative metrics
-            const totalValue = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
-            if (insight.name === 'page_impressions_unique') totalReach = totalValue;
-            if (insight.name === 'page_impressions') totalImpressions = totalValue;
-            if (insight.name === 'page_fans') {
-              // For fans, take the last value (current count)
-              totalFollowers = totalFollowers || (insight.values?.[insight.values.length - 1]?.value || 0);
+          
+          if (fbInsightsData.error) {
+            console.log("Page insights API error:", fbInsightsData.error.message);
+          } else {
+            for (const insight of fbInsightsData.data || []) {
+              // Sum up all daily values for cumulative metrics
+              const totalValue = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+              if (insight.name === 'page_impressions_unique') totalReach = totalValue;
+              if (insight.name === 'page_impressions') totalImpressions = totalValue;
+              if (insight.name === 'page_fans') {
+                totalFollowers = totalFollowers || (insight.values?.[insight.values.length - 1]?.value || 0);
+              }
             }
+            console.log(`Facebook page insights: reach=${totalReach}, impressions=${totalImpressions}, followers=${totalFollowers}`);
           }
-          console.log(`Facebook page insights: reach=${totalReach}, impressions=${totalImpressions}, followers=${totalFollowers}`);
         } else {
           const errorText = await fbInsightsResp.text();
-          console.log("Facebook insights with date range failed, trying week period:", errorText);
-          
-          // Fallback to week period
-          const fbWeekUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions,page_post_engagements,page_fans&period=week&access_token=${accessToken}`;
-          const fbWeekResp = await fetch(fbWeekUrl);
-          
-          if (fbWeekResp.ok) {
-            const fbWeekData = await fbWeekResp.json();
-            for (const insight of fbWeekData.data || []) {
-              const value = insight.values?.[insight.values.length - 1]?.value || 0;
-              if (insight.name === 'page_impressions') totalImpressions = value;
-              if (insight.name === 'page_fans') totalFollowers = totalFollowers || value;
-            }
-            console.log(`Facebook weekly insights: impressions=${totalImpressions}, followers=${totalFollowers}`);
-          }
+          console.log("Facebook insights failed:", errorText);
         }
       } catch (e) {
         console.log("Error fetching Facebook page insights:", e);
@@ -229,43 +218,20 @@ serve(async (req) => {
         }
       }
     } else {
-      console.log(`Fetching insights for ${mediaItems.length} Facebook posts...`);
-      for (const item of mediaItems) {
-        try {
-          // Use post_impressions_unique for reach, post_impressions for impressions with period=lifetime
-          const postInsightsUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions_unique,post_impressions&period=lifetime&access_token=${accessToken}`;
-          const insightsResp = await fetch(postInsightsUrl);
-          const insightsJson = await insightsResp.json();
+      // For Facebook, skip per-post insights API calls (they often fail)
+      // We'll use page-level totalReach/totalImpressions and distribute proportionally
+      console.log(`Skipping per-post Facebook insights - will use page-level metrics`);
+    }
 
-          // Check for API error in response (Graph API can return 200 with error)
-          if (insightsJson.error) {
-            console.log(`FB post insights API error for ${item.id}: ${insightsJson.error.message?.substring(0, 100)}`);
-            
-            // Try fallback with just post_impressions
-            const fallbackUrl = `${baseUrl}/${item.id}/insights?metric=post_impressions&period=lifetime&access_token=${accessToken}`;
-            const fallbackResp = await fetch(fallbackUrl);
-            const fallbackJson = await fallbackResp.json();
-            
-            if (!fallbackJson.error && fallbackJson.data?.length > 0) {
-              (item as any).fbInsights = fallbackJson.data;
-              (item as any).insightsFallback = true;
-            } else {
-              (item as any).fbInsights = [];
-              (item as any).insightsFailed = true;
-            }
-          } else if (insightsResp.ok && insightsJson.data) {
-            (item as any).fbInsights = insightsJson.data || [];
-          } else {
-            console.log(`FB post insights failed for ${item.id}: status=${insightsResp.status}`);
-            (item as any).fbInsights = [];
-            (item as any).insightsFailed = true;
-          }
-        } catch (e) {
-          console.error(`Error fetching FB post insights for ${item.id}:`, e);
-          (item as any).fbInsights = [];
-          (item as any).insightsFailed = true;
-        }
-      }
+    // Calculate total engagement for proportional distribution (Facebook only)
+    let totalPostEngagement = 0;
+    if (platform === 'facebook') {
+      totalPostEngagement = mediaItems.reduce((sum, item) => {
+        const likes = (item as any).reactions?.summary?.total_count || 0;
+        const comments = (item as any).comments?.summary?.total_count || 0;
+        const shares = (item as any).shares?.count || 0;
+        return sum + likes + comments + shares;
+      }, 0);
     }
 
     // Store content and metrics
@@ -317,27 +283,32 @@ serve(async (req) => {
           for (const insight of item.insights.data) {
             const value = insight.values?.[0]?.value || 0;
             if (insight.name === 'reach') reach = value;
-            if (insight.name === 'views') views = value; // v22.0+ replaces impressions
+            if (insight.name === 'views') views = value;
             if (insight.name === 'saved') saved = value;
             if (insight.name === 'total_interactions') interactions = value;
           }
         }
-        // Store views as impressions for backward compatibility
         impressions = views;
 
         if (interactions === 0) {
           interactions = likes + comments + shares + saved;
         }
       } else {
+        // Facebook - use page-level reach distributed proportionally
         likes = (item as any).reactions?.summary?.total_count || 0;
         comments = (item as any).comments?.summary?.total_count || 0;
         shares = (item as any).shares?.count || 0;
+        const postEngagement = likes + comments + shares;
 
-        const fbInsights = (item as any).fbInsights || [];
-        for (const insight of fbInsights) {
-          const value = insight.values?.[0]?.value || 0;
-          if (insight.name === 'post_impressions_unique') reach = value;
-          if (insight.name === 'post_impressions') impressions = value;
+        // Distribute page reach/impressions proportionally based on engagement
+        if (totalReach > 0 && totalPostEngagement > 0) {
+          const engagementRatio = postEngagement / totalPostEngagement;
+          reach = Math.round(totalReach * engagementRatio);
+          impressions = Math.round(totalImpressions * engagementRatio);
+        } else if (totalReach > 0 && mediaItems.length > 0) {
+          // Equal distribution if no engagement data
+          reach = Math.round(totalReach / mediaItems.length);
+          impressions = Math.round(totalImpressions / mediaItems.length);
         }
       }
 
