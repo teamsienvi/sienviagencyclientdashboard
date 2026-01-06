@@ -83,6 +83,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 8-14", link: "/dynamic-report/2a27391a-4671-4470-9a8f-4c397284868a", isInternal: true },
       { dateRange: "Dec 15-21", link: "/serenity-scrolls-dec15-21", isInternal: true },
       { dateRange: "Dec 22-28", link: "/dynamic-report/ca37fd5b-6b2f-4ceb-8557-67c922e5e454", isInternal: true },
+      { dateRange: "Dec 29 - Jan 2", link: "/dynamic-report/a1b2c3d4-e5f6-7890-abcd-777777777777", isInternal: true },
     ],
   },
   {
