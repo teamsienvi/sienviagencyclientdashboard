@@ -164,12 +164,28 @@ const DynamicReport = () => {
       // Combine existing top posts with YouTube content
       let allTopPosts: TopPost[] = topPostsData || [];
 
+      // Helper function to extract video ID from YouTube URL
+      const extractYoutubeVideoId = (url: string): string | null => {
+        const patterns = [
+          /youtube\.com\/watch\?v=([^&]+)/,
+          /youtube\.com\/shorts\/([^?&]+)/,
+          /youtu\.be\/([^?&]+)/,
+        ];
+        for (const pattern of patterns) {
+          const match = url.match(pattern);
+          if (match) return match[1];
+        }
+        return null;
+      };
+
       // Check if we have YouTube posts in social_content that aren't in top_performing_posts
       if (youtubeContent && youtubeContent.length > 0) {
-        const existingYoutubeLinks = new Set(
+        // Extract video IDs from existing posts for proper comparison
+        const existingYoutubeVideoIds = new Set(
           allTopPosts
             .filter((p) => p.platform?.toLowerCase() === "youtube")
-            .map((p) => p.link)
+            .map((p) => extractYoutubeVideoId(p.link))
+            .filter(Boolean)
         );
 
         // Process YouTube content and add missing posts
@@ -208,7 +224,10 @@ const DynamicReport = () => {
               influence: Math.min(Math.ceil(views / 100) + (engagementPercent >= 3 ? 1 : 0), 5),
             };
           })
-          .filter((post: TopPost) => post.views > 0 && !existingYoutubeLinks.has(post.link));
+          .filter((post: TopPost) => {
+            const videoId = extractYoutubeVideoId(post.link);
+            return post.views > 0 && videoId && !existingYoutubeVideoIds.has(videoId);
+          });
 
         // Merge and sort by views + engagement
         allTopPosts = [...allTopPosts, ...youtubeTopPosts];
