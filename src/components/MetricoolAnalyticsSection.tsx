@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle } from "lucide-react";
+import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface MetricoolAnalyticsSectionProps {
   clientId: string;
@@ -407,13 +408,13 @@ export const MetricoolAnalyticsSection = ({
         </Card>
       )}
 
-      {/* Account Metrics Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Account Metrics Overview - 6 cards like other platforms */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
-          <CardContent className="pt-4">
+          <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Users className="h-4 w-4" />
-              <span className="text-xs">Followers</span>
+              <span className="text-sm">Followers</span>
             </div>
             {metricsLoading ? (
               <Skeleton className="h-8 w-20" />
@@ -426,61 +427,80 @@ export const MetricoolAnalyticsSection = ({
         </Card>
 
         <Card>
-          <CardContent className="pt-4">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Eye className="h-4 w-4" />
+              <span className="text-sm">Total Views</span>
+              {livePosts.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
+              )}
+            </div>
+            <p className="text-2xl font-bold">
+              {livePosts.length > 0
+                ? formatNumber(livePosts.reduce((sum, p) => sum + (p.views || 0), 0))
+                : "—"
+              }
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Heart className="h-4 w-4" />
+              <span className="text-sm">Total Likes</span>
+            </div>
+            <p className="text-2xl font-bold">
+              {livePosts.length > 0
+                ? formatNumber(livePosts.reduce((sum, p) => sum + (p.likes || 0), 0))
+                : "—"
+              }
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <TrendingUp className="h-4 w-4" />
-              <span className="text-xs">Engagement Rate</span>
+              <span className="text-sm">Engagement</span>
               {liveEngagement !== null && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
               )}
             </div>
-            {metricsLoading && liveEngagement === null ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <p className="text-2xl font-bold">
-                {liveEngagement !== null 
-                  ? `${liveEngagement.toFixed(2)}%`
-                  : `${accountMetrics?.engagement_rate?.toFixed(2) || "0"}%`
-                }
-              </p>
-            )}
+            <p className="text-2xl font-bold">
+              {liveEngagement !== null 
+                ? `${liveEngagement.toFixed(2)}%`
+                : `${accountMetrics?.engagement_rate?.toFixed(2) || "0"}%`
+              }
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-4">
+          <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Eye className="h-4 w-4" />
-              <span className="text-xs">Period</span>
+              <Play className="h-4 w-4" />
+              <span className="text-sm">Total Posts</span>
             </div>
-            {lastSyncTime ? (
-              <p className="text-sm font-medium">
-                {format(subDays(new Date(), 7), "MMM d")} - {format(new Date(), "MMM d")}
-              </p>
-            ) : metricsLoading ? (
-              <Skeleton className="h-8 w-32" />
-            ) : accountMetrics ? (
-              <p className="text-sm font-medium">
-                {format(new Date(accountMetrics.period_start), "MMM d")} - {format(new Date(accountMetrics.period_end), "MMM d")}
-              </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">No data</p>
-            )}
+            <p className="text-2xl font-bold">
+              {livePosts.length > 0 ? livePosts.length : "—"}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="pt-4">
+          <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <RefreshCw className="h-4 w-4" />
-              <span className="text-xs">Last Synced</span>
+              <Clock className="h-4 w-4" />
+              <span className="text-sm">Last Synced</span>
             </div>
             {lastSyncTime ? (
               <p className="text-sm font-medium">
                 {format(lastSyncTime, "MMM d, h:mm a")}
               </p>
             ) : metricsLoading ? (
-              <Skeleton className="h-8 w-24" />
+              <Skeleton className="h-6 w-24" />
             ) : accountMetrics ? (
               <p className="text-sm font-medium">
                 {format(new Date(accountMetrics.collected_at), "MMM d, h:mm a")}
@@ -496,13 +516,13 @@ export const MetricoolAnalyticsSection = ({
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            Recent Content
+            Recent {platform === "tiktok" ? "Videos" : "Posts"}
             {livePosts.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">Live</Badge>
             )}
           </CardTitle>
           <CardDescription>
-            Latest {platform === "tiktok" ? "videos" : "posts"} with performance metrics
+            Latest {platform === "tiktok" ? "videos" : "posts"} with performance metrics from the past 7 days
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -511,65 +531,89 @@ export const MetricoolAnalyticsSection = ({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Content</TableHead>
-                  <TableHead className="text-center">
-                    <Eye className="h-4 w-4 mx-auto" />
+                  <TableHead className="min-w-[200px]">Video</TableHead>
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Eye className="h-3 w-3" />
+                      Views
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <Heart className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Heart className="h-3 w-3" />
+                      Likes
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <MessageCircle className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <MessageCircle className="h-3 w-3" />
+                      Comments
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <Share2 className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Share2 className="h-3 w-3" />
+                      Shares
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <TrendingUp className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      Engagement
+                    </div>
                   </TableHead>
-                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {livePosts.map((post, idx) => (
                   <TableRow key={idx}>
                     <TableCell>
-                      <div>
-                        <p className="font-medium line-clamp-1">
-                          {post.title || "Untitled"}
-                        </p>
+                      <div className="max-w-[300px]">
+                        {(post.url || post.link) ? (
+                          <a
+                            href={post.url || post.link || "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-sm line-clamp-1 text-primary hover:underline flex items-center gap-1"
+                          >
+                            {post.title || "Untitled"}
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          </a>
+                        ) : (
+                          <p className="font-medium text-sm line-clamp-1">
+                            {post.title || "Untitled"}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           {post.date || "Unknown date"}
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(post.views)}
+                    <TableCell className="text-right font-medium">
+                      {post.views.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(post.likes)}
+                    <TableCell className="text-right">
+                      {post.likes.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(post.comments)}
+                    <TableCell className="text-right">
+                      {post.comments.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(post.shares)}
+                    <TableCell className="text-right">
+                      {post.shares.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {post.engagement?.toFixed(2)}%
-                    </TableCell>
-                    <TableCell>
-                      {(post.url || post.link) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          asChild
-                        >
-                          <a href={post.url || post.link || "#"} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      )}
+                    <TableCell className="text-right">
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          post.engagement >= 5
+                            ? "bg-green-500/20 text-green-600"
+                            : post.engagement >= 2
+                            ? "bg-yellow-500/20 text-yellow-600"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {post.engagement?.toFixed(2)}%
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -585,59 +629,69 @@ export const MetricoolAnalyticsSection = ({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Content</TableHead>
-                  <TableHead className="text-center">
-                    <Eye className="h-4 w-4 mx-auto" />
+                  <TableHead className="min-w-[200px]">Video</TableHead>
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Eye className="h-3 w-3" />
+                      Views
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <Heart className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Heart className="h-3 w-3" />
+                      Likes
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <MessageCircle className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <MessageCircle className="h-3 w-3" />
+                      Comments
+                    </div>
                   </TableHead>
-                  <TableHead className="text-center">
-                    <Share2 className="h-4 w-4 mx-auto" />
+                  <TableHead className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Share2 className="h-3 w-3" />
+                      Shares
+                    </div>
                   </TableHead>
-                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {contentData.map((content) => (
                   <TableRow key={content.id}>
                     <TableCell>
-                      <div>
-                        <p className="font-medium line-clamp-1">
-                          {content.title || "Untitled"}
-                        </p>
+                      <div className="max-w-[300px]">
+                        {content.url ? (
+                          <a
+                            href={content.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-sm line-clamp-1 text-primary hover:underline flex items-center gap-1"
+                          >
+                            {content.title || "Untitled"}
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          </a>
+                        ) : (
+                          <p className="font-medium text-sm line-clamp-1">
+                            {content.title || "Untitled"}
+                          </p>
+                        )}
                         <p className="text-xs text-muted-foreground">
                           {format(new Date(content.published_at), "MMM d, yyyy")}
                         </p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(content.metrics?.views)}
+                    <TableCell className="text-right font-medium">
+                      {(content.metrics?.views || 0).toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(content.metrics?.likes)}
+                    <TableCell className="text-right">
+                      {(content.metrics?.likes || 0).toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(content.metrics?.comments)}
+                    <TableCell className="text-right">
+                      {(content.metrics?.comments || 0).toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {formatNumber(content.metrics?.shares)}
-                    </TableCell>
-                    <TableCell>
-                      {content.url && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          asChild
-                        >
-                          <a href={content.url} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      )}
+                    <TableCell className="text-right">
+                      {(content.metrics?.shares || 0).toLocaleString()}
                     </TableCell>
                   </TableRow>
                 ))}
