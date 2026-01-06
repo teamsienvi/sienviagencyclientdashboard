@@ -98,6 +98,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 8-14", link: "/dynamic-report/c36adde3-192c-4eda-8b72-1316a3588346", isInternal: true },
       { dateRange: "Dec 15-21", link: "/oxisure-tech-dec15-21", isInternal: true },
       { dateRange: "Dec 22-28", link: "/dynamic-report/6fa69ed4-37b6-4953-8ba3-bc6f31965084", isInternal: true },
+      { dateRange: "Dec 29 - Jan 2", link: "/dynamic-report/a1b2c3d4-e5f6-7890-abcd-666666666666", isInternal: true },
     ],
   },
   {
@@ -113,6 +114,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 8-14", link: "/dynamic-report/a40e1b54-e594-43e3-afa0-e5d93e0b606b", isInternal: true },
       { dateRange: "Dec 15-21", link: "/the-haven-at-deer-park-dec15-21", isInternal: true },
       { dateRange: "Dec 22-28", link: "/dynamic-report/b728ee70-2549-46bd-a1b9-5b9edecf712c", isInternal: true },
+      { dateRange: "Dec 29 - Jan 2", link: "/dynamic-report/a1b2c3d4-e5f6-7890-abcd-555555555555", isInternal: true },
     ],
   },
   {
@@ -123,6 +125,7 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 8-14", link: "/dynamic-report/6c0042b9-f216-4fb1-85ff-31f744122837", isInternal: true },
       { dateRange: "Dec 15-21", link: "/bsue-brow-lash-dec15-21", isInternal: true },
       { dateRange: "Dec 22-28", link: "/dynamic-report/865b12b3-793b-4cee-85e7-da052c219f9e", isInternal: true },
+      { dateRange: "Dec 29 - Jan 2", link: "/dynamic-report/a1b2c3d4-e5f6-7890-abcd-444444444444", isInternal: true },
     ],
   },
   {
