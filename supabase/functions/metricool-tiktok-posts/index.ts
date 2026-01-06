@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +12,7 @@ interface TikTokPostsRequest {
   timezone: string;
   userId: string;
   blogId?: string;
+  clientId?: string; // Optional: if provided, will persist to database
 }
 
 interface TikTokPost {
@@ -92,6 +94,37 @@ function parseCSV(csvText: string): TikTokPost[] {
   return rows;
 }
 
+// Parse date string from Metricool format to ISO
+function parseMetricoolDate(dateStr: string | null): string {
+  if (!dateStr) return new Date().toISOString();
+  
+  // Try parsing common formats like "Jan 5, 2025" or "2025-01-05"
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+  
+  return new Date().toISOString();
+}
+
+// Generate a unique content_id from post data
+function generateContentId(post: TikTokPost): string {
+  const urlPart = post.url || post.link || "";
+  const datePart = post.date || "";
+  const titlePart = post.title || "";
+  
+  // Create a hash-like string from the components
+  const combined = `${urlPart}-${datePart}-${titlePart}`;
+  // Use a simple hash for uniqueness
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `tiktok_${Math.abs(hash).toString(16)}`;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -100,7 +133,7 @@ serve(async (req) => {
 
   try {
     const body: TikTokPostsRequest = await req.json();
-    const { from, to, timezone, userId, blogId } = body;
+    const { from, to, timezone, userId, blogId, clientId } = body;
 
     if (!from || !to || !userId) {
       return new Response(
@@ -167,8 +200,90 @@ serve(async (req) => {
     const rows = parseCSV(csvText);
     console.log("Parsed rows count:", rows.length);
 
+    // If clientId is provided, persist to database
+    let savedCount = 0;
+    if (clientId && rows.length > 0) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      console.log("Persisting", rows.length, "posts to database for client:", clientId);
+
+      for (const post of rows) {
+        const contentId = generateContentId(post);
+        const publishedAt = parseMetricoolDate(post.date);
+        const postUrl = post.url || post.link || null;
+
+        // Upsert social_content
+        const { data: contentData, error: contentError } = await supabase
+          .from("social_content")
+          .upsert({
+            client_id: clientId,
+            content_id: contentId,
+            platform: "tiktok",
+            content_type: "video",
+            title: post.title,
+            url: postUrl,
+            published_at: publishedAt,
+          }, { onConflict: "client_id,content_id" })
+          .select("id")
+          .single();
+
+        if (contentError) {
+          console.error("Error upserting content:", contentError);
+          continue;
+        }
+
+        // Insert metrics (use current period dates)
+        const { error: metricsError } = await supabase
+          .from("social_content_metrics")
+          .upsert({
+            social_content_id: contentData.id,
+            platform: "tiktok",
+            period_start: from.split("T")[0],
+            period_end: to.split("T")[0],
+            views: post.views,
+            likes: post.likes,
+            comments: post.comments,
+            shares: post.shares,
+            reach: post.reach,
+            collected_at: new Date().toISOString(),
+          }, { onConflict: "social_content_id,period_start,period_end" });
+
+        if (metricsError) {
+          console.error("Error upserting metrics:", metricsError);
+          continue;
+        }
+
+        savedCount++;
+      }
+
+      // Calculate and save account-level metrics
+      const totalViews = rows.reduce((sum, p) => sum + p.views, 0);
+      const totalLikes = rows.reduce((sum, p) => sum + p.likes, 0);
+      const totalComments = rows.reduce((sum, p) => sum + p.comments, 0);
+      const totalShares = rows.reduce((sum, p) => sum + p.shares, 0);
+      const avgEngagement = rows.length > 0 
+        ? rows.reduce((sum, p) => sum + p.engagement, 0) / rows.length 
+        : 0;
+
+      await supabase
+        .from("social_account_metrics")
+        .upsert({
+          client_id: clientId,
+          platform: "tiktok",
+          period_start: from.split("T")[0],
+          period_end: to.split("T")[0],
+          engagement_rate: avgEngagement,
+          total_content: rows.length,
+          collected_at: new Date().toISOString(),
+        }, { onConflict: "client_id,platform,period_start,period_end" });
+
+      console.log("Saved", savedCount, "posts to database");
+    }
+
     return new Response(
-      JSON.stringify({ success: true, rows }),
+      JSON.stringify({ success: true, rows, savedCount }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
