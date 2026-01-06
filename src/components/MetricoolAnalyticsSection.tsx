@@ -64,6 +64,10 @@ export const MetricoolAnalyticsSection = ({
   const [showConfig, setShowConfig] = useState(false);
   const [userId, setUserId] = useState("");
   const [blogId, setBlogId] = useState("");
+  
+  // Store live aggregation data from Metricool API
+  const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Fetch Metricool config for this client/platform
   const { data: config, isLoading: configLoading } = useQuery({
@@ -240,6 +244,13 @@ export const MetricoolAnalyticsSection = ({
     onSuccess: (data) => {
       toast.success("Synced analytics from Metricool");
       console.log("Sync success, data:", data);
+      
+      // Store the live engagement data
+      if (data.data?.data !== undefined) {
+        setLiveEngagement(data.data.data);
+        setLastSyncTime(new Date());
+      }
+      
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
       queryClient.invalidateQueries({ queryKey: ["metricool-content", clientId, platform] });
     },
@@ -401,12 +412,18 @@ export const MetricoolAnalyticsSection = ({
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <TrendingUp className="h-4 w-4" />
               <span className="text-xs">Engagement Rate</span>
+              {liveEngagement !== null && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
+              )}
             </div>
-            {metricsLoading ? (
+            {metricsLoading && liveEngagement === null ? (
               <Skeleton className="h-8 w-20" />
             ) : (
               <p className="text-2xl font-bold">
-                {accountMetrics?.engagement_rate?.toFixed(2) || "0"}%
+                {liveEngagement !== null 
+                  ? `${liveEngagement.toFixed(2)}%`
+                  : `${accountMetrics?.engagement_rate?.toFixed(2) || "0"}%`
+                }
               </p>
             )}
           </CardContent>
@@ -418,7 +435,11 @@ export const MetricoolAnalyticsSection = ({
               <Eye className="h-4 w-4" />
               <span className="text-xs">Period</span>
             </div>
-            {metricsLoading ? (
+            {lastSyncTime ? (
+              <p className="text-sm font-medium">
+                {format(subDays(new Date(), 7), "MMM d")} - {format(new Date(), "MMM d")}
+              </p>
+            ) : metricsLoading ? (
               <Skeleton className="h-8 w-32" />
             ) : accountMetrics ? (
               <p className="text-sm font-medium">
@@ -436,7 +457,11 @@ export const MetricoolAnalyticsSection = ({
               <RefreshCw className="h-4 w-4" />
               <span className="text-xs">Last Synced</span>
             </div>
-            {metricsLoading ? (
+            {lastSyncTime ? (
+              <p className="text-sm font-medium">
+                {format(lastSyncTime, "MMM d, h:mm a")}
+              </p>
+            ) : metricsLoading ? (
               <Skeleton className="h-8 w-24" />
             ) : accountMetrics ? (
               <p className="text-sm font-medium">
