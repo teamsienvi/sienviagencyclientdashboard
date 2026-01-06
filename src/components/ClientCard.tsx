@@ -19,6 +19,7 @@ interface ClientCardProps {
   clientIndex: number;
   clientId?: string; // Database ID for YouTube analytics
   websiteAnalyticsId?: string; // Database ID for website analytics (only if supabase_url is set)
+  metricoolPlatforms?: string[]; // Platforms with Metricool config (e.g., ['tiktok', 'linkedin'])
 }
 
 // Helper to extract month from date range (e.g., "Nov 24-30" -> "November")
@@ -45,7 +46,7 @@ const getMonthFromDateRange = (dateRange: string): string => {
   return dateRange;
 };
 
-export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }: ClientCardProps) => {
+export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, metricoolPlatforms }: ClientCardProps) => {
   const navigate = useNavigate();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [hasXAccount, setHasXAccount] = useState(false);
@@ -348,17 +349,19 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId }
                 Meta
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start"
-                onClick={() => navigate(`/tiktok-metricool/${clientId}`)}
-              >
-                <Music2 className="h-4 w-4 mr-2 text-pink-500" />
-                TikTok
-              </Button>
+              {metricoolPlatforms?.includes('tiktok') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start"
+                  onClick={() => navigate(`/tiktok-metricool/${clientId}`)}
+                >
+                  <Music2 className="h-4 w-4 mr-2 text-pink-500" />
+                  TikTok
+                </Button>
+              )}
 
-              {client.name === "Father Figure Formula" && (
+              {metricoolPlatforms?.includes('linkedin') && (
                 <Button
                   variant="outline"
                   size="sm"
