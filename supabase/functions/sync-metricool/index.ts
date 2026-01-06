@@ -1,304 +1,342 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.87.1";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+interface MetricoolMetrics {
+  followers?: number;
+  newFollowers?: number;
+  engagementRate?: number;
+  totalContent?: number;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface MetricoolBlog {
-  id: string;
-  blogId?: string;
-  name: string;
-  picture: string;
-  networks: string[];
-}
-
-interface MetricoolMetrics {
-  followers?: number;
-  following?: number;
-  posts?: number;
-  likes?: number;
-  comments?: number;
-  shares?: number;
-  views?: number;
-  engagement?: number;
-  reach?: number;
-  impressions?: number;
-}
-
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const metricoolToken = Deno.env.get("METRICOOL_USER_TOKEN")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const metricoolToken = Deno.env.get("METRICOOL_USER_TOKEN");
+
+    if (!metricoolToken) {
+      throw new Error("METRICOOL_USER_TOKEN not configured");
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     const { clientId, platform, userId, blogId, periodStart, periodEnd } = await req.json();
 
     if (!clientId || !platform || !userId) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Missing required parameters: clientId, platform, userId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      throw new Error("Missing required parameters: clientId, platform, userId");
     }
 
-    console.log(`Syncing Metricool ${platform} data for client ${clientId}, userId: ${userId}, blogId: ${blogId || 'auto'}`);
+    console.log("Starting Metricool sync:", { clientId, platform, userId, blogId });
 
-    // Create sync log
-    const { data: syncLog, error: syncLogError } = await supabase
+    // Calculate date range (default to last 30 days)
+    const endDate = periodEnd || new Date().toISOString().split("T")[0];
+    const startDate = periodStart || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    // Create sync log entry
+    const { data: syncLog, error: logError } = await supabase
       .from("social_sync_logs")
       .insert({
         client_id: clientId,
         platform: platform,
-        status: "running",
+        status: "in_progress",
       })
       .select()
       .single();
 
-    if (syncLogError) {
-      console.error("Error creating sync log:", syncLogError);
+    if (logError) {
+      console.error("Failed to create sync log:", logError);
     }
 
     let recordsSynced = 0;
     let accountMetrics: MetricoolMetrics = {};
 
-    // Metricool API base URL
+    // Metricool API base URL - using the v2 analytics endpoints discovered from network inspection
     const baseUrl = "https://app.metricool.com/api";
 
-    // Common headers for Metricool API - use X-Mc-Auth header as per documentation
+    // Common headers for Metricool API - use X-Mc-Auth header
     const metricoolHeaders = {
       "X-Mc-Auth": metricoolToken,
       "Content-Type": "application/json",
     };
 
-    // Step 1: Get user's blogs and verify platform is connected
+    // Step 1: Get user's blogs/profiles to verify connection
     let targetBlogId = blogId;
     let platformConnected = false;
     
-    console.log("Fetching blogs for user...");
-    const blogsResponse = await fetch(`${baseUrl}/admin/simpleProfiles?userId=${userId}`, {
+    console.log("Fetching profiles for user...");
+    const profilesResponse = await fetch(`${baseUrl}/admin/simpleProfiles?userId=${userId}`, {
       headers: metricoolHeaders,
     });
 
-    if (!blogsResponse.ok) {
-      const errorText = await blogsResponse.text();
-      console.error("Metricool API error fetching blogs:", errorText);
-      throw new Error(`Metricool API error: ${blogsResponse.status}`);
+    if (!profilesResponse.ok) {
+      const errorText = await profilesResponse.text();
+      console.error("Failed to fetch profiles:", profilesResponse.status, errorText);
+      throw new Error(`Failed to fetch Metricool profiles: ${profilesResponse.status}`);
     }
 
-    const blogsData = await blogsResponse.json();
-    console.log("Full blogs response:", JSON.stringify(blogsData));
-    
-    // The API returns an array of blogs with platform-specific fields
-    const blogs = Array.isArray(blogsData) ? blogsData : (blogsData.blogs || blogsData.profiles || []);
-    
-    if (blogs.length === 0) {
-      throw new Error("No blogs found for this Metricool user");
-    }
+    const profiles = await profilesResponse.json();
+    console.log("Profiles response:", JSON.stringify(profiles).substring(0, 500));
 
-    // Check each blog for the target platform
-    for (const blog of blogs) {
-      // Platform fields are named like "tiktok", "linkedin", "instagram", etc.
-      const platformField = blog[platform.toLowerCase()];
-      console.log(`Blog ${blog.id} (${blog.label}): ${platform} = ${platformField}`);
-      
-      if (platformField) {
-        platformConnected = true;
-        if (!targetBlogId) {
-          targetBlogId = blog.id;
-          console.log(`Found blog with ${platform} connected: ${blog.label} (${blog.id})`);
+    // Find the target blog/profile
+    if (Array.isArray(profiles)) {
+      for (const profile of profiles) {
+        if (profile.id === targetBlogId || profile.blogId === targetBlogId) {
+          platformConnected = true;
+          targetBlogId = profile.id || profile.blogId;
+          break;
         }
-        break;
+        // Check if platform is connected to this profile
+        const platformKey = platform.toLowerCase();
+        if (profile[platformKey] || profile.networks?.includes(platformKey)) {
+          platformConnected = true;
+          if (!targetBlogId) {
+            targetBlogId = profile.id || profile.blogId;
+          }
+        }
       }
-    }
-
-    if (!platformConnected) {
-      const blogNames = blogs.map((b: any) => b.label || b.name).join(", ");
-      throw new Error(`${platform} is not connected to any Metricool blog. Available blogs: ${blogNames}. Please connect ${platform} to your Metricool account first.`);
     }
 
     if (!targetBlogId) {
-      targetBlogId = blogs[0].id;
-      console.log(`Using first blog: ${blogs[0].label}, blogId: ${targetBlogId}`);
+      console.log("No blogId provided and couldn't determine from profiles, using userId as blogId");
+      targetBlogId = blogId || userId;
     }
 
-    // Step 2: Fetch analytics for the platform
-    const startDate = periodStart || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const endDate = periodEnd || new Date().toISOString().split('T')[0];
+    console.log("Using blogId:", targetBlogId, "Platform connected:", platformConnected);
 
-    console.log(`Fetching ${platform} analytics from ${startDate} to ${endDate}...`);
-    console.log(`Using blogId: ${targetBlogId}`);
+    // Step 2: Fetch TikTok account stats using discovered endpoints
+    // Based on network inspection: /api/v2/analytics/stats/tiktok and /api/stats/timeling/tiktokFollowers
     
-    // Try the /stats/overview endpoint which returns all network stats
-    const overviewUrl = `${baseUrl}/stats/overview?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
-    console.log("Trying overview URL:", overviewUrl);
-    
-    const overviewResponse = await fetch(overviewUrl, { headers: metricoolHeaders });
-    if (overviewResponse.ok) {
-      const overviewData = await overviewResponse.json();
-      console.log("Overview response:", JSON.stringify(overviewData).substring(0, 1000));
-    } else {
-      console.log("Overview failed:", overviewResponse.status);
-    }
-    
-    // Get account stats - try multiple endpoint formats
-    // Format 1: /stats/timeling/{network}Followers
-    const statsUrl1 = `${baseUrl}/stats/timeling/${platform.toLowerCase()}Followers?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
-    // Format 2: /stats/{network}
-    const statsUrl2 = `${baseUrl}/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
-    // Format 3: /{network}/stats
-    const statsUrl3 = `${baseUrl}/${platform.toLowerCase()}/stats?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
-    
-    console.log("Stats URL 1:", statsUrl1);
-    console.log("Stats URL 2:", statsUrl2);
-    console.log("Stats URL 3:", statsUrl3);
-    
-    // Try each URL format
-    let statsResponse = await fetch(statsUrl1, { headers: metricoolHeaders });
-    let statsUrl = statsUrl1;
-    
-    if (!statsResponse.ok) {
-      console.log(`Stats URL 1 failed: ${statsResponse.status}`);
-      statsResponse = await fetch(statsUrl2, { headers: metricoolHeaders });
-      statsUrl = statsUrl2;
-    }
-    
-    if (!statsResponse.ok) {
-      console.log(`Stats URL 2 failed: ${statsResponse.status}`);
-      statsResponse = await fetch(statsUrl3, { headers: metricoolHeaders });
-      statsUrl = statsUrl3;
-    }
-
-    if (statsResponse.ok) {
-      const statsData = await statsResponse.json();
-      console.log(`${platform} stats response:`, JSON.stringify(statsData).substring(0, 500));
-
-      // Extract metrics based on platform
-      if (platform === "tiktok") {
-        accountMetrics = {
-          followers: statsData.followers || statsData.summary?.followers || 0,
-          views: statsData.videoViews || statsData.summary?.videoViews || 0,
-          likes: statsData.likes || statsData.summary?.likes || 0,
-          comments: statsData.comments || statsData.summary?.comments || 0,
-          shares: statsData.shares || statsData.summary?.shares || 0,
-          engagement: statsData.engagementRate || statsData.summary?.engagementRate || 0,
-        };
-      } else if (platform === "linkedin") {
-        accountMetrics = {
-          followers: statsData.followers || statsData.summary?.followers || 0,
-          impressions: statsData.impressions || statsData.summary?.impressions || 0,
-          engagement: statsData.engagementRate || statsData.summary?.engagementRate || 0,
-          reach: statsData.reach || statsData.summary?.reach || 0,
-          likes: statsData.reactions || statsData.summary?.reactions || 0,
-          comments: statsData.comments || statsData.summary?.comments || 0,
-          shares: statsData.shares || statsData.summary?.shares || 0,
-        };
-      } else {
-        // Generic extraction
-        accountMetrics = {
-          followers: statsData.followers || statsData.summary?.followers || 0,
-          engagement: statsData.engagementRate || statsData.summary?.engagementRate || 0,
-          reach: statsData.reach || statsData.summary?.reach || 0,
-          impressions: statsData.impressions || statsData.summary?.impressions || 0,
-        };
+    if (platform.toLowerCase() === "tiktok") {
+      // Endpoint 1: /api/v2/analytics/stats/tiktok - Main analytics stats
+      const analyticsStatsUrl = `${baseUrl}/v2/analytics/stats/tiktok?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      console.log("Fetching TikTok analytics stats:", analyticsStatsUrl);
+      
+      try {
+        const statsResponse = await fetch(analyticsStatsUrl, { headers: metricoolHeaders });
+        console.log("Analytics stats response status:", statsResponse.status);
+        
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          console.log("TikTok analytics stats:", JSON.stringify(statsData).substring(0, 1000));
+          
+          // Extract metrics from response
+          if (statsData) {
+            accountMetrics.followers = statsData.followers || statsData.totalFollowers;
+            accountMetrics.newFollowers = statsData.newFollowers || statsData.followersGained;
+            accountMetrics.engagementRate = statsData.engagementRate || statsData.engagement;
+            accountMetrics.totalContent = statsData.posts || statsData.videos || statsData.totalContent;
+          }
+        } else {
+          console.log("Analytics stats endpoint returned:", statsResponse.status);
+        }
+      } catch (e) {
+        console.error("Error fetching analytics stats:", e);
       }
 
-      // Store account metrics
+      // Endpoint 2: /api/stats/timeling/tiktokFollowers - Follower timeline
+      const followersUrl = `${baseUrl}/stats/timeling/tiktokFollowers?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      console.log("Fetching TikTok followers timeline:", followersUrl);
+      
+      try {
+        const followersResponse = await fetch(followersUrl, { headers: metricoolHeaders });
+        console.log("Followers timeline response status:", followersResponse.status);
+        
+        if (followersResponse.ok) {
+          const followersData = await followersResponse.json();
+          console.log("TikTok followers data:", JSON.stringify(followersData).substring(0, 500));
+          
+          // Get latest follower count from timeline
+          if (Array.isArray(followersData) && followersData.length > 0) {
+            const latestEntry = followersData[followersData.length - 1];
+            accountMetrics.followers = latestEntry.followers || latestEntry.value || accountMetrics.followers;
+          } else if (followersData.data && Array.isArray(followersData.data)) {
+            const latestEntry = followersData.data[followersData.data.length - 1];
+            accountMetrics.followers = latestEntry.followers || latestEntry.value || accountMetrics.followers;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching followers timeline:", e);
+      }
+    } else {
+      // For other platforms, try generic endpoints
+      const statsUrl = `${baseUrl}/v2/analytics/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      console.log("Fetching platform stats:", statsUrl);
+      
+      try {
+        const statsResponse = await fetch(statsUrl, { headers: metricoolHeaders });
+        if (statsResponse.ok) {
+          const statsData = await statsResponse.json();
+          console.log("Platform stats:", JSON.stringify(statsData).substring(0, 500));
+          
+          if (statsData) {
+            accountMetrics.followers = statsData.followers || statsData.totalFollowers;
+            accountMetrics.newFollowers = statsData.newFollowers;
+            accountMetrics.engagementRate = statsData.engagementRate;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching platform stats:", e);
+      }
+    }
+
+    // Store account metrics if we have any
+    if (accountMetrics.followers || accountMetrics.newFollowers || accountMetrics.engagementRate) {
+      console.log("Storing account metrics:", accountMetrics);
+      
       const { error: metricsError } = await supabase
         .from("social_account_metrics")
         .insert({
           client_id: clientId,
           platform: platform,
-          followers: accountMetrics.followers || 0,
-          engagement_rate: accountMetrics.engagement || 0,
           period_start: startDate,
           period_end: endDate,
+          followers: accountMetrics.followers || null,
+          new_followers: accountMetrics.newFollowers || null,
+          engagement_rate: accountMetrics.engagementRate || null,
+          total_content: accountMetrics.totalContent || null,
         });
 
       if (metricsError) {
-        console.error("Error inserting account metrics:", metricsError);
+        console.error("Failed to store account metrics:", metricsError);
       } else {
         recordsSynced++;
-        console.log("Account metrics inserted successfully");
       }
-    } else {
-      const errorText = await statsResponse.text();
-      console.error(`Stats API error: ${statsResponse.status}`, errorText);
     }
 
-    // Step 3: Fetch content/posts - Metricool uses /posts/{network} or /videos/{network}
-    // TikTok uses /videos/tiktok, LinkedIn uses /posts/linkedin
-    const contentEndpoint = platform.toLowerCase() === "tiktok" ? "videos/tiktok" : `posts/${platform.toLowerCase()}`;
-    const postsUrl = `${baseUrl}/${contentEndpoint}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+    // Step 3: Fetch content/videos using discovered endpoints
+    // For TikTok: /api/v2/analytics/videos/tiktok and /api/videos/tiktok
+    let contentData: any[] = [];
     
-    console.log("Posts URL:", postsUrl);
-    
-    const postsResponse = await fetch(postsUrl, {
-      headers: metricoolHeaders,
-    });
-
-    if (postsResponse.ok) {
-      const postsData = await postsResponse.json();
-      const posts = Array.isArray(postsData) ? postsData : (postsData.posts || postsData.content || []);
+    if (platform.toLowerCase() === "tiktok") {
+      // Try /api/v2/analytics/videos/tiktok first (more detailed)
+      const analyticsVideosUrl = `${baseUrl}/v2/analytics/videos/tiktok?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      console.log("Fetching TikTok analytics videos:", analyticsVideosUrl);
       
-      console.log(`Found ${posts.length} ${platform} posts`);
-
-      for (const post of posts) {
-        // Upsert content
-        const { data: content, error: contentError } = await supabase
-          .from("social_content")
-          .upsert({
-            client_id: clientId,
-            platform: platform,
-            content_id: post.id || post.postId || `${platform}_${Date.now()}_${Math.random()}`,
-            content_type: post.type || "post",
-            published_at: post.publishedAt || post.date || new Date().toISOString(),
-            url: post.url || post.permalink,
-            title: (post.text || post.caption || post.title || "").substring(0, 100),
-          }, { onConflict: 'client_id,platform,content_id' })
-          .select()
-          .single();
-
-        if (contentError) {
-          console.error("Error upserting content:", contentError);
-          continue;
+      try {
+        const videosResponse = await fetch(analyticsVideosUrl, { headers: metricoolHeaders });
+        console.log("Analytics videos response status:", videosResponse.status);
+        
+        if (videosResponse.ok) {
+          const videosData = await videosResponse.json();
+          console.log("TikTok analytics videos:", JSON.stringify(videosData).substring(0, 1000));
+          
+          if (Array.isArray(videosData)) {
+            contentData = videosData;
+          } else if (videosData.data && Array.isArray(videosData.data)) {
+            contentData = videosData.data;
+          } else if (videosData.videos && Array.isArray(videosData.videos)) {
+            contentData = videosData.videos;
+          }
         }
+      } catch (e) {
+        console.error("Error fetching analytics videos:", e);
+      }
 
-        // Insert metrics
-        const { error: postMetricsError } = await supabase
-          .from("social_content_metrics")
-          .insert({
-            social_content_id: content.id,
-            platform: platform,
-            views: post.views || post.videoViews || 0,
-            likes: post.likes || post.reactions || 0,
-            comments: post.comments || 0,
-            shares: post.shares || post.reposts || 0,
-            reach: post.reach || 0,
-            impressions: post.impressions || 0,
-            interactions: (post.likes || 0) + (post.comments || 0) + (post.shares || 0),
-            period_start: startDate,
-            period_end: endDate,
-          });
-
-        if (postMetricsError) {
-          console.error("Error inserting post metrics:", postMetricsError);
-        } else {
-          recordsSynced++;
+      // Fallback to /api/videos/tiktok if no data
+      if (contentData.length === 0) {
+        const videosUrl = `${baseUrl}/videos/tiktok?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+        console.log("Fetching TikTok videos (fallback):", videosUrl);
+        
+        try {
+          const videosResponse = await fetch(videosUrl, { headers: metricoolHeaders });
+          if (videosResponse.ok) {
+            const videosData = await videosResponse.json();
+            console.log("TikTok videos fallback:", JSON.stringify(videosData).substring(0, 500));
+            
+            if (Array.isArray(videosData)) {
+              contentData = videosData;
+            } else if (videosData.data) {
+              contentData = videosData.data;
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching videos fallback:", e);
         }
       }
     } else {
-      const errorText = await postsResponse.text();
-      console.error(`Posts API error: ${postsResponse.status}`, errorText);
+      // For other platforms
+      const postsUrl = `${baseUrl}/v2/analytics/posts/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      console.log("Fetching platform posts:", postsUrl);
+      
+      try {
+        const postsResponse = await fetch(postsUrl, { headers: metricoolHeaders });
+        if (postsResponse.ok) {
+          const postsData = await postsResponse.json();
+          if (Array.isArray(postsData)) {
+            contentData = postsData;
+          } else if (postsData.data) {
+            contentData = postsData.data;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching posts:", e);
+      }
+    }
+
+    console.log(`Found ${contentData.length} content items`);
+
+    // Store content and metrics
+    for (const item of contentData) {
+      const contentId = item.id || item.videoId || item.postId || `${platform}-${Date.now()}-${Math.random()}`;
+      const publishedAt = item.publishedAt || item.createdAt || item.date || new Date().toISOString();
+      
+      // Upsert content
+      const { data: contentRecord, error: contentError } = await supabase
+        .from("social_content")
+        .upsert({
+          client_id: clientId,
+          platform: platform,
+          content_id: contentId,
+          title: item.title || item.description || item.caption || null,
+          url: item.url || item.link || item.permalink || null,
+          published_at: publishedAt,
+          content_type: platform.toLowerCase() === "tiktok" ? "video" : "post",
+        }, { onConflict: "client_id,platform,content_id" })
+        .select()
+        .single();
+
+      if (contentError) {
+        console.error("Failed to upsert content:", contentError);
+        continue;
+      }
+
+      // Insert content metrics
+      const { error: metricsError } = await supabase
+        .from("social_content_metrics")
+        .insert({
+          social_content_id: contentRecord.id,
+          platform: platform,
+          period_start: startDate,
+          period_end: endDate,
+          views: item.views || item.plays || item.videoViews || 0,
+          likes: item.likes || item.hearts || 0,
+          comments: item.comments || 0,
+          shares: item.shares || 0,
+          reach: item.reach || 0,
+          impressions: item.impressions || 0,
+          engagements: item.engagements || item.engagement || 0,
+        });
+
+      if (metricsError) {
+        console.error("Failed to insert content metrics:", metricsError);
+      } else {
+        recordsSynced++;
+      }
     }
 
     // Update sync log
-    if (syncLog?.id) {
+    if (syncLog) {
       await supabase
         .from("social_sync_logs")
         .update({
@@ -309,25 +347,23 @@ serve(async (req) => {
         .eq("id", syncLog.id);
     }
 
-    console.log(`Metricool sync completed. Records synced: ${recordsSynced}`);
+    console.log("Sync completed. Records synced:", recordsSynced);
 
     return new Response(
       JSON.stringify({
         success: true,
         recordsSynced,
-        platform,
-        blogId: targetBlogId,
         accountMetrics,
+        contentCount: contentData.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Error in sync-metricool:", error);
+
+  } catch (error: unknown) {
+    console.error("Sync error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
+      JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
