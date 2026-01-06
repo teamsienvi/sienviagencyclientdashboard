@@ -584,13 +584,16 @@ export const MetricoolAnalyticsSection = ({
                             href={post.url || post.link || "#"}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-medium text-sm line-clamp-1 text-primary hover:underline flex items-center gap-1"
+                            className="font-medium text-sm text-primary hover:underline flex items-center gap-1"
+                            title={post.title || post.url || post.link}
                           >
-                            {post.title || "Untitled"}
+                            <span className="truncate max-w-[250px]">
+                              {post.title || "Untitled"}
+                            </span>
                             <ExternalLink className="h-3 w-3 flex-shrink-0" />
                           </a>
                         ) : (
-                          <p className="font-medium text-sm line-clamp-1">
+                          <p className="font-medium text-sm truncate max-w-[250px]">
                             {post.title || "Untitled"}
                           </p>
                         )}
@@ -676,13 +679,16 @@ export const MetricoolAnalyticsSection = ({
                             href={content.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-medium text-sm line-clamp-1 text-primary hover:underline flex items-center gap-1"
+                            className="font-medium text-sm text-primary hover:underline flex items-center gap-1"
+                            title={content.title || content.url}
                           >
-                            {content.title || "Untitled"}
+                            <span className="truncate max-w-[250px]">
+                              {content.title || "Untitled"}
+                            </span>
                             <ExternalLink className="h-3 w-3 flex-shrink-0" />
                           </a>
                         ) : (
-                          <p className="font-medium text-sm line-clamp-1">
+                          <p className="font-medium text-sm truncate max-w-[250px]">
                             {content.title || "Untitled"}
                           </p>
                         )}
