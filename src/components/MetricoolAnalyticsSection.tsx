@@ -230,7 +230,7 @@ export const MetricoolAnalyticsSection = ({
         to 
       });
 
-      // Call the TikTok posts endpoint
+      // Call the TikTok posts endpoint with clientId to persist data
       const { data, error } = await supabase.functions.invoke("metricool-tiktok-posts", {
         body: {
           from,
@@ -238,6 +238,7 @@ export const MetricoolAnalyticsSection = ({
           timezone: "UTC",
           userId: config.user_id,
           blogId: config.blog_id || undefined,
+          clientId, // Pass clientId to persist data to database
         },
       });
 
