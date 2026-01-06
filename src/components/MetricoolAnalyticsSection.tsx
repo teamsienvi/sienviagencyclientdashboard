@@ -424,7 +424,7 @@ export const MetricoolAnalyticsSection = ({
                 {formatNumber(accountMetrics?.followers)}
               </p>
             )}
-          </CardContent>
+        </CardContent>
         </Card>
 
         <Card>
@@ -439,7 +439,9 @@ export const MetricoolAnalyticsSection = ({
             <p className="text-2xl font-bold">
               {livePosts.length > 0
                 ? formatNumber(livePosts.reduce((sum, p) => sum + (p.views || 0), 0))
-                : "—"
+                : contentData && contentData.length > 0
+                  ? formatNumber(contentData.reduce((sum, c) => sum + (c.metrics?.views || 0), 0))
+                  : "—"
               }
             </p>
           </CardContent>
@@ -454,7 +456,9 @@ export const MetricoolAnalyticsSection = ({
             <p className="text-2xl font-bold">
               {livePosts.length > 0
                 ? formatNumber(livePosts.reduce((sum, p) => sum + (p.likes || 0), 0))
-                : "—"
+                : contentData && contentData.length > 0
+                  ? formatNumber(contentData.reduce((sum, c) => sum + (c.metrics?.likes || 0), 0))
+                  : "—"
               }
             </p>
           </CardContent>
@@ -485,7 +489,12 @@ export const MetricoolAnalyticsSection = ({
               <span className="text-sm">Total Posts</span>
             </div>
             <p className="text-2xl font-bold">
-              {livePosts.length > 0 ? livePosts.length : "—"}
+              {livePosts.length > 0 
+                ? livePosts.length 
+                : contentData && contentData.length > 0 
+                  ? contentData.length 
+                  : "—"
+              }
             </p>
           </CardContent>
         </Card>
