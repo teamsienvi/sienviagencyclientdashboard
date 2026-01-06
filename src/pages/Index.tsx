@@ -22,6 +22,19 @@ const Index = () => {
       return data;
     },
   });
+
+  // Fetch Metricool configs to know which clients have TikTok/LinkedIn setup
+  const { data: metricoolConfigs } = useQuery({
+    queryKey: ["metricool-configs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_metricool_config")
+        .select("client_id, platform")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data;
+    },
+  });
   
   // Map client names to their database IDs (for YouTube analytics)
   const clientIdMap = useMemo(() => {
@@ -31,6 +44,18 @@ const Index = () => {
     });
     return map;
   }, [dbClients]);
+
+  // Map client IDs to their Metricool platforms
+  const metricoolPlatformsMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    metricoolConfigs?.forEach((config) => {
+      if (!map[config.client_id]) {
+        map[config.client_id] = [];
+      }
+      map[config.client_id].push(config.platform);
+    });
+    return map;
+  }, [metricoolConfigs]);
 
   // Map client names to their database IDs (only Snarky Humans has website analytics for now)
   const websiteAnalyticsMap = useMemo(() => {
@@ -70,15 +95,19 @@ const Index = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredClients.map((client, index) => (
-              <ClientCard 
-                key={client.name} 
-                client={client} 
-                clientIndex={index} 
-                clientId={clientIdMap[client.name]}
-                websiteAnalyticsId={websiteAnalyticsMap[client.name]}
-              />
-            ))}
+            {filteredClients.map((client, index) => {
+              const dbClientId = clientIdMap[client.name];
+              return (
+                <ClientCard 
+                  key={client.name} 
+                  client={client} 
+                  clientIndex={index} 
+                  clientId={dbClientId}
+                  websiteAnalyticsId={websiteAnalyticsMap[client.name]}
+                  metricoolPlatforms={dbClientId ? metricoolPlatformsMap[dbClientId] : undefined}
+                />
+              );
+            })}
           </div>
         )}
       </main>
