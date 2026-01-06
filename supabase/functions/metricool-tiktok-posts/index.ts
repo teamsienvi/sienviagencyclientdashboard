@@ -121,8 +121,14 @@ serve(async (req) => {
 
     // Build URL with searchParams to properly encode special characters like +
     const url = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/tiktok`);
-    url.searchParams.set("from", from);
-    url.searchParams.set("to", to);
+    
+    // Metricool requires datetime format: yyyy-MM-dd'T'HH:mm:ss
+    // If from/to are just dates, append T00:00:00 / T23:59:59
+    const fromFormatted = from.includes("T") ? from : `${from}T00:00:00`;
+    const toFormatted = to.includes("T") ? to : `${to}T23:59:59`;
+    
+    url.searchParams.set("from", fromFormatted);
+    url.searchParams.set("to", toFormatted);
     url.searchParams.set("timezone", timezone || "UTC");
     url.searchParams.set("userId", userId);
     if (blogId) {
