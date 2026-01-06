@@ -36,6 +36,22 @@ interface AccountMetric {
   collected_at: string;
 }
 
+interface TikTokPost {
+  title: string | null;
+  date: string | null;
+  type: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach: number;
+  duration: string | null;
+  engagement: number;
+  url: string | null;
+  link: string | null;
+  image: string | null;
+}
+
 interface ContentWithMetrics {
   id: string;
   content_id: string;
@@ -65,9 +81,10 @@ export const MetricoolAnalyticsSection = ({
   const [userId, setUserId] = useState("");
   const [blogId, setBlogId] = useState("");
   
-  // Store live aggregation data from Metricool API
+  // Store live data from Metricool API
   const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [livePosts, setLivePosts] = useState<TikTokPost[]>([]);
 
   // Fetch Metricool config for this client/platform
   const { data: config, isLoading: configLoading } = useQuery({
@@ -181,23 +198,21 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
-  // Sync mutation - uses metricool-aggregation edge function
+  // Sync mutation - uses metricool-tiktok-posts edge function to fetch CSV data
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!config) throw new Error("No configuration found");
       if (!config.user_id) throw new Error("User ID not configured");
 
-      // Build ISO date strings with timezone offset (e.g., 2025-12-30T00:00:00+08:00)
+      // Build ISO date strings with timezone offset
       const now = new Date();
       const startDate = subDays(now, 7);
       
-      // Format with timezone offset
       const formatWithTimezone = (date: Date, isEnd: boolean) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const time = isEnd ? "23:59:59" : "00:00:00";
-        // Use a common timezone offset (e.g., +08:00 for Asia/Shanghai or UTC)
         const offset = "+00:00";
         return `${year}-${month}-${day}T${time}${offset}`;
       };
@@ -205,7 +220,7 @@ export const MetricoolAnalyticsSection = ({
       const from = formatWithTimezone(startDate, false);
       const to = formatWithTimezone(now, true);
 
-      console.log("Syncing with metricool-aggregation:", { 
+      console.log("Syncing TikTok posts:", { 
         clientId, 
         platform, 
         userId: config.user_id, 
@@ -214,15 +229,12 @@ export const MetricoolAnalyticsSection = ({
         to 
       });
 
-      // Call the new aggregation endpoint
-      const { data, error } = await supabase.functions.invoke("metricool-aggregation", {
+      // Call the TikTok posts endpoint
+      const { data, error } = await supabase.functions.invoke("metricool-tiktok-posts", {
         body: {
           from,
           to,
-          metric: "engagement",
-          network: platform,
           timezone: "UTC",
-          subject: "video",
           userId: config.user_id,
           blogId: config.blog_id || undefined,
         },
@@ -233,22 +245,28 @@ export const MetricoolAnalyticsSection = ({
       // Check for upstream errors
       if (data.error) {
         console.error("Metricool upstream error:", data);
-        throw new Error(data.error);
+        throw new Error(`${data.error} (status: ${data.upstreamStatus})`);
       }
       
       if (!data.success) throw new Error("Sync failed - no data returned");
       
-      console.log("Metricool aggregation response:", data);
+      console.log("Metricool TikTok posts response:", data);
       return data;
     },
     onSuccess: (data) => {
-      toast.success("Synced analytics from Metricool");
-      console.log("Sync success, data:", data);
+      toast.success(`Synced ${data.rows?.length || 0} TikTok posts from Metricool`);
+      console.log("Sync success, posts:", data.rows);
       
-      // Store the live engagement data
-      if (data.data?.data !== undefined) {
-        setLiveEngagement(data.data.data);
+      // Store the live posts data
+      if (data.rows && Array.isArray(data.rows)) {
+        setLivePosts(data.rows);
         setLastSyncTime(new Date());
+        
+        // Calculate average engagement from posts
+        if (data.rows.length > 0) {
+          const avgEngagement = data.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / data.rows.length;
+          setLiveEngagement(avgEngagement);
+        }
       }
       
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
@@ -477,13 +495,87 @@ export const MetricoolAnalyticsSection = ({
       {/* Content Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Recent Content</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            Recent Content
+            {livePosts.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
+            )}
+          </CardTitle>
           <CardDescription>
             Latest {platform === "tiktok" ? "videos" : "posts"} with performance metrics
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {contentLoading ? (
+          {/* Show live posts if available */}
+          {livePosts.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Content</TableHead>
+                  <TableHead className="text-center">
+                    <Eye className="h-4 w-4 mx-auto" />
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <Heart className="h-4 w-4 mx-auto" />
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <MessageCircle className="h-4 w-4 mx-auto" />
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <Share2 className="h-4 w-4 mx-auto" />
+                  </TableHead>
+                  <TableHead className="text-center">
+                    <TrendingUp className="h-4 w-4 mx-auto" />
+                  </TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {livePosts.map((post, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium line-clamp-1">
+                          {post.title || "Untitled"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {post.date || "Unknown date"}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {formatNumber(post.views)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {formatNumber(post.likes)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {formatNumber(post.comments)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {formatNumber(post.shares)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {post.engagement?.toFixed(2)}%
+                    </TableCell>
+                    <TableCell>
+                      {(post.url || post.link) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                        >
+                          <a href={post.url || post.link || "#"} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : contentLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-12 w-full" />
