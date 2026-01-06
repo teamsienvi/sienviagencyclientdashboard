@@ -31,10 +31,30 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    const { clientId, platform, userId, blogId, periodStart, periodEnd } = await req.json();
+    const { clientId, platform, periodStart, periodEnd } = await req.json();
 
-    if (!clientId || !platform || !userId) {
-      throw new Error("Missing required parameters: clientId, platform, userId");
+    if (!clientId || !platform) {
+      throw new Error("Missing required parameters: clientId, platform");
+    }
+
+    // Fetch config from database
+    const { data: config, error: configError } = await supabase
+      .from("client_metricool_config")
+      .select("user_id, blog_id")
+      .eq("client_id", clientId)
+      .eq("platform", platform)
+      .eq("is_active", true)
+      .single();
+
+    if (configError || !config) {
+      throw new Error(`No Metricool config found for client ${clientId} and platform ${platform}`);
+    }
+
+    const userId = config.user_id;
+    const blogId = config.blog_id;
+
+    if (!userId) {
+      throw new Error("Metricool user_id not configured for this client");
     }
 
     console.log("Starting Metricool sync:", { clientId, platform, userId, blogId });
@@ -118,8 +138,8 @@ serve(async (req) => {
     // Based on network inspection: /api/v2/analytics/stats/tiktok and /api/stats/timeling/tiktokFollowers
     
     if (platform.toLowerCase() === "tiktok") {
-      // Endpoint 1: /api/v2/analytics/stats/tiktok - Main analytics stats
-      const analyticsStatsUrl = `${baseUrl}/v2/analytics/stats/tiktok?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      // Endpoint 1: /api/v2/analytics/stats/tiktok - Main analytics stats (use blog_id with underscore)
+      const analyticsStatsUrl = `${baseUrl}/v2/analytics/stats/tiktok?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok analytics stats:", analyticsStatsUrl);
       
       try {
@@ -144,8 +164,8 @@ serve(async (req) => {
         console.error("Error fetching analytics stats:", e);
       }
 
-      // Endpoint 2: /api/stats/timeling/tiktokFollowers - Follower timeline
-      const followersUrl = `${baseUrl}/stats/timeling/tiktokFollowers?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      // Endpoint 2: /api/stats/timeling/tiktokFollowers - Follower timeline (use start/end params)
+      const followersUrl = `${baseUrl}/stats/timeling/tiktokFollowers?userId=${userId}&blog_id=${targetBlogId}&start=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok followers timeline:", followersUrl);
       
       try {
@@ -170,7 +190,7 @@ serve(async (req) => {
       }
     } else {
       // For other platforms, try generic endpoints
-      const statsUrl = `${baseUrl}/v2/analytics/stats/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      const statsUrl = `${baseUrl}/v2/analytics/stats/${platform.toLowerCase()}?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching platform stats:", statsUrl);
       
       try {
@@ -220,7 +240,7 @@ serve(async (req) => {
     
     if (platform.toLowerCase() === "tiktok") {
       // Try /api/v2/analytics/videos/tiktok first (more detailed)
-      const analyticsVideosUrl = `${baseUrl}/v2/analytics/videos/tiktok?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      const analyticsVideosUrl = `${baseUrl}/v2/analytics/videos/tiktok?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok analytics videos:", analyticsVideosUrl);
       
       try {
@@ -245,7 +265,7 @@ serve(async (req) => {
 
       // Fallback to /api/videos/tiktok if no data
       if (contentData.length === 0) {
-        const videosUrl = `${baseUrl}/videos/tiktok?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+        const videosUrl = `${baseUrl}/videos/tiktok?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
         console.log("Fetching TikTok videos (fallback):", videosUrl);
         
         try {
@@ -266,7 +286,7 @@ serve(async (req) => {
       }
     } else {
       // For other platforms
-      const postsUrl = `${baseUrl}/v2/analytics/posts/${platform.toLowerCase()}?userId=${userId}&blogId=${targetBlogId}&init=${startDate}&end=${endDate}`;
+      const postsUrl = `${baseUrl}/v2/analytics/posts/${platform.toLowerCase()}?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching platform posts:", postsUrl);
       
       try {
