@@ -66,14 +66,8 @@ export const MetricoolAnalyticsSection = ({
   const [blogId, setBlogId] = useState("");
   
   // Store live aggregation data from Metricool API
-  const [liveMetrics, setLiveMetrics] = useState<{
-    engagement: number | null;
-    followers: number | null;
-    views: number | null;
-    likes: number | null;
-  }>({ engagement: null, followers: null, views: null, likes: null });
+  const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
 
   // Fetch Metricool config for this client/platform
   const { data: config, isLoading: configLoading } = useQuery({
@@ -187,92 +181,81 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
-  // Helper to fetch a single metric from Metricool
-  const fetchMetric = async (metric: string, subject?: string) => {
-    if (!config) throw new Error("No configuration found");
-    if (!config.user_id) throw new Error("User ID not configured");
-
-    const now = new Date();
-    const startDate = subDays(now, 7);
-    
-    const formatWithTimezone = (date: Date, isEnd: boolean) => {
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const time = isEnd ? "23:59:59" : "00:00:00";
-      const offset = "+00:00";
-      return `${year}-${month}-${day}T${time}${offset}`;
-    };
-
-    const from = formatWithTimezone(startDate, false);
-    const to = formatWithTimezone(now, true);
-
-    const { data, error } = await supabase.functions.invoke("metricool-aggregation", {
-      body: {
-        from,
-        to,
-        metric,
-        network: platform,
-        timezone: "UTC",
-        subject: subject || "video",
-        userId: config.user_id,
-        blogId: config.blog_id || undefined,
-      },
-    });
-
-    if (error) throw error;
-    if (data.error) {
-      console.warn(`Metricool ${metric} error:`, data.error);
-      return null;
-    }
-    
-    return data.data?.data ?? null;
-  };
-
-  // Sync mutation - fetches multiple metrics in parallel
+  // Sync mutation - uses metricool-aggregation edge function
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!config) throw new Error("No configuration found");
-      setIsSyncing(true);
+      if (!config.user_id) throw new Error("User ID not configured");
 
-      console.log("Syncing multiple metrics from Metricool:", { 
+      // Build ISO date strings with timezone offset (e.g., 2025-12-30T00:00:00+08:00)
+      const now = new Date();
+      const startDate = subDays(now, 7);
+      
+      // Format with timezone offset
+      const formatWithTimezone = (date: Date, isEnd: boolean) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const time = isEnd ? "23:59:59" : "00:00:00";
+        // Use a common timezone offset (e.g., +08:00 for Asia/Shanghai or UTC)
+        const offset = "+00:00";
+        return `${year}-${month}-${day}T${time}${offset}`;
+      };
+
+      const from = formatWithTimezone(startDate, false);
+      const to = formatWithTimezone(now, true);
+
+      console.log("Syncing with metricool-aggregation:", { 
         clientId, 
         platform, 
         userId: config.user_id, 
-        blogId: config.blog_id 
+        blogId: config.blog_id,
+        from,
+        to 
       });
 
-      // Fetch all metrics in parallel
-      const [engagement, followers, views, likes] = await Promise.all([
-        fetchMetric("engagement", "video"),
-        fetchMetric("followers", "profile"),
-        fetchMetric("views", "video"),
-        fetchMetric("likes", "video"),
-      ]);
+      // Call the new aggregation endpoint
+      const { data, error } = await supabase.functions.invoke("metricool-aggregation", {
+        body: {
+          from,
+          to,
+          metric: "engagement",
+          network: platform,
+          timezone: "UTC",
+          subject: "video",
+          userId: config.user_id,
+          blogId: config.blog_id || undefined,
+        },
+      });
 
-      console.log("Metricool metrics fetched:", { engagement, followers, views, likes });
+      if (error) throw error;
       
-      return { engagement, followers, views, likes };
+      // Check for upstream errors
+      if (data.error) {
+        console.error("Metricool upstream error:", data);
+        throw new Error(data.error);
+      }
+      
+      if (!data.success) throw new Error("Sync failed - no data returned");
+      
+      console.log("Metricool aggregation response:", data);
+      return data;
     },
     onSuccess: (data) => {
-      toast.success("Synced all metrics from Metricool");
-      console.log("Sync success, all metrics:", data);
+      toast.success("Synced analytics from Metricool");
+      console.log("Sync success, data:", data);
       
-      setLiveMetrics({
-        engagement: data.engagement,
-        followers: data.followers,
-        views: data.views,
-        likes: data.likes,
-      });
-      setLastSyncTime(new Date());
-      setIsSyncing(false);
+      // Store the live engagement data
+      if (data.data?.data !== undefined) {
+        setLiveEngagement(data.data.data);
+        setLastSyncTime(new Date());
+      }
       
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
       queryClient.invalidateQueries({ queryKey: ["metricool-content", clientId, platform] });
     },
     onError: (error) => {
       toast.error(`Sync failed: ${error.message}`);
-      setIsSyncing(false);
     },
   });
 
@@ -407,23 +390,18 @@ export const MetricoolAnalyticsSection = ({
       )}
 
       {/* Account Metrics Overview */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Users className="h-4 w-4" />
               <span className="text-xs">Followers</span>
-              {liveMetrics.followers !== null && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
-              )}
             </div>
-            {isSyncing ? (
+            {metricsLoading ? (
               <Skeleton className="h-8 w-20" />
             ) : (
               <p className="text-2xl font-bold">
-                {liveMetrics.followers !== null 
-                  ? formatNumber(liveMetrics.followers)
-                  : formatNumber(accountMetrics?.followers)}
+                {formatNumber(accountMetrics?.followers)}
               </p>
             )}
           </CardContent>
@@ -433,61 +411,19 @@ export const MetricoolAnalyticsSection = ({
           <CardContent className="pt-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <TrendingUp className="h-4 w-4" />
-              <span className="text-xs">Engagement</span>
-              {liveMetrics.engagement !== null && (
+              <span className="text-xs">Engagement Rate</span>
+              {liveEngagement !== null && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
               )}
             </div>
-            {isSyncing ? (
+            {metricsLoading && liveEngagement === null ? (
               <Skeleton className="h-8 w-20" />
             ) : (
               <p className="text-2xl font-bold">
-                {liveMetrics.engagement !== null 
-                  ? `${liveMetrics.engagement.toFixed(2)}%`
+                {liveEngagement !== null 
+                  ? `${liveEngagement.toFixed(2)}%`
                   : `${accountMetrics?.engagement_rate?.toFixed(2) || "0"}%`
                 }
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Eye className="h-4 w-4" />
-              <span className="text-xs">Views</span>
-              {liveMetrics.views !== null && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
-              )}
-            </div>
-            {isSyncing ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <p className="text-2xl font-bold">
-                {liveMetrics.views !== null 
-                  ? formatNumber(liveMetrics.views)
-                  : "0"}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Heart className="h-4 w-4" />
-              <span className="text-xs">Likes</span>
-              {liveMetrics.likes !== null && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
-              )}
-            </div>
-            {isSyncing ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <p className="text-2xl font-bold">
-                {liveMetrics.likes !== null 
-                  ? formatNumber(liveMetrics.likes)
-                  : "0"}
               </p>
             )}
           </CardContent>
