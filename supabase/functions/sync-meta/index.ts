@@ -105,22 +105,47 @@ serve(async (req) => {
         console.error("Facebook page info error (non-fatal):", errorText);
       }
 
-      // Fetch Facebook page insights for reach/impressions
+      // Fetch Facebook page insights for reach/impressions - try multiple metrics and date ranges
       try {
-        const fbInsightsUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions,page_post_engagements,page_fans&period=week&access_token=${accessToken}`;
-        console.log("Fetching Facebook page insights...");
-        const fbInsightsResp = await fetch(fbInsightsUrl);
+        // First try with day period and date range for more accurate data
+        const since = Math.floor(new Date(periodStart).getTime() / 1000);
+        const until = Math.floor(new Date(periodEnd).getTime() / 1000) + 86400; // +1 day to include end date
+        
+        // Try page_impressions_unique (reach) with day period
+        const fbReachUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions_unique,page_impressions,page_post_engagements,page_fans&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+        console.log("Fetching Facebook page insights with date range...");
+        const fbInsightsResp = await fetch(fbReachUrl);
         
         if (fbInsightsResp.ok) {
           const fbInsightsData = await fbInsightsResp.json();
           for (const insight of fbInsightsData.data || []) {
-            const value = insight.values?.[insight.values.length - 1]?.value || 0;
-            if (insight.name === 'page_impressions') totalImpressions = value;
-            if (insight.name === 'page_fans') totalFollowers = totalFollowers || value;
+            // Sum up all daily values for cumulative metrics
+            const totalValue = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+            if (insight.name === 'page_impressions_unique') totalReach = totalValue;
+            if (insight.name === 'page_impressions') totalImpressions = totalValue;
+            if (insight.name === 'page_fans') {
+              // For fans, take the last value (current count)
+              totalFollowers = totalFollowers || (insight.values?.[insight.values.length - 1]?.value || 0);
+            }
           }
-          console.log(`Facebook page insights: impressions=${totalImpressions}, followers=${totalFollowers}`);
+          console.log(`Facebook page insights: reach=${totalReach}, impressions=${totalImpressions}, followers=${totalFollowers}`);
         } else {
-          console.log("Facebook insights failed (non-fatal):", await fbInsightsResp.text());
+          const errorText = await fbInsightsResp.text();
+          console.log("Facebook insights with date range failed, trying week period:", errorText);
+          
+          // Fallback to week period
+          const fbWeekUrl = `${baseUrl}/${accountExternalId}/insights?metric=page_impressions,page_post_engagements,page_fans&period=week&access_token=${accessToken}`;
+          const fbWeekResp = await fetch(fbWeekUrl);
+          
+          if (fbWeekResp.ok) {
+            const fbWeekData = await fbWeekResp.json();
+            for (const insight of fbWeekData.data || []) {
+              const value = insight.values?.[insight.values.length - 1]?.value || 0;
+              if (insight.name === 'page_impressions') totalImpressions = value;
+              if (insight.name === 'page_fans') totalFollowers = totalFollowers || value;
+            }
+            console.log(`Facebook weekly insights: impressions=${totalImpressions}, followers=${totalFollowers}`);
+          }
         }
       } catch (e) {
         console.log("Error fetching Facebook page insights:", e);
@@ -358,6 +383,15 @@ serve(async (req) => {
     }, 0);
 
     const engagementRate = totalFollowers > 0 ? (totalInteractions / totalFollowers) * 100 : 0;
+
+    // Delete existing metrics for this period to avoid duplicates
+    await supabase
+      .from("social_account_metrics")
+      .delete()
+      .eq("client_id", clientId)
+      .eq("platform", platform)
+      .eq("period_start", periodStart)
+      .eq("period_end", periodEnd);
 
     const { error: accountMetricsError } = await supabase
       .from("social_account_metrics")
