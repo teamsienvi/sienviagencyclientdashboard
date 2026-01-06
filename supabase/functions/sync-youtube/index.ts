@@ -216,7 +216,7 @@ serve(async (req) => {
     
     const engagementRate = subscriberCount > 0 ? (totalInteractions / subscriberCount) * 100 : 0;
 
-    // Store account metrics - only include social_account_id if valid
+    // Store account metrics - use upsert to handle duplicates
     const accountMetricsData: any = {
       client_id: clientId,
       platform: "youtube",
@@ -230,6 +230,15 @@ serve(async (req) => {
     if (accountId && accountId.length === 36) {
       accountMetricsData.social_account_id = accountId;
     }
+
+    // Delete existing metrics for this period to avoid duplicates
+    await supabase
+      .from("social_account_metrics")
+      .delete()
+      .eq("client_id", clientId)
+      .eq("platform", "youtube")
+      .eq("period_start", periodStart)
+      .eq("period_end", periodEnd);
 
     const { error: accountMetricsError } = await supabase
       .from("social_account_metrics")
