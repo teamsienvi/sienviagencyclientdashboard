@@ -60,6 +60,7 @@ export type Database = {
           blog_id: string | null
           client_id: string
           created_at: string
+          followers: number | null
           id: string
           is_active: boolean
           platform: string
@@ -70,6 +71,7 @@ export type Database = {
           blog_id?: string | null
           client_id: string
           created_at?: string
+          followers?: number | null
           id?: string
           is_active?: boolean
           platform: string
@@ -80,6 +82,7 @@ export type Database = {
           blog_id?: string | null
           client_id?: string
           created_at?: string
+          followers?: number | null
           id?: string
           is_active?: boolean
           platform?: string
