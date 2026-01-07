@@ -64,14 +64,9 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           };
         });
 
-      // Sort by views (descending) and return top posts
-      const sortedByViews = topInsightContent
-        .sort((a, b) => b.views - a.views)
-        .slice(0, limit);
-
-      // Still apply ranking to get tiers and scores, but maintain view-based order
-      const ranked = rankTopInsights(sortedByViews, limit);
-      return ranked.sort((a, b) => b.views - a.views);
+      // Rank using Sienvi Performance Index and return top posts
+      // rankTopInsights now sorts by total_score DESC, then views DESC
+      return rankTopInsights(topInsightContent, limit);
     },
     enabled: !!clientId,
   });
