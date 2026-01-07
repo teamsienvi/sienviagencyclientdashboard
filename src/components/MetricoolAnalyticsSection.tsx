@@ -353,12 +353,16 @@ export const MetricoolAnalyticsSection = ({
             })
           : Promise.resolve({ data: null as any, error: null as any });
 
-      // Fetch demographics data
-      const demographicsPromise = supabase.functions.invoke("metricool-tiktok-demographics", {
+      // Fetch demographics data using the distribution endpoint
+      const demographicsPromise = supabase.functions.invoke("metricool-distribution", {
         body: {
-          userId: config.user_id,
-          blogId: config.blog_id,
+          metric: "gender",
           network: platform,
+          subject: "account",
+          from: fromUTC,
+          to: toUTC,
+          userId: config.user_id,
+          blogId: config.blog_id || undefined,
         },
       });
 
@@ -475,12 +479,52 @@ export const MetricoolAnalyticsSection = ({
         }
       }
 
-      // Handle demographics data
+      // Handle demographics data from distribution endpoint
       if (result.demographicsError) {
         console.error("Demographics sync error:", result.demographicsError);
       } else if (result.demographics?.success && result.demographics.data) {
-        console.log("Demographics data:", result.demographics.data);
-        setDemographics(result.demographics.data);
+        console.log("Demographics raw data:", result.demographics.data);
+        
+        // Parse the distribution response into our DemographicsData format
+        // Metricool distribution returns: { data: [ { label: "male", percentage: 45.5 }, ... ] }
+        const distData = result.demographics.data;
+        const genderData: { male: number; female: number; unknown: number } = {
+          male: 0,
+          female: 0,
+          unknown: 0,
+        };
+        
+        if (Array.isArray(distData)) {
+          for (const item of distData) {
+            const label = (item.label || item.name || item.metric || "").toLowerCase();
+            const value = item.percentage || item.value || 0;
+            
+            if (label.includes("male") && !label.includes("female")) {
+              genderData.male = value;
+            } else if (label.includes("female")) {
+              genderData.female = value;
+            } else if (label.includes("unknown") || label.includes("other")) {
+              genderData.unknown = value;
+            }
+          }
+        } else if (distData?.data && Array.isArray(distData.data)) {
+          for (const item of distData.data) {
+            const label = (item.label || item.name || item.metric || "").toLowerCase();
+            const value = item.percentage || item.value || 0;
+            
+            if (label.includes("male") && !label.includes("female")) {
+              genderData.male = value;
+            } else if (label.includes("female")) {
+              genderData.female = value;
+            } else if (label.includes("unknown") || label.includes("other")) {
+              genderData.unknown = value;
+            }
+          }
+        }
+        
+        if (genderData.male > 0 || genderData.female > 0) {
+          setDemographics({ gender: genderData });
+        }
       }
 
       setLastSyncTime(new Date());
