@@ -6,7 +6,7 @@ import { format, subDays } from "date-fns";
 import { 
   ArrowLeft, Calendar, TrendingUp, Users, Eye, 
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload
+  BarChart3, Loader2, ChevronRight, Upload, Twitter
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { TopPerformingPosts } from "@/components/TopPerformingPosts";
+import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 
 // Helper to extract month from date range
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -369,6 +370,56 @@ const ClientDashboard = () => {
                     )}
                   </CardContent>
                 </Card>
+
+                {/* X (Twitter) */}
+                {connectedAccounts?.x ? (
+                  <Card 
+                    className="hover:border-primary/30 transition-all cursor-pointer group"
+                    onClick={() => navigate(`/x-analytics/${clientId}`)}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
+                          <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">X</CardTitle>
+                          <CardDescription>Twitter Analytics</CardDescription>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                    </CardHeader>
+                    <CardContent>
+                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="hover:border-primary/30 transition-all group">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
+                          <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">X</CardTitle>
+                          <CardDescription>Twitter Analytics</CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <XCSVUploadDialog
+                        clientId={clientId!}
+                        clientName={client.name}
+                        trigger={
+                          <Button variant="outline" size="sm" className="gap-2 w-full">
+                            <Upload className="h-4 w-4" />
+                            Upload CSV
+                          </Button>
+                        }
+                      />
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* TikTok */}
                 {metricoolPlatforms?.includes('tiktok') && (
