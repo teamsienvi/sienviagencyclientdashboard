@@ -276,7 +276,7 @@ export const MetricoolAnalyticsSection = ({
                 to: toShanghai,
                 timezone: "Asia/Shanghai",
                 userId: config.user_id,
-                blogId: "5691309", // TikTok followers specific blogId
+                blogId: config.blog_id,
               },
             })
           : Promise.resolve({ data: null as any, error: null as any });
