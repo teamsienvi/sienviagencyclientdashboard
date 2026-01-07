@@ -27,10 +27,25 @@ serve(async (req) => {
       throw new Error("Missing required parameters: from, to, metric, network, userId");
     }
 
+    // Format dates to Metricool's required format: yyyy-MM-dd'T'HH:mm:ss
+    const formatDateForMetricool = (dateStr: string, isEnd: boolean) => {
+      // If already has T and time, return as-is (but strip timezone offset)
+      if (dateStr.includes("T") && dateStr.includes(":")) {
+        // Remove timezone offset if present (e.g., +00:00 or Z)
+        return dateStr.replace(/[Z+][0-9:]*$/, "");
+      }
+      // Otherwise append time
+      const time = isEnd ? "T23:59:59" : "T00:00:00";
+      return `${dateStr.split("T")[0]}${time}`;
+    };
+
+    const fromFormatted = formatDateForMetricool(from, false);
+    const toFormatted = formatDateForMetricool(to, true);
+
     // Build URL using URL + URLSearchParams to properly encode special characters like +
     const url = new URL(`${metricoolBaseUrl}/api/v2/analytics/aggregation`);
-    url.searchParams.set("from", from);
-    url.searchParams.set("to", to);
+    url.searchParams.set("from", fromFormatted);
+    url.searchParams.set("to", toFormatted);
     url.searchParams.set("metric", metric);
     url.searchParams.set("network", network);
     url.searchParams.set("userId", userId);
