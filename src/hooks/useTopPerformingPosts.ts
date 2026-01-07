@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
 
-export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
+export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
   return useQuery({
     queryKey: ["top-performing-posts", clientId, limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
@@ -64,8 +64,14 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
           };
         });
 
-      // Rank and return top posts
-      return rankTopInsights(topInsightContent, limit);
+      // Sort by views (descending) and return top posts
+      const sortedByViews = topInsightContent
+        .sort((a, b) => b.views - a.views)
+        .slice(0, limit);
+
+      // Still apply ranking to get tiers and scores, but maintain view-based order
+      const ranked = rankTopInsights(sortedByViews, limit);
+      return ranked.sort((a, b) => b.views - a.views);
     },
     enabled: !!clientId,
   });
