@@ -98,3 +98,6 @@ verify_jwt = false
 
 [functions.metricool-tiktok-demographics]
 verify_jwt = false
+
+[functions.metricool-distribution]
+verify_jwt = false
