@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, TrendingDown } from "lucide-react";
+import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -90,7 +90,6 @@ export const MetricoolAnalyticsSection = ({
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [livePosts, setLivePosts] = useState<TikTokPost[]>([]);
   const [liveFollowers, setLiveFollowers] = useState<number | null>(null);
-  const [followerGrowth, setFollowerGrowth] = useState<number | null>(null);
   const [followerTimeline, setFollowerTimeline] = useState<{ date: string; followers: number }[]>([]);
 
   // Fetch Metricool config for this client/platform
@@ -223,32 +222,45 @@ export const MetricoolAnalyticsSection = ({
       const now = new Date();
       const startDate = subDays(now, 7);
       
-      const formatWithTimezone = (date: Date, isEnd: boolean) => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
+      const formatWithOffset = (date: Date, isEnd: boolean, offsetMinutes: number) => {
+        // Format date in a fixed-offset "local" time by shifting the timestamp
+        const shifted = new Date(date.getTime() + offsetMinutes * 60_000);
+        const year = shifted.getUTCFullYear();
+        const month = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(shifted.getUTCDate()).padStart(2, "0");
         const time = isEnd ? "23:59:59" : "00:00:00";
-        const offset = "+00:00";
-        return `${year}-${month}-${day}T${time}${offset}`;
+
+        const sign = offsetMinutes >= 0 ? "+" : "-";
+        const abs = Math.abs(offsetMinutes);
+        const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+        const mm = String(abs % 60).padStart(2, "0");
+
+        return `${year}-${month}-${day}T${time}${sign}${hh}:${mm}`;
       };
 
-      const from = formatWithTimezone(startDate, false);
-      const to = formatWithTimezone(now, true);
+      const fromUTC = formatWithOffset(startDate, false, 0);
+      const toUTC = formatWithOffset(now, true, 0);
+
+      // Use +08:00 for TikTok follower timelines (Metricool expects offset in from/to)
+      const fromShanghai = formatWithOffset(startDate, false, 8 * 60);
+      const toShanghai = formatWithOffset(now, true, 8 * 60);
 
       console.log("Syncing TikTok data:", { 
         clientId, 
         platform, 
         userId: config.user_id, 
         blogId: config.blog_id,
-        from,
-        to 
+        fromUTC,
+        toUTC,
+        fromShanghai,
+        toShanghai,
       });
 
       // Fetch TikTok posts
       const postsPromise = supabase.functions.invoke("metricool-tiktok-posts", {
         body: {
-          from,
-          to,
+          from: fromUTC,
+          to: toUTC,
           timezone: "UTC",
           userId: config.user_id,
           blogId: config.blog_id || undefined,
@@ -256,16 +268,18 @@ export const MetricoolAnalyticsSection = ({
         },
       });
 
-      // Fetch TikTok followers (use blogId 5691309 for TikTok followers)
-      const followersPromise = supabase.functions.invoke("metricool-tiktok-followers", {
-        body: {
-          from,
-          to,
-          timezone: "Asia/Shanghai",
-          userId: config.user_id,
-          blogId: "5691309", // TikTok followers specific blogId
-        },
-      });
+      const followersPromise =
+        platform === "tiktok"
+          ? supabase.functions.invoke("metricool-tiktok-followers", {
+              body: {
+                from: fromShanghai,
+                to: toShanghai,
+                timezone: "Asia/Shanghai",
+                userId: config.user_id,
+                blogId: "5691309", // TikTok followers specific blogId
+              },
+            })
+          : Promise.resolve({ data: null as any, error: null as any });
 
       const [postsResult, followersResult] = await Promise.all([postsPromise, followersPromise]);
 
@@ -303,27 +317,31 @@ export const MetricoolAnalyticsSection = ({
         console.error("Followers upstream error:", followers);
         toast.error(`Followers API error: ${followers.error}`);
       } else if (followers?.success && followers.data) {
-        console.log("Followers timeline data:", followers.data);
-        
-        // Parse the timeline data
-        // Expected format: array of { date: string, value: number } or similar
-        const timelineData = followers.data;
-        
-        if (Array.isArray(timelineData) && timelineData.length > 0) {
-          const formattedTimeline = timelineData.map((point: { date?: string; value?: number }) => ({
-            date: point.date ? format(new Date(point.date), "MMM d") : "Unknown",
-            followers: point.value || 0,
+        console.log("Followers raw response:", followers.data);
+
+        // Expected shape (confirmed):
+        // { data: [ { metric: "followers_count", values: [ { dateTime, value }, ... ] } ] }
+        const values =
+          followers.data?.data?.[0]?.values && Array.isArray(followers.data.data[0].values)
+            ? followers.data.data[0].values
+            : [];
+
+        if (values.length > 0) {
+          const normalizeDateTime = (s: string) => {
+            // Metricool sometimes returns +0100 (no colon). Normalize to +01:00 for Date parsing.
+            return s.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+          };
+
+          const formattedTimeline = values.map((point: { dateTime: string; value: number }) => ({
+            date: format(new Date(normalizeDateTime(point.dateTime)), "MMM d"),
+            followers: point.value ?? 0,
           }));
-          
+
           setFollowerTimeline(formattedTimeline);
-          
-          // Current followers = last datapoint
-          const currentFollowers = timelineData[timelineData.length - 1]?.value || 0;
-          setLiveFollowers(currentFollowers);
-          
-          // Growth = last - first
-          const firstFollowers = timelineData[0]?.value || 0;
-          setFollowerGrowth(currentFollowers - firstFollowers);
+          setLiveFollowers(values[values.length - 1]?.value ?? 0);
+        } else {
+          setFollowerTimeline([]);
+          setLiveFollowers(null);
         }
       }
 
@@ -409,7 +427,7 @@ export const MetricoolAnalyticsSection = ({
                 placeholder="Enter current follower count"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Metricool API doesn't provide TikTok follower counts. Enter manually for reporting.
+                Optional: used only if follower sync is unavailable.
               </p>
             </div>
             <Button
@@ -482,7 +500,7 @@ export const MetricoolAnalyticsSection = ({
                 placeholder="Enter current follower count"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Metricool doesn't provide TikTok follower counts via API. Enter manually.
+                Optional: used only if follower sync is unavailable.
               </p>
             </div>
             <Button
@@ -514,34 +532,9 @@ export const MetricoolAnalyticsSection = ({
               <Skeleton className="h-8 w-20" />
             ) : (
               <p className="text-2xl font-bold">
-                {formatNumber(liveFollowers || config?.followers || accountMetrics?.followers || null)}
+                {formatNumber(liveFollowers ?? config?.followers ?? accountMetrics?.followers ?? null)}
               </p>
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              {followerGrowth !== null && followerGrowth >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-500" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-500" />
-              )}
-              <span className="text-sm">Growth (7d)</span>
-              {followerGrowth !== null && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
-              )}
-            </div>
-            <p className={cn(
-              "text-2xl font-bold",
-              followerGrowth !== null && followerGrowth >= 0 ? "text-green-500" : "text-red-500"
-            )}>
-              {followerGrowth !== null 
-                ? (followerGrowth >= 0 ? `+${formatNumber(followerGrowth)}` : formatNumber(followerGrowth))
-                : "—"
-              }
-            </p>
           </CardContent>
         </Card>
 
