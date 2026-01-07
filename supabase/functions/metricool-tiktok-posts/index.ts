@@ -267,6 +267,92 @@ serve(async (req) => {
         ? rows.reduce((sum, p) => sum + p.engagement, 0) / rows.length 
         : 0;
 
+      // Fetch followers from Metricool followers timeline endpoint
+      let followers: number | null = null;
+      try {
+        const followersUrl = new URL(`${METRICOOL_BASE_URL}/api/stats/timeling/tiktokFollowers`);
+        followersUrl.searchParams.set("userId", userId);
+        if (blogId) {
+          followersUrl.searchParams.set("blog_id", blogId);
+        }
+        followersUrl.searchParams.set("start", from.split("T")[0]);
+        followersUrl.searchParams.set("end", to.split("T")[0]);
+
+        console.log("Fetching TikTok followers:", followersUrl.toString());
+
+        const followersResponse = await fetch(followersUrl.toString(), {
+          method: "GET",
+          headers: {
+            "x-mc-auth": METRICOOL_AUTH,
+            "accept": "application/json",
+          },
+        });
+
+        if (followersResponse.ok) {
+          const followersData = await followersResponse.json();
+          console.log("Followers response:", JSON.stringify(followersData).substring(0, 500));
+
+          // Get latest follower count from timeline
+          if (Array.isArray(followersData) && followersData.length > 0) {
+            const latestEntry = followersData[followersData.length - 1];
+            followers = latestEntry.followers || latestEntry.value || latestEntry.count || null;
+          } else if (followersData.data && Array.isArray(followersData.data) && followersData.data.length > 0) {
+            const latestEntry = followersData.data[followersData.data.length - 1];
+            followers = latestEntry.followers || latestEntry.value || latestEntry.count || null;
+          } else if (typeof followersData === 'object' && followersData.followers) {
+            followers = followersData.followers;
+          }
+        } else {
+          console.log("Followers endpoint returned status:", followersResponse.status);
+        }
+      } catch (e) {
+        console.error("Error fetching followers:", e);
+      }
+
+      // If followers endpoint didn't work, try the aggregation endpoint
+      if (followers === null) {
+        try {
+          const aggUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/aggregation`);
+          aggUrl.searchParams.set("from", from.split("T")[0]);
+          aggUrl.searchParams.set("to", to.split("T")[0]);
+          aggUrl.searchParams.set("metric", "followers");
+          aggUrl.searchParams.set("network", "tiktok");
+          aggUrl.searchParams.set("userId", userId);
+          if (blogId) {
+            aggUrl.searchParams.set("blogId", blogId);
+          }
+
+          console.log("Fetching TikTok followers via aggregation:", aggUrl.toString());
+
+          const aggResponse = await fetch(aggUrl.toString(), {
+            method: "GET",
+            headers: {
+              "x-mc-auth": METRICOOL_AUTH,
+              "accept": "application/json",
+            },
+          });
+
+          if (aggResponse.ok) {
+            const aggData = await aggResponse.json();
+            console.log("Aggregation response:", JSON.stringify(aggData).substring(0, 500));
+            
+            if (typeof aggData === 'number') {
+              followers = aggData;
+            } else if (aggData.value !== undefined) {
+              followers = aggData.value;
+            } else if (aggData.followers !== undefined) {
+              followers = aggData.followers;
+            } else if (aggData.total !== undefined) {
+              followers = aggData.total;
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching aggregation:", e);
+        }
+      }
+
+      console.log("Final followers count:", followers);
+
       await supabase
         .from("social_account_metrics")
         .upsert({
@@ -274,12 +360,13 @@ serve(async (req) => {
           platform: "tiktok",
           period_start: from.split("T")[0],
           period_end: to.split("T")[0],
+          followers: followers,
           engagement_rate: avgEngagement,
           total_content: rows.length,
           collected_at: new Date().toISOString(),
         }, { onConflict: "client_id,platform,period_start,period_end" });
 
-      console.log("Saved", savedCount, "posts to database");
+      console.log("Saved", savedCount, "posts to database, followers:", followers);
     }
 
     return new Response(
