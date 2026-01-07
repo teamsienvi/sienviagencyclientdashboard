@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
+import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 
 // Helper to extract month from date range
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -295,6 +296,9 @@ const ClientDashboard = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Top Performing Posts */}
+          <TopPerformingPosts clientId={clientId!} />
 
           {/* Main Content Tabs */}
           <Tabs defaultValue="analytics" className="space-y-6">
