@@ -224,7 +224,7 @@ const ClientDashboard = () => {
               Welcome to your Dashboard
             </h1>
             <p className="text-muted-foreground text-lg">
-              View your performance metrics and weekly reports all in one place.
+              View your performance metrics and past reports all in one place.
             </p>
           </div>
 
@@ -251,7 +251,7 @@ const ClientDashboard = () => {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Weekly Reports</CardTitle>
+                <CardTitle className="text-sm font-medium">Past Reports</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -310,7 +310,7 @@ const ClientDashboard = () => {
               </TabsTrigger>
               <TabsTrigger value="reports" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" />
-                Weekly Reports
+                Past Reports
               </TabsTrigger>
             </TabsList>
 
@@ -508,7 +508,7 @@ const ClientDashboard = () => {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle>Weekly Performance Reports</CardTitle>
+                      <CardTitle>Past Performance Reports</CardTitle>
                       <CardDescription>
                         Access detailed weekly analytics breakdowns
                       </CardDescription>
