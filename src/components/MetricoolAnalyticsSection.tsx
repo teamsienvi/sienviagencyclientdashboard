@@ -544,12 +544,27 @@ export const MetricoolAnalyticsSection = ({
         console.log("Country raw data:", result.countryData.data);
         
         // Metricool returns: { data: [{ key: "US", value: 45 }, { key: "MX", value: 20 }, ...] }
+        const countryCodeToName: Record<string, string> = {
+          US: "United States", MX: "Mexico", BR: "Brazil", GB: "United Kingdom", CA: "Canada",
+          DE: "Germany", FR: "France", ES: "Spain", IT: "Italy", AU: "Australia", IN: "India",
+          JP: "Japan", KR: "South Korea", CN: "China", RU: "Russia", AR: "Argentina", CO: "Colombia",
+          CL: "Chile", PE: "Peru", VE: "Venezuela", PH: "Philippines", ID: "Indonesia", MY: "Malaysia",
+          TH: "Thailand", VN: "Vietnam", SG: "Singapore", NL: "Netherlands", BE: "Belgium", AT: "Austria",
+          CH: "Switzerland", PL: "Poland", PT: "Portugal", SE: "Sweden", NO: "Norway", DK: "Denmark",
+          FI: "Finland", IE: "Ireland", NZ: "New Zealand", ZA: "South Africa", EG: "Egypt", NG: "Nigeria",
+          SA: "Saudi Arabia", AE: "UAE", TR: "Turkey", IL: "Israel", PK: "Pakistan", BD: "Bangladesh",
+          UA: "Ukraine", RO: "Romania", CZ: "Czech Republic", HU: "Hungary", GR: "Greece", TW: "Taiwan",
+        };
+        
         const parseCountryItems = (items: any[]): Array<{ country: string; percentage: number }> => {
           return items
-            .map((item) => ({
-              country: item.key || item.label || item.name || "Unknown",
-              percentage: item.percentage || item.value || 0,
-            }))
+            .map((item) => {
+              const code = item.key || item.label || item.name || "Unknown";
+              return {
+                country: countryCodeToName[code] || code,
+                percentage: item.percentage || item.value || 0,
+              };
+            })
             .filter((c) => c.percentage > 0)
             .sort((a, b) => b.percentage - a.percentage);
         };
