@@ -93,24 +93,29 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
           <TrendingUp className="h-5 w-5" />
           Top Performing Posts
         </CardTitle>
-        <CardDescription>Ranked by engagement percentage from live analytics</CardDescription>
+        <CardDescription>Ranked by views from live analytics</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-2">
-          {posts.map((post, index) => (
+          {/* Column Headers */}
+          <div className="grid grid-cols-[1fr_80px_90px_80px_90px_80px_100px_70px] gap-2 px-3 py-2 text-xs font-medium text-muted-foreground border-b">
+            <span>Post Link</span>
+            <span className="text-right">Views</span>
+            <span className="text-right">Engage %</span>
+            <span className="text-center">Platform</span>
+            <span className="text-right">Followers</span>
+            <span className="text-center">Reach</span>
+            <span className="text-center">Engage Tier</span>
+            <span className="text-center">Impact</span>
+          </div>
+
+          {posts.map((post) => (
             <div
               key={post.id}
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+              className="grid grid-cols-[1fr_80px_90px_80px_90px_80px_100px_70px] gap-2 items-center p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
             >
-              <span className="text-sm font-medium text-muted-foreground w-6">
-                #{index + 1}
-              </span>
-              
-              <span className="text-lg" title={post.platform}>
-                {getPlatformIcon(post.platform)}
-              </span>
-
-              <div className="flex-1 min-w-0">
+              {/* Post Link */}
+              <div className="min-w-0">
                 {post.post_url ? (
                   <a
                     href={post.post_url}
@@ -118,8 +123,8 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                     rel="noopener noreferrer"
                     className="text-sm font-medium hover:underline flex items-center gap-1 truncate"
                   >
-                    {post.post_url.length > 40 
-                      ? `${post.post_url.substring(0, 40)}...` 
+                    {post.post_url.length > 35 
+                      ? `${post.post_url.substring(0, 35)}...` 
                       : post.post_url}
                     <ExternalLink className="h-3 w-3 flex-shrink-0" />
                   </a>
@@ -128,30 +133,42 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="text-right">
-                  <span className="text-sm font-medium">{formatNumber(post.views)}</span>
-                  <span className="text-xs text-muted-foreground ml-1">views</span>
-                </div>
+              {/* Views */}
+              <span className="text-sm font-medium text-right">{formatNumber(post.views)}</span>
 
-                <Badge 
-                  variant="secondary" 
-                  className={`${getEngagementTierColor(post.engagement_tier)} text-white text-xs`}
-                >
-                  {post.engagement_percentage.toFixed(1)}%
-                </Badge>
+              {/* Engagement % */}
+              <span className="text-sm font-medium text-right">{post.engagement_percentage.toFixed(1)}%</span>
 
-                <Badge 
-                  variant="outline" 
-                  className={`${getReachTierColor(post.reach_tier)} text-white text-xs`}
-                >
-                  {post.reach_tier}
-                </Badge>
+              {/* Platform */}
+              <span className="text-lg text-center" title={post.platform}>
+                {getPlatformIcon(post.platform)}
+              </span>
 
-                <span className="text-yellow-500 text-sm" title={`Influence: ${post.influence_score}/5`}>
-                  {getInfluenceDisplay(post.influence_score)}
-                </span>
-              </div>
+              {/* Followers */}
+              <span className="text-sm text-muted-foreground text-right">
+                {formatNumber(post.followers_at_post_time || 0)}
+              </span>
+
+              {/* Reach Tier */}
+              <Badge 
+                variant="outline" 
+                className={`${getReachTierColor(post.reach_tier)} text-white text-xs justify-center`}
+              >
+                {post.reach_tier?.replace('Tier ', 'T') || '-'}
+              </Badge>
+
+              {/* Engagement Tier */}
+              <Badge 
+                variant="secondary" 
+                className={`${getEngagementTierColor(post.engagement_tier)} text-white text-xs justify-center`}
+              >
+                {post.engagement_tier || '-'}
+              </Badge>
+
+              {/* Impact Score */}
+              <span className="text-sm font-medium text-center" title={`Impact: ${post.influence_score}/5`}>
+                {post.influence_score}/5
+              </span>
             </div>
           ))}
         </div>
