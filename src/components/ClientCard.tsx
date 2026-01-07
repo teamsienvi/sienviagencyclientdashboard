@@ -166,8 +166,9 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
 
   return (
     <div 
-      className="bg-card border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fade-in group"
+      className="bg-card border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fade-in group cursor-pointer"
       style={{ animationDelay: `${clientIndex * 100}ms` }}
+      onClick={() => clientId && navigate(`/client/${clientId}`)}
     >
       <div className="space-y-5">
         <div className="flex items-start justify-between gap-4">
@@ -193,188 +194,59 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
               </p>
             </div>
           </div>
+          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
         </div>
         
-        {/* CSV Upload Analytics Section */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <h4 className="text-sm font-medium text-foreground">Weekly Reports</h4>
-            <span className="text-xs text-muted-foreground">(CSV Upload)</span>
+        {/* Quick Stats */}
+        <div className="flex items-center gap-4 text-sm text-muted-foreground" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5">
+            <FileText className="h-4 w-4" />
+            <span>{client.reports.length} reports</span>
           </div>
-          
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            {/* View Latest Button */}
-            <Button
-              variant="secondary"
-              className="flex-1 justify-between group/btn hover:bg-primary hover:text-primary-foreground transition-all duration-300"
-              onClick={handleViewLatest}
-              disabled={!latestReport}
-            >
-              <span className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                {latestReport ? "View Latest" : "No Reports"}
-              </span>
-              <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform duration-300" />
-            </Button>
-            
-            {/* CSV Upload Button */}
-            <CSVUploadDialog
-              clientName={client.name}
-              trigger={
-                <Button variant="outline" size="icon" className="shrink-0" title="Import CSV">
-                  <Upload className="h-4 w-4" />
-                </Button>
-              }
-            />
-          </div>
-          
-          {/* Step 1: Month Selection */}
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-full bg-accent/50 border-border hover:bg-accent hover:border-primary/20 transition-all duration-300">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-primary" />
-                <SelectValue placeholder="Browse by month" />
-              </div>
-            </SelectTrigger>
-            <SelectContent className="bg-popover border-border animate-scale-in">
-              {months.map((month) => (
-                <SelectItem 
-                  key={month} 
-                  value={month}
-                  className="cursor-pointer transition-colors duration-200"
-                >
-                  <div className="flex items-center justify-between gap-3 w-full">
-                    <span>{month}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {reportsByMonth[month].length} {reportsByMonth[month].length === 1 ? 'week' : 'weeks'}
-                    </span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          
-          {/* Step 2: Week Selection (only show when month is selected) */}
-          {selectedMonth && (
-            <div className="animate-slide-down">
-              <Select onValueChange={handleWeekSelect}>
-                <SelectTrigger className="w-full bg-primary/5 border-primary/20 hover:bg-primary/10 hover:border-primary/30 transition-all duration-300">
-                  <div className="flex items-center gap-2">
-                    <ChevronRight className="h-4 w-4 text-primary" />
-                    <SelectValue placeholder="Select week" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-border animate-scale-in">
-                  {weeksInSelectedMonth.map(({ index, report }) => (
-                    <SelectItem 
-                      key={index} 
-                      value={index.toString()}
-                      className="cursor-pointer transition-colors duration-200"
-                    >
-                      <div className="flex items-center justify-between gap-3 w-full">
-                        <span>{report.dateRange}</span>
-                        {!report.isInternal && (
-                          <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {metricoolPlatforms && metricoolPlatforms.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="h-4 w-4" />
+              <span>{metricoolPlatforms.length + 2} platforms</span>
             </div>
-          )}
-          
-          {latestReport && (
-            <p className="text-xs text-muted-foreground text-center pt-1">
-              Latest: {latestReport.dateRange}
-            </p>
           )}
         </div>
 
-        {/* Automated Analytics Section */}
-        {clientId && (
-          <div className="pt-4 border-t border-border space-y-3">
+        {/* Latest Report Preview */}
+        {latestReport && (
+          <div className="flex items-center justify-between p-3 rounded-lg bg-accent/50 border border-border/50">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              <h4 className="text-sm font-medium text-foreground">Automated Analytics</h4>
-              <span className="text-xs text-muted-foreground">(API)</span>
+              <Calendar className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Latest: {latestReport.dateRange}</span>
             </div>
-
-
-            {/* Individual Platform Buttons - Secondary */}
-            <div className="grid grid-cols-2 gap-2">
-              {websiteAnalyticsId && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => navigate(`/web-analytics/${clientId}`)}
-                >
-                  <Eye className="h-4 w-4 mr-2 text-blue-500" />
-                  Web
-                </Button>
-              )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start"
-                onClick={() => navigate(`/youtube-analytics/${clientId}`)}
-              >
-                <Youtube className="h-4 w-4 mr-2 text-red-500" />
-                YouTube
-              </Button>
-
-              {hasXAccount && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => navigate(`/x-analytics/${clientId}`)}
-                >
-                  <Twitter className="h-4 w-4 mr-2" />
-                  X
-                </Button>
-              )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start"
-                onClick={() => navigate(`/meta-analytics/${clientId}`)}
-              >
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Meta
-              </Button>
-
-              {metricoolPlatforms?.includes('tiktok') && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => navigate(`/tiktok-metricool/${clientId}`)}
-                >
-                  <Music2 className="h-4 w-4 mr-2 text-pink-500" />
-                  TikTok
-                </Button>
-              )}
-
-              {metricoolPlatforms?.includes('linkedin') && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="justify-start"
-                  onClick={() => navigate(`/linkedin-metricool/${clientId}`)}
-                >
-                  <Linkedin className="h-4 w-4 mr-2 text-[#0A66C2]" />
-                  LinkedIn
-                </Button>
-              )}
-            </div>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 px-3"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleViewLatest();
+              }}
+            >
+              View
+              <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
           </div>
         )}
+
+        {/* Open Dashboard CTA */}
+        <div className="pt-2">
+          <Button 
+            variant="default" 
+            className="w-full justify-center gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (clientId) navigate(`/client/${clientId}`);
+            }}
+          >
+            Open Dashboard
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
