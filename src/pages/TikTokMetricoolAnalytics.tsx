@@ -55,8 +55,8 @@ const TikTokMetricoolAnalytics = () => {
         <Header />
         <main className="container mx-auto px-4 py-8">
           <p className="text-muted-foreground">Client not found.</p>
-          <Link to="/" className="text-primary hover:underline">
-            Back to Clients
+          <Link to={`/client/${clientId}`} className="text-primary hover:underline">
+            Back to Dashboard
           </Link>
         </main>
       </div>
@@ -68,11 +68,11 @@ const TikTokMetricoolAnalytics = () => {
       <Header />
       <main className="container mx-auto px-4 py-8">
         <Link
-          to="/"
+          to={`/client/${clientId}`}
           className="inline-flex items-center text-muted-foreground hover:text-foreground mb-4 transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Clients
+          Back to Dashboard
         </Link>
         
         <div className="flex items-center gap-4 mb-8">

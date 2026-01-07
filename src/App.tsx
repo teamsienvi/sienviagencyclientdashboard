@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
+import ClientDashboard from "./pages/ClientDashboard";
 import Report from "./pages/Report";
 import DynamicReport from "./pages/DynamicReport";
 import NotFound from "./pages/NotFound";
@@ -58,6 +59,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/client/:clientId" element={<ClientDashboard />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/admin/meta-assets" element={<AdminMetaAssets />} />
           <Route path="/admin/youtube-assets" element={<AdminYouTubeAssets />} />
