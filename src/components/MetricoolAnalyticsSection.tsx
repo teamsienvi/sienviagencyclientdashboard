@@ -354,7 +354,7 @@ export const MetricoolAnalyticsSection = ({
           : Promise.resolve({ data: null as any, error: null as any });
 
       // Fetch demographics data using the distribution endpoint
-      const demographicsPromise = supabase.functions.invoke("metricool-distribution", {
+      const genderDemographicsPromise = supabase.functions.invoke("metricool-distribution", {
         body: {
           metric: "gender",
           network: platform,
@@ -366,10 +366,24 @@ export const MetricoolAnalyticsSection = ({
         },
       });
 
-      const [postsResult, followersResult, demographicsResult] = await Promise.all([
+      // Fetch country demographics
+      const countryDemographicsPromise = supabase.functions.invoke("metricool-distribution", {
+        body: {
+          metric: "country",
+          network: platform,
+          subject: "account",
+          from: fromUTC,
+          to: toUTC,
+          userId: config.user_id,
+          blogId: config.blog_id || undefined,
+        },
+      });
+
+      const [postsResult, followersResult, genderResult, countryResult] = await Promise.all([
         postsPromise, 
         followersPromise, 
-        demographicsPromise
+        genderDemographicsPromise,
+        countryDemographicsPromise
       ]);
 
       console.log("Posts result:", postsResult);
@@ -423,8 +437,10 @@ export const MetricoolAnalyticsSection = ({
         followers: followersResult.data,
         followersError: followersResult.error,
         persistedFollowers,
-        demographics: demographicsResult.data,
-        demographicsError: demographicsResult.error,
+        genderData: genderResult.data,
+        genderError: genderResult.error,
+        countryData: countryResult.data,
+        countryError: countryResult.error,
       };
     },
     onSuccess: (result) => {
@@ -479,15 +495,14 @@ export const MetricoolAnalyticsSection = ({
         }
       }
 
-      // Handle demographics data from distribution endpoint
-      if (result.demographicsError) {
-        console.error("Demographics sync error:", result.demographicsError);
-      } else if (result.demographics?.success && result.demographics.data) {
-        console.log("Demographics raw data:", result.demographics.data);
+      // Handle gender demographics
+      const demographicsResult: DemographicsData = {};
+      
+      if (result.genderError) {
+        console.error("Gender demographics sync error:", result.genderError);
+      } else if (result.genderData?.success && result.genderData.data) {
+        console.log("Gender raw data:", result.genderData.data);
         
-        // Parse the distribution response into our DemographicsData format
-        // Metricool distribution returns: { data: [ { label: "male", percentage: 45.5 }, ... ] }
-        const distData = result.demographics.data;
         const genderData: { male: number; female: number; unknown: number } = {
           male: 0,
           female: 0,
@@ -510,6 +525,7 @@ export const MetricoolAnalyticsSection = ({
           }
         };
         
+        const distData = result.genderData.data;
         if (Array.isArray(distData)) {
           parseGenderItems(distData);
         } else if (distData?.data && Array.isArray(distData.data)) {
@@ -517,8 +533,43 @@ export const MetricoolAnalyticsSection = ({
         }
         
         if (genderData.male > 0 || genderData.female > 0) {
-          setDemographics({ gender: genderData });
+          demographicsResult.gender = genderData;
         }
+      }
+
+      // Handle country demographics
+      if (result.countryError) {
+        console.error("Country demographics sync error:", result.countryError);
+      } else if (result.countryData?.success && result.countryData.data) {
+        console.log("Country raw data:", result.countryData.data);
+        
+        // Metricool returns: { data: [{ key: "US", value: 45 }, { key: "MX", value: 20 }, ...] }
+        const parseCountryItems = (items: any[]): Array<{ country: string; percentage: number }> => {
+          return items
+            .map((item) => ({
+              country: item.key || item.label || item.name || "Unknown",
+              percentage: item.percentage || item.value || 0,
+            }))
+            .filter((c) => c.percentage > 0)
+            .sort((a, b) => b.percentage - a.percentage);
+        };
+        
+        const countryDistData = result.countryData.data;
+        let countries: Array<{ country: string; percentage: number }> = [];
+        
+        if (Array.isArray(countryDistData)) {
+          countries = parseCountryItems(countryDistData);
+        } else if (countryDistData?.data && Array.isArray(countryDistData.data)) {
+          countries = parseCountryItems(countryDistData.data);
+        }
+        
+        if (countries.length > 0) {
+          demographicsResult.countries = countries;
+        }
+      }
+      
+      if (demographicsResult.gender || demographicsResult.countries) {
+        setDemographics(demographicsResult);
       }
 
       setLastSyncTime(new Date());
@@ -940,10 +991,10 @@ export const MetricoolAnalyticsSection = ({
                       <PieChart>
                         <Pie
                           data={[
-                            { name: "Male", value: demographics.gender.male, fill: "hsl(var(--primary))" },
-                            { name: "Female", value: demographics.gender.female, fill: "hsl(var(--secondary))" },
+                            { name: "Male", value: demographics.gender.male, fill: "#3b82f6" },
+                            { name: "Female", value: demographics.gender.female, fill: "#ec4899" },
                             ...(demographics.gender.unknown && demographics.gender.unknown > 0 
-                              ? [{ name: "Unknown", value: demographics.gender.unknown, fill: "hsl(var(--muted))" }] 
+                              ? [{ name: "Unknown", value: demographics.gender.unknown, fill: "#94a3b8" }] 
                               : []),
                           ]}
                           cx="50%"
@@ -967,16 +1018,16 @@ export const MetricoolAnalyticsSection = ({
                   </div>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-primary" />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
                       <span className="text-sm">Male: {demographics.gender.male.toFixed(1)}%</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-secondary" />
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#ec4899" }} />
                       <span className="text-sm">Female: {demographics.gender.female.toFixed(1)}%</span>
                     </div>
                     {demographics.gender.unknown && demographics.gender.unknown > 0 && (
                       <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-muted" />
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#94a3b8" }} />
                         <span className="text-sm">Unknown: {demographics.gender.unknown.toFixed(1)}%</span>
                       </div>
                     )}
@@ -1023,7 +1074,7 @@ export const MetricoolAnalyticsSection = ({
                       />
                       <Bar 
                         dataKey="percentage" 
-                        fill="hsl(var(--primary))" 
+                        fill="#10b981" 
                         radius={[0, 4, 4, 0]}
                       />
                     </BarChart>
