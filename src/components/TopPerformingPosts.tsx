@@ -93,16 +93,16 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left">
-                <th className="pb-2 font-medium text-muted-foreground">Post Link</th>
-                <th className="pb-2 font-medium text-muted-foreground text-right">Views</th>
-                <th className="pb-2 font-medium text-muted-foreground text-right">Engage %</th>
-                <th className="pb-2 font-medium text-muted-foreground">Platform</th>
-                <th className="pb-2 font-medium text-muted-foreground text-right">Followers</th>
-                <th className="pb-2 font-medium text-muted-foreground text-center">Reach Tier</th>
-                <th className="pb-2 font-medium text-muted-foreground text-center">Engage Tier</th>
-                <th className="pb-2 font-medium text-muted-foreground text-center">Impact</th>
-                <th className="pb-2 font-medium text-muted-foreground text-right">Score</th>
-                <th className="pb-2 font-medium text-muted-foreground text-center">Tier</th>
+                <th className="pb-2 pr-4 font-medium text-muted-foreground">Post Link</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Views</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Engage %</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground">Platform</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Followers</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-center">Reach Tier</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-center">Engage Tier</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-center">Impact</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Score</th>
+                <th className="pb-2 pl-3 font-medium text-muted-foreground text-center">Tier</th>
               </tr>
             </thead>
             <tbody>
@@ -112,7 +112,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                   className="border-b last:border-0 hover:bg-muted/50 transition-colors"
                 >
                   {/* Post Link */}
-                  <td className="py-3 pr-3">
+                  <td className="py-3 pr-4">
                     {post.post_url ? (
                       <a
                         href={post.post_url}
@@ -133,23 +133,23 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                   </td>
 
                   {/* Views */}
-                  <td className="py-3 text-right font-medium">{formatNumber(post.views)}</td>
+                  <td className="py-3 px-3 text-right font-medium">{formatNumber(post.views)}</td>
 
                   {/* Engagement % */}
-                  <td className="py-3 text-right">{post.engagement_percentage.toFixed(1)}%</td>
+                  <td className="py-3 px-3 text-right">{post.engagement_percentage.toFixed(1)}%</td>
 
                   {/* Platform */}
-                  <td className="py-3 text-muted-foreground">
+                  <td className="py-3 px-3 text-muted-foreground">
                     {formatPlatformName(post.platform)}
                   </td>
 
                   {/* Followers */}
-                  <td className="py-3 text-right text-muted-foreground">
+                  <td className="py-3 px-3 text-right text-muted-foreground">
                     {formatNumber(post.followers_at_post_time || 0)}
                   </td>
 
                   {/* Reach Tier */}
-                  <td className="py-3 text-center">
+                  <td className="py-3 px-3 text-center">
                     <Badge 
                       variant="outline" 
                       className={`${getReachTierColor(post.reach_tier)} text-white text-xs`}
@@ -159,7 +159,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                   </td>
 
                   {/* Engagement Tier */}
-                  <td className="py-3 text-center">
+                  <td className="py-3 px-3 text-center">
                     <Badge 
                       variant="secondary" 
                       className={`${getEngagementTierColor(post.engagement_tier)} text-white text-xs`}
@@ -169,15 +169,15 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                   </td>
 
                   {/* Impact (Influence Score) */}
-                  <td className="py-3 text-center font-medium">
+                  <td className="py-3 px-3 text-center font-medium">
                     {post.influence_score / 20}/5
                   </td>
 
                   {/* Total Score */}
-                  <td className="py-3 text-right font-bold">{post.total_score}</td>
+                  <td className="py-3 px-3 text-right font-bold">{post.total_score}</td>
 
                   {/* Performance Tier */}
-                  <td className="py-3 text-center">
+                  <td className="py-3 pl-3 text-center">
                     <Badge 
                       className={`${getPerformanceTierColor(post.performance_tier)} text-white text-xs`}
                     >
