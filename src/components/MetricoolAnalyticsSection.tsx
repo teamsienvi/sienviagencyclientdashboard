@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock } from "lucide-react";
+import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { toast } from "sonner";
-import { format, subDays } from "date-fns";
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { DateRangeSelector } from "@/components/DateRangeSelector";
 
 interface MetricoolAnalyticsSectionProps {
   clientId: string;
@@ -34,10 +35,19 @@ interface AccountMetric {
   id: string;
   followers: number | null;
   engagement_rate: number | null;
+  total_content: number | null;
   period_start: string;
   period_end: string;
   collected_at: string;
 }
+
+interface PrevMetrics {
+  followers: number | null;
+  engagement_rate: number | null;
+  total_content: number | null;
+}
+
+type DateRangePreset = "7d" | "30d" | "custom";
 
 interface TikTokPost {
   title: string | null;
@@ -91,6 +101,27 @@ export const MetricoolAnalyticsSection = ({
   const [livePosts, setLivePosts] = useState<TikTokPost[]>([]);
   const [liveFollowers, setLiveFollowers] = useState<number | null>(null);
   const [followerTimeline, setFollowerTimeline] = useState<{ date: string; followers: number }[]>([]);
+  const [prevMetrics, setPrevMetrics] = useState<PrevMetrics | null>(null);
+
+  // Date range state
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+
+  const getDateRange = () => {
+    const today = new Date();
+    if (dateRangePreset === "custom" && customDateRange) {
+      return { start: customDateRange.start, end: customDateRange.end };
+    }
+    const days = dateRangePreset === "30d" ? 30 : 7;
+    return { start: subDays(today, days), end: today };
+  };
+
+  const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
+    setDateRangePreset(preset);
+    if (preset === "custom" && customRange) {
+      setCustomDateRange(customRange);
+    }
+  };
 
   // Fetch Metricool config for this client/platform
   const { data: config, isLoading: configLoading } = useQuery({
@@ -109,20 +140,53 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
-  // Fetch latest account metrics
-  const { data: accountMetrics, isLoading: metricsLoading } = useQuery({
-    queryKey: ["metricool-account-metrics", clientId, platform],
+  // Fetch latest account metrics with date range
+  const { data: accountMetrics, isLoading: metricsLoading, refetch: refetchMetrics } = useQuery({
+    queryKey: ["metricool-account-metrics", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
+      const { start, end } = getDateRange();
+      const startDate = format(startOfDay(start), "yyyy-MM-dd");
+      const endDate = format(endOfDay(end), "yyyy-MM-dd");
+
+      // Calculate previous period for comparison
+      const periodDuration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - periodDuration);
+      const prevEnd = new Date(start.getTime() - 1);
+      const prevStartDate = format(startOfDay(prevStart), "yyyy-MM-dd");
+      const prevEndDate = format(endOfDay(prevEnd), "yyyy-MM-dd");
+
+      // Fetch current period metrics
       const { data, error } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", platform)
+        .lte("period_start", endDate)
+        .gte("period_end", startDate)
         .order("collected_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (error) throw error;
+
+      // Fetch previous period metrics
+      const { data: prevData } = await supabase
+        .from("social_account_metrics")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", platform)
+        .lte("period_start", prevEndDate)
+        .gte("period_end", prevStartDate)
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setPrevMetrics(prevData ? {
+        followers: prevData.followers,
+        engagement_rate: prevData.engagement_rate,
+        total_content: prevData.total_content,
+      } : null);
+
       return data as AccountMetric | null;
     },
     enabled: !!config,
@@ -486,14 +550,49 @@ export const MetricoolAnalyticsSection = ({
     );
   }
 
+  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false, isNumeric = false) => {
+    if (current == null || previous == null) return null;
+    
+    const diff = current - previous;
+    const percentChange = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : "0";
+    
+    if (diff > 0) {
+      return (
+        <div className="flex items-center text-xs text-green-500 gap-0.5">
+          <ArrowUp className="h-3 w-3" />
+          <span>{isPercentage ? `+${diff.toFixed(2)}%` : isNumeric ? `+${diff}` : `+${percentChange}%`}</span>
+        </div>
+      );
+    } else if (diff < 0) {
+      return (
+        <div className="flex items-center text-xs text-red-500 gap-0.5">
+          <ArrowDown className="h-3 w-3" />
+          <span>{isPercentage ? `${diff.toFixed(2)}%` : isNumeric ? `${diff}` : `${percentChange}%`}</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center text-xs text-muted-foreground gap-0.5">
+        <Minus className="h-3 w-3" />
+        <span>{isNumeric ? "0" : "0%"}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header with sync button */}
-      <div className="flex items-center justify-between">
+      {/* Header with date range and sync button */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
             Metricool Connected
           </Badge>
+          <DateRangeSelector
+            value={dateRangePreset}
+            onChange={handleDateRangeChange}
+            customRange={customDateRange}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -567,16 +666,28 @@ export const MetricoolAnalyticsSection = ({
               {liveFollowers !== null && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
               )}
-              {liveFollowers === null && config?.followers && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">Manual</Badge>
-              )}
             </div>
             {metricsLoading && configLoading ? (
               <Skeleton className="h-8 w-20" />
             ) : (
-              <p className="text-2xl font-bold">
-                {formatNumber(liveFollowers ?? config?.followers ?? accountMetrics?.followers ?? null)}
-              </p>
+              <>
+                <p className="text-2xl font-bold">
+                  {formatNumber(liveFollowers ?? config?.followers ?? accountMetrics?.followers ?? null)}
+                </p>
+                {prevMetrics?.followers != null && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-muted-foreground">
+                      vs {formatNumber(prevMetrics.followers)}
+                    </span>
+                    {renderTrendIndicator(
+                      liveFollowers ?? config?.followers ?? accountMetrics?.followers,
+                      prevMetrics.followers,
+                      false,
+                      true
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -623,9 +734,6 @@ export const MetricoolAnalyticsSection = ({
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <TrendingUp className="h-4 w-4" />
               <span className="text-sm">Engagement</span>
-              {liveEngagement !== null && (
-                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
-              )}
             </div>
             <p className="text-2xl font-bold">
               {liveEngagement !== null 
@@ -633,6 +741,18 @@ export const MetricoolAnalyticsSection = ({
                 : `${accountMetrics?.engagement_rate?.toFixed(2) || "0"}%`
               }
             </p>
+            {prevMetrics?.engagement_rate != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.engagement_rate.toFixed(2)}%
+                </span>
+                {renderTrendIndicator(
+                  liveEngagement ?? accountMetrics?.engagement_rate,
+                  prevMetrics.engagement_rate,
+                  true
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

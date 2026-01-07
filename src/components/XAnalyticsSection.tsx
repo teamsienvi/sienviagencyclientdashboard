@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, Twitter, Heart, Repeat2, Eye } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
@@ -30,6 +30,12 @@ interface XAccountMetrics {
   period_start: string;
   period_end: string;
   collected_at: string;
+}
+
+interface XPrevMetrics {
+  followers: number | null;
+  engagement_rate: number | null;
+  total_content: number | null;
 }
 
 interface XContent {
@@ -56,6 +62,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [accountMetrics, setAccountMetrics] = useState<XAccountMetrics | null>(null);
+  const [prevMetrics, setPrevMetrics] = useState<XPrevMetrics | null>(null);
   const [content, setContent] = useState<(XContent & { metrics?: XContentMetrics })[]>([]);
   const [socialAccount, setSocialAccount] = useState<{ id: string; account_id: string } | null>(null);
   
@@ -122,6 +129,13 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       const startDate = format(startOfDay(start), "yyyy-MM-dd");
       const endDate = format(endOfDay(end), "yyyy-MM-dd");
 
+      // Calculate previous period for comparison
+      const periodDuration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - periodDuration);
+      const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
+      const prevStartDate = format(startOfDay(prevStart), "yyyy-MM-dd");
+      const prevEndDate = format(endOfDay(prevEnd), "yyyy-MM-dd");
+
       // Fetch social account for X
       const { data: accountData } = await supabase
         .from("social_accounts")
@@ -146,6 +160,24 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         .maybeSingle();
 
       setAccountMetrics(metricsData);
+
+      // Fetch previous period metrics for comparison
+      const { data: prevMetricsData } = await supabase
+        .from("social_account_metrics")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .lte("period_start", prevEndDate)
+        .gte("period_end", prevStartDate)
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setPrevMetrics(prevMetricsData ? {
+        followers: prevMetricsData.followers,
+        engagement_rate: prevMetricsData.engagement_rate,
+        total_content: prevMetricsData.total_content,
+      } : null);
 
       // Fetch ALL content for this client/platform with their metrics
       // We filter by metrics period_start/period_end instead of published_at
@@ -255,6 +287,35 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       </div>
     );
   }
+  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false, isNumeric = false) => {
+    if (current == null || previous == null) return null;
+    
+    const diff = current - previous;
+    const percentChange = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : "0";
+    
+    if (diff > 0) {
+      return (
+        <div className="flex items-center text-xs text-green-500 gap-0.5">
+          <ArrowUp className="h-3 w-3" />
+          <span>{isPercentage ? `+${diff.toFixed(2)}%` : isNumeric ? `+${diff}` : `+${percentChange}%`}</span>
+        </div>
+      );
+    } else if (diff < 0) {
+      return (
+        <div className="flex items-center text-xs text-red-500 gap-0.5">
+          <ArrowDown className="h-3 w-3" />
+          <span>{isPercentage ? `${diff.toFixed(2)}%` : isNumeric ? `${diff}` : `${percentChange}%`}</span>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center text-xs text-muted-foreground gap-0.5">
+        <Minus className="h-3 w-3" />
+        <span>{isNumeric ? "0" : "0%"}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -295,6 +356,14 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             <p className="text-2xl font-bold">
               {accountMetrics?.followers?.toLocaleString() || "—"}
             </p>
+            {prevMetrics?.followers != null && accountMetrics?.followers != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.followers.toLocaleString()}
+                </span>
+                {renderTrendIndicator(accountMetrics.followers, prevMetrics.followers, false, true)}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -306,6 +375,14 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             <p className="text-2xl font-bold">
               {accountMetrics?.engagement_rate?.toFixed(2) || "0"}%
             </p>
+            {prevMetrics?.engagement_rate != null && accountMetrics?.engagement_rate != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.engagement_rate.toFixed(2)}%
+                </span>
+                {renderTrendIndicator(accountMetrics.engagement_rate, prevMetrics.engagement_rate, true)}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -317,6 +394,14 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             <p className="text-2xl font-bold">
               {accountMetrics?.total_content || content.length || "—"}
             </p>
+            {prevMetrics?.total_content != null && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  vs {prevMetrics.total_content}
+                </span>
+                {renderTrendIndicator(accountMetrics?.total_content || content.length, prevMetrics.total_content, false, true)}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -330,6 +415,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
                 ? `${formatDate(accountMetrics.period_start)} - ${formatDate(accountMetrics.period_end)}`
                 : "—"}
             </p>
+            <p className="text-xs text-muted-foreground mt-1">vs previous period</p>
           </CardContent>
         </Card>
       </div>
