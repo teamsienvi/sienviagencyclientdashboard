@@ -42,11 +42,20 @@ serve(async (req) => {
 
     const result: DemographicsResponse = {};
 
-    // Fetch gender demographics
+    // Calculate date range (last 30 days for demographics)
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const fromDate = thirtyDaysAgo.toISOString().split('T')[0] + "T00:00:00";
+    const toDate = now.toISOString().split('T')[0] + "T23:59:59";
+
+    // Fetch gender demographics using the timelines endpoint (similar to followers)
     try {
       const genderUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/aggregation`);
+      genderUrl.searchParams.set("from", fromDate);
+      genderUrl.searchParams.set("to", toDate);
       genderUrl.searchParams.set("metric", "followers_gender");
       genderUrl.searchParams.set("network", network);
+      genderUrl.searchParams.set("subject", "account");
       genderUrl.searchParams.set("userId", userId.toString());
       if (blogId) genderUrl.searchParams.set("blogId", blogId.toString());
 
@@ -60,9 +69,11 @@ serve(async (req) => {
         },
       });
 
+      console.log("Gender response status:", genderResponse.status);
+
       if (genderResponse.ok) {
         const genderData = await genderResponse.json();
-        console.log("Gender response:", JSON.stringify(genderData).slice(0, 500));
+        console.log("Gender response:", JSON.stringify(genderData));
 
         // Parse the gender data - Metricool returns different formats
         if (genderData && Array.isArray(genderData.data)) {
@@ -73,16 +84,21 @@ serve(async (req) => {
           };
 
           for (const item of genderData.data) {
-            if (item.metric === "male" || item.label === "Male" || item.gender === "male") {
-              genderValues.male = item.value || item.percentage || 0;
-            } else if (item.metric === "female" || item.label === "Female" || item.gender === "female") {
-              genderValues.female = item.value || item.percentage || 0;
-            } else if (item.metric === "unknown" || item.label === "Unknown") {
-              genderValues.unknown = item.value || item.percentage || 0;
+            const label = (item.metric || item.label || item.gender || "").toLowerCase();
+            const value = item.value || item.percentage || 0;
+            
+            if (label.includes("male") && !label.includes("female")) {
+              genderValues.male = value;
+            } else if (label.includes("female")) {
+              genderValues.female = value;
+            } else if (label.includes("unknown") || label.includes("other")) {
+              genderValues.unknown = value;
             }
           }
 
-          result.gender = genderValues;
+          if (genderValues.male > 0 || genderValues.female > 0) {
+            result.gender = genderValues;
+          }
         } else if (genderData?.male !== undefined || genderData?.female !== undefined) {
           result.gender = {
             male: genderData.male || 0,
@@ -91,7 +107,8 @@ serve(async (req) => {
           };
         }
       } else {
-        console.log("Gender fetch failed:", genderResponse.status);
+        const errorText = await genderResponse.text();
+        console.log("Gender fetch failed:", genderResponse.status, errorText);
       }
     } catch (e) {
       console.error("Error fetching gender data:", e);
@@ -100,8 +117,11 @@ serve(async (req) => {
     // Fetch country demographics
     try {
       const countryUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/aggregation`);
+      countryUrl.searchParams.set("from", fromDate);
+      countryUrl.searchParams.set("to", toDate);
       countryUrl.searchParams.set("metric", "followers_country");
       countryUrl.searchParams.set("network", network);
+      countryUrl.searchParams.set("subject", "account");
       countryUrl.searchParams.set("userId", userId.toString());
       if (blogId) countryUrl.searchParams.set("blogId", blogId.toString());
 
@@ -115,30 +135,35 @@ serve(async (req) => {
         },
       });
 
+      console.log("Country response status:", countryResponse.status);
+
       if (countryResponse.ok) {
         const countryData = await countryResponse.json();
-        console.log("Country response:", JSON.stringify(countryData).slice(0, 500));
+        console.log("Country response:", JSON.stringify(countryData));
 
         // Parse country data
         if (countryData && Array.isArray(countryData.data)) {
           result.countries = countryData.data
             .map((item: any) => ({
-              country: item.country || item.label || item.name || "Unknown",
+              country: item.country || item.label || item.name || item.metric || "Unknown",
               percentage: item.percentage || item.value || 0,
             }))
+            .filter((c: any) => c.percentage > 0)
             .sort((a: any, b: any) => b.percentage - a.percentage)
             .slice(0, 10); // Top 10 countries
         } else if (Array.isArray(countryData)) {
           result.countries = countryData
             .map((item: any) => ({
-              country: item.country || item.label || item.name || "Unknown",
+              country: item.country || item.label || item.name || item.metric || "Unknown",
               percentage: item.percentage || item.value || 0,
             }))
+            .filter((c: any) => c.percentage > 0)
             .sort((a: any, b: any) => b.percentage - a.percentage)
             .slice(0, 10);
         }
       } else {
-        console.log("Country fetch failed:", countryResponse.status);
+        const errorText = await countryResponse.text();
+        console.log("Country fetch failed:", countryResponse.status, errorText);
       }
     } catch (e) {
       console.error("Error fetching country data:", e);
@@ -146,8 +171,15 @@ serve(async (req) => {
 
     console.log("Demographics result:", JSON.stringify(result));
 
+    // If no data was fetched, add a note about requirements
+    const hasData = result.gender || (result.countries && result.countries.length > 0);
+    
     return new Response(
-      JSON.stringify({ success: true, data: result }),
+      JSON.stringify({ 
+        success: true, 
+        data: result,
+        note: hasData ? undefined : "Demographics require a TikTok Business account with 100+ followers"
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
