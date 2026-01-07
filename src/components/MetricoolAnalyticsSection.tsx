@@ -286,11 +286,54 @@ export const MetricoolAnalyticsSection = ({
       console.log("Posts result:", postsResult);
       console.log("Followers result:", followersResult);
 
+      // Extract follower count and persist to DB within the async mutation
+      let persistedFollowers: number | null = null;
+      const followersData = followersResult.data;
+
+      if (!followersResult.error && followersData?.success && followersData.data) {
+        const values =
+          followersData.data?.data?.[0]?.values && Array.isArray(followersData.data.data[0].values)
+            ? followersData.data.data[0].values
+            : [];
+
+        if (values.length > 0) {
+          persistedFollowers = values[values.length - 1]?.value ?? null;
+        }
+      }
+
+      // Persist followers to social_account_metrics
+      if (persistedFollowers !== null) {
+        const now = new Date();
+        const periodStart = subDays(now, 7).toISOString();
+        const periodEnd = now.toISOString();
+
+        const { error: upsertError } = await supabase
+          .from("social_account_metrics")
+          .upsert(
+            {
+              client_id: clientId,
+              platform: platform as "tiktok" | "linkedin",
+              followers: persistedFollowers,
+              period_start: periodStart,
+              period_end: periodEnd,
+              collected_at: now.toISOString(),
+            },
+            { onConflict: "client_id,platform,period_start,period_end" }
+          );
+
+        if (upsertError) {
+          console.error("Failed to persist followers:", upsertError);
+        } else {
+          console.log("Persisted followers to database:", persistedFollowers);
+        }
+      }
+
       return { 
         posts: postsResult.data, 
         postsError: postsResult.error,
         followers: followersResult.data,
         followersError: followersResult.error,
+        persistedFollowers,
       };
     },
     onSuccess: (result) => {
@@ -338,7 +381,7 @@ export const MetricoolAnalyticsSection = ({
           }));
 
           setFollowerTimeline(formattedTimeline);
-          setLiveFollowers(values[values.length - 1]?.value ?? 0);
+          setLiveFollowers(result.persistedFollowers);
         } else {
           setFollowerTimeline([]);
           setLiveFollowers(null);
