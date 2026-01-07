@@ -92,3 +92,6 @@ verify_jwt = false
 
 [functions.sync-youtube-agency]
 verify_jwt = false
+
+[functions.metricool-tiktok-followers]
+verify_jwt = false

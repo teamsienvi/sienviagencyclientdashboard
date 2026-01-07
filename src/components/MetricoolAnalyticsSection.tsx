@@ -8,10 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock } from "lucide-react";
+import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, TrendingDown } from "lucide-react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
 import { cn } from "@/lib/utils";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 interface MetricoolAnalyticsSectionProps {
   clientId: string;
@@ -88,6 +89,9 @@ export const MetricoolAnalyticsSection = ({
   const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [livePosts, setLivePosts] = useState<TikTokPost[]>([]);
+  const [liveFollowers, setLiveFollowers] = useState<number | null>(null);
+  const [followerGrowth, setFollowerGrowth] = useState<number | null>(null);
+  const [followerTimeline, setFollowerTimeline] = useState<{ date: string; followers: number }[]>([]);
 
   // Fetch Metricool config for this client/platform
   const { data: config, isLoading: configLoading } = useQuery({
@@ -231,7 +235,7 @@ export const MetricoolAnalyticsSection = ({
       const from = formatWithTimezone(startDate, false);
       const to = formatWithTimezone(now, true);
 
-      console.log("Syncing TikTok posts:", { 
+      console.log("Syncing TikTok data:", { 
         clientId, 
         platform, 
         userId: config.user_id, 
@@ -240,46 +244,93 @@ export const MetricoolAnalyticsSection = ({
         to 
       });
 
-      // Call the TikTok posts endpoint with clientId to persist data
-      const { data, error } = await supabase.functions.invoke("metricool-tiktok-posts", {
+      // Fetch TikTok posts
+      const postsPromise = supabase.functions.invoke("metricool-tiktok-posts", {
         body: {
           from,
           to,
           timezone: "UTC",
           userId: config.user_id,
           blogId: config.blog_id || undefined,
-          clientId, // Pass clientId to persist data to database
+          clientId,
         },
       });
 
-      if (error) throw error;
-      
-      // Check for upstream errors
-      if (data.error) {
-        console.error("Metricool upstream error:", data);
-        throw new Error(`${data.error} (status: ${data.upstreamStatus})`);
-      }
-      
-      if (!data.success) throw new Error("Sync failed - no data returned");
-      
-      console.log("Metricool TikTok posts response:", data);
-      return data;
+      // Fetch TikTok followers (use blogId 5691309 for TikTok followers)
+      const followersPromise = supabase.functions.invoke("metricool-tiktok-followers", {
+        body: {
+          from,
+          to,
+          timezone: "Asia/Shanghai",
+          userId: config.user_id,
+          blogId: "5691309", // TikTok followers specific blogId
+        },
+      });
+
+      const [postsResult, followersResult] = await Promise.all([postsPromise, followersPromise]);
+
+      console.log("Posts result:", postsResult);
+      console.log("Followers result:", followersResult);
+
+      return { 
+        posts: postsResult.data, 
+        postsError: postsResult.error,
+        followers: followersResult.data,
+        followersError: followersResult.error,
+      };
     },
-    onSuccess: (data) => {
-      toast.success(`Synced ${data.rows?.length || 0} TikTok posts from Metricool`);
-      console.log("Sync success, posts:", data.rows);
+    onSuccess: (result) => {
+      const { posts, postsError, followers, followersError } = result;
       
-      // Store the live posts data
-      if (data.rows && Array.isArray(data.rows)) {
-        setLivePosts(data.rows);
-        setLastSyncTime(new Date());
+      // Handle posts data
+      if (postsError) {
+        console.error("Posts sync error:", postsError);
+      } else if (posts?.success && posts.rows) {
+        setLivePosts(posts.rows);
         
         // Calculate average engagement from posts
-        if (data.rows.length > 0) {
-          const avgEngagement = data.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / data.rows.length;
+        if (posts.rows.length > 0) {
+          const avgEngagement = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length;
           setLiveEngagement(avgEngagement);
         }
       }
+
+      // Handle followers data
+      if (followersError) {
+        console.error("Followers sync error:", followersError);
+        toast.error(`Followers sync failed: ${followersError.message}`);
+      } else if (followers?.error) {
+        console.error("Followers upstream error:", followers);
+        toast.error(`Followers API error: ${followers.error}`);
+      } else if (followers?.success && followers.data) {
+        console.log("Followers timeline data:", followers.data);
+        
+        // Parse the timeline data
+        // Expected format: array of { date: string, value: number } or similar
+        const timelineData = followers.data;
+        
+        if (Array.isArray(timelineData) && timelineData.length > 0) {
+          const formattedTimeline = timelineData.map((point: { date?: string; value?: number }) => ({
+            date: point.date ? format(new Date(point.date), "MMM d") : "Unknown",
+            followers: point.value || 0,
+          }));
+          
+          setFollowerTimeline(formattedTimeline);
+          
+          // Current followers = last datapoint
+          const currentFollowers = timelineData[timelineData.length - 1]?.value || 0;
+          setLiveFollowers(currentFollowers);
+          
+          // Growth = last - first
+          const firstFollowers = timelineData[0]?.value || 0;
+          setFollowerGrowth(currentFollowers - firstFollowers);
+        }
+      }
+
+      setLastSyncTime(new Date());
+      
+      const postsCount = posts?.rows?.length || 0;
+      toast.success(`Synced ${postsCount} TikTok posts from Metricool`);
       
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
       queryClient.invalidateQueries({ queryKey: ["metricool-content", clientId, platform] });
@@ -452,7 +503,10 @@ export const MetricoolAnalyticsSection = ({
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Users className="h-4 w-4" />
               <span className="text-sm">Followers</span>
-              {config?.followers && (
+              {liveFollowers !== null && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
+              )}
+              {liveFollowers === null && config?.followers && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Manual</Badge>
               )}
             </div>
@@ -460,10 +514,35 @@ export const MetricoolAnalyticsSection = ({
               <Skeleton className="h-8 w-20" />
             ) : (
               <p className="text-2xl font-bold">
-                {formatNumber(config?.followers || accountMetrics?.followers || null)}
+                {formatNumber(liveFollowers || config?.followers || accountMetrics?.followers || null)}
               </p>
             )}
-        </CardContent>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              {followerGrowth !== null && followerGrowth >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-green-500" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-red-500" />
+              )}
+              <span className="text-sm">Growth (7d)</span>
+              {followerGrowth !== null && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
+              )}
+            </div>
+            <p className={cn(
+              "text-2xl font-bold",
+              followerGrowth !== null && followerGrowth >= 0 ? "text-green-500" : "text-red-500"
+            )}>
+              {followerGrowth !== null 
+                ? (followerGrowth >= 0 ? `+${formatNumber(followerGrowth)}` : formatNumber(followerGrowth))
+                : "—"
+              }
+            </p>
+          </CardContent>
         </Card>
 
         <Card>
@@ -560,6 +639,59 @@ export const MetricoolAnalyticsSection = ({
           </CardContent>
         </Card>
       </div>
+
+      {/* Follower Timeline Chart */}
+      {followerTimeline.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Follower Growth
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">7 Days</Badge>
+            </CardTitle>
+            <CardDescription>
+              Daily follower count over the past week
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={followerTimeline}>
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => formatNumber(value)}
+                    domain={['dataMin - 100', 'dataMax + 100']}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => [value.toLocaleString(), "Followers"]}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="followers" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={2}
+                    dot={{ fill: 'hsl(var(--primary))', strokeWidth: 0, r: 4 }}
+                    activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Content Table */}
       <Card>
