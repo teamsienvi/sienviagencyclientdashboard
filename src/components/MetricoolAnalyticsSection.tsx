@@ -494,32 +494,26 @@ export const MetricoolAnalyticsSection = ({
           unknown: 0,
         };
         
+        // Metricool returns: { data: [{ key: "M", value: 79 }, { key: "F", value: 21 }, ...] }
+        const parseGenderItems = (items: any[]) => {
+          for (const item of items) {
+            const key = (item.key || item.label || item.name || item.metric || "").toUpperCase();
+            const value = item.percentage || item.value || 0;
+            
+            if (key === "M" || key === "MALE") {
+              genderData.male = value;
+            } else if (key === "F" || key === "FEMALE") {
+              genderData.female = value;
+            } else if (key === "U" || key === "UNKNOWN" || key === "OTHER") {
+              genderData.unknown = value;
+            }
+          }
+        };
+        
         if (Array.isArray(distData)) {
-          for (const item of distData) {
-            const label = (item.label || item.name || item.metric || "").toLowerCase();
-            const value = item.percentage || item.value || 0;
-            
-            if (label.includes("male") && !label.includes("female")) {
-              genderData.male = value;
-            } else if (label.includes("female")) {
-              genderData.female = value;
-            } else if (label.includes("unknown") || label.includes("other")) {
-              genderData.unknown = value;
-            }
-          }
+          parseGenderItems(distData);
         } else if (distData?.data && Array.isArray(distData.data)) {
-          for (const item of distData.data) {
-            const label = (item.label || item.name || item.metric || "").toLowerCase();
-            const value = item.percentage || item.value || 0;
-            
-            if (label.includes("male") && !label.includes("female")) {
-              genderData.male = value;
-            } else if (label.includes("female")) {
-              genderData.female = value;
-            } else if (label.includes("unknown") || label.includes("other")) {
-              genderData.unknown = value;
-            }
-          }
+          parseGenderItems(distData.data);
         }
         
         if (genderData.male > 0 || genderData.female > 0) {
