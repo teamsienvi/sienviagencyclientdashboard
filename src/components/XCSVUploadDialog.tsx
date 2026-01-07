@@ -101,14 +101,6 @@ export const XCSVUploadDialog = ({
     const lines = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
     if (lines.length < 2) return [];
 
-    // Use parseCSVLine for headers too (handles quoted values)
-    const headers = parseCSVLine(lines[0]).map(h => 
-      h.toLowerCase().replace(/['"]/g, '').trim()
-    );
-    
-    console.log("Parsed headers:", headers);
-    const rows: XCSVRow[] = [];
-
     // More flexible header matching - check if header contains the key
     const findMappedKey = (header: string): keyof XCSVRow | null => {
       const h = header.toLowerCase();
@@ -124,12 +116,40 @@ export const XCSVUploadDialog = ({
       return null;
     };
 
-    for (let i = 1; i < lines.length; i++) {
+    // Find the X data section by looking for the header row with DATE PUBLISHED
+    let headerLineIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const lineLower = lines[i].toLowerCase();
+      if (lineLower.includes('date') && (lineLower.includes('impression') || lineLower.includes('engagement'))) {
+        headerLineIndex = i;
+        break;
+      }
+    }
+
+    // If no header found, try first non-empty line as header (fallback for simple CSVs)
+    if (headerLineIndex === -1) {
+      headerLineIndex = 0;
+    }
+
+    const headers = parseCSVLine(lines[headerLineIndex]).map(h => 
+      h.toLowerCase().replace(/['"]/g, '').trim()
+    );
+    
+    console.log("Found header at line:", headerLineIndex, "Headers:", headers);
+    const rows: XCSVRow[] = [];
+
+    for (let i = headerLineIndex + 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
       
+      // Stop at "Total:" line or empty data
+      if (line.toLowerCase().startsWith('total')) break;
+      
       const values = parseCSVLine(line);
       if (values.length < 2) continue;
+      
+      // Skip rows where first column is empty or just whitespace
+      if (!values[0] || values[0].trim() === '') continue;
 
       const row: XCSVRow = {};
       headers.forEach((header, index) => {
@@ -142,8 +162,8 @@ export const XCSVUploadDialog = ({
       
       console.log("Parsed row:", row);
       
-      // Only add rows that have at least a link/url or title, or any numeric data
-      if (row.link || row.url || row.title || row.impressions || row.views || row.likes) {
+      // Only add rows that have at least a date or any numeric data
+      if (row.date || row.impressions || row.views || row.likes || row.engagements) {
         rows.push(row);
       }
     }
