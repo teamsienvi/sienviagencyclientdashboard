@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus, Globe, User } from "lucide-react";
+import { PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import { toast } from "sonner";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,11 @@ interface ContentWithMetrics {
   } | null;
 }
 
+interface DemographicsData {
+  gender?: { male: number; female: number; unknown?: number };
+  countries?: Array<{ country: string; percentage: number }>;
+}
+
 export const MetricoolAnalyticsSection = ({
   clientId,
   clientName,
@@ -102,6 +108,8 @@ export const MetricoolAnalyticsSection = ({
   const [liveFollowers, setLiveFollowers] = useState<number | null>(null);
   const [followerTimeline, setFollowerTimeline] = useState<{ date: string; followers: number }[]>([]);
   const [prevMetrics, setPrevMetrics] = useState<PrevMetrics | null>(null);
+  const [demographics, setDemographics] = useState<DemographicsData | null>(null);
+  const [demographicsLoading, setDemographicsLoading] = useState(false);
 
   // Date range state
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
@@ -345,7 +353,20 @@ export const MetricoolAnalyticsSection = ({
             })
           : Promise.resolve({ data: null as any, error: null as any });
 
-      const [postsResult, followersResult] = await Promise.all([postsPromise, followersPromise]);
+      // Fetch demographics data
+      const demographicsPromise = supabase.functions.invoke("metricool-tiktok-demographics", {
+        body: {
+          userId: config.user_id,
+          blogId: config.blog_id,
+          network: platform,
+        },
+      });
+
+      const [postsResult, followersResult, demographicsResult] = await Promise.all([
+        postsPromise, 
+        followersPromise, 
+        demographicsPromise
+      ]);
 
       console.log("Posts result:", postsResult);
       console.log("Followers result:", followersResult);
@@ -398,6 +419,8 @@ export const MetricoolAnalyticsSection = ({
         followers: followersResult.data,
         followersError: followersResult.error,
         persistedFollowers,
+        demographics: demographicsResult.data,
+        demographicsError: demographicsResult.error,
       };
     },
     onSuccess: (result) => {
@@ -450,6 +473,14 @@ export const MetricoolAnalyticsSection = ({
           setFollowerTimeline([]);
           setLiveFollowers(null);
         }
+      }
+
+      // Handle demographics data
+      if (result.demographicsError) {
+        console.error("Demographics sync error:", result.demographicsError);
+      } else if (result.demographics?.success && result.demographics.data) {
+        console.log("Demographics data:", result.demographics.data);
+        setDemographics(result.demographics.data);
       }
 
       setLastSyncTime(new Date());
@@ -847,6 +878,123 @@ export const MetricoolAnalyticsSection = ({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Demographics Section */}
+      {demographics && (demographics.gender || (demographics.countries && demographics.countries.length > 0)) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Gender Distribution */}
+          {demographics.gender && (demographics.gender.male > 0 || demographics.gender.female > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Gender Distribution
+                </CardTitle>
+                <CardDescription>
+                  Follower breakdown by gender
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-center gap-8">
+                  <div className="h-[180px] w-[180px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: "Male", value: demographics.gender.male, fill: "hsl(var(--primary))" },
+                            { name: "Female", value: demographics.gender.female, fill: "hsl(var(--secondary))" },
+                            ...(demographics.gender.unknown && demographics.gender.unknown > 0 
+                              ? [{ name: "Unknown", value: demographics.gender.unknown, fill: "hsl(var(--muted))" }] 
+                              : []),
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={80}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
+                          contentStyle={{ 
+                            backgroundColor: 'hsl(var(--background))', 
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-primary" />
+                      <span className="text-sm">Male: {demographics.gender.male.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-secondary" />
+                      <span className="text-sm">Female: {demographics.gender.female.toFixed(1)}%</span>
+                    </div>
+                    {demographics.gender.unknown && demographics.gender.unknown > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-muted" />
+                        <span className="text-sm">Unknown: {demographics.gender.unknown.toFixed(1)}%</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Country Distribution */}
+          {demographics.countries && demographics.countries.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  Top Countries
+                </CardTitle>
+                <CardDescription>
+                  Follower breakdown by location
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={demographics.countries.slice(0, 5)}
+                      layout="vertical"
+                      margin={{ left: 60, right: 20 }}
+                    >
+                      <XAxis type="number" tickFormatter={(v) => `${v}%`} />
+                      <YAxis 
+                        dataKey="country" 
+                        type="category" 
+                        tick={{ fontSize: 12 }}
+                        width={55}
+                      />
+                      <Tooltip
+                        formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--background))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Bar 
+                        dataKey="percentage" 
+                        fill="hsl(var(--primary))" 
+                        radius={[0, 4, 4, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Content Table */}
