@@ -26,6 +26,7 @@ interface MetricoolConfig {
   user_id: string;
   blog_id: string | null;
   is_active: boolean;
+  followers: number | null;
 }
 
 interface AccountMetric {
@@ -81,6 +82,7 @@ export const MetricoolAnalyticsSection = ({
   const [showConfig, setShowConfig] = useState(false);
   const [userId, setUserId] = useState("");
   const [blogId, setBlogId] = useState("");
+  const [followers, setFollowers] = useState("");
   
   // Store live data from Metricool API
   const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
@@ -177,13 +179,21 @@ export const MetricoolAnalyticsSection = ({
   // Save config mutation
   const saveConfigMutation = useMutation({
     mutationFn: async () => {
+      const followersValue = followers ? parseInt(followers, 10) : null;
+      const userIdValue = userId || config?.user_id;
+      
+      if (!userIdValue) {
+        throw new Error("User ID is required");
+      }
+      
       const { error } = await supabase
         .from("client_metricool_config")
         .upsert({
           client_id: clientId,
           platform: platform,
-          user_id: userId,
-          blog_id: blogId || null,
+          user_id: userIdValue,
+          blog_id: blogId || config?.blog_id || null,
+          followers: followersValue !== null && !isNaN(followersValue) ? followersValue : (config?.followers || null),
           is_active: true,
         }, { onConflict: "client_id,platform" });
 
@@ -338,6 +348,19 @@ export const MetricoolAnalyticsSection = ({
                 placeholder="Leave empty to auto-detect"
               />
             </div>
+            <div>
+              <Label htmlFor="initFollowers">Current Followers (Optional)</Label>
+              <Input
+                id="initFollowers"
+                type="number"
+                value={followers}
+                onChange={(e) => setFollowers(e.target.value)}
+                placeholder="Enter current follower count"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Metricool API doesn't provide TikTok follower counts. Enter manually for reporting.
+              </p>
+            </div>
             <Button
               onClick={() => saveConfigMutation.mutate()}
               disabled={!userId || saveConfigMutation.isPending}
@@ -398,6 +421,19 @@ export const MetricoolAnalyticsSection = ({
                 placeholder="Auto-detect"
               />
             </div>
+            <div>
+              <Label htmlFor="editFollowers">Followers (Manual Entry)</Label>
+              <Input
+                id="editFollowers"
+                type="number"
+                value={followers || (config.followers?.toString() ?? "")}
+                onChange={(e) => setFollowers(e.target.value)}
+                placeholder="Enter current follower count"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Metricool doesn't provide TikTok follower counts via API. Enter manually.
+              </p>
+            </div>
             <Button
               size="sm"
               onClick={() => saveConfigMutation.mutate()}
@@ -416,12 +452,15 @@ export const MetricoolAnalyticsSection = ({
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Users className="h-4 w-4" />
               <span className="text-sm">Followers</span>
+              {config?.followers && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0">Manual</Badge>
+              )}
             </div>
-            {metricsLoading ? (
+            {metricsLoading && configLoading ? (
               <Skeleton className="h-8 w-20" />
             ) : (
               <p className="text-2xl font-bold">
-                {formatNumber(accountMetrics?.followers)}
+                {formatNumber(config?.followers || accountMetrics?.followers || null)}
               </p>
             )}
         </CardContent>
