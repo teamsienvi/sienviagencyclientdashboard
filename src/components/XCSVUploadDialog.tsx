@@ -97,52 +97,58 @@ export const XCSVUploadDialog = ({
   };
 
   const parseXCSV = (csvText: string): XCSVRow[] => {
-    const lines = csvText.trim().split('\n');
+    // Handle different line endings (Windows, Mac, Unix)
+    const lines = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
     if (lines.length < 2) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    // Use parseCSVLine for headers too (handles quoted values)
+    const headers = parseCSVLine(lines[0]).map(h => 
+      h.toLowerCase().replace(/['"]/g, '').trim()
+    );
+    
+    console.log("Parsed headers:", headers);
     const rows: XCSVRow[] = [];
 
-    const headerMap: Record<string, keyof XCSVRow> = {
-      'link': 'link',
-      'url': 'url',
-      'title': 'title',
-      'post': 'title',
-      'content': 'title',
-      'text': 'title',
-      'date': 'date',
-      'posted': 'date',
-      'published': 'date',
-      'impressions': 'impressions',
-      'views': 'views',
-      'likes': 'likes',
-      'comments': 'comments',
-      'replies': 'replies',
-      'shares': 'shares',
-      'reposts': 'reposts',
-      'retweets': 'reposts',
-      'engagements': 'engagements',
+    // More flexible header matching - check if header contains the key
+    const findMappedKey = (header: string): keyof XCSVRow | null => {
+      const h = header.toLowerCase();
+      if (h.includes('link') || h.includes('url') || h.includes('permalink')) return 'link';
+      if (h.includes('title') || h.includes('post') || h.includes('content') || h.includes('text') || h.includes('tweet')) return 'title';
+      if (h.includes('date') || h.includes('time') || h.includes('posted') || h.includes('published')) return 'date';
+      if (h.includes('impression')) return 'impressions';
+      if (h.includes('view')) return 'views';
+      if (h.includes('like') || h.includes('favorite')) return 'likes';
+      if (h.includes('comment') || h.includes('repl')) return 'comments';
+      if (h.includes('share') || h.includes('repost') || h.includes('retweet')) return 'shares';
+      if (h.includes('engagement')) return 'engagements';
+      return null;
     };
 
     for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const values = parseCSVLine(line);
       if (values.length < 2) continue;
 
       const row: XCSVRow = {};
       headers.forEach((header, index) => {
-        const mappedKey = headerMap[header];
-        if (mappedKey && values[index]) {
+        const mappedKey = findMappedKey(header);
+        if (mappedKey && values[index] !== undefined && values[index] !== '') {
           const value = parseValue(values[index]);
           (row as any)[mappedKey] = value;
         }
       });
       
-      // Only add rows that have at least a link/url or title
-      if (row.link || row.url || row.title) {
+      console.log("Parsed row:", row);
+      
+      // Only add rows that have at least a link/url or title, or any numeric data
+      if (row.link || row.url || row.title || row.impressions || row.views || row.likes) {
         rows.push(row);
       }
     }
 
+    console.log("Total parsed rows:", rows.length);
     return rows;
   };
 
