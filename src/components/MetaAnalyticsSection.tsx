@@ -178,6 +178,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   // Sync details panel state
   const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
 
+  // Metricool config state for Instagram
+  const [metricoolConfig, setMetricoolConfig] = useState<{ user_id: string; blog_id: string | null } | null>(null);
+  const [syncingMetricool, setSyncingMetricool] = useState(false);
+
   // Get the most recent Monday (start of reporting week)
   const getMostRecentMonday = (fromDate: Date = new Date()) => {
     const date = new Date(fromDate);
@@ -314,6 +318,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     }
     setAgencyMapping(null);
     return null;
+  };
+
+  // Fetch Metricool config for Instagram
+  const fetchMetricoolConfig = async () => {
+    const { data } = await supabase
+      .from("client_metricool_config")
+      .select("user_id, blog_id")
+      .eq("client_id", clientId)
+      .eq("platform", "instagram")
+      .eq("is_active", true)
+      .maybeSingle();
+    
+    setMetricoolConfig(data);
+    return data;
   };
 
   const fetchInstagramProfile = async (accessToken: string, instagramBusinessId: string, pageId?: string | null) => {
@@ -589,10 +607,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const compStartDate = format(startOfDay(compStart), "yyyy-MM-dd");
       const compEndDate = format(endOfDay(compEnd), "yyyy-MM-dd");
 
-      // Fetch OAuth account, agency mapping, and platform data in parallel
-      const [oauth, agency, instagramData, facebookData] = await Promise.all([
+      // Fetch OAuth account, agency mapping, metricool config and platform data in parallel
+      const [oauth, agency, metricool, instagramData, facebookData] = await Promise.all([
         fetchOAuthAccount(),
         fetchAgencyMapping(),
+        fetchMetricoolConfig(),
         fetchPlatformData("instagram", startDate, endDate, compStartDate, compEndDate),
         fetchPlatformData("facebook", startDate, endDate, compStartDate, compEndDate),
       ]);
@@ -788,6 +807,46 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       fetchSyncLogs();
     } finally {
       setSyncing(false);
+      setSyncingContent(false);
+    }
+  };
+
+  // Sync Instagram via Metricool
+  const handleMetricoolSync = async () => {
+    if (!metricoolConfig) {
+      toast.error("No Metricool configuration found for Instagram");
+      return;
+    }
+
+    setSyncingMetricool(true);
+    setSyncingContent(true);
+    try {
+      const { start, end } = getDateRange();
+      const periodStart = format(startOfDay(start), "yyyy-MM-dd");
+      const periodEnd = format(endOfDay(end), "yyyy-MM-dd");
+
+      const { data, error } = await supabase.functions.invoke("sync-metricool-instagram", {
+        body: {
+          clientId,
+          periodStart,
+          periodEnd,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(`Synced ${data.recordsSynced} posts from Instagram via Metricool`);
+        await fetchData();
+        fetchSyncLogs();
+      } else {
+        toast.error(data?.error || "Failed to sync Instagram data from Metricool");
+      }
+    } catch (error: any) {
+      console.error("Metricool sync error:", error);
+      toast.error(error.message || "Failed to sync Instagram via Metricool");
+    } finally {
+      setSyncingMetricool(false);
       setSyncingContent(false);
     }
   };
@@ -1469,7 +1528,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <TabsTrigger 
               value="instagram" 
               className="flex items-center gap-2" 
-              disabled={!oauthAccount?.instagram_business_id && !agencyMapping?.ig_business_id}
+              disabled={!oauthAccount?.instagram_business_id && !agencyMapping?.ig_business_id && !metricoolConfig}
             >
               <Instagram className="h-4 w-4" /> Instagram
             </TabsTrigger>
@@ -1482,9 +1541,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             </TabsTrigger>
           </TabsList>
           
-          {/* Only show sync buttons for per-client OAuth (not agency model) */}
-          {oauthAccount?.access_token && (
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            {/* OAuth sync buttons for per-client OAuth (not agency model) */}
+            {oauthAccount?.access_token && (
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
@@ -1505,8 +1564,22 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   {syncing ? "Syncing..." : "Sync Now"}
                 </Button>
               </div>
-            </div>
-          )}
+            )}
+            
+            {/* Metricool sync button for Instagram */}
+            {activePlatform === "instagram" && metricoolConfig && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMetricoolSync}
+                disabled={syncingMetricool}
+                className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-200/50 hover:from-purple-500/20 hover:to-pink-500/20"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${syncingMetricool ? "animate-spin" : ""}`} />
+                {syncingMetricool ? "Syncing Metricool..." : "Sync via Metricool"}
+              </Button>
+            )}
+          </div>
           {/* Sync Details Panel */}
           {renderSyncDetailsPanel()}
         </div>
