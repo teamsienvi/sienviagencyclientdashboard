@@ -101,3 +101,6 @@ verify_jwt = false
 
 [functions.metricool-distribution]
 verify_jwt = false
+
+[functions.sync-metricool-instagram]
+verify_jwt = false
