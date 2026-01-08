@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -70,6 +71,7 @@ export const XCSVUploadDialog = ({
   onSuccess,
 }: XCSVUploadDialogProps) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -284,9 +286,15 @@ export const XCSVUploadDialog = ({
       queryClient.invalidateQueries({ queryKey: ["social-content-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["top-performing-posts"] });
       queryClient.invalidateQueries({ queryKey: ["client-social-metrics"] });
+      queryClient.invalidateQueries({ queryKey: ["x-analytics"] });
+      queryClient.invalidateQueries({ queryKey: ["client-x-content"] });
       
       setOpen(false);
       resetForm();
+      
+      // Navigate to X analytics page to see results
+      navigate(`/x-analytics/${clientId}`);
+      
       onSuccess?.();
     } catch (error) {
       console.error("Error uploading CSV:", error);
