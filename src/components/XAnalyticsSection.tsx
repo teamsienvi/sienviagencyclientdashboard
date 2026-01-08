@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,16 +60,37 @@ interface XContentMetrics {
 type DateRangePreset = "7d" | "30d" | "custom";
 
 const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => {
+  const [searchParams] = useSearchParams();
+  const didInitFromQuery = useRef(false);
+
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [accountMetrics, setAccountMetrics] = useState<XAccountMetrics | null>(null);
   const [prevMetrics, setPrevMetrics] = useState<XPrevMetrics | null>(null);
   const [content, setContent] = useState<(XContent & { metrics?: XContentMetrics })[]>([]);
   const [socialAccount, setSocialAccount] = useState<{ id: string; account_id: string } | null>(null);
-  
+
   // Date range state
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+
+  useEffect(() => {
+    if (didInitFromQuery.current) return;
+
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    if (start && end) {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+      if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+        setDateRangePreset("custom");
+        setCustomDateRange({ start: startDate, end: endDate });
+      }
+    }
+
+    didInitFromQuery.current = true;
+  }, [searchParams]);
 
   const getDateRange = () => {
     const today = new Date();

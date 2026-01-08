@@ -16,6 +16,7 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           url,
           title,
           social_content_metrics (
+            collected_at,
             views,
             reach,
             likes,
@@ -49,17 +50,21 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       const topInsightContent: TopInsightContent[] = content
         .filter((c) => c.social_content_metrics && c.social_content_metrics.length > 0)
         .map((c) => {
-          const metrics = c.social_content_metrics[0];
+          const latestMetric = [...c.social_content_metrics].sort(
+            (a: any, b: any) =>
+              new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+          )[0];
+
           return {
             id: c.id,
             post_url: c.url || "",
             platform: c.platform,
             published_at: c.published_at,
-            views: metrics.views || 0,
-            reach: metrics.reach || 0,
-            likes: metrics.likes || 0,
-            comments: metrics.comments || 0,
-            shares: metrics.shares || 0,
+            views: latestMetric?.views || 0,
+            reach: latestMetric?.reach || 0,
+            likes: latestMetric?.likes || 0,
+            comments: latestMetric?.comments || 0,
+            shares: latestMetric?.shares || 0,
             followers_at_post_time: platformFollowers[c.platform] || 0,
           };
         });
