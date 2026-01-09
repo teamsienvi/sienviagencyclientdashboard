@@ -2,11 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
 
-export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
+export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
   return useQuery({
     queryKey: ["top-performing-posts", clientId, limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
-      // Fetch content with metrics for this client
+      // Fetch content with metrics for this client across all platforms
       const { data: content, error: contentError } = await supabase
         .from("social_content")
         .select(`
@@ -19,14 +19,16 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
             collected_at,
             views,
             reach,
+            impressions,
             likes,
             comments,
-            shares
+            shares,
+            engagements
           )
         `)
         .eq("client_id", clientId)
         .order("published_at", { ascending: false })
-        .limit(100);
+        .limit(200);
 
       if (contentError) throw contentError;
       if (!content || content.length === 0) return [];
@@ -55,19 +57,25 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
               new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
           )[0];
 
+          // Use views or impressions (Instagram often uses impressions as views)
+          const viewsValue = latestMetric?.views || latestMetric?.impressions || 0;
+          const reachValue = latestMetric?.reach || 0;
+
           return {
             id: c.id,
             post_url: c.url || "",
             platform: c.platform,
             published_at: c.published_at,
-            views: latestMetric?.views || 0,
-            reach: latestMetric?.reach || 0,
+            views: viewsValue,
+            reach: reachValue > 0 ? reachValue : viewsValue, // Use reach, or fall back to views
             likes: latestMetric?.likes || 0,
             comments: latestMetric?.comments || 0,
             shares: latestMetric?.shares || 0,
             followers_at_post_time: platformFollowers[c.platform] || 0,
           };
-        });
+        })
+        // Filter out posts with no views/impressions
+        .filter((c) => c.views > 0);
 
       // Rank using Sienvi Performance Index and return top posts
       // rankTopInsights now sorts by total_score DESC, then views DESC
