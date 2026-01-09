@@ -258,22 +258,22 @@ serve(async (req) => {
       console.error("Posts fetch failed:", postsResponse.status, errorText);
     }
 
-    // Fetch followers from aggregation endpoint
+    // Fetch followers from distribution endpoint (more reliable)
     let followers: number | null = null;
+    let newFollowers: number | null = null;
     try {
-      const followersUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/aggregation`);
-      followersUrl.searchParams.set("from", startDate);
-      followersUrl.searchParams.set("to", endDate);
-      followersUrl.searchParams.set("metric", "followers");
-      followersUrl.searchParams.set("network", "instagram");
-      followersUrl.searchParams.set("userId", userId);
+      const distUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/distribution`);
+      distUrl.searchParams.set("from", startDate);
+      distUrl.searchParams.set("to", endDate);
+      distUrl.searchParams.set("network", "instagram");
+      distUrl.searchParams.set("userId", userId);
       if (blogId) {
-        followersUrl.searchParams.set("blogId", blogId);
+        distUrl.searchParams.set("blogId", blogId);
       }
 
-      console.log("Fetching Instagram followers:", followersUrl.toString());
+      console.log("Fetching Instagram distribution:", distUrl.toString());
 
-      const followersResponse = await fetch(followersUrl.toString(), {
+      const distResponse = await fetch(distUrl.toString(), {
         method: "GET",
         headers: {
           "x-mc-auth": METRICOOL_AUTH,
@@ -281,28 +281,82 @@ serve(async (req) => {
         },
       });
 
-      if (followersResponse.ok) {
-        const followersData = await followersResponse.json();
-        console.log("Followers response:", JSON.stringify(followersData).substring(0, 500));
+      if (distResponse.ok) {
+        const distData = await distResponse.json();
+        console.log("Distribution response:", JSON.stringify(distData).substring(0, 1000));
         
-        if (typeof followersData === 'number') {
-          followers = followersData;
-        } else if (followersData.value !== undefined) {
-          followers = followersData.value;
-        } else if (followersData.followers !== undefined) {
-          followers = followersData.followers;
-        } else if (followersData.total !== undefined) {
-          followers = followersData.total;
+        // Distribution endpoint returns array of daily data with followers
+        if (Array.isArray(distData) && distData.length > 0) {
+          // Get the last day's followers count
+          const lastDay = distData[distData.length - 1];
+          if (lastDay && typeof lastDay.followers === 'number') {
+            followers = lastDay.followers;
+          }
+          
+          // Calculate new followers from the period
+          const firstDay = distData[0];
+          if (firstDay && lastDay && typeof firstDay.followers === 'number' && typeof lastDay.followers === 'number') {
+            newFollowers = lastDay.followers - firstDay.followers;
+          }
         }
       }
     } catch (e) {
-      console.error("Error fetching followers:", e);
+      console.error("Error fetching distribution:", e);
     }
 
-    // Calculate engagement rate
-    const avgEngagement = rows.length > 0 
-      ? rows.reduce((sum, p) => sum + p.engagement, 0) / rows.length 
-      : 0;
+    // Fallback: try aggregation endpoint if distribution didn't work
+    if (followers === null) {
+      try {
+        const followersUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/aggregation`);
+        followersUrl.searchParams.set("from", startDate);
+        followersUrl.searchParams.set("to", endDate);
+        followersUrl.searchParams.set("metric", "followers");
+        followersUrl.searchParams.set("network", "instagram");
+        followersUrl.searchParams.set("userId", userId);
+        if (blogId) {
+          followersUrl.searchParams.set("blogId", blogId);
+        }
+
+        console.log("Fetching Instagram followers (fallback):", followersUrl.toString());
+
+        const followersResponse = await fetch(followersUrl.toString(), {
+          method: "GET",
+          headers: {
+            "x-mc-auth": METRICOOL_AUTH,
+            "accept": "application/json",
+          },
+        });
+
+        if (followersResponse.ok) {
+          const followersData = await followersResponse.json();
+          console.log("Followers response:", JSON.stringify(followersData).substring(0, 500));
+          
+          if (typeof followersData === 'number') {
+            followers = followersData;
+          } else if (followersData.value !== undefined) {
+            followers = followersData.value;
+          } else if (followersData.followers !== undefined) {
+            followers = followersData.followers;
+          } else if (followersData.total !== undefined) {
+            followers = followersData.total;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching followers:", e);
+      }
+    }
+
+    // Calculate engagement rate from post data
+    let engagementRate: number | null = null;
+    if (rows.length > 0) {
+      const totalReach = rows.reduce((sum, p) => sum + p.reach, 0);
+      const totalEngagements = rows.reduce((sum, p) => sum + p.likes + p.comments + p.shares + p.saves, 0);
+      if (totalReach > 0) {
+        engagementRate = (totalEngagements / totalReach) * 100;
+      } else if (followers && followers > 0) {
+        engagementRate = (totalEngagements / (followers * rows.length)) * 100;
+      }
+    }
 
     // Save account-level metrics
     if (rows.length > 0 || followers !== null) {
@@ -314,7 +368,8 @@ serve(async (req) => {
           period_start: startDate,
           period_end: endDate,
           followers: followers,
-          engagement_rate: avgEngagement,
+          new_followers: newFollowers,
+          engagement_rate: engagementRate,
           total_content: rows.length,
           collected_at: new Date().toISOString(),
         }, { onConflict: "client_id,platform,period_start,period_end" });
@@ -339,7 +394,7 @@ serve(async (req) => {
         success: true, 
         recordsSynced: savedCount,
         followers,
-        engagement: avgEngagement,
+        engagement: engagementRate,
         postsCount: rows.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
