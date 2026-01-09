@@ -290,6 +290,19 @@ serve(async (req) => {
           continue;
         }
 
+        // Log post metrics before saving
+        if (savedCount < 3) {
+          console.log(`Post ${savedCount + 1} metrics:`, {
+            reach: post.reach,
+            impressions: post.impressions,
+            likes: post.likes,
+            comments: post.comments,
+            saves: post.saves,
+            engagement: post.engagement,
+            interactions: post.interactions,
+          });
+        }
+
         const { error: metricsError } = await supabase
           .from("social_content_metrics")
           .upsert({
@@ -299,10 +312,11 @@ serve(async (req) => {
             period_end: endDate,
             reach: post.reach,
             impressions: post.impressions,
+            views: post.impressions, // Views = impressions for Instagram
             likes: post.likes,
             comments: post.comments,
             shares: post.shares,
-            engagements: post.interactions, // Total interactions from Metricool
+            engagements: post.interactions || (post.likes + post.comments + post.shares + post.saves),
             collected_at: new Date().toISOString(),
           }, { onConflict: "social_content_id,period_start,period_end" });
 
@@ -422,24 +436,38 @@ serve(async (req) => {
       console.log("Using followers from config:", followers);
     }
 
-    // Calculate engagement rate from interactions/reach (Metricool engagement field is often empty)
+    // Calculate engagement rate - use Metricool's engagement field if available, else calculate
     let engagementRate: number | null = null;
     if (rows.length > 0) {
-      const totalInteractions = rows.reduce((sum, p) => sum + p.interactions, 0);
-      const totalReach = rows.reduce((sum, p) => sum + p.reach, 0);
-      
-      if (totalReach > 0) {
-        engagementRate = (totalInteractions / totalReach) * 100;
-      } else if (followers && followers > 0) {
-        // Fallback: use followers as base
-        engagementRate = (totalInteractions / followers) * 100;
+      // First check if Metricool already provides engagement percentages
+      const postsWithEngagement = rows.filter(p => p.engagement > 0);
+      if (postsWithEngagement.length > 0) {
+        // Average the engagement rates from Metricool (these are already percentages)
+        const avgEngagement = postsWithEngagement.reduce((sum, p) => sum + p.engagement, 0) / postsWithEngagement.length;
+        // Metricool engagement is often scaled (e.g., 1000 = 10.00%), so normalize
+        engagementRate = avgEngagement > 100 ? avgEngagement / 100 : avgEngagement;
+      } else {
+        // Calculate from interactions
+        const totalInteractions = rows.reduce((sum, p) => sum + (p.interactions || p.likes + p.comments + p.shares + p.saves), 0);
+        const totalReach = rows.reduce((sum, p) => sum + p.reach, 0);
+        
+        if (totalReach > 0) {
+          engagementRate = (totalInteractions / totalReach) * 100;
+        } else if (followers && followers > 0) {
+          // Fallback: use followers as base
+          engagementRate = (totalInteractions / followers) * 100;
+        }
       }
       
-      // Round to 2 decimal places
+      // Round to 2 decimal places and cap at reasonable max
       if (engagementRate !== null) {
         engagementRate = Math.round(engagementRate * 100) / 100;
+        // Cap at 100% max for display
+        if (engagementRate > 100) engagementRate = 100;
       }
     }
+    
+    console.log("Calculated engagement rate:", engagementRate, "from", rows.length, "posts");
 
     // Save account-level metrics
     if (rows.length > 0 || followers !== null) {
