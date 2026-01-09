@@ -23,41 +23,56 @@ interface InstagramPost {
 }
 
 function parseCSV(csvText: string): InstagramPost[] {
-  const lines = csvText.trim().split("\n");
-  if (lines.length < 2) return [];
+  // Handle multi-line quoted fields by joining lines within quotes
+  const normalizedText = csvText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  
+  // Split into records properly handling quoted fields with newlines
+  const records: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  
+  for (let i = 0; i < normalizedText.length; i++) {
+    const char = normalizedText[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      current += char;
+    } else if (char === "\n" && !inQuotes) {
+      if (current.trim()) {
+        records.push(current);
+      }
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) {
+    records.push(current);
+  }
+  
+  if (records.length < 2) return [];
 
-  const headerLine = lines[0].replace(/^\uFEFF/, "").trim();
-  const headers = headerLine.split(",").map((h) => h.trim().toLowerCase());
+  const headerLine = records[0].replace(/^\uFEFF/, "").trim();
+  const headers = parseCSVLine(headerLine).map((h) => h.trim().toLowerCase());
   
   console.log("CSV Headers:", headers);
 
   const rows: InstagramPost[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
+  for (let i = 1; i < records.length; i++) {
+    const line = records[i].trim();
     if (!line) continue;
 
-    const values: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (let j = 0; j < line.length; j++) {
-      const char = line[j];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === "," && !inQuotes) {
-        values.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-    values.push(current.trim());
-
+    const values = parseCSVLine(line);
+    
     const row: Record<string, string> = {};
     headers.forEach((header, idx) => {
       row[header] = values[idx] || "";
     });
+
+    // Log first row for debugging
+    if (i === 1) {
+      console.log("First row parsed values:", JSON.stringify(row).substring(0, 500));
+    }
 
     // Map CSV columns: id, type, image, url, content, timestamp, views, reach (organic), likes, saved, comments, interactions, engagement
     const post: InstagramPost = {
@@ -76,10 +91,36 @@ function parseCSV(csvText: string): InstagramPost[] {
       image: row["image"] || null,
     };
 
+    // Log first post metrics for debugging
+    if (i === 1) {
+      console.log("First post metrics:", { reach: post.reach, impressions: post.impressions, likes: post.likes, comments: post.comments });
+    }
+
     rows.push(post);
   }
 
   return rows;
+}
+
+function parseCSVLine(line: string): string[] {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let j = 0; j < line.length; j++) {
+    const char = line[j];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  values.push(current.trim());
+  
+  return values;
 }
 
 function parseMetricoolDate(dateStr: string | null): string {
@@ -127,10 +168,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch config from database
+    // Fetch config from database (including followers field as fallback)
     const { data: config, error: configError } = await supabase
       .from("client_metricool_config")
-      .select("user_id, blog_id")
+      .select("user_id, blog_id, followers")
       .eq("client_id", clientId)
       .eq("platform", "instagram")
       .eq("is_active", true)
@@ -258,22 +299,25 @@ serve(async (req) => {
       console.error("Posts fetch failed:", postsResponse.status, errorText);
     }
 
-    // Fetch followers from distribution endpoint (more reliable)
+    // Fetch followers from timelines endpoint (most reliable for follower counts)
     let followers: number | null = null;
     let newFollowers: number | null = null;
     try {
-      const distUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/distribution`);
-      distUrl.searchParams.set("from", startDate);
-      distUrl.searchParams.set("to", endDate);
-      distUrl.searchParams.set("network", "instagram");
-      distUrl.searchParams.set("userId", userId);
+      const timelinesUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/timelines`);
+      timelinesUrl.searchParams.set("from", startDate);
+      timelinesUrl.searchParams.set("to", endDate);
+      timelinesUrl.searchParams.set("metric", "followers_count");
+      timelinesUrl.searchParams.set("network", "instagram");
+      timelinesUrl.searchParams.set("subject", "account");
+      timelinesUrl.searchParams.set("timezone", "UTC");
+      timelinesUrl.searchParams.set("userId", userId);
       if (blogId) {
-        distUrl.searchParams.set("blogId", blogId);
+        timelinesUrl.searchParams.set("blogId", blogId);
       }
 
-      console.log("Fetching Instagram distribution:", distUrl.toString());
+      console.log("Fetching Instagram timelines (followers):", timelinesUrl.toString());
 
-      const distResponse = await fetch(distUrl.toString(), {
+      const timelinesResponse = await fetch(timelinesUrl.toString(), {
         method: "GET",
         headers: {
           "x-mc-auth": METRICOOL_AUTH,
@@ -281,27 +325,34 @@ serve(async (req) => {
         },
       });
 
-      if (distResponse.ok) {
-        const distData = await distResponse.json();
-        console.log("Distribution response:", JSON.stringify(distData).substring(0, 1000));
+      if (timelinesResponse.ok) {
+        const timelinesData = await timelinesResponse.json();
+        console.log("Timelines response:", JSON.stringify(timelinesData).substring(0, 1000));
         
-        // Distribution endpoint returns array of daily data with followers
-        if (Array.isArray(distData) && distData.length > 0) {
+        // Timelines endpoint returns array of data points with date and value
+        if (Array.isArray(timelinesData) && timelinesData.length > 0) {
           // Get the last day's followers count
-          const lastDay = distData[distData.length - 1];
-          if (lastDay && typeof lastDay.followers === 'number') {
-            followers = lastDay.followers;
+          const lastPoint = timelinesData[timelinesData.length - 1];
+          const firstPoint = timelinesData[0];
+          
+          if (lastPoint && typeof lastPoint.value === 'number') {
+            followers = lastPoint.value;
+          } else if (lastPoint && typeof lastPoint === 'number') {
+            followers = lastPoint;
           }
           
-          // Calculate new followers from the period
-          const firstDay = distData[0];
-          if (firstDay && lastDay && typeof firstDay.followers === 'number' && typeof lastDay.followers === 'number') {
-            newFollowers = lastDay.followers - firstDay.followers;
+          // Calculate new followers
+          if (firstPoint && lastPoint) {
+            const firstVal = typeof firstPoint.value === 'number' ? firstPoint.value : (typeof firstPoint === 'number' ? firstPoint : 0);
+            const lastVal = typeof lastPoint.value === 'number' ? lastPoint.value : (typeof lastPoint === 'number' ? lastPoint : 0);
+            newFollowers = lastVal - firstVal;
           }
         }
+      } else {
+        console.log("Timelines response not ok:", timelinesResponse.status);
       }
     } catch (e) {
-      console.error("Error fetching distribution:", e);
+      console.error("Error fetching timelines:", e);
     }
 
     // Fallback: try aggregation endpoint if distribution didn't work
@@ -344,6 +395,12 @@ serve(async (req) => {
       } catch (e) {
         console.error("Error fetching followers:", e);
       }
+    }
+
+    // Use followers from config as ultimate fallback
+    if (followers === null && config.followers) {
+      followers = config.followers;
+      console.log("Using followers from config:", followers);
     }
 
     // Calculate engagement rate from post data
