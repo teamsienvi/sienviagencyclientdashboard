@@ -16,7 +16,8 @@ interface InstagramPost {
   comments: number;
   shares: number;
   saves: number;
-  engagement: number;
+  interactions: number;
+  engagement: number; // This is already a percentage from Metricool
   url: string | null;
   link: string | null;
   image: string | null;
@@ -64,14 +65,30 @@ function parseCSV(csvText: string): InstagramPost[] {
 
     const values = parseCSVLine(line);
     
+    // Log first row raw data for debugging
+    if (i === 1) {
+      console.log("First row value count:", values.length, "Expected:", headers.length);
+      console.log("First row line length:", line.length);
+      // Log the last few values which should contain the metrics
+      console.log("First row last 7 values:", JSON.stringify(values.slice(-7)));
+    }
+    
     const row: Record<string, string> = {};
     headers.forEach((header, idx) => {
       row[header] = values[idx] || "";
     });
 
-    // Log first row for debugging
+    // Log first row for debugging - show numeric fields specifically
     if (i === 1) {
-      console.log("First row parsed values:", JSON.stringify(row).substring(0, 500));
+      console.log("First row numeric fields:", JSON.stringify({
+        views: row["views"],
+        "reach (organic)": row["reach (organic)"],
+        likes: row["likes"],
+        saved: row["saved"],
+        comments: row["comments"],
+        interactions: row["interactions"],
+        engagement: row["engagement"],
+      }));
     }
 
     // Map CSV columns: id, type, image, url, content, timestamp, views, reach (organic), likes, saved, comments, interactions, engagement
@@ -85,7 +102,8 @@ function parseCSV(csvText: string): InstagramPost[] {
       comments: parseInt(row["comments"] || "0", 10) || 0,
       shares: parseInt(row["shares"] || "0", 10) || 0,
       saves: parseInt(row["saved"] || row["saves"] || "0", 10) || 0,
-      engagement: parseFloat(row["engagement"] || row["engageme"] || "0") || 0,
+      interactions: parseInt(row["interactions"] || "0", 10) || 0,
+      engagement: parseFloat(row["engagement"] || "0") || 0,
       url: row["url"] || null,
       link: row["link"] || null,
       image: row["image"] || null,
@@ -93,7 +111,7 @@ function parseCSV(csvText: string): InstagramPost[] {
 
     // Log first post metrics for debugging
     if (i === 1) {
-      console.log("First post metrics:", { reach: post.reach, impressions: post.impressions, likes: post.likes, comments: post.comments });
+      console.log("First post metrics:", { reach: post.reach, impressions: post.impressions, likes: post.likes, comments: post.comments, engagement: post.engagement });
     }
 
     rows.push(post);
@@ -284,6 +302,7 @@ serve(async (req) => {
             likes: post.likes,
             comments: post.comments,
             shares: post.shares,
+            engagements: post.interactions, // Total interactions from Metricool
             collected_at: new Date().toISOString(),
           }, { onConflict: "social_content_id,period_start,period_end" });
 
@@ -403,15 +422,22 @@ serve(async (req) => {
       console.log("Using followers from config:", followers);
     }
 
-    // Calculate engagement rate from post data
+    // Calculate engagement rate from interactions/reach (Metricool engagement field is often empty)
     let engagementRate: number | null = null;
     if (rows.length > 0) {
+      const totalInteractions = rows.reduce((sum, p) => sum + p.interactions, 0);
       const totalReach = rows.reduce((sum, p) => sum + p.reach, 0);
-      const totalEngagements = rows.reduce((sum, p) => sum + p.likes + p.comments + p.shares + p.saves, 0);
+      
       if (totalReach > 0) {
-        engagementRate = (totalEngagements / totalReach) * 100;
+        engagementRate = (totalInteractions / totalReach) * 100;
       } else if (followers && followers > 0) {
-        engagementRate = (totalEngagements / (followers * rows.length)) * 100;
+        // Fallback: use followers as base
+        engagementRate = (totalInteractions / followers) * 100;
+      }
+      
+      // Round to 2 decimal places
+      if (engagementRate !== null) {
+        engagementRate = Math.round(engagementRate * 100) / 100;
       }
     }
 
