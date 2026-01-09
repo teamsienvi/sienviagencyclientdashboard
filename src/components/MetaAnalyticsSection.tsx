@@ -61,10 +61,12 @@ interface MetaContentMetrics {
   social_content_id: string;
   reach: number | null;
   impressions: number | null;
+  views: number | null;
   likes: number | null;
   comments: number | null;
   shares: number | null;
   interactions: number | null;
+  engagements: number | null;
 }
 
 interface OAuthAccount {
@@ -514,7 +516,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .from("social_content")
       .select(`
         id, content_id, title, url, published_at, content_type,
-        social_content_metrics(social_content_id, reach, impressions, likes, comments, shares, interactions, collected_at, period_start, period_end)
+        social_content_metrics(social_content_id, reach, impressions, views, likes, comments, shares, engagements, collected_at, period_start, period_end)
       `)
       .eq("client_id", clientId)
       .eq("platform", platform)
@@ -531,6 +533,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         };
       })
       .filter((item: any) => item.metrics !== null) // Only show content with metrics in the period
+      // Sort by engagement (most engaging first), then by date
+      .sort((a: any, b: any) => {
+        const engA = (a.metrics?.engagements || 0) + (a.metrics?.likes || 0) + (a.metrics?.comments || 0);
+        const engB = (b.metrics?.engagements || 0) + (b.metrics?.likes || 0) + (b.metrics?.comments || 0);
+        if (engB !== engA) return engB - engA;
+        return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
+      })
       .slice(0, 50); // Limit to 50 items
 
     return { account: accountData, metrics: metricsData, prevMetrics: prevMetricsData, content: contentWithMetrics };
@@ -1103,6 +1112,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <TableHead>
                   <div className="flex items-center gap-1">
                     <Eye className="h-3 w-3" />
+                    Views
+                  </div>
+                </TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-1">
+                    <Users className="h-3 w-3" />
                     Reach
                   </div>
                 </TableHead>
@@ -1124,12 +1139,18 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     Shares
                   </div>
                 </TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-1">
+                    <TrendingUp className="h-3 w-3" />
+                    Engagement
+                  </div>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {content.map((post) => (
                 <TableRow key={post.id}>
-                  <TableCell className="max-w-[300px]">
+                  <TableCell className="max-w-[250px]">
                     {post.url ? (
                       <a
                         href={post.url}
@@ -1138,15 +1159,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                         className="text-primary hover:underline flex items-center gap-1"
                       >
                         <span className="truncate">
-                          {post.title?.substring(0, 50) || "View Post"}
-                          {post.title && post.title.length > 50 ? "..." : ""}
+                          {post.title?.substring(0, 40) || "View Post"}
+                          {post.title && post.title.length > 40 ? "..." : ""}
                         </span>
                         <ExternalLink className="h-3 w-3 flex-shrink-0" />
                       </a>
                     ) : (
                       <span className="text-muted-foreground truncate">
-                        {post.title?.substring(0, 50) || "—"}
-                        {post.title && post.title.length > 50 ? "..." : ""}
+                        {post.title?.substring(0, 40) || "—"}
+                        {post.title && post.title.length > 40 ? "..." : ""}
                       </span>
                     )}
                   </TableCell>
@@ -1155,7 +1176,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                       {getContentTypeIcon(post.content_type)}
                     </span>
                   </TableCell>
-                  <TableCell>{formatDate(post.published_at)}</TableCell>
+                  <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const views = post.metrics?.views || post.metrics?.impressions;
+                      return views ? views.toLocaleString() : "—";
+                    })()}
+                  </TableCell>
                   <TableCell>
                     {(() => {
                       const reach = post.metrics?.reach;
@@ -1164,10 +1191,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                       const shares = post.metrics?.shares || 0;
                       const hasEngagement = likes > 0 || comments > 0 || shares > 0;
                       
-                      // If reach is 0 or null but has engagement, show N/A with tooltip
                       if ((reach === 0 || reach == null) && hasEngagement) {
                         return (
-                          <span className="text-muted-foreground cursor-help" title="Reach unavailable - insights not returned by Meta API">
+                          <span className="text-muted-foreground cursor-help" title="Reach unavailable">
                             N/A
                           </span>
                         );
@@ -1178,6 +1204,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
                   <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
                   <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const engagements = post.metrics?.engagements || 0;
+                      return engagements > 0 ? engagements.toLocaleString() : "—";
+                    })()}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
