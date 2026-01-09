@@ -251,11 +251,8 @@ export const rankTopInsights = (
     };
   });
 
-  // Sort by total_score DESC, then views DESC
+  // Sort by views DESC (highest views first across all platforms)
   rankedContent.sort((a, b) => {
-    if (b.total_score !== a.total_score) {
-      return b.total_score - a.total_score;
-    }
     return b.views - a.views;
   });
 

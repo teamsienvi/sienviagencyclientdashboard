@@ -86,7 +86,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
           <TrendingUp className="h-5 w-5" />
           Top Performing Posts
         </CardTitle>
-        <CardDescription>Ranked by Sienvi Performance Index from live analytics</CardDescription>
+        <CardDescription>Ranked by highest views across all platforms</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
