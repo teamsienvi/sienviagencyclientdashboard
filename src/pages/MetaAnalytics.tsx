@@ -2,6 +2,8 @@ import { useParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ArrowLeft } from "lucide-react";
 import MetaAnalyticsSection from "@/components/MetaAnalyticsSection";
+import { WeeklyComparisonCard, WeeklyComparisonSkeleton } from "@/components/WeeklyComparisonCard";
+import { useWeeklyComparison } from "@/hooks/useWeeklyComparison";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +18,10 @@ const MetaAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const { data: weeklyComparisons, isLoading: weeklyLoading } = useWeeklyComparison(
+    clientId || ""
+  );
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -63,6 +69,10 @@ const MetaAnalytics = () => {
     );
   }
 
+  // Filter for Meta platforms
+  const instagramComparison = weeklyComparisons?.find(c => c.platform === "instagram");
+  const facebookComparison = weeklyComparisons?.find(c => c.platform === "facebook");
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -87,6 +97,21 @@ const MetaAnalytics = () => {
             <h1 className="text-3xl font-bold text-foreground">{client.name}</h1>
             <p className="text-muted-foreground">Meta Analytics (Instagram & Facebook)</p>
           </div>
+        </div>
+
+        {/* Weekly Comparison Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          {weeklyLoading ? (
+            <>
+              <WeeklyComparisonSkeleton />
+              <WeeklyComparisonSkeleton />
+            </>
+          ) : (
+            <>
+              {instagramComparison && <WeeklyComparisonCard comparison={instagramComparison} />}
+              {facebookComparison && <WeeklyComparisonCard comparison={facebookComparison} />}
+            </>
+          )}
         </div>
         
         <MetaAnalyticsSection 

@@ -2,6 +2,8 @@ import { useParams, Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ArrowLeft, Music2 } from "lucide-react";
 import { MetricoolAnalyticsSection } from "@/components/MetricoolAnalyticsSection";
+import { WeeklyComparisonCard, WeeklyComparisonSkeleton } from "@/components/WeeklyComparisonCard";
+import { useWeeklyComparison } from "@/hooks/useWeeklyComparison";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +18,11 @@ const TikTokMetricoolAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const { data: weeklyComparisons, isLoading: weeklyLoading } = useWeeklyComparison(
+    clientId || "",
+    "tiktok"
+  );
 
   useEffect(() => {
     const fetchClient = async () => {
@@ -63,6 +70,8 @@ const TikTokMetricoolAnalytics = () => {
     );
   }
 
+  const tiktokComparison = weeklyComparisons?.find(c => c.platform === "tiktok");
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -87,6 +96,15 @@ const TikTokMetricoolAnalytics = () => {
             <h1 className="text-3xl font-bold text-foreground">{client.name}</h1>
             <p className="text-muted-foreground">TikTok Analytics (via Metricool)</p>
           </div>
+        </div>
+
+        {/* Weekly Comparison Card */}
+        <div className="mb-6">
+          {weeklyLoading ? (
+            <WeeklyComparisonSkeleton />
+          ) : tiktokComparison ? (
+            <WeeklyComparisonCard comparison={tiktokComparison} />
+          ) : null}
         </div>
         
         <MetricoolAnalyticsSection 

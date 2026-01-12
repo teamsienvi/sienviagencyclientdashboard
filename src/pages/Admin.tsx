@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ClientManagement } from "@/components/ClientManagement";
+import { ClientUserManagement } from "@/components/ClientUserManagement";
 import { AuthForm } from "@/components/AuthForm";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogOut, Shield, Facebook, Youtube, ArrowRight } from "lucide-react";
+import { LogOut, Shield, Facebook, Youtube, ArrowRight, Users } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Admin = () => {
   const { user, isAdmin, isLoading, signOut, isAuthenticated } = useAuth();
@@ -107,7 +109,22 @@ const Admin = () => {
           </CardContent>
         </Card>
         
-        <ClientManagement />
+        {/* Main Content Tabs */}
+        <Tabs defaultValue="clients" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="clients">Clients</TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="h-4 w-4" />
+              User Access
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="clients">
+            <ClientManagement />
+          </TabsContent>
+          <TabsContent value="users">
+            <ClientUserManagement />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
