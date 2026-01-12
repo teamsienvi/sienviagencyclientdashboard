@@ -129,6 +129,89 @@ const WebAnalytics = () => {
     toast.success("Tracking script copied to clipboard!");
   };
 
+  // Copy the universal tracking prompt for Lovable sites
+  const copyUniversalTrackingPrompt = () => {
+    const prompt = `Add web analytics tracking to this site. Install the tracking script that sends page views to our analytics backend.
+
+Add this tracking code to the index.html file inside the <head> tag:
+
+\`\`\`html
+<!-- Web Analytics Tracking -->
+<script>
+(function() {
+  const CLIENT_ID = "${clientId}";
+  const ANALYTICS_ENDPOINT = "${getTrackingEndpoint()}";
+  
+  // Generate or retrieve visitor ID
+  function getVisitorId() {
+    let visitorId = localStorage.getItem('_analytics_visitor_id');
+    if (!visitorId) {
+      visitorId = 'v_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+      localStorage.setItem('_analytics_visitor_id', visitorId);
+    }
+    return visitorId;
+  }
+  
+  // Get UTM parameters
+  function getUTMParams() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      utmSource: params.get('utm_source') || '',
+      utmMedium: params.get('utm_medium') || '',
+      utmCampaign: params.get('utm_campaign') || ''
+    };
+  }
+  
+  // Track page view
+  function trackPageView() {
+    const utm = getUTMParams();
+    fetch(ANALYTICS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        clientId: CLIENT_ID,
+        visitorId: getVisitorId(),
+        pageUrl: window.location.pathname + window.location.search,
+        pageTitle: document.title,
+        referrer: document.referrer,
+        utmSource: utm.utmSource,
+        utmMedium: utm.utmMedium,
+        utmCampaign: utm.utmCampaign
+      })
+    }).catch(function(err) { console.log('Analytics error:', err); });
+  }
+  
+  // Track on page load
+  if (document.readyState === 'complete') {
+    trackPageView();
+  } else {
+    window.addEventListener('load', trackPageView);
+  }
+  
+  // Track on SPA navigation (for React Router)
+  let lastPath = window.location.pathname;
+  const observer = new MutationObserver(function() {
+    if (window.location.pathname !== lastPath) {
+      lastPath = window.location.pathname;
+      trackPageView();
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+})();
+</script>
+\`\`\`
+
+This script will:
+1. Generate a unique visitor ID stored in localStorage
+2. Track page views including page URL, title, and referrer
+3. Capture UTM parameters for campaign tracking
+4. Work with React Router for SPA navigation
+5. Send data to our centralized analytics endpoint`;
+
+    navigator.clipboard.writeText(prompt);
+    toast.success("Universal tracking prompt copied! Paste this in your client's Lovable project.");
+  };
+
   // Check for error state from hook
   const errorType = analyticsData?.errorType;
   const errorDetails = analyticsData?.errorDetails;
@@ -227,10 +310,16 @@ const WebAnalytics = () => {
     }
 
     // Fallback: Generate synthetic daily data from totals
-    const days = dateRange === "30d" ? 30 : 7;
+    // For "all" time range, show last 30 days of synthetic data
+    const days = dateRange === "30d" ? 30 : dateRange === "all" ? 30 : 7;
     const totalVisitors = normalizedAnalytics?.visitors || 0;
     const totalPageViews = normalizedAnalytics?.pageViews || 0;
     const avgBounceRate = normalizedAnalytics?.bounceRate || 45;
+    
+    // If no real data, return empty array
+    if (totalVisitors === 0 && totalPageViews === 0) {
+      return [];
+    }
     
     const weights = Array.from({ length: days }, (_, i) => {
       const date = subDays(new Date(), days - 1 - i);
@@ -414,8 +503,28 @@ const WebAnalytics = () => {
                               )}
                               {errorType === 'no_data' && clientId && (
                                 <div className="mt-4 p-4 bg-muted rounded-lg text-left max-w-xl w-full">
+                                  {/* Primary action: Copy Lovable Prompt */}
+                                  <div className="mb-4 p-3 bg-primary/10 rounded-lg border border-primary/20">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <p className="text-sm font-medium text-primary">For Lovable Sites</p>
+                                      <Button
+                                        variant="default"
+                                        size="sm"
+                                        onClick={copyUniversalTrackingPrompt}
+                                        className="h-7 px-3"
+                                      >
+                                        <Copy className="h-3 w-3 mr-1" />
+                                        Copy Lovable Prompt
+                                      </Button>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      Copy this prompt and paste it directly into your client's Lovable project to install analytics tracking automatically.
+                                    </p>
+                                  </div>
+
+                                  {/* Alternative: Manual script */}
                                   <div className="flex items-center justify-between mb-3">
-                                    <p className="text-sm font-medium">Tracking Script</p>
+                                    <p className="text-sm font-medium">Manual Script (Non-Lovable Sites)</p>
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -430,7 +539,7 @@ const WebAnalytics = () => {
                                     {`<script src="${getTrackingEndpoint()}" data-client-id="${clientId}"></script>`}
                                   </code>
                                   <p className="text-xs text-muted-foreground mt-2">
-                                    Add this script to your website's HTML header to start tracking visitors.
+                                    For non-Lovable sites, add this script to your website's HTML header.
                                   </p>
                                   
                                   {/* Test Tracking Button */}
@@ -471,7 +580,7 @@ const WebAnalytics = () => {
                                   <div className="mt-4 text-xs text-muted-foreground space-y-1">
                                     <p className="font-medium text-foreground">Troubleshooting:</p>
                                     <ul className="list-disc list-inside space-y-1 ml-1">
-                                      <li>Install the script in your website's global header</li>
+                                      <li>Use the "Copy Lovable Prompt" button for client Lovable sites</li>
                                       <li>Verify the client ID matches this client</li>
                                       <li>Disable ad blockers which may block tracking</li>
                                       <li>Check browser console for blocked requests</li>
@@ -613,234 +722,271 @@ const WebAnalytics = () => {
                 </TabsContent>
 
                 <TabsContent value="traffic" className="space-y-6">
-                  {/* Sessions Bar Chart */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Daily Sessions</CardTitle>
-                      <CardDescription>
-                        Number of sessions per day
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={dailyData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                              dataKey="date" 
-                              stroke="hsl(var(--muted-foreground))"
-                              fontSize={12}
-                            />
-                            <YAxis 
-                              stroke="hsl(var(--muted-foreground))"
-                              fontSize={12}
-                            />
-                            <Tooltip 
-                              contentStyle={{
-                                backgroundColor: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "8px",
-                              }}
-                            />
-                            <Bar 
-                              dataKey="sessions" 
-                              fill="hsl(var(--primary))"
-                              radius={[4, 4, 0, 0]}
-                              name="Sessions"
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
+                  {isLoadingAnalytics ? (
+                    <Card>
+                      <CardContent className="p-6 flex items-center justify-center h-[300px]">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </CardContent>
+                    </Card>
+                  ) : !normalizedAnalytics || (normalizedAnalytics.visitors === 0 && normalizedAnalytics.totalSessions === 0) ? (
+                    <Card>
+                      <CardContent className="py-12 text-center">
+                        <Info className="h-8 w-8 mx-auto text-muted-foreground mb-4" />
+                        <h3 className="font-semibold text-muted-foreground">No Traffic Data Available</h3>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Install the tracking script to start collecting traffic analytics.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <>
+                      {/* Sessions Bar Chart */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Daily Sessions</CardTitle>
+                          <CardDescription>
+                            Number of sessions per day
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={dailyData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis 
+                                  dataKey="date" 
+                                  stroke="hsl(var(--muted-foreground))"
+                                  fontSize={12}
+                                />
+                                <YAxis 
+                                  stroke="hsl(var(--muted-foreground))"
+                                  fontSize={12}
+                                />
+                                <Tooltip 
+                                  contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                  }}
+                                />
+                                <Bar 
+                                  dataKey="sessions" 
+                                  fill="hsl(var(--primary))"
+                                  radius={[4, 4, 0, 0]}
+                                  name="Sessions"
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Traffic Sources */}
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <Card>
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <CardTitle>Traffic Sources</CardTitle>
+                                <CardDescription>Where your visitors come from</CardDescription>
+                              </div>
+                              {!hasRealTrafficSources && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Info className="h-3 w-3 mr-1" />
+                                  Estimated
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              {trafficSources.map((item) => (
+                                <div key={item.source} className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span>{item.source}</span>
+                                    <span className="text-muted-foreground">
+                                      {item.visitors.toLocaleString()} ({item.percentage}%)
+                                    </span>
+                                  </div>
+                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full ${item.color} rounded-full`}
+                                      style={{ width: `${item.percentage}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {!hasRealTrafficSources && (
+                              <p className="text-xs text-muted-foreground mt-4">
+                                Based on industry-standard distribution patterns
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <CardTitle>Device Breakdown</CardTitle>
+                                <CardDescription>Devices used by visitors</CardDescription>
+                              </div>
+                              {!hasRealDeviceBreakdown && (
+                                <Badge variant="secondary" className="text-xs">
+                                  <Info className="h-3 w-3 mr-1" />
+                                  Estimated
+                                </Badge>
+                              )}
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              {deviceBreakdown.map((item) => (
+                                <div key={item.device} className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span>{item.device}</span>
+                                    <span className="text-muted-foreground">
+                                      {item.visitors.toLocaleString()} ({item.percentage}%)
+                                    </span>
+                                  </div>
+                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                    <div 
+                                      className={`h-full ${item.color} rounded-full`}
+                                      style={{ width: `${item.percentage}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {!hasRealDeviceBreakdown && (
+                              <p className="text-xs text-muted-foreground mt-4">
+                                Based on industry-standard distribution patterns
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Traffic Sources */}
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Card>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle>Traffic Sources</CardTitle>
-                            <CardDescription>Where your visitors come from</CardDescription>
-                          </div>
-                          {!hasRealTrafficSources && (
-                            <Badge variant="secondary" className="text-xs">
-                              <Info className="h-3 w-3 mr-1" />
-                              Estimated
-                            </Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {trafficSources.map((item) => (
-                            <div key={item.source} className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span>{item.source}</span>
-                                <span className="text-muted-foreground">
-                                  {item.visitors.toLocaleString()} ({item.percentage}%)
-                                </span>
-                              </div>
-                              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full ${item.color} rounded-full`}
-                                  style={{ width: `${item.percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        {!hasRealTrafficSources && (
-                          <p className="text-xs text-muted-foreground mt-4">
-                            Based on industry-standard distribution patterns
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle>Device Breakdown</CardTitle>
-                            <CardDescription>Devices used by visitors</CardDescription>
-                          </div>
-                          {!hasRealDeviceBreakdown && (
-                            <Badge variant="secondary" className="text-xs">
-                              <Info className="h-3 w-3 mr-1" />
-                              Estimated
-                            </Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {deviceBreakdown.map((item) => (
-                            <div key={item.device} className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span>{item.device}</span>
-                                <span className="text-muted-foreground">
-                                  {item.visitors.toLocaleString()} ({item.percentage}%)
-                                </span>
-                              </div>
-                              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full ${item.color} rounded-full`}
-                                  style={{ width: `${item.percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        {!hasRealDeviceBreakdown && (
-                          <p className="text-xs text-muted-foreground mt-4">
-                            Based on industry-standard distribution patterns
-                          </p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+                    </>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="engagement" className="space-y-6">
-                  {/* Bounce Rate Over Time */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Bounce Rate Trend</CardTitle>
-                      <CardDescription>
-                        Daily bounce rate percentage
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-[300px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={dailyData}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                              dataKey="date" 
-                              stroke="hsl(var(--muted-foreground))"
-                              fontSize={12}
-                            />
-                            <YAxis 
-                              stroke="hsl(var(--muted-foreground))"
-                              fontSize={12}
-                              domain={[0, 100]}
-                            />
-                            <Tooltip 
-                              contentStyle={{
-                                backgroundColor: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "8px",
-                              }}
-                              formatter={(value: number) => [`${value}%`, "Bounce Rate"]}
-                            />
-                            <Line 
-                              type="monotone" 
-                              dataKey="bounceRate" 
-                              stroke="hsl(var(--destructive))" 
-                              strokeWidth={2}
-                              dot={{ fill: "hsl(var(--destructive))" }}
-                              name="Bounce Rate"
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Top Pages */}
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle>Top Pages</CardTitle>
-                          <CardDescription>Most visited pages on the website</CardDescription>
-                        </div>
-                        {!normalizedAnalytics?.topPages?.length && (
-                          <Badge variant="secondary" className="text-xs">
-                            <Info className="h-3 w-3 mr-1" />
-                            Sample Data
-                          </Badge>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {(normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 
-                          ? normalizedAnalytics.topPages.slice(0, 10).map((page, index) => ({
-                              page: page.url,
-                              views: page.views,
-                              avgTime: "-",
-                            }))
-                          : [
-                              { page: "/", views: 1250, avgTime: "2m 15s" },
-                              { page: "/shop", views: 892, avgTime: "3m 42s" },
-                              { page: "/about", views: 456, avgTime: "1m 30s" },
-                              { page: "/blog", views: 321, avgTime: "4m 18s" },
-                              { page: "/contact", views: 198, avgTime: "1m 05s" },
-                            ]
-                        ).map((item, index) => (
-                          <div key={item.page} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                            <div className="flex items-center gap-3">
-                              <span className="text-muted-foreground w-6">{index + 1}.</span>
-                              <span className="font-medium truncate max-w-[300px]" title={item.page}>{item.page}</span>
-                            </div>
-                            <div className="flex items-center gap-6 text-sm">
-                              {item.avgTime !== "-" && (
-                                <span className="text-muted-foreground">{item.avgTime}</span>
-                              )}
-                              <span className="font-medium">{item.views.toLocaleString()} views</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      {!normalizedAnalytics?.topPages?.length && (
-                        <p className="text-xs text-muted-foreground mt-4">
-                          Showing sample data - real data will appear once tracking is active
+                  {isLoadingAnalytics ? (
+                    <Card>
+                      <CardContent className="p-6 flex items-center justify-center h-[300px]">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                      </CardContent>
+                    </Card>
+                  ) : !normalizedAnalytics || (normalizedAnalytics.visitors === 0 && normalizedAnalytics.totalSessions === 0) ? (
+                    <Card>
+                      <CardContent className="py-12 text-center">
+                        <MousePointerClick className="h-8 w-8 mx-auto text-muted-foreground mb-4" />
+                        <h3 className="font-semibold text-muted-foreground">No Engagement Data Available</h3>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Install the tracking script to start collecting engagement analytics.
                         </p>
-                      )}
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <>
+                      {/* Bounce Rate Over Time */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Bounce Rate Trend</CardTitle>
+                          <CardDescription>
+                            Daily bounce rate percentage
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-[300px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={dailyData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                                <XAxis 
+                                  dataKey="date" 
+                                  stroke="hsl(var(--muted-foreground))"
+                                  fontSize={12}
+                                />
+                                <YAxis 
+                                  stroke="hsl(var(--muted-foreground))"
+                                  fontSize={12}
+                                  domain={[0, 100]}
+                                />
+                                <Tooltip 
+                                  contentStyle={{
+                                    backgroundColor: "hsl(var(--card))",
+                                    border: "1px solid hsl(var(--border))",
+                                    borderRadius: "8px",
+                                  }}
+                                  formatter={(value: number) => [`${value}%`, "Bounce Rate"]}
+                                />
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="bounceRate" 
+                                  stroke="hsl(var(--destructive))" 
+                                  strokeWidth={2}
+                                  dot={{ fill: "hsl(var(--destructive))" }}
+                                  name="Bounce Rate"
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Top Pages */}
+                      <Card>
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <CardTitle>Top Pages</CardTitle>
+                              <CardDescription>Most visited pages on the website</CardDescription>
+                            </div>
+                            {!normalizedAnalytics?.topPages?.length && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Info className="h-3 w-3 mr-1" />
+                                Estimated
+                              </Badge>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {(normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 
+                              ? normalizedAnalytics.topPages.slice(0, 10).map((page, index) => ({
+                                  page: page.url,
+                                  views: page.views,
+                                  avgTime: "-",
+                                }))
+                              : [
+                                  { page: "/", views: Math.round(normalizedAnalytics.pageViews * 0.35), avgTime: "-" },
+                                  { page: "/about", views: Math.round(normalizedAnalytics.pageViews * 0.20), avgTime: "-" },
+                                  { page: "/services", views: Math.round(normalizedAnalytics.pageViews * 0.18), avgTime: "-" },
+                                  { page: "/contact", views: Math.round(normalizedAnalytics.pageViews * 0.15), avgTime: "-" },
+                                  { page: "/blog", views: Math.round(normalizedAnalytics.pageViews * 0.12), avgTime: "-" },
+                                ]
+                            ).map((item, index) => (
+                              <div key={item.page} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-muted-foreground w-6">{index + 1}.</span>
+                                  <span className="font-medium truncate max-w-[300px]" title={item.page}>{item.page}</span>
+                                </div>
+                                <div className="flex items-center gap-6 text-sm">
+                                  <span className="font-medium">{item.views.toLocaleString()} views</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {!normalizedAnalytics?.topPages?.length && (
+                            <p className="text-xs text-muted-foreground mt-4">
+                              Based on industry-standard page distribution
+                            </p>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
                 </TabsContent>
               </Tabs>
             </>
