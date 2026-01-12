@@ -381,7 +381,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             {prevMetrics?.followers != null && accountMetrics?.followers != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.followers.toLocaleString()}
+                  vs {prevMetrics.followers.toLocaleString()} (prev week)
                 </span>
                 {renderTrendIndicator(accountMetrics.followers, prevMetrics.followers, false, true)}
               </div>
@@ -400,7 +400,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             {prevMetrics?.engagement_rate != null && accountMetrics?.engagement_rate != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.engagement_rate.toFixed(2)}%
+                  vs {prevMetrics.engagement_rate.toFixed(2)}% (prev week)
                 </span>
                 {renderTrendIndicator(accountMetrics.engagement_rate, prevMetrics.engagement_rate, true)}
               </div>
@@ -419,7 +419,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             {prevMetrics?.total_content != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.total_content}
+                  vs {prevMetrics.total_content} (prev week)
                 </span>
                 {renderTrendIndicator(accountMetrics?.total_content || content.length, prevMetrics.total_content, false, true)}
               </div>

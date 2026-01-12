@@ -816,7 +816,7 @@ export const MetricoolAnalyticsSection = ({
                 {prevMetrics?.followers != null && (
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-xs text-muted-foreground">
-                      vs {formatNumber(prevMetrics.followers)}
+                      vs {formatNumber(prevMetrics.followers)} (prev week)
                     </span>
                     {renderTrendIndicator(
                       liveFollowers ?? config?.followers ?? accountMetrics?.followers,
@@ -855,7 +855,7 @@ export const MetricoolAnalyticsSection = ({
                   {prevViews != null && currentViews != null && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {formatNumber(prevViews)}
+                        vs {formatNumber(prevViews)} (prev week)
                       </span>
                       {renderTrendIndicator(currentViews, prevViews, false, true)}
                     </div>
@@ -887,7 +887,7 @@ export const MetricoolAnalyticsSection = ({
                   {prevLikes != null && currentLikes != null && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {formatNumber(prevLikes)}
+                        vs {formatNumber(prevLikes)} (prev week)
                       </span>
                       {renderTrendIndicator(currentLikes, prevLikes, false, true)}
                     </div>
@@ -913,7 +913,7 @@ export const MetricoolAnalyticsSection = ({
             {prevMetrics?.engagement_rate != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.engagement_rate.toFixed(2)}%
+                  vs {prevMetrics.engagement_rate.toFixed(2)}% (prev week)
                 </span>
                 {renderTrendIndicator(
                   liveEngagement ?? accountMetrics?.engagement_rate,
@@ -946,7 +946,7 @@ export const MetricoolAnalyticsSection = ({
                   {prevPosts != null && currentPosts != null && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {prevPosts}
+                        vs {prevPosts} (prev week)
                       </span>
                       {renderTrendIndicator(currentPosts, prevPosts, false, true)}
                     </div>
