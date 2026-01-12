@@ -279,8 +279,8 @@ export const XCSVUploadDialog = ({
         return;
       }
 
-      // DELETE existing content and metrics for this client + platform + period to prevent duplicates
-      console.log("Deleting existing X content for client:", clientId, "period:", effectivePeriodStart, "-", effectivePeriodEnd);
+      // DELETE ALL existing content and metrics for this client + platform to REPLACE data (not append)
+      console.log("Deleting ALL existing X content for client:", clientId);
       
       // First, get all existing social_content IDs for this client/platform
       const { data: existingContent } = await supabase
@@ -292,27 +292,44 @@ export const XCSVUploadDialog = ({
       if (existingContent && existingContent.length > 0) {
         const contentIds = existingContent.map(c => c.id);
         
-        // Delete metrics for these content items in the period
-        await supabase
+        // Delete ALL metrics for these content items (not filtered by period)
+        const { error: metricsDeleteError } = await supabase
           .from("social_content_metrics")
           .delete()
-          .in("social_content_id", contentIds)
-          .eq("period_start", effectivePeriodStart)
-          .eq("period_end", effectivePeriodEnd);
+          .in("social_content_id", contentIds);
         
-        console.log("Deleted existing metrics for period");
+        if (metricsDeleteError) {
+          console.error("Error deleting content metrics:", metricsDeleteError);
+        } else {
+          console.log("Deleted all existing content metrics for", contentIds.length, "items");
+        }
+        
+        // Delete ALL content items for this client/platform
+        const { error: contentDeleteError } = await supabase
+          .from("social_content")
+          .delete()
+          .eq("client_id", clientId)
+          .eq("platform", "x");
+        
+        if (contentDeleteError) {
+          console.error("Error deleting content:", contentDeleteError);
+        } else {
+          console.log("Deleted all existing content for client");
+        }
       }
 
-      // Delete existing account metrics for this period
-      await supabase
+      // Delete ALL existing account metrics for this client/platform
+      const { error: accountMetricsDeleteError } = await supabase
         .from("social_account_metrics")
         .delete()
         .eq("client_id", clientId)
-        .eq("platform", "x")
-        .eq("period_start", effectivePeriodStart)
-        .eq("period_end", effectivePeriodEnd);
+        .eq("platform", "x");
 
-      console.log("Deleted existing account metrics for period");
+      if (accountMetricsDeleteError) {
+        console.error("Error deleting account metrics:", accountMetricsDeleteError);
+      } else {
+        console.log("Deleted all existing account metrics");
+      }
 
       let totalInserted = 0;
 
@@ -323,58 +340,29 @@ export const XCSVUploadDialog = ({
         const contentId = rawUrl || `x_${clientId}_${rawDate}_${row.title?.slice(0, 20) || Math.random().toString(36).substr(2, 9)}`;
         const publishedAt = row.date ? new Date(row.date).toISOString() : new Date().toISOString();
 
-        // UPSERT: Check if content already exists
-        const { data: existingContent } = await supabase
+        // Insert new social_content (since we deleted all existing)
+        const { data: newContent, error: contentError } = await supabase
           .from("social_content")
+          .insert({
+            client_id: clientId,
+            platform: "x",
+            content_id: contentId,
+            content_type: "tweet",
+            title: row.title || null,
+            url: rawUrl || null,
+            published_at: publishedAt,
+          })
           .select("id")
-          .eq("client_id", clientId)
-          .eq("platform", "x")
-          .eq("content_id", contentId)
-          .maybeSingle();
+          .single();
 
-        let contentDbId: string;
-
-        if (existingContent) {
-          contentDbId = existingContent.id;
-          // Update existing content title/url if needed
-          await supabase
-            .from("social_content")
-            .update({
-              title: row.title || null,
-              url: rawUrl || null,
-            })
-            .eq("id", contentDbId);
-        } else {
-          // Insert new social_content
-          const { data: newContent, error: contentError } = await supabase
-            .from("social_content")
-            .insert({
-              client_id: clientId,
-              platform: "x",
-              content_id: contentId,
-              content_type: "tweet",
-              title: row.title || null,
-              url: rawUrl || null,
-              published_at: publishedAt,
-            })
-            .select("id")
-            .single();
-
-          if (contentError) {
-            console.error("Error inserting content:", contentError);
-            continue;
-          }
-          contentDbId = newContent.id;
+        if (contentError) {
+          console.error("Error inserting content:", contentError);
+          continue;
         }
+        
+        const contentDbId = newContent.id;
 
-        // UPSERT metrics: Delete existing for same period, then insert new
-        await supabase
-          .from("social_content_metrics")
-          .delete()
-          .eq("social_content_id", contentDbId)
-          .eq("period_start", effectivePeriodStart)
-          .eq("period_end", effectivePeriodEnd);
-
+        // Insert metrics
         const { error: metricsError } = await supabase
           .from("social_content_metrics")
           .insert({
