@@ -345,7 +345,7 @@ This script will:
     });
   }, [normalizedAnalytics, dateRange, hasRealDailyBreakdown]);
 
-  // Traffic sources - use real data if available
+  // Traffic sources - only use real data, no estimates
   const trafficSources = useMemo(() => {
     if (hasRealTrafficSources && normalizedAnalytics?.trafficSources) {
       const colors = ["bg-primary", "bg-green-500", "bg-blue-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
@@ -356,18 +356,11 @@ This script will:
         color: colors[index % colors.length],
       }));
     }
-
-    // Fallback: Estimate based on industry averages
-    const total = normalizedAnalytics?.visitors || normalizedAnalytics?.totalSessions || 0;
-    return [
-      { source: "Direct", percentage: 42, visitors: Math.round(total * 0.42), color: "bg-primary" },
-      { source: "Organic Search", percentage: 31, visitors: Math.round(total * 0.31), color: "bg-green-500" },
-      { source: "Social Media", percentage: 18, visitors: Math.round(total * 0.18), color: "bg-blue-500" },
-      { source: "Referral", percentage: 9, visitors: Math.round(total * 0.09), color: "bg-purple-500" },
-    ];
+    // Return empty array if no real data - don't make up estimates
+    return [];
   }, [normalizedAnalytics, hasRealTrafficSources]);
 
-  // Device breakdown - use real data if available
+  // Device breakdown - only use real data, no estimates
   const deviceBreakdown = useMemo(() => {
     if (hasRealDeviceBreakdown && normalizedAnalytics?.deviceBreakdown) {
       const colors = ["bg-primary", "bg-green-500", "bg-blue-500"];
@@ -378,14 +371,8 @@ This script will:
         color: colors[index % colors.length],
       }));
     }
-
-    // Fallback: Estimate based on industry averages
-    const total = normalizedAnalytics?.visitors || normalizedAnalytics?.totalSessions || 0;
-    return [
-      { device: "Mobile", percentage: 58, visitors: Math.round(total * 0.58), color: "bg-primary" },
-      { device: "Desktop", percentage: 35, visitors: Math.round(total * 0.35), color: "bg-green-500" },
-      { device: "Tablet", percentage: 7, visitors: Math.round(total * 0.07), color: "bg-blue-500" },
-    ];
+    // Return empty array if no real data - don't make up estimates
+    return [];
   }, [normalizedAnalytics, hasRealDeviceBreakdown]);
 
   const formatDuration = (seconds: number) => {
@@ -785,84 +772,82 @@ This script will:
                       <div className="grid gap-4 md:grid-cols-2">
                         <Card>
                           <CardHeader>
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <CardTitle>Traffic Sources</CardTitle>
-                                <CardDescription>Where your visitors come from</CardDescription>
-                              </div>
-                              {!hasRealTrafficSources && (
-                                <Badge variant="secondary" className="text-xs">
-                                  <Info className="h-3 w-3 mr-1" />
-                                  Estimated
-                                </Badge>
-                              )}
+                            <div>
+                              <CardTitle>Traffic Sources</CardTitle>
+                              <CardDescription>Where your visitors come from</CardDescription>
                             </div>
                           </CardHeader>
                           <CardContent>
-                            <div className="space-y-4">
-                              {trafficSources.map((item) => (
-                                <div key={item.source} className="space-y-2">
-                                  <div className="flex justify-between text-sm">
-                                    <span>{item.source}</span>
-                                    <span className="text-muted-foreground">
-                                      {item.visitors.toLocaleString()} ({item.percentage}%)
-                                    </span>
+                            {trafficSources.length > 0 ? (
+                              <div className="space-y-4">
+                                {trafficSources.map((item) => (
+                                  <div key={item.source} className="space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                      <span>{item.source}</span>
+                                      <span className="text-muted-foreground">
+                                        {item.visitors.toLocaleString()} ({item.percentage}%)
+                                      </span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full ${item.color} rounded-full`}
+                                        style={{ width: `${item.percentage}%` }}
+                                      />
+                                    </div>
                                   </div>
-                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full ${item.color} rounded-full`}
-                                      style={{ width: `${item.percentage}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            {!hasRealTrafficSources && (
-                              <p className="text-xs text-muted-foreground mt-4">
-                                Based on industry-standard distribution patterns
-                              </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="py-8 text-center">
+                                <Info className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                                <p className="text-sm text-muted-foreground">
+                                  No traffic source data yet
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Data will appear once visitors start arriving
+                                </p>
+                              </div>
                             )}
                           </CardContent>
                         </Card>
 
                         <Card>
                           <CardHeader>
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <CardTitle>Device Breakdown</CardTitle>
-                                <CardDescription>Devices used by visitors</CardDescription>
-                              </div>
-                              {!hasRealDeviceBreakdown && (
-                                <Badge variant="secondary" className="text-xs">
-                                  <Info className="h-3 w-3 mr-1" />
-                                  Estimated
-                                </Badge>
-                              )}
+                            <div>
+                              <CardTitle>Device Breakdown</CardTitle>
+                              <CardDescription>Devices used by visitors</CardDescription>
                             </div>
                           </CardHeader>
                           <CardContent>
-                            <div className="space-y-4">
-                              {deviceBreakdown.map((item) => (
-                                <div key={item.device} className="space-y-2">
-                                  <div className="flex justify-between text-sm">
-                                    <span>{item.device}</span>
-                                    <span className="text-muted-foreground">
-                                      {item.visitors.toLocaleString()} ({item.percentage}%)
-                                    </span>
+                            {deviceBreakdown.length > 0 ? (
+                              <div className="space-y-4">
+                                {deviceBreakdown.map((item) => (
+                                  <div key={item.device} className="space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                      <span>{item.device}</span>
+                                      <span className="text-muted-foreground">
+                                        {item.visitors.toLocaleString()} ({item.percentage}%)
+                                      </span>
+                                    </div>
+                                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full ${item.color} rounded-full`}
+                                        style={{ width: `${item.percentage}%` }}
+                                      />
+                                    </div>
                                   </div>
-                                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full ${item.color} rounded-full`}
-                                      style={{ width: `${item.percentage}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            {!hasRealDeviceBreakdown && (
-                              <p className="text-xs text-muted-foreground mt-4">
-                                Based on industry-standard distribution patterns
-                              </p>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="py-8 text-center">
+                                <Info className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                                <p className="text-sm text-muted-foreground">
+                                  No device data yet
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Data will appear once visitors start arriving
+                                </p>
+                              </div>
                             )}
                           </CardContent>
                         </Card>
@@ -938,50 +923,36 @@ This script will:
                       {/* Top Pages */}
                       <Card>
                         <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <CardTitle>Top Pages</CardTitle>
-                              <CardDescription>Most visited pages on the website</CardDescription>
-                            </div>
-                            {!normalizedAnalytics?.topPages?.length && (
-                              <Badge variant="secondary" className="text-xs">
-                                <Info className="h-3 w-3 mr-1" />
-                                Estimated
-                              </Badge>
-                            )}
+                          <div>
+                            <CardTitle>Top Pages</CardTitle>
+                            <CardDescription>Most visited pages on the website</CardDescription>
                           </div>
                         </CardHeader>
                         <CardContent>
-                          <div className="space-y-4">
-                            {(normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 
-                              ? normalizedAnalytics.topPages.slice(0, 10).map((page, index) => ({
-                                  page: page.url,
-                                  views: page.views,
-                                  avgTime: "-",
-                                }))
-                              : [
-                                  { page: "/", views: Math.round(normalizedAnalytics.pageViews * 0.35), avgTime: "-" },
-                                  { page: "/about", views: Math.round(normalizedAnalytics.pageViews * 0.20), avgTime: "-" },
-                                  { page: "/services", views: Math.round(normalizedAnalytics.pageViews * 0.18), avgTime: "-" },
-                                  { page: "/contact", views: Math.round(normalizedAnalytics.pageViews * 0.15), avgTime: "-" },
-                                  { page: "/blog", views: Math.round(normalizedAnalytics.pageViews * 0.12), avgTime: "-" },
-                                ]
-                            ).map((item, index) => (
-                              <div key={item.page} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-muted-foreground w-6">{index + 1}.</span>
-                                  <span className="font-medium truncate max-w-[300px]" title={item.page}>{item.page}</span>
+                          {normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 ? (
+                            <div className="space-y-4">
+                              {normalizedAnalytics.topPages.slice(0, 10).map((page, index) => (
+                                <div key={page.url} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-muted-foreground w-6">{index + 1}.</span>
+                                    <span className="font-medium truncate max-w-[300px]" title={page.url}>{page.url}</span>
+                                  </div>
+                                  <div className="flex items-center gap-6 text-sm">
+                                    <span className="font-medium">{page.views.toLocaleString()} views</span>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-6 text-sm">
-                                  <span className="font-medium">{item.views.toLocaleString()} views</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          {!normalizedAnalytics?.topPages?.length && (
-                            <p className="text-xs text-muted-foreground mt-4">
-                              Based on industry-standard page distribution
-                            </p>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="py-8 text-center">
+                              <Info className="h-6 w-6 mx-auto text-muted-foreground mb-2" />
+                              <p className="text-sm text-muted-foreground">
+                                No page data yet
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Data will appear once visitors start browsing pages
+                              </p>
+                            </div>
                           )}
                         </CardContent>
                       </Card>
