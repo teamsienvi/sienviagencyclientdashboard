@@ -349,59 +349,97 @@ export const MetricoolAnalyticsSection = ({
             },
           },
         }).then(result => {
-          // Transform CSV response to match TikTok post format
+          // Transform CSV response to match our post format
+          // LinkedIn CSV columns: Title, Date, URL, Reactions, LikeReactions, PraiseReactions, 
+          // AppreciationReactions, EmpathyReactions, InterestReactions, EntertainmentReactions,
+          // Comments, Shares, Impressions, Unique Impressions, Engagement, Vid. Views, 
+          // Viewers, Time Watched, Time Watched (avg), Type
           if (result.data?.success && result.data?.rows) {
             const transformedRows = result.data.rows.map((row: any) => {
-              // Get the LinkedIn URL from the CSV
-              const postUrl = row.url || null;
+              // Get the LinkedIn URL from the CSV - map from correct column name
+              const postUrl = row.url || row.URL || null;
               
               // Validate LinkedIn URL - log error if it contains tiktok.com
               if (postUrl && postUrl.includes("tiktok.com")) {
                 console.error("MAPPING ERROR: LinkedIn post has TikTok URL:", postUrl, "Row:", row);
               }
               
-              // Parse the date - normalize to display format
-              let displayDate = row.date || null;
-              if (displayDate && displayDate.includes("T")) {
-                // ISO format - parse and format nicely
+              // Parse the date - LinkedIn CSV uses "Date" column
+              let displayDate = row.date || row.Date || null;
+              if (displayDate) {
                 try {
-                  const parsedDate = new Date(displayDate);
-                  if (!isNaN(parsedDate.getTime())) {
+                  // Try various date formats
+                  let parsedDate: Date | null = null;
+                  
+                  if (displayDate.includes("T")) {
+                    // ISO format
+                    parsedDate = new Date(displayDate);
+                  } else if (displayDate.includes("/")) {
+                    // MM/DD/YYYY or DD/MM/YYYY format
+                    const parts = displayDate.split("/");
+                    if (parts.length === 3) {
+                      // Assume MM/DD/YYYY
+                      parsedDate = new Date(`${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`);
+                    }
+                  } else if (displayDate.includes("-")) {
+                    // YYYY-MM-DD format
+                    parsedDate = new Date(displayDate);
+                  }
+                  
+                  if (parsedDate && !isNaN(parsedDate.getTime())) {
                     displayDate = format(parsedDate, "MMM d, yyyy");
                   }
                 } catch (e) {
-                  console.warn("Failed to parse date:", displayDate);
+                  console.warn("Failed to parse LinkedIn date:", displayDate);
                 }
               }
               
-              // Compute engagement if not provided
-              const impressions = row.impressions || row.unique_impressions || 0;
-              const reactions = row.reactions_total || row.reactions_like || 0;
-              const comments = row.comments || 0;
-              const shares = row.shares || 0;
-              let engagement = row.engagement || 0;
+              // Map LinkedIn CSV columns correctly (case-insensitive)
+              const impressions = Number(row.impressions || row.Impressions || 0);
+              const uniqueImpressions = Number(row.unique_impressions || row["Unique Impressions"] || row["unique impressions"] || 0);
+              const reactions = Number(row.reactions || row.Reactions || 0);
+              const likeReactions = Number(row.likereactions || row.LikeReactions || row["Like Reactions"] || 0);
+              const comments = Number(row.comments || row.Comments || 0);
+              const shares = Number(row.shares || row.Shares || 0);
+              const vidViews = Number(row.vid_views || row["Vid. Views"] || row["vid. views"] || 0);
+              const contentType = row.type || row.Type || "post";
               
+              // Use reactions as likes (total reactions count)
+              const totalReactions = reactions > 0 ? reactions : likeReactions;
+              
+              // Compute engagement from CSV or calculate
+              let engagement = Number(row.engagement || row.Engagement || 0);
               if (engagement === 0 && impressions > 0) {
-                engagement = ((reactions + comments + shares) / impressions) * 100;
+                engagement = ((totalReactions + comments + shares) / impressions) * 100;
               }
               
               return {
-                title: row.title || null,
+                title: row.title || row.Title || null,
                 date: displayDate,
-                type: row.type || "post",
+                type: contentType,
                 views: impressions,
-                likes: reactions,
+                likes: totalReactions,
                 comments: comments,
                 shares: shares,
-                reach: row.unique_impressions || impressions,
-                duration: null,
+                reach: uniqueImpressions || impressions,
+                duration: row.time_watched || row["Time Watched"] || null,
                 engagement: engagement,
                 url: postUrl,
                 link: postUrl,
                 image: null,
+                // Store raw LinkedIn-specific fields for display
+                rawData: {
+                  impressions,
+                  uniqueImpressions,
+                  reactions,
+                  vidViews,
+                  viewers: Number(row.viewers || row.Viewers || 0),
+                  timeWatched: row.time_watched || row["Time Watched"] || null,
+                  avgTimeWatched: row.time_watched_avg || row["Time Watched (avg)"] || null,
+                },
               };
             });
-            return { data: { success: true, rows: transformedRows }, error: null };
+            return { data: { success: true, rows: transformedRows, platform: "linkedin" }, error: null };
           }
           
           // Surface upstream errors for debugging
@@ -1250,17 +1288,17 @@ export const MetricoolAnalyticsSection = ({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[200px]">Video</TableHead>
+                  <TableHead className="min-w-[200px]">{platform === "linkedin" ? "Post" : "Video"}</TableHead>
                   <TableHead className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Eye className="h-3 w-3" />
-                      Views
+                      {platform === "linkedin" ? "Impressions" : "Views"}
                     </div>
                   </TableHead>
                   <TableHead className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Heart className="h-3 w-3" />
-                      Likes
+                      {platform === "linkedin" ? "Reactions" : "Likes"}
                     </div>
                   </TableHead>
                   <TableHead className="text-right">
