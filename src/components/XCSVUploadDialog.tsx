@@ -280,10 +280,13 @@ export const XCSVUploadDialog = ({
       let totalInserted = 0;
 
       for (const row of parsedData) {
-        const contentId = row.link || row.url || `x_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        // Create deterministic content_id from URL or composite key
+        const rawUrl = (row.link || row.url || "").trim();
+        const rawDate = row.date ? new Date(row.date).toISOString().split("T")[0] : "";
+        const contentId = rawUrl || `x_${clientId}_${rawDate}_${row.title?.slice(0, 20) || Math.random().toString(36).substr(2, 9)}`;
         const publishedAt = row.date ? new Date(row.date).toISOString() : new Date().toISOString();
 
-        // Check if content already exists
+        // UPSERT: Check if content already exists
         const { data: existingContent } = await supabase
           .from("social_content")
           .select("id")
@@ -296,6 +299,14 @@ export const XCSVUploadDialog = ({
 
         if (existingContent) {
           contentDbId = existingContent.id;
+          // Update existing content title/url if needed
+          await supabase
+            .from("social_content")
+            .update({
+              title: row.title || null,
+              url: rawUrl || null,
+            })
+            .eq("id", contentDbId);
         } else {
           // Insert new social_content
           const { data: newContent, error: contentError } = await supabase
@@ -306,7 +317,7 @@ export const XCSVUploadDialog = ({
               content_id: contentId,
               content_type: "tweet",
               title: row.title || null,
-              url: row.link || row.url || null,
+              url: rawUrl || null,
               published_at: publishedAt,
             })
             .select("id")
@@ -319,7 +330,14 @@ export const XCSVUploadDialog = ({
           contentDbId = newContent.id;
         }
 
-        // Insert metrics
+        // UPSERT metrics: Delete existing for same period, then insert new
+        await supabase
+          .from("social_content_metrics")
+          .delete()
+          .eq("social_content_id", contentDbId)
+          .eq("period_start", effectivePeriodStart)
+          .eq("period_end", effectivePeriodEnd);
+
         const { error: metricsError } = await supabase
           .from("social_content_metrics")
           .insert({
