@@ -352,23 +352,50 @@ export const MetricoolAnalyticsSection = ({
           // Transform CSV response to match TikTok post format
           if (result.data?.success && result.data?.rows) {
             const transformedRows = result.data.rows.map((row: any) => {
-              // Validate LinkedIn URL - log warning if it contains tiktok.com
+              // Get the LinkedIn URL from the CSV
               const postUrl = row.url || null;
+              
+              // Validate LinkedIn URL - log error if it contains tiktok.com
               if (postUrl && postUrl.includes("tiktok.com")) {
-                console.error("MAPPING ERROR: LinkedIn post has TikTok URL:", postUrl);
+                console.error("MAPPING ERROR: LinkedIn post has TikTok URL:", postUrl, "Row:", row);
+              }
+              
+              // Parse the date - normalize to display format
+              let displayDate = row.date || null;
+              if (displayDate && displayDate.includes("T")) {
+                // ISO format - parse and format nicely
+                try {
+                  const parsedDate = new Date(displayDate);
+                  if (!isNaN(parsedDate.getTime())) {
+                    displayDate = format(parsedDate, "MMM d, yyyy");
+                  }
+                } catch (e) {
+                  console.warn("Failed to parse date:", displayDate);
+                }
+              }
+              
+              // Compute engagement if not provided
+              const impressions = row.impressions || row.unique_impressions || 0;
+              const reactions = row.reactions_total || row.reactions_like || 0;
+              const comments = row.comments || 0;
+              const shares = row.shares || 0;
+              let engagement = row.engagement || 0;
+              
+              if (engagement === 0 && impressions > 0) {
+                engagement = ((reactions + comments + shares) / impressions) * 100;
               }
               
               return {
                 title: row.title || null,
-                date: row.date || null,
+                date: displayDate,
                 type: row.type || "post",
-                views: row.impressions || row.unique_impressions || 0,
-                likes: row.reactions_total || row.reactions_like || 0,
-                comments: row.comments || 0,
-                shares: row.shares || 0,
-                reach: row.unique_impressions || row.impressions || 0,
+                views: impressions,
+                likes: reactions,
+                comments: comments,
+                shares: shares,
+                reach: row.unique_impressions || impressions,
                 duration: null,
-                engagement: row.engagement || 0,
+                engagement: engagement,
                 url: postUrl,
                 link: postUrl,
                 image: null,
@@ -376,6 +403,12 @@ export const MetricoolAnalyticsSection = ({
             });
             return { data: { success: true, rows: transformedRows }, error: null };
           }
+          
+          // Surface upstream errors for debugging
+          if (result.data && !result.data.success) {
+            console.error("LinkedIn CSV fetch error - upstreamStatus:", result.data.upstreamStatus, "upstreamBody:", result.data.upstreamBody);
+          }
+          
           return result;
         });
       } else {

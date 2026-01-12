@@ -36,6 +36,7 @@ interface XCSVUploadDialogProps {
   clientName: string;
   trigger?: React.ReactNode;
   onSuccess?: () => void;
+  onUploadComplete?: () => void;
 }
 
 const parseCSVLine = (line: string): string[] => {
@@ -69,6 +70,7 @@ export const XCSVUploadDialog = ({
   clientName,
   trigger,
   onSuccess,
+  onUploadComplete,
 }: XCSVUploadDialogProps) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -469,6 +471,9 @@ export const XCSVUploadDialog = ({
 
       setOpen(false);
       resetForm();
+
+      // Call onUploadComplete callback if provided (for auto-refresh)
+      onUploadComplete?.();
 
       // Navigate to X analytics page (pre-set the date range to the imported period)
       navigate(`/x-analytics/${clientId}?start=${effectivePeriodStart}&end=${effectivePeriodEnd}`);

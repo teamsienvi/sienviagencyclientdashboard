@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,12 +11,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { subDays, format, startOfDay, endOfDay } from "date-fns";
 import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
+import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 
 interface XAnalyticsSectionProps {
   clientId: string;
@@ -144,7 +145,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     return sorted[0];
   };
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const { start, end } = getDateRange();
@@ -233,7 +234,13 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientId, dateRangePreset, customDateRange]);
+
+  // Callback for when CSV upload completes - auto-refresh data
+  const handleUploadComplete = useCallback(() => {
+    toast.success("CSV uploaded! Refreshing analytics...");
+    fetchData();
+  }, [fetchData]);
 
   const handleSync = async () => {
     if (!socialAccount) {
@@ -356,15 +363,28 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             customRange={customDateRange}
           />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleSync}
-          disabled={syncing || !socialAccount}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-          {syncing ? "Syncing..." : "Sync from X"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <XCSVUploadDialog
+            clientId={clientId}
+            clientName={clientName}
+            onUploadComplete={handleUploadComplete}
+            trigger={
+              <Button variant="outline" size="sm" className="gap-2">
+                <Upload className="h-4 w-4" />
+                Upload CSV
+              </Button>
+            }
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={syncing || !socialAccount}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing..." : "Sync from X"}
+          </Button>
+        </div>
       </div>
 
       {/* Account Metrics Cards */}

@@ -57,6 +57,42 @@ function parseValue(value: string, isNumericField: boolean): string | number {
   return trimmed;
 }
 
+// Parse date string to ISO format - handles various LinkedIn date formats
+function parseDateToISO(dateStr: string): string {
+  if (!dateStr || dateStr.trim() === "") return "";
+  
+  const trimmed = dateStr.trim();
+  
+  // Already ISO format
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed;
+  }
+  
+  // Try parsing common formats like "Jan 5, 2025", "January 5, 2025", "5 Jan 2025"
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+  
+  // Try DD/MM/YYYY or MM/DD/YYYY formats
+  const slashMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (slashMatch) {
+    const [, first, second, year] = slashMatch;
+    // Assume MM/DD/YYYY for US format
+    const month = parseInt(first, 10);
+    const day = parseInt(second, 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      const date = new Date(parseInt(year, 10), month - 1, day);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString();
+      }
+    }
+  }
+  
+  // Return original if all parsing fails
+  return trimmed;
+}
+
 // Numeric field names for LinkedIn posts CSV
 const numericFields = new Set([
   "Reactions", "LikeReactions", "PraiseReactions", "AppreciationReactions",
@@ -168,7 +204,23 @@ serve(async (req) => {
         const value = values[j] || "";
         const fieldName = columnMap[header] || header.toLowerCase().replace(/\s+/g, "_");
         const isNumeric = numericFields.has(header);
-        row[fieldName] = parseValue(value, isNumeric);
+        
+        // Special handling for date field - parse to ISO
+        if (header === "Date" || fieldName === "date") {
+          row[fieldName] = parseDateToISO(value);
+        } else {
+          row[fieldName] = parseValue(value, isNumeric);
+        }
+      }
+      
+      // Compute engagement rate if not provided
+      if ((row.engagement === undefined || row.engagement === 0) && row.impressions && typeof row.impressions === 'number' && row.impressions > 0) {
+        const interactions = (
+          (typeof row.reactions_total === 'number' ? row.reactions_total : 0) +
+          (typeof row.comments === 'number' ? row.comments : 0) +
+          (typeof row.shares === 'number' ? row.shares : 0)
+        );
+        row.engagement = (interactions / row.impressions) * 100;
       }
       
       rows.push(row);

@@ -72,17 +72,31 @@ function parseCSV(csvText: string): TikTokPost[] {
     });
 
     // Convert to TikTokPost with numeric casting
+    // Calculate engagement if not provided: (likes + comments + shares) / views * 100
+    const views = parseInt(row["views"] || "0", 10) || 0;
+    const likes = parseInt(row["likes"] || "0", 10) || 0;
+    const comments = parseInt(row["comments"] || "0", 10) || 0;
+    const shares = parseInt(row["shares"] || "0", 10) || 0;
+    
+    // Try to parse engagement from CSV first, then compute if needed
+    let engagement = parseFloat(row["engageme"] || row["engagement"] || "0") || 0;
+    
+    // If engagement is 0 or missing, compute it from likes + comments + shares / views
+    if (engagement === 0 && views > 0) {
+      engagement = ((likes + comments + shares) / views) * 100;
+    }
+    
     const post: TikTokPost = {
       title: row["title"] || null,
       date: row["date"] || null,
       type: row["type"] || null,
-      views: parseInt(row["views"] || "0", 10) || 0,
-      likes: parseInt(row["likes"] || "0", 10) || 0,
-      comments: parseInt(row["comments"] || "0", 10) || 0,
-      shares: parseInt(row["shares"] || "0", 10) || 0,
+      views,
+      likes,
+      comments,
+      shares,
       reach: parseInt(row["reach"] || "0", 10) || 0,
       duration: row["duration"] || null,
-      engagement: parseFloat(row["engageme"] || row["engagement"] || "0") || 0,
+      engagement,
       url: row["url"] || null,
       link: row["link"] || null,
       image: row["image"] || null,
