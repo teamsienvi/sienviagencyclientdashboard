@@ -68,18 +68,27 @@ const ClientDashboard = () => {
     enabled: !!clientId,
   });
 
-  // Fetch connected accounts
+  // Fetch connected accounts and data existence
   const { data: connectedAccounts } = useQuery({
     queryKey: ["client-connected-accounts", clientId],
     queryFn: async () => {
-      if (!clientId) return { x: false, meta: false, youtube: false };
+      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false };
       
+      // Check X account connection
       const { data: xData } = await supabase
         .from("social_accounts")
         .select("id")
         .eq("client_id", clientId)
         .eq("platform", "x")
         .eq("is_active", true)
+        .limit(1);
+
+      // Check if X has any content data (from CSV upload)
+      const { data: xContentData } = await supabase
+        .from("social_content")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
         .limit(1);
 
       const { data: metaData } = await supabase
@@ -98,6 +107,7 @@ const ClientDashboard = () => {
 
       return {
         x: xData && xData.length > 0,
+        xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
         meta: metaData && metaData.length > 0,
         youtube: youtubeData && youtubeData.length > 0,
       };
@@ -371,8 +381,8 @@ const ClientDashboard = () => {
                   </CardContent>
                 </Card>
 
-                {/* X (Twitter) */}
-                {connectedAccounts?.x ? (
+                {/* X (Twitter) - Show connected if has account OR has data */}
+                {connectedAccounts?.xHasData ? (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/x-analytics/${clientId}`)}
@@ -390,7 +400,9 @@ const ClientDashboard = () => {
                       <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                     </CardHeader>
                     <CardContent>
-                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                        {connectedAccounts?.x ? "Connected" : "Data Available"}
+                      </Badge>
                     </CardContent>
                   </Card>
                 ) : (
