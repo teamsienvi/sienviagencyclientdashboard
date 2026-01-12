@@ -1,5 +1,11 @@
 project_id = "ihbdwilzjxivmmmlkuyu"
 
+[functions.metricool-json]
+verify_jwt = false
+
+[functions.metricool-csv]
+verify_jwt = false
+
 [functions.metricool-tiktok-posts]
 verify_jwt = false
 

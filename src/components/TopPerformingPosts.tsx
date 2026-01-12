@@ -21,7 +21,8 @@ const formatNumber = (num: number): string => {
 };
 
 export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
-  const { data: posts, isLoading, error } = useTopPerformingPosts(clientId);
+  // Always show top 3 posts from last 7 days, ranked by views
+  const { data: posts, isLoading, error } = useTopPerformingPosts(clientId, 3);
 
   if (isLoading) {
     return (
@@ -86,7 +87,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
           <TrendingUp className="h-5 w-5" />
           Top Performing Posts
         </CardTitle>
-        <CardDescription>Ranked by highest views across all platforms</CardDescription>
+        <CardDescription>Top 3 posts from last 7 days, ranked by views</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">

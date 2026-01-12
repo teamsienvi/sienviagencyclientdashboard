@@ -1,11 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
+import { subDays, isAfter, parseISO } from "date-fns";
 
-export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
+export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
   return useQuery({
     queryKey: ["top-performing-posts", clientId, limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
+      // Calculate 7 days ago for filtering
+      const sevenDaysAgo = subDays(new Date(), 7);
+
       // Fetch content with metrics for this client across all platforms
       const { data: content, error: contentError } = await supabase
         .from("social_content")
@@ -27,6 +31,7 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
           )
         `)
         .eq("client_id", clientId)
+        .gte("published_at", sevenDaysAgo.toISOString())
         .order("published_at", { ascending: false })
         .limit(200);
 
@@ -50,14 +55,19 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
 
       // Transform to TopInsightContent format
       const topInsightContent: TopInsightContent[] = content
-        .filter((c) => c.social_content_metrics && c.social_content_metrics.length > 0)
+        .filter((c) => {
+          // Must have metrics and be within last 7 days
+          if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
+          const publishedDate = parseISO(c.published_at);
+          return isAfter(publishedDate, sevenDaysAgo);
+        })
         .map((c) => {
           const latestMetric = [...c.social_content_metrics].sort(
             (a: any, b: any) =>
               new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
           )[0];
 
-          // Use views or impressions (Instagram often uses impressions as views)
+          // Use views first, then video_views equivalent, then impressions as fallback
           const viewsValue = latestMetric?.views || latestMetric?.impressions || 0;
           const reachValue = latestMetric?.reach || 0;
 
@@ -67,7 +77,7 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
             platform: c.platform,
             published_at: c.published_at,
             views: viewsValue,
-            reach: reachValue > 0 ? reachValue : viewsValue, // Use reach, or fall back to views
+            reach: reachValue > 0 ? reachValue : viewsValue,
             likes: latestMetric?.likes || 0,
             comments: latestMetric?.comments || 0,
             shares: latestMetric?.shares || 0,
@@ -77,8 +87,7 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 10) => {
         // Filter out posts with no views/impressions
         .filter((c) => c.views > 0);
 
-      // Rank using Sienvi Performance Index and return top posts
-      // rankTopInsights now sorts by total_score DESC, then views DESC
+      // Rank by views DESC and return top 3 posts
       return rankTopInsights(topInsightContent, limit);
     },
     enabled: !!clientId,

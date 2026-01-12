@@ -533,11 +533,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         };
       })
       .filter((item: any) => item.metrics !== null) // Only show content with metrics in the period
-      // Sort by engagement (most engaging first), then by date
+      // Sort by date DESC (most recent first) as per requirement
       .sort((a: any, b: any) => {
-        const engA = (a.metrics?.engagements || 0) + (a.metrics?.likes || 0) + (a.metrics?.comments || 0);
-        const engB = (b.metrics?.engagements || 0) + (b.metrics?.likes || 0) + (b.metrics?.comments || 0);
-        if (engB !== engA) return engB - engA;
         return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
       })
       .slice(0, 50); // Limit to 50 items
