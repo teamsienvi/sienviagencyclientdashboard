@@ -165,6 +165,26 @@ serve(async (req) => {
     // Check if there's any data
     if (sessionList.length === 0 && pageViewList.length === 0) {
       console.log('No local analytics data for client:', client.name);
+      
+      // Check for last event timestamp (any time, not just date range)
+      const { data: lastPageView } = await supabase
+        .from('web_analytics_page_views')
+        .select('viewed_at')
+        .eq('client_id', clientId)
+        .order('viewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const { data: lastSession } = await supabase
+        .from('web_analytics_sessions')
+        .select('started_at')
+        .eq('client_id', clientId)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const lastEventTime = lastPageView?.viewed_at || lastSession?.started_at || null;
+      
       return new Response(
         JSON.stringify({ 
           ok: false,
@@ -172,7 +192,10 @@ serve(async (req) => {
           errorType: 'no_data',
           clientId: client.id,
           clientName: client.name,
-          details: 'Install the tracking script on your website to start collecting analytics data.',
+          details: lastEventTime 
+            ? `Last event recorded: ${lastEventTime}. No data in the selected date range.`
+            : 'Install the tracking script on your website to start collecting analytics data.',
+          lastEventTime,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
