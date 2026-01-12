@@ -982,8 +982,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       ? reportData.followers - reportData.new_followers 
       : prevMetrics?.followers;
 
+    // Calculate Views and Reach from content metrics
+    const content = platform === "instagram" ? instagramContent : facebookContent;
+    const currentViews = content.reduce((sum, c) => sum + (c.metrics?.views || c.metrics?.impressions || 0), 0);
+    const currentReach = content.reduce((sum, c) => sum + (c.metrics?.reach || 0), 0);
+    
+    // For previous period, we'd need to fetch that separately, but for now we'll show what we have
+    // This will be improved when we add proper previous period content fetching
+
     return (
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -1044,6 +1052,34 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Eye className="h-4 w-4" />
+              <span className="text-sm">Views</span>
+            </div>
+            <p className="text-2xl font-bold">
+              {currentViews > 0 ? currentViews.toLocaleString() : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              From synced posts
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Users className="h-4 w-4" />
+              <span className="text-sm">Reach</span>
+            </div>
+            <p className="text-2xl font-bold">
+              {currentReach > 0 ? currentReach.toLocaleString() : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Unique accounts reached
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Clock className="h-4 w-4" />
               <span className="text-sm">Reporting Period</span>
             </div>
@@ -1052,13 +1088,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             </p>
             <div className="group relative">
               <p className="text-xs text-muted-foreground mt-1 cursor-help underline decoration-dotted">
-                vs previous week
+                vs {compLabel}
               </p>
-              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block z-10">
-                <div className="bg-popover text-popover-foreground text-xs rounded-md px-3 py-2 shadow-lg border whitespace-nowrap">
-                  <p>Compared to: {compLabel}</p>
-                </div>
-              </div>
             </div>
           </CardContent>
         </Card>

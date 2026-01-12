@@ -532,7 +532,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 </div>
                 {stats.prevTotalViews > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Last period: {stats.prevTotalViews.toLocaleString()}
+                    vs {stats.prevTotalViews.toLocaleString()} (prev week)
                   </p>
                 )}
               </CardContent>
@@ -603,7 +603,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 </div>
                 {stats.prevEngagementRate > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Last period: {stats.prevEngagementRate.toFixed(2)}%
+                    vs {stats.prevEngagementRate.toFixed(2)}% (prev week)
                   </p>
                 )}
               </CardContent>
