@@ -74,7 +74,7 @@ export interface ClientAnalyticsResponse {
   errorDetails?: string;
 }
 
-type DateRangePreset = "7d" | "30d" | "custom";
+export type DateRangePreset = "7d" | "30d" | "all" | "custom";
 
 interface UseClientAnalyticsOptions {
   clientId: string;
@@ -98,6 +98,10 @@ const getDateRange = (
       break;
     case "30d":
       start = subDays(end, 30);
+      break;
+    case "all":
+      // Use a very old start date to capture all data
+      start = new Date("2020-01-01");
       break;
     case "custom":
       start = customStart || subDays(end, 7);
