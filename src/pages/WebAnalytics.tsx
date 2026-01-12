@@ -10,16 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { useClientAnalytics, AnalyticsErrorType } from "@/hooks/useClientAnalytics";
+import { useClientAnalytics, AnalyticsErrorType, DateRangePreset } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
 import { toast } from "sonner";
-
-type DateRangePreset = "7d" | "30d" | "custom";
 
 const WebAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
-  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [dateRange, setDateRange] = useState<DateRangePreset>("all");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -349,6 +347,7 @@ const WebAnalytics = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
                 <SelectItem value="7d">Last 7 days</SelectItem>
                 <SelectItem value="30d">Last 30 days</SelectItem>
               </SelectContent>

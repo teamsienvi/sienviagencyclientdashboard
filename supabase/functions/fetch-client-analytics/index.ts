@@ -78,6 +78,7 @@ serve(async (req) => {
           headers: {
             'Content-Type': 'application/json',
             'x-api-key': client.api_key,
+            'apikey': client.api_key,
             Authorization: `Bearer ${client.api_key}`,
           },
           body: JSON.stringify({
@@ -88,22 +89,32 @@ serve(async (req) => {
           }),
         });
 
+        console.log('External analytics response status:', analyticsResponse.status);
+
         if (analyticsResponse.ok) {
           const analyticsData = await analyticsResponse.json();
-          console.log('Analytics fetched successfully from external source for client:', client.name);
+          console.log('External analytics raw response:', JSON.stringify(analyticsData));
           
           // Check if external returned all zeros (no real data)
-          const data = analyticsData?.data || analyticsData;
+          // Support both nested and flat response formats
+          const data = analyticsData?.data || analyticsData?.analytics || analyticsData;
           const hasRealData = data && (
             (data.visitors && data.visitors > 0) ||
             (data.pageViews && data.pageViews > 0) ||
-            (data.totalSessions && data.totalSessions > 0)
+            (data.totalSessions && data.totalSessions > 0) ||
+            (data.uniqueVisitors && data.uniqueVisitors > 0) ||
+            (data.summary?.uniqueVisitors && data.summary.uniqueVisitors > 0) ||
+            (data.summary?.totalSessions && data.summary.totalSessions > 0) ||
+            (data.summary?.totalPageViews && data.summary.totalPageViews > 0)
           );
+
+          console.log('External has real data:', hasRealData, 'data keys:', data ? Object.keys(data) : 'null');
 
           if (!hasRealData) {
             // External returned zeros - fall through to local or show no_data
             console.log('External source returned no data, checking local tables...');
           } else {
+            console.log('Analytics fetched successfully from external source for client:', client.name);
             return new Response(
               JSON.stringify({ 
                 clientId: client.id,
@@ -116,7 +127,8 @@ serve(async (req) => {
             );
           }
         } else {
-          console.log('External analytics failed, falling back to local:', analyticsResponse.status);
+          const errorText = await analyticsResponse.text();
+          console.log('External analytics failed, status:', analyticsResponse.status, 'response:', errorText);
           // Fall through to local analytics
         }
       } catch (fetchError) {
