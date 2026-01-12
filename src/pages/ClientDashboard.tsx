@@ -488,8 +488,8 @@ const ClientDashboard = () => {
                   </Card>
                 )}
 
-                {/* Web Analytics - Only for clients with supabase_url */}
-                {client.supabase_url && client.name === "Snarky Humans" && (
+                {/* Web Analytics - For any client with supabase_url configured */}
+                {client.supabase_url && (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/web-analytics/${clientId}`)}
