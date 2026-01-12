@@ -46,6 +46,8 @@ interface PrevMetrics {
   followers: number | null;
   engagement_rate: number | null;
   total_content: number | null;
+  total_views: number | null;
+  total_likes: number | null;
 }
 
 type DateRangePreset = "7d" | "30d" | "custom";
@@ -193,6 +195,8 @@ export const MetricoolAnalyticsSection = ({
         followers: prevData.followers,
         engagement_rate: prevData.engagement_rate,
         total_content: prevData.total_content,
+        total_views: null, // Will be computed from content
+        total_likes: null, // Will be computed from content
       } : null);
 
       return data as AccountMetric | null;
@@ -836,14 +840,29 @@ export const MetricoolAnalyticsSection = ({
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
               )}
             </div>
-            <p className="text-2xl font-bold">
-              {livePosts.length > 0
-                ? formatNumber(livePosts.reduce((sum, p) => sum + (p.views || 0), 0))
+            {(() => {
+              const currentViews = livePosts.length > 0
+                ? livePosts.reduce((sum, p) => sum + (p.views || 0), 0)
                 : contentData && contentData.length > 0
-                  ? formatNumber(contentData.reduce((sum, c) => sum + (c.metrics?.views || 0), 0))
-                  : "—"
-              }
-            </p>
+                  ? contentData.reduce((sum, c) => sum + (c.metrics?.views || 0), 0)
+                  : null;
+              const prevViews = prevMetrics?.total_views;
+              return (
+                <>
+                  <p className="text-2xl font-bold">
+                    {currentViews !== null ? formatNumber(currentViews) : "—"}
+                  </p>
+                  {prevViews != null && currentViews != null && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        vs {formatNumber(prevViews)}
+                      </span>
+                      {renderTrendIndicator(currentViews, prevViews, false, true)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -853,14 +872,29 @@ export const MetricoolAnalyticsSection = ({
               <Heart className="h-4 w-4" />
               <span className="text-sm">Total Likes</span>
             </div>
-            <p className="text-2xl font-bold">
-              {livePosts.length > 0
-                ? formatNumber(livePosts.reduce((sum, p) => sum + (p.likes || 0), 0))
+            {(() => {
+              const currentLikes = livePosts.length > 0
+                ? livePosts.reduce((sum, p) => sum + (p.likes || 0), 0)
                 : contentData && contentData.length > 0
-                  ? formatNumber(contentData.reduce((sum, c) => sum + (c.metrics?.likes || 0), 0))
-                  : "—"
-              }
-            </p>
+                  ? contentData.reduce((sum, c) => sum + (c.metrics?.likes || 0), 0)
+                  : null;
+              const prevLikes = prevMetrics?.total_likes;
+              return (
+                <>
+                  <p className="text-2xl font-bold">
+                    {currentLikes !== null ? formatNumber(currentLikes) : "—"}
+                  </p>
+                  {prevLikes != null && currentLikes != null && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        vs {formatNumber(prevLikes)}
+                      </span>
+                      {renderTrendIndicator(currentLikes, prevLikes, false, true)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -897,14 +931,29 @@ export const MetricoolAnalyticsSection = ({
               <Play className="h-4 w-4" />
               <span className="text-sm">Total Posts</span>
             </div>
-            <p className="text-2xl font-bold">
-              {livePosts.length > 0 
+            {(() => {
+              const currentPosts = livePosts.length > 0 
                 ? livePosts.length 
                 : contentData && contentData.length > 0 
                   ? contentData.length 
-                  : "—"
-              }
-            </p>
+                  : null;
+              const prevPosts = prevMetrics?.total_content;
+              return (
+                <>
+                  <p className="text-2xl font-bold">
+                    {currentPosts !== null ? currentPosts : "—"}
+                  </p>
+                  {prevPosts != null && currentPosts != null && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        vs {prevPosts}
+                      </span>
+                      {renderTrendIndicator(currentPosts, prevPosts, false, true)}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
 
