@@ -27,6 +27,7 @@ interface XAnalyticsSectionProps {
 interface XAccountMetrics {
   id: string;
   followers: number | null;
+  new_followers: number | null;
   engagement_rate: number | null;
   total_content: number | null;
   period_start: string;
@@ -36,6 +37,7 @@ interface XAccountMetrics {
 
 interface XPrevMetrics {
   followers: number | null;
+  new_followers: number | null;
   engagement_rate: number | null;
   total_content: number | null;
 }
@@ -198,6 +200,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
       setPrevMetrics(prevMetricsData ? {
         followers: prevMetricsData.followers,
+        new_followers: prevMetricsData.new_followers,
         engagement_rate: prevMetricsData.engagement_rate,
         total_content: prevMetricsData.total_content,
       } : null);
@@ -398,14 +401,27 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             <p className="text-2xl font-bold">
               {accountMetrics?.followers?.toLocaleString() || "—"}
             </p>
-            {prevMetrics?.followers != null && accountMetrics?.followers != null && (
+            {/* Show added followers if available, otherwise show comparison vs previous */}
+            {accountMetrics?.new_followers != null ? (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground">
+                  {accountMetrics.new_followers >= 0 ? '+' : ''}{accountMetrics.new_followers.toLocaleString()} this week
+                </span>
+                {accountMetrics.new_followers > 0 && (
+                  <ArrowUp className="h-3 w-3 text-green-500" />
+                )}
+                {accountMetrics.new_followers < 0 && (
+                  <ArrowDown className="h-3 w-3 text-red-500" />
+                )}
+              </div>
+            ) : prevMetrics?.followers != null && accountMetrics?.followers != null ? (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
                   vs {prevMetrics.followers.toLocaleString()} (prev week)
                 </span>
                 {renderTrendIndicator(accountMetrics.followers, prevMetrics.followers, false, true)}
               </div>
-            )}
+            ) : null}
           </CardContent>
         </Card>
         <Card>

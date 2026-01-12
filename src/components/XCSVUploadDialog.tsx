@@ -138,10 +138,32 @@ export const XCSVUploadDialog = ({
 
   const extractXDashboardMetrics = (csvText: string): {
     followers?: number;
+    oldFollowers?: number;
+    addedFollowers?: number;
     engagementRate?: number;
+    engagementRateLastWeek?: number;
     totalContent?: number;
+    totalContentLastWeek?: number;
+    periodLabel?: string;
   } => {
     const lines = csvText.trim().replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+
+    const findNumberAfterLabel = (line: string, label: string): number | undefined => {
+      const cells = parseCSVLine(line);
+      const lowerLabel = label.toLowerCase();
+      
+      for (let i = 0; i < cells.length; i++) {
+        const cellLower = (cells[i] || "").toLowerCase().trim();
+        if (cellLower.includes(lowerLabel)) {
+          // Check the next cell for the value
+          for (let j = i + 1; j < cells.length; j++) {
+            const v = parseValue((cells[j] || "").trim());
+            if (typeof v === "number" && !Number.isNaN(v)) return v;
+          }
+        }
+      }
+      return undefined;
+    };
 
     const findFirstNumberInLine = (line: string): number | undefined => {
       const cells = parseCSVLine(line);
@@ -152,27 +174,135 @@ export const XCSVUploadDialog = ({
       return undefined;
     };
 
-    const metrics: { followers?: number; engagementRate?: number; totalContent?: number } = {};
+    const metrics: {
+      followers?: number;
+      oldFollowers?: number;
+      addedFollowers?: number;
+      engagementRate?: number;
+      engagementRateLastWeek?: number;
+      totalContent?: number;
+      totalContentLastWeek?: number;
+      periodLabel?: string;
+    } = {};
 
     for (const line of lines) {
       const lower = line.toLowerCase();
 
+      // Extract period from header like "Weekly Performance Insights (Dec Dec 29 - Jan 4)"
+      if (lower.includes("weekly performance insights") || lower.includes("performance insights")) {
+        const periodMatch = line.match(/\(([^)]+)\)/);
+        if (periodMatch) {
+          metrics.periodLabel = periodMatch[1].trim();
+        }
+      }
+
+      // Old Followers (row 37 format: "Old Followers:,,10")
+      if (lower.includes("old followers")) {
+        metrics.oldFollowers = findFirstNumberInLine(line);
+      }
+
+      // Added Followers (row 38 format: "Added Followers:,,-" or "Added Followers:,,5")
+      if (lower.includes("added followers")) {
+        const val = findFirstNumberInLine(line);
+        // If it's a dash or empty, treat as 0
+        metrics.addedFollowers = val !== undefined ? val : 0;
+      }
+
+      // Total Followers (row 39 format: "Total Followers:,,10")
       if (lower.includes("total followers")) {
         metrics.followers = findFirstNumberInLine(line);
       }
 
+      // Engagement Rate (row 40 has both current and last week)
       if (lower.includes("engagement rate")) {
-        // Prefer the first "Engagement Rate:" line (not last week)
-        if (!lower.includes("last week")) {
+        // Check for last week first
+        if (lower.includes("last week")) {
+          metrics.engagementRateLastWeek = findNumberAfterLabel(line, "last week");
+        }
+        // Current engagement rate (first number in the line, not associated with "last week")
+        if (metrics.engagementRate === undefined && !lower.includes("last week")) {
           metrics.engagementRate = findFirstNumberInLine(line);
         }
       }
 
+      // Handle the combined line format: "Engagement Rate:,,3.26,Engagement Rate Last week:,,9.62"
+      if (lower.includes("engagement rate") && lower.includes("last week")) {
+        const cells = parseCSVLine(line);
+        let foundCurrent = false;
+        for (let i = 0; i < cells.length; i++) {
+          const cellLower = (cells[i] || "").toLowerCase().trim();
+          if (cellLower.includes("engagement rate") && !cellLower.includes("last week")) {
+            // Get the next numeric value for current
+            for (let j = i + 1; j < cells.length; j++) {
+              const v = parseValue((cells[j] || "").trim());
+              if (typeof v === "number" && !Number.isNaN(v)) {
+                if (!foundCurrent) {
+                  metrics.engagementRate = v;
+                  foundCurrent = true;
+                }
+                break;
+              }
+            }
+          }
+          if (cellLower.includes("last week")) {
+            // Get the next numeric value for last week
+            for (let j = i + 1; j < cells.length; j++) {
+              const v = parseValue((cells[j] || "").trim());
+              if (typeof v === "number" && !Number.isNaN(v)) {
+                metrics.engagementRateLastWeek = v;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // Total number of content this week
       if (lower.includes("total number of content this week")) {
-        metrics.totalContent = findFirstNumberInLine(line);
+        metrics.totalContent = findNumberAfterLabel(line, "this week");
+        if (metrics.totalContent === undefined) {
+          // Fallback: find number after "total number of content this week"
+          const cells = parseCSVLine(line);
+          for (let i = 0; i < cells.length; i++) {
+            if ((cells[i] || "").toLowerCase().includes("this week")) {
+              for (let j = i + 1; j < cells.length; j++) {
+                const v = parseValue((cells[j] || "").trim());
+                if (typeof v === "number" && !Number.isNaN(v)) {
+                  metrics.totalContent = v;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Total number of content last week
+      if (lower.includes("total number of content last week")) {
+        metrics.totalContentLastWeek = findNumberAfterLabel(line, "last week");
+        if (metrics.totalContentLastWeek === undefined) {
+          const cells = parseCSVLine(line);
+          for (let i = 0; i < cells.length; i++) {
+            if ((cells[i] || "").toLowerCase().includes("last week")) {
+              for (let j = i + 1; j < cells.length; j++) {
+                const v = parseValue((cells[j] || "").trim());
+                if (typeof v === "number" && !Number.isNaN(v)) {
+                  metrics.totalContentLastWeek = v;
+                  break;
+                }
+              }
+            }
+          }
+        }
       }
     }
 
+    // Calculate old followers from total - added if not found directly
+    if (metrics.oldFollowers === undefined && metrics.followers !== undefined && metrics.addedFollowers !== undefined) {
+      metrics.oldFollowers = metrics.followers - metrics.addedFollowers;
+    }
+
+    console.log("Extracted dashboard metrics:", metrics);
     return metrics;
   };
 
@@ -398,7 +528,7 @@ export const XCSVUploadDialog = ({
 
       const dashboard = extractXDashboardMetrics(csvText);
 
-      // If the CSV doesn't include followers, reuse the latest known followers (so Top Posts can still compute the index)
+      // Use followers from CSV, otherwise fallback to latest known
       let followers: number | null = dashboard.followers ?? null;
       if (followers == null) {
         const { data: latestFollowerRow } = await supabase
@@ -416,6 +546,14 @@ export const XCSVUploadDialog = ({
       const engagementRate = dashboard.engagementRate ?? computedEngagementRate;
       const totalContent = dashboard.totalContent ?? parsedData.length;
 
+      // Calculate added followers from the CSV data
+      const addedFollowers = dashboard.addedFollowers ?? (
+        dashboard.followers !== undefined && dashboard.oldFollowers !== undefined
+          ? dashboard.followers - dashboard.oldFollowers
+          : null
+      );
+
+      // Insert/update current period metrics
       const { data: existingAccountMetric } = await supabase
         .from("social_account_metrics")
         .select("id")
@@ -434,6 +572,7 @@ export const XCSVUploadDialog = ({
             followers,
             total_content: totalContent,
             engagement_rate: engagementRate,
+            new_followers: addedFollowers,
           })
           .eq("id", existingAccountMetric.id);
       } else {
@@ -445,7 +584,65 @@ export const XCSVUploadDialog = ({
           followers,
           total_content: totalContent,
           engagement_rate: engagementRate,
+          new_followers: addedFollowers,
         });
+      }
+
+      // Insert previous period metrics if we have the data
+      // This allows us to show week-over-week comparisons
+      const hasLastWeekData = dashboard.oldFollowers !== undefined || 
+                              dashboard.engagementRateLastWeek !== undefined || 
+                              dashboard.totalContentLastWeek !== undefined;
+      
+      if (hasLastWeekData) {
+        // Calculate previous period dates (7 days before the current period)
+        const currentStart = new Date(effectivePeriodStart);
+        const currentEnd = new Date(effectivePeriodEnd);
+        const periodDuration = currentEnd.getTime() - currentStart.getTime();
+        const prevStart = new Date(currentStart.getTime() - periodDuration - 86400000); // Start of previous week
+        const prevEnd = new Date(currentStart.getTime() - 86400000); // Day before current period
+        
+        const prevPeriodStart = prevStart.toISOString().split("T")[0];
+        const prevPeriodEnd = prevEnd.toISOString().split("T")[0];
+
+        // Check if previous period metrics already exist
+        const { data: existingPrevMetric } = await supabase
+          .from("social_account_metrics")
+          .select("id")
+          .eq("client_id", clientId)
+          .eq("platform", "x")
+          .eq("period_start", prevPeriodStart)
+          .eq("period_end", prevPeriodEnd)
+          .order("collected_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const prevFollowers = dashboard.oldFollowers ?? null;
+        const prevEngagementRate = dashboard.engagementRateLastWeek ?? null;
+        const prevTotalContent = dashboard.totalContentLastWeek ?? null;
+
+        if (existingPrevMetric?.id) {
+          await supabase
+            .from("social_account_metrics")
+            .update({
+              followers: prevFollowers,
+              total_content: prevTotalContent,
+              engagement_rate: prevEngagementRate,
+            })
+            .eq("id", existingPrevMetric.id);
+        } else {
+          await supabase.from("social_account_metrics").insert({
+            client_id: clientId,
+            platform: "x",
+            period_start: prevPeriodStart,
+            period_end: prevPeriodEnd,
+            followers: prevFollowers,
+            total_content: prevTotalContent,
+            engagement_rate: prevEngagementRate,
+          });
+        }
+
+        console.log("Inserted previous period metrics:", { prevPeriodStart, prevPeriodEnd, prevFollowers, prevEngagementRate, prevTotalContent });
       }
 
       toast.success(`Imported ${totalInserted} X posts successfully!`);
