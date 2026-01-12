@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings } from "lucide-react";
+import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { useClientAnalytics, AnalyticsErrorType } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
+import { toast } from "sonner";
 
 type DateRangePreset = "7d" | "30d" | "custom";
 
@@ -19,6 +20,8 @@ const WebAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
 
   // Fetch client details
   const { data: client, isLoading: isLoadingClient } = useQuery({
@@ -37,11 +40,96 @@ const WebAnalytics = () => {
   });
 
   // Fetch analytics for client
-  const { data: analyticsData, isLoading: isLoadingAnalytics, error: analyticsError } = useClientAnalytics({
+  const { data: analyticsData, isLoading: isLoadingAnalytics, error: analyticsError, refetch: refetchAnalytics } = useClientAnalytics({
     clientId: clientId || "",
     dateRange,
     enabled: !!clientId,
   });
+
+  // Get the tracking endpoint URL - use client's supabase_url if available, otherwise use main project
+  const getTrackingEndpoint = () => {
+    const baseUrl = client?.supabase_url || "https://ihbdwilzjxivmmmlkuyu.supabase.co";
+    return `${baseUrl}/functions/v1/track-analytics`;
+  };
+
+  // Test tracking function
+  const handleTestTracking = async () => {
+    if (!clientId) return;
+    
+    setIsTesting(true);
+    setTestResult(null);
+    
+    try {
+      const endpoint = getTrackingEndpoint();
+      const testVisitorId = `test_${Date.now()}`;
+      
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          clientId,
+          visitorId: testVisitorId,
+          pageUrl: "/test-page",
+          pageTitle: "Test Page - Analytics Verification",
+          referrer: "",
+          utmSource: "lovable_test",
+          utmMedium: "test",
+          utmCampaign: "analytics_verification",
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTestResult({ 
+            success: true, 
+            message: "Test event recorded successfully! Refresh the page in a few seconds to see the data." 
+          });
+          toast.success("Test tracking event sent successfully!");
+          // Refetch analytics after a short delay
+          setTimeout(() => {
+            refetchAnalytics();
+          }, 2000);
+        } else {
+          setTestResult({ 
+            success: false, 
+            message: `Tracking failed: ${data.error || "Unknown error"}` 
+          });
+        }
+      } else {
+        const errorText = await response.text();
+        let errorMessage = `HTTP ${response.status}`;
+        
+        if (response.status === 400) {
+          errorMessage = `Bad request - ${errorText}`;
+        } else if (response.status === 401 || response.status === 403) {
+          errorMessage = "Authentication failed - check API key or RLS policies";
+        } else if (response.status === 404) {
+          errorMessage = "Tracking endpoint not found - ensure edge function is deployed";
+        } else if (response.status >= 500) {
+          errorMessage = `Server error - ${errorText}`;
+        }
+        
+        setTestResult({ success: false, message: errorMessage });
+        toast.error(`Test failed: ${errorMessage}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Network error - CORS or connectivity issue";
+      setTestResult({ success: false, message });
+      toast.error(`Test failed: ${message}`);
+    } finally {
+      setIsTesting(false);
+    }
+  };
+
+  // Copy tracking script to clipboard
+  const copyTrackingScript = () => {
+    const script = `<script src="${getTrackingEndpoint()}" data-client-id="${clientId}"></script>`;
+    navigator.clipboard.writeText(script);
+    toast.success("Tracking script copied to clipboard!");
+  };
 
   // Check for error state from hook
   const errorType = analyticsData?.errorType;
@@ -326,12 +414,70 @@ const WebAnalytics = () => {
                                 </Button>
                               )}
                               {errorType === 'no_data' && clientId && (
-                                <div className="mt-4 p-4 bg-muted rounded-lg text-left max-w-lg">
-                                  <p className="text-sm font-medium mb-2">Tracking Script</p>
-                                  <code className="text-xs break-all block p-2 bg-background rounded">
-                                    {`<script src="https://ihbdwilzjxivmmmlkuyu.supabase.co/functions/v1/track-analytics" data-client-id="${clientId}"></script>`}
+                                <div className="mt-4 p-4 bg-muted rounded-lg text-left max-w-xl w-full">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <p className="text-sm font-medium">Tracking Script</p>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={copyTrackingScript}
+                                      className="h-7 px-2"
+                                    >
+                                      <Copy className="h-3 w-3 mr-1" />
+                                      Copy
+                                    </Button>
+                                  </div>
+                                  <code className="text-xs break-all block p-2 bg-background rounded border">
+                                    {`<script src="${getTrackingEndpoint()}" data-client-id="${clientId}"></script>`}
                                   </code>
-                                  <p className="text-xs text-muted-foreground mt-2">Add this to your website's HTML to start tracking.</p>
+                                  <p className="text-xs text-muted-foreground mt-2">
+                                    Add this script to your website's HTML header to start tracking visitors.
+                                  </p>
+                                  
+                                  {/* Test Tracking Button */}
+                                  <div className="mt-4 pt-4 border-t border-border">
+                                    <div className="flex items-center gap-3">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleTestTracking}
+                                        disabled={isTesting}
+                                      >
+                                        {isTesting ? (
+                                          <>
+                                            <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                                            Testing...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Play className="h-3 w-3 mr-2" />
+                                            Test Tracking
+                                          </>
+                                        )}
+                                      </Button>
+                                      {testResult && (
+                                        <div className={`flex items-center gap-1 text-xs ${testResult.success ? 'text-green-600' : 'text-destructive'}`}>
+                                          {testResult.success ? (
+                                            <CheckCircle className="h-3 w-3" />
+                                          ) : (
+                                            <XCircle className="h-3 w-3" />
+                                          )}
+                                          <span className="max-w-[250px] truncate">{testResult.message}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Troubleshooting Guide */}
+                                  <div className="mt-4 text-xs text-muted-foreground space-y-1">
+                                    <p className="font-medium text-foreground">Troubleshooting:</p>
+                                    <ul className="list-disc list-inside space-y-1 ml-1">
+                                      <li>Install the script in your website's global header</li>
+                                      <li>Verify the client ID matches this client</li>
+                                      <li>Disable ad blockers which may block tracking</li>
+                                      <li>Check browser console for blocked requests</li>
+                                    </ul>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -646,30 +792,54 @@ const WebAnalytics = () => {
                   {/* Top Pages */}
                   <Card>
                     <CardHeader>
-                      <CardTitle>Top Pages</CardTitle>
-                      <CardDescription>Most visited pages on the website</CardDescription>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>Top Pages</CardTitle>
+                          <CardDescription>Most visited pages on the website</CardDescription>
+                        </div>
+                        {!normalizedAnalytics?.topPages?.length && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Info className="h-3 w-3 mr-1" />
+                            Sample Data
+                          </Badge>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
-                        {[
-                          { page: "/", views: 1250, avgTime: "2m 15s" },
-                          { page: "/shop", views: 892, avgTime: "3m 42s" },
-                          { page: "/about", views: 456, avgTime: "1m 30s" },
-                          { page: "/blog", views: 321, avgTime: "4m 18s" },
-                          { page: "/contact", views: 198, avgTime: "1m 05s" },
-                        ].map((item, index) => (
+                        {(normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 
+                          ? normalizedAnalytics.topPages.slice(0, 10).map((page, index) => ({
+                              page: page.url,
+                              views: page.views,
+                              avgTime: "-",
+                            }))
+                          : [
+                              { page: "/", views: 1250, avgTime: "2m 15s" },
+                              { page: "/shop", views: 892, avgTime: "3m 42s" },
+                              { page: "/about", views: 456, avgTime: "1m 30s" },
+                              { page: "/blog", views: 321, avgTime: "4m 18s" },
+                              { page: "/contact", views: 198, avgTime: "1m 05s" },
+                            ]
+                        ).map((item, index) => (
                           <div key={item.page} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                             <div className="flex items-center gap-3">
                               <span className="text-muted-foreground w-6">{index + 1}.</span>
-                              <span className="font-medium">{item.page}</span>
+                              <span className="font-medium truncate max-w-[300px]" title={item.page}>{item.page}</span>
                             </div>
                             <div className="flex items-center gap-6 text-sm">
-                              <span className="text-muted-foreground">{item.avgTime}</span>
+                              {item.avgTime !== "-" && (
+                                <span className="text-muted-foreground">{item.avgTime}</span>
+                              )}
                               <span className="font-medium">{item.views.toLocaleString()} views</span>
                             </div>
                           </div>
                         ))}
                       </div>
+                      {!normalizedAnalytics?.topPages?.length && (
+                        <p className="text-xs text-muted-foreground mt-4">
+                          Showing sample data - real data will appear once tracking is active
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>

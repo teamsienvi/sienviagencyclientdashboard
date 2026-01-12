@@ -321,7 +321,7 @@ export const MetricoolAnalyticsSection = ({
       const fromShanghai = formatWithOffset(startDate, false, 8 * 60);
       const toShanghai = formatWithOffset(now, true, 8 * 60);
 
-      console.log("Syncing TikTok data:", { 
+      console.log("Syncing Metricool data:", { 
         clientId, 
         platform, 
         userId: config.user_id, 
@@ -332,17 +332,65 @@ export const MetricoolAnalyticsSection = ({
         toShanghai,
       });
 
-      // Fetch TikTok posts
-      const postsPromise = supabase.functions.invoke("metricool-tiktok-posts", {
-        body: {
-          from: fromUTC,
-          to: toUTC,
-          timezone: "UTC",
-          userId: config.user_id,
-          blogId: config.blog_id || undefined,
-          clientId,
-        },
-      });
+      // Fetch posts - use platform-specific endpoints
+      let postsPromise: Promise<{ data: any; error: any }>;
+      
+      if (platform === "linkedin") {
+        // For LinkedIn, use metricool-csv to fetch posts from the correct endpoint
+        postsPromise = supabase.functions.invoke("metricool-csv", {
+          body: {
+            path: "/api/v2/analytics/posts/linkedin",
+            params: {
+              from: fromUTC,
+              to: toUTC,
+              timezone: "UTC",
+              userId: config.user_id,
+              blogId: config.blog_id || undefined,
+            },
+          },
+        }).then(result => {
+          // Transform CSV response to match TikTok post format
+          if (result.data?.success && result.data?.rows) {
+            const transformedRows = result.data.rows.map((row: any) => {
+              // Validate LinkedIn URL - log warning if it contains tiktok.com
+              const postUrl = row.url || null;
+              if (postUrl && postUrl.includes("tiktok.com")) {
+                console.error("MAPPING ERROR: LinkedIn post has TikTok URL:", postUrl);
+              }
+              
+              return {
+                title: row.title || null,
+                date: row.date || null,
+                type: row.type || "post",
+                views: row.impressions || row.unique_impressions || 0,
+                likes: row.reactions_total || row.reactions_like || 0,
+                comments: row.comments || 0,
+                shares: row.shares || 0,
+                reach: row.unique_impressions || row.impressions || 0,
+                duration: null,
+                engagement: row.engagement || 0,
+                url: postUrl,
+                link: postUrl,
+                image: null,
+              };
+            });
+            return { data: { success: true, rows: transformedRows }, error: null };
+          }
+          return result;
+        });
+      } else {
+        // For TikTok, use the existing endpoint
+        postsPromise = supabase.functions.invoke("metricool-tiktok-posts", {
+          body: {
+            from: fromUTC,
+            to: toUTC,
+            timezone: "UTC",
+            userId: config.user_id,
+            blogId: config.blog_id || undefined,
+            clientId,
+          },
+        });
+      }
 
       const followersPromise =
         platform === "tiktok"

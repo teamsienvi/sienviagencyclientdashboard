@@ -277,6 +277,41 @@ export const XCSVUploadDialog = ({
         return;
       }
 
+      // DELETE existing content and metrics for this client + platform + period to prevent duplicates
+      console.log("Deleting existing X content for client:", clientId, "period:", effectivePeriodStart, "-", effectivePeriodEnd);
+      
+      // First, get all existing social_content IDs for this client/platform
+      const { data: existingContent } = await supabase
+        .from("social_content")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("platform", "x");
+
+      if (existingContent && existingContent.length > 0) {
+        const contentIds = existingContent.map(c => c.id);
+        
+        // Delete metrics for these content items in the period
+        await supabase
+          .from("social_content_metrics")
+          .delete()
+          .in("social_content_id", contentIds)
+          .eq("period_start", effectivePeriodStart)
+          .eq("period_end", effectivePeriodEnd);
+        
+        console.log("Deleted existing metrics for period");
+      }
+
+      // Delete existing account metrics for this period
+      await supabase
+        .from("social_account_metrics")
+        .delete()
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .eq("period_start", effectivePeriodStart)
+        .eq("period_end", effectivePeriodEnd);
+
+      console.log("Deleted existing account metrics for period");
+
       let totalInserted = 0;
 
       for (const row of parsedData) {
