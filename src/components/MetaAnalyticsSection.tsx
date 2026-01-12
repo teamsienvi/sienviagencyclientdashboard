@@ -982,16 +982,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       ? reportData.followers - reportData.new_followers 
       : prevMetrics?.followers;
 
-    // Calculate Views and Reach from content metrics
-    const content = platform === "instagram" ? instagramContent : facebookContent;
-    const currentViews = content.reduce((sum, c) => sum + (c.metrics?.views || c.metrics?.impressions || 0), 0);
-    const currentReach = content.reduce((sum, c) => sum + (c.metrics?.reach || 0), 0);
-    
-    // For previous period, we'd need to fetch that separately, but for now we'll show what we have
-    // This will be improved when we add proper previous period content fetching
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -1052,34 +1045,6 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Eye className="h-4 w-4" />
-              <span className="text-sm">Views</span>
-            </div>
-            <p className="text-2xl font-bold">
-              {currentViews > 0 ? currentViews.toLocaleString() : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              From synced posts
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Users className="h-4 w-4" />
-              <span className="text-sm">Reach</span>
-            </div>
-            <p className="text-2xl font-bold">
-              {currentReach > 0 ? currentReach.toLocaleString() : "—"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Unique accounts reached
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Clock className="h-4 w-4" />
               <span className="text-sm">Reporting Period</span>
             </div>
@@ -1118,7 +1083,6 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <Skeleton className="h-4 w-[60px]" />
                 <Skeleton className="h-4 w-[60px]" />
                 <Skeleton className="h-4 w-[60px]" />
-                <Skeleton className="h-4 w-[60px]" />
               </div>
             ))}
           </div>
@@ -1137,12 +1101,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <TableHead>Post</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
-                    Views
-                  </div>
-                </TableHead>
+                {platform === "instagram" && (
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <Eye className="h-3 w-3" />
+                      Views
+                    </div>
+                  </TableHead>
+                )}
                 <TableHead>
                   <div className="flex items-center gap-1">
                     <Users className="h-3 w-3" />
@@ -1205,19 +1171,27 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     </span>
                   </TableCell>
                   <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
-                  <TableCell>
-                    {(() => {
-                      const views = post.metrics?.views || post.metrics?.impressions;
-                      return views ? views.toLocaleString() : "—";
-                    })()}
-                  </TableCell>
+                  {platform === "instagram" && (
+                    <TableCell>
+                      {(() => {
+                        const views = post.metrics?.views || post.metrics?.impressions;
+                        return views ? views.toLocaleString() : "—";
+                      })()}
+                    </TableCell>
+                  )}
                   <TableCell>
                     {(() => {
                       const reach = post.metrics?.reach;
+                      const impressions = post.metrics?.impressions;
                       const likes = post.metrics?.likes || 0;
                       const comments = post.metrics?.comments || 0;
                       const shares = post.metrics?.shares || 0;
                       const hasEngagement = likes > 0 || comments > 0 || shares > 0;
+                      
+                      // For Facebook, fallback to impressions if reach is 0/null
+                      if (platform === "facebook" && (reach === 0 || reach == null) && impressions && impressions > 0) {
+                        return impressions.toLocaleString();
+                      }
                       
                       if ((reach === 0 || reach == null) && hasEngagement) {
                         return (

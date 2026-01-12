@@ -57,11 +57,11 @@ const Index = () => {
     return map;
   }, [metricoolConfigs]);
 
-  // Map client names to their database IDs (only Snarky Humans has website analytics for now)
+  // Map client names to their database IDs for clients with website analytics configured
   const websiteAnalyticsMap = useMemo(() => {
     const map: Record<string, string> = {};
     dbClients?.forEach((client) => {
-      if (client.supabase_url && client.name === "Snarky Humans") {
+      if (client.supabase_url) {
         map[client.name] = client.id;
       }
     });
