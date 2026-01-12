@@ -566,7 +566,7 @@ export const MetricoolAnalyticsSection = ({
         countryError: countryResult.error,
       };
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       const { posts, postsError, followers, followersError } = result;
       
       // Handle posts data
@@ -579,6 +579,89 @@ export const MetricoolAnalyticsSection = ({
         if (posts.rows.length > 0) {
           const avgEngagement = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length;
           setLiveEngagement(avgEngagement);
+        }
+        
+        // PERSIST POSTS TO DATABASE for LinkedIn
+        if (platform === "linkedin" && posts.rows.length > 0) {
+          console.log("Persisting LinkedIn posts to database:", posts.rows.length);
+          const now = new Date();
+          const periodStart = subDays(now, 7).toISOString().split("T")[0];
+          const periodEnd = now.toISOString().split("T")[0];
+          
+          // Calculate totals for account metrics
+          const totalImpressions = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.views || 0), 0);
+          const totalReactions = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.likes || 0), 0);
+          const totalComments = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.comments || 0), 0);
+          const totalShares = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.shares || 0), 0);
+          const avgEngagementRate = posts.rows.length > 0 
+            ? posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length
+            : 0;
+          
+          // Upsert account metrics
+          const { error: metricsError } = await supabase
+            .from("social_account_metrics")
+            .upsert({
+              client_id: clientId,
+              platform: "linkedin",
+              period_start: periodStart,
+              period_end: periodEnd,
+              collected_at: now.toISOString(),
+              total_content: posts.rows.length,
+              engagement_rate: avgEngagementRate,
+              followers: liveFollowers || config?.followers || null,
+            }, { onConflict: "client_id,platform,period_start,period_end" });
+          
+          if (metricsError) {
+            console.error("Failed to persist LinkedIn account metrics:", metricsError);
+          } else {
+            console.log("Persisted LinkedIn account metrics");
+          }
+          
+          // Persist individual posts
+          for (const post of posts.rows) {
+            const contentId = post.url || `linkedin_${clientId}_${post.date}_${(post.title || "").slice(0, 20)}`;
+            
+            // Upsert content
+            const { data: contentData, error: contentError } = await supabase
+              .from("social_content")
+              .upsert({
+                client_id: clientId,
+                platform: "linkedin",
+                content_id: contentId,
+                content_type: (post.type || "post").toLowerCase() as "post" | "video",
+                title: post.title || null,
+                url: post.url || null,
+                published_at: post.date ? new Date(post.date).toISOString() : now.toISOString(),
+              }, { onConflict: "client_id,platform,content_id" })
+              .select("id")
+              .single();
+            
+            if (contentError) {
+              console.error("Failed to persist LinkedIn content:", contentError);
+              continue;
+            }
+            
+            // Upsert content metrics
+            const { error: contentMetricsError } = await supabase
+              .from("social_content_metrics")
+              .upsert({
+                social_content_id: contentData.id,
+                platform: "linkedin",
+                period_start: periodStart,
+                period_end: periodEnd,
+                collected_at: now.toISOString(),
+                impressions: post.views || 0,
+                likes: post.likes || 0,
+                comments: post.comments || 0,
+                shares: post.shares || 0,
+                reach: post.reach || 0,
+              }, { onConflict: "social_content_id,platform,period_start,period_end" });
+            
+            if (contentMetricsError) {
+              console.error("Failed to persist LinkedIn content metrics:", contentMetricsError);
+            }
+          }
+          console.log("Finished persisting LinkedIn posts to database");
         }
       }
 
@@ -713,7 +796,8 @@ export const MetricoolAnalyticsSection = ({
       setLastSyncTime(new Date());
       
       const postsCount = posts?.rows?.length || 0;
-      toast.success(`Synced ${postsCount} TikTok posts from Metricool`);
+      const platformName = platform === "linkedin" ? "LinkedIn" : "TikTok";
+      toast.success(`Synced ${postsCount} ${platformName} posts from Metricool`);
       
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
       queryClient.invalidateQueries({ queryKey: ["metricool-content", clientId, platform] });
@@ -954,7 +1038,7 @@ export const MetricoolAnalyticsSection = ({
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Eye className="h-4 w-4" />
-              <span className="text-sm">Total Views</span>
+              <span className="text-sm">{platform === "linkedin" ? "Total Impressions" : "Total Views"}</span>
               {livePosts.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
               )}
@@ -963,7 +1047,7 @@ export const MetricoolAnalyticsSection = ({
               const currentViews = livePosts.length > 0
                 ? livePosts.reduce((sum, p) => sum + (p.views || 0), 0)
                 : contentData && contentData.length > 0
-                  ? contentData.reduce((sum, c) => sum + (c.metrics?.views || 0), 0)
+                  ? contentData.reduce((sum, c) => sum + (c.metrics?.impressions || c.metrics?.views || 0), 0)
                   : null;
               const prevViews = prevMetrics?.total_views;
               return (
@@ -989,7 +1073,7 @@ export const MetricoolAnalyticsSection = ({
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Heart className="h-4 w-4" />
-              <span className="text-sm">Total Likes</span>
+              <span className="text-sm">{platform === "linkedin" ? "Total Reactions" : "Total Likes"}</span>
             </div>
             {(() => {
               const currentLikes = livePosts.length > 0
