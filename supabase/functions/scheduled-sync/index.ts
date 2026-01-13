@@ -227,84 +227,75 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 500));
     }
 
-    // 5. META (INSTAGRAM & FACEBOOK) SYNC
-    console.log("\n=== Syncing Meta (Instagram & Facebook) ===");
-    const { data: metaOauthAccounts } = await supabase
-      .from("social_oauth_accounts")
+    // 5. META (INSTAGRAM & FACEBOOK) SYNC VIA METRICOOL
+    console.log("\n=== Syncing Meta via Metricool (Instagram & Facebook) ===");
+    
+    // Fetch all active Metricool configs for Instagram
+    const { data: instagramConfigs } = await supabase
+      .from("client_metricool_config")
       .select(`
-        id, client_id, access_token, instagram_business_id, page_id,
+        client_id,
+        user_id,
+        blog_id,
         clients(name)
       `)
+      .eq("platform", "instagram")
       .eq("is_active", true);
 
-    const metaClientIds = (metaOauthAccounts || []).map(a => a.client_id);
-    const { data: metaSocialAccounts } = await supabase
-      .from("social_accounts")
-      .select("id, client_id, platform")
-      .in("client_id", metaClientIds.length > 0 ? metaClientIds : ["none"])
-      .in("platform", ["instagram", "facebook"])
+    for (const config of instagramConfigs || []) {
+      const clientName = (config.clients as any)?.name || config.client_id;
+      console.log(`Syncing Instagram (Metricool) for ${clientName}`);
+      
+      await syncBothPeriods(
+        async (periodStart, periodEnd) => {
+          const { data, error } = await supabase.functions.invoke("sync-metricool-instagram", {
+            body: {
+              clientId: config.client_id,
+              periodStart,
+              periodEnd,
+            },
+          });
+          if (error) throw error;
+          return { success: true, recordsSynced: data?.recordsSynced || 0 };
+        },
+        "instagram",
+        clientName
+      );
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // Fetch all active Metricool configs for Facebook
+    const { data: facebookConfigs } = await supabase
+      .from("client_metricool_config")
+      .select(`
+        client_id,
+        user_id,
+        blog_id,
+        clients(name)
+      `)
+      .eq("platform", "facebook")
       .eq("is_active", true);
 
-    for (const oauthAccount of metaOauthAccounts || []) {
-      const clientName = (oauthAccount.clients as any)?.name || oauthAccount.client_id;
-
-      // Sync Instagram
-      if (oauthAccount.instagram_business_id) {
-        const igSocialAccount = metaSocialAccounts?.find(
-          sa => sa.client_id === oauthAccount.client_id && sa.platform === "instagram"
-        );
-        
-        console.log(`Syncing Instagram for ${clientName}`);
-        await syncBothPeriods(
-          async (periodStart, periodEnd) => {
-            const { data, error } = await supabase.functions.invoke("sync-meta", {
-              body: {
-                clientId: oauthAccount.client_id,
-                accountId: igSocialAccount?.id,
-                platform: "instagram",
-                accessToken: oauthAccount.access_token,
-                accountExternalId: oauthAccount.instagram_business_id,
-                periodStart,
-                periodEnd,
-              },
-            });
-            if (error) throw error;
-            return data;
-          },
-          "instagram",
-          clientName
-        );
-        await new Promise(r => setTimeout(r, 500));
-      }
-
-      // Sync Facebook
-      if (oauthAccount.page_id) {
-        const fbSocialAccount = metaSocialAccounts?.find(
-          sa => sa.client_id === oauthAccount.client_id && sa.platform === "facebook"
-        );
-        
-        console.log(`Syncing Facebook for ${clientName}`);
-        await syncBothPeriods(
-          async (periodStart, periodEnd) => {
-            const { data, error } = await supabase.functions.invoke("sync-meta", {
-              body: {
-                clientId: oauthAccount.client_id,
-                accountId: fbSocialAccount?.id,
-                platform: "facebook",
-                accessToken: oauthAccount.access_token,
-                accountExternalId: oauthAccount.page_id,
-                periodStart,
-                periodEnd,
-              },
-            });
-            if (error) throw error;
-            return data;
-          },
-          "facebook",
-          clientName
-        );
-        await new Promise(r => setTimeout(r, 500));
-      }
+    for (const config of facebookConfigs || []) {
+      const clientName = (config.clients as any)?.name || config.client_id;
+      console.log(`Syncing Facebook (Metricool) for ${clientName}`);
+      
+      await syncBothPeriods(
+        async (periodStart, periodEnd) => {
+          const { data, error } = await supabase.functions.invoke("sync-metricool-facebook", {
+            body: {
+              clientId: config.client_id,
+              periodStart,
+              periodEnd,
+            },
+          });
+          if (error) throw error;
+          return { success: true, recordsSynced: data?.recordsSynced || 0 };
+        },
+        "facebook",
+        clientName
+      );
+      await new Promise(r => setTimeout(r, 500));
     }
 
     console.log("\n=== Scheduled Sync Complete ===");
