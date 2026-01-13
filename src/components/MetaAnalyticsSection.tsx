@@ -170,19 +170,28 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     ig_business_id: string | null;
   } | null>(null);
 
-  // isConnected is true if either per-client OAuth OR agency mapping exists
-  const isConnected = (oauthAccount !== null && oauthAccount.is_active) || (agencyMapping !== null);
-  const hasAgencyConnection = agencyMapping !== null;
-
   // Bulk sync "in progress" banner state
   const [bulkSyncRunning, setBulkSyncRunning] = useState(false);
 
   // Sync details panel state
   const [syncDetailsOpen, setSyncDetailsOpen] = useState(false);
 
-  // Metricool config state for Instagram
+  // Metricool config state for both platforms
   const [metricoolConfig, setMetricoolConfig] = useState<{ user_id: string; blog_id: string | null } | null>(null);
+  const [facebookMetricoolConfig, setFacebookMetricoolConfig] = useState<{ user_id: string; blog_id: string | null } | null>(null);
   const [syncingMetricool, setSyncingMetricool] = useState(false);
+  const [syncingFacebookMetricool, setSyncingFacebookMetricool] = useState(false);
+  
+  // isConnected is true if OAuth, agency mapping, OR Metricool config exists
+  const isConnected = (oauthAccount !== null && oauthAccount.is_active) || 
+                      (agencyMapping !== null) || 
+                      (metricoolConfig !== null) || 
+                      (facebookMetricoolConfig !== null);
+  const hasAgencyConnection = agencyMapping !== null;
+  
+  // Metricool is the primary data source when config exists
+  const hasInstagramMetricool = metricoolConfig !== null;
+  const hasFacebookMetricool = facebookMetricoolConfig !== null;
 
   // Get the most recent Monday (start of reporting week)
   const getMostRecentMonday = (fromDate: Date = new Date()) => {
@@ -333,6 +342,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .maybeSingle();
     
     setMetricoolConfig(data);
+    return data;
+  };
+  
+  // Fetch Metricool config for Facebook
+  const fetchFacebookMetricoolConfig = async () => {
+    const { data } = await supabase
+      .from("client_metricool_config")
+      .select("user_id, blog_id")
+      .eq("client_id", clientId)
+      .eq("platform", "facebook")
+      .eq("is_active", true)
+      .maybeSingle();
+    
+    setFacebookMetricoolConfig(data);
     return data;
   };
 
@@ -613,11 +636,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       const compStartDate = format(startOfDay(compStart), "yyyy-MM-dd");
       const compEndDate = format(endOfDay(compEnd), "yyyy-MM-dd");
 
-      // Fetch OAuth account, agency mapping, metricool config and platform data in parallel
-      const [oauth, agency, metricool, instagramData, facebookData] = await Promise.all([
+      // Fetch OAuth account, agency mapping, metricool configs and platform data in parallel
+      const [oauth, agency, metricool, fbMetricool, instagramData, facebookData] = await Promise.all([
         fetchOAuthAccount(),
         fetchAgencyMapping(),
         fetchMetricoolConfig(),
+        fetchFacebookMetricoolConfig(),
         fetchPlatformData("instagram", startDate, endDate, compStartDate, compEndDate),
         fetchPlatformData("facebook", startDate, endDate, compStartDate, compEndDate),
       ]);
@@ -853,6 +877,46 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       toast.error(error.message || "Failed to sync Instagram via Metricool");
     } finally {
       setSyncingMetricool(false);
+      setSyncingContent(false);
+    }
+  };
+
+  // Sync Facebook via Metricool
+  const handleFacebookMetricoolSync = async () => {
+    if (!facebookMetricoolConfig) {
+      toast.error("No Metricool configuration found for Facebook");
+      return;
+    }
+
+    setSyncingFacebookMetricool(true);
+    setSyncingContent(true);
+    try {
+      const { start, end } = getDateRange();
+      const periodStart = format(startOfDay(start), "yyyy-MM-dd");
+      const periodEnd = format(endOfDay(end), "yyyy-MM-dd");
+
+      const { data, error } = await supabase.functions.invoke("sync-metricool-facebook", {
+        body: {
+          clientId,
+          periodStart,
+          periodEnd,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(`Synced ${data.recordsSynced} posts from Facebook via Metricool`);
+        await fetchData();
+        fetchSyncLogs();
+      } else {
+        toast.error(data?.error || "Failed to sync Facebook data from Metricool");
+      }
+    } catch (error: any) {
+      console.error("Facebook Metricool sync error:", error);
+      toast.error(error.message || "Failed to sync Facebook via Metricool");
+    } finally {
+      setSyncingFacebookMetricool(false);
       setSyncingContent(false);
     }
   };
@@ -1611,6 +1675,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${syncingMetricool ? "animate-spin" : ""}`} />
                 {syncingMetricool ? "Syncing Metricool..." : "Sync via Metricool"}
+              </Button>
+            )}
+            
+            {/* Metricool sync button for Facebook */}
+            {activePlatform === "facebook" && facebookMetricoolConfig && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleFacebookMetricoolSync}
+                disabled={syncingFacebookMetricool}
+                className="bg-gradient-to-r from-blue-500/10 to-blue-600/10 border-blue-200/50 hover:from-blue-500/20 hover:to-blue-600/20"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${syncingFacebookMetricool ? "animate-spin" : ""}`} />
+                {syncingFacebookMetricool ? "Syncing Metricool..." : "Sync via Metricool"}
               </Button>
             )}
           </div>
