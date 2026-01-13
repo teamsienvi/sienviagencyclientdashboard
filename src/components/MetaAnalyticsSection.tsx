@@ -1656,30 +1656,6 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           </TabsList>
           
           <div className="flex items-center gap-3">
-            {/* OAuth sync buttons for per-client OAuth (not agency model) */}
-            {oauthAccount?.access_token && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSync(activePlatform, true)}
-                  disabled={syncing}
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-                  Sync Last Week
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSync(activePlatform, false)}
-                  disabled={syncing}
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-                  {syncing ? "Syncing..." : "Sync Now"}
-                </Button>
-              </div>
-            )}
-            
             {/* Metricool sync button for Instagram */}
             {activePlatform === "instagram" && metricoolConfig && (
               <Button
@@ -1690,7 +1666,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-purple-200/50 hover:from-purple-500/20 hover:to-pink-500/20"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${syncingMetricool ? "animate-spin" : ""}`} />
-                {syncingMetricool ? "Syncing Metricool..." : "Sync via Metricool"}
+                {syncingMetricool ? "Syncing..." : "Sync via Metricool"}
               </Button>
             )}
             
@@ -1704,7 +1680,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 className="bg-gradient-to-r from-blue-500/10 to-blue-600/10 border-blue-200/50 hover:from-blue-500/20 hover:to-blue-600/20"
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${syncingFacebookMetricool ? "animate-spin" : ""}`} />
-                {syncingFacebookMetricool ? "Syncing Metricool..." : "Sync via Metricool"}
+                {syncingFacebookMetricool ? "Syncing..." : "Sync via Metricool"}
               </Button>
             )}
           </div>
