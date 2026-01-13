@@ -448,7 +448,7 @@ export const XCSVUploadDialog = ({
         }
       }
 
-      // Delete ALL existing account metrics for this client/platform
+      // Delete ALL existing account metrics for this client/platform and wait for completion
       const { error: accountMetricsDeleteError } = await supabase
         .from("social_account_metrics")
         .delete()
@@ -460,6 +460,9 @@ export const XCSVUploadDialog = ({
       } else {
         console.log("Deleted all existing account metrics");
       }
+      
+      // Small delay to ensure deletions are committed before inserts
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       let totalInserted = 0;
 
@@ -553,40 +556,19 @@ export const XCSVUploadDialog = ({
           : null
       );
 
-      // Insert/update current period metrics
-      const { data: existingAccountMetric } = await supabase
-        .from("social_account_metrics")
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("platform", "x")
-        .eq("period_start", effectivePeriodStart)
-        .eq("period_end", effectivePeriodEnd)
-        .order("collected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Insert current period metrics (we deleted all existing above, so just insert)
+      await supabase.from("social_account_metrics").insert({
+        client_id: clientId,
+        platform: "x",
+        period_start: effectivePeriodStart,
+        period_end: effectivePeriodEnd,
+        followers,
+        total_content: totalContent,
+        engagement_rate: engagementRate,
+        new_followers: addedFollowers,
+      });
 
-      if (existingAccountMetric?.id) {
-        await supabase
-          .from("social_account_metrics")
-          .update({
-            followers,
-            total_content: totalContent,
-            engagement_rate: engagementRate,
-            new_followers: addedFollowers,
-          })
-          .eq("id", existingAccountMetric.id);
-      } else {
-        await supabase.from("social_account_metrics").insert({
-          client_id: clientId,
-          platform: "x",
-          period_start: effectivePeriodStart,
-          period_end: effectivePeriodEnd,
-          followers,
-          total_content: totalContent,
-          engagement_rate: engagementRate,
-          new_followers: addedFollowers,
-        });
-      }
+      console.log("Inserted current period metrics:", { effectivePeriodStart, effectivePeriodEnd, followers, engagementRate, totalContent, addedFollowers });
 
       // Insert previous period metrics if we have the data
       // This allows us to show week-over-week comparisons
@@ -605,42 +587,20 @@ export const XCSVUploadDialog = ({
         const prevPeriodStart = prevStart.toISOString().split("T")[0];
         const prevPeriodEnd = prevEnd.toISOString().split("T")[0];
 
-        // Check if previous period metrics already exist
-        const { data: existingPrevMetric } = await supabase
-          .from("social_account_metrics")
-          .select("id")
-          .eq("client_id", clientId)
-          .eq("platform", "x")
-          .eq("period_start", prevPeriodStart)
-          .eq("period_end", prevPeriodEnd)
-          .order("collected_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
         const prevFollowers = dashboard.oldFollowers ?? null;
         const prevEngagementRate = dashboard.engagementRateLastWeek ?? null;
         const prevTotalContent = dashboard.totalContentLastWeek ?? null;
 
-        if (existingPrevMetric?.id) {
-          await supabase
-            .from("social_account_metrics")
-            .update({
-              followers: prevFollowers,
-              total_content: prevTotalContent,
-              engagement_rate: prevEngagementRate,
-            })
-            .eq("id", existingPrevMetric.id);
-        } else {
-          await supabase.from("social_account_metrics").insert({
-            client_id: clientId,
-            platform: "x",
-            period_start: prevPeriodStart,
-            period_end: prevPeriodEnd,
-            followers: prevFollowers,
-            total_content: prevTotalContent,
-            engagement_rate: prevEngagementRate,
-          });
-        }
+        // Insert previous period metrics (we deleted all existing above)
+        await supabase.from("social_account_metrics").insert({
+          client_id: clientId,
+          platform: "x",
+          period_start: prevPeriodStart,
+          period_end: prevPeriodEnd,
+          followers: prevFollowers,
+          total_content: prevTotalContent,
+          engagement_rate: prevEngagementRate,
+        });
 
         console.log("Inserted previous period metrics:", { prevPeriodStart, prevPeriodEnd, prevFollowers, prevEngagementRate, prevTotalContent });
       }
