@@ -181,6 +181,21 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [facebookMetricoolConfig, setFacebookMetricoolConfig] = useState<{ user_id: string; blog_id: string | null } | null>(null);
   const [syncingMetricool, setSyncingMetricool] = useState(false);
   const [syncingFacebookMetricool, setSyncingFacebookMetricool] = useState(false);
+
+  // Metricool Overview KPIs (fetched directly from JSON API, not CSV)
+  interface MetricoolOverviewKPIs {
+    engagement: number | null;
+    interactions: number | null;
+    avgReachPerPost: number | null;
+    impressions: number | null;
+    postsCount: number | null;
+    followers: number | null;
+    engagementRate: number | null;
+  }
+  const [instagramOverviewKPIs, setInstagramOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
+  const [facebookOverviewKPIs, setFacebookOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
+  const [loadingOverviewKPIs, setLoadingOverviewKPIs] = useState(false);
+  const [overviewKPIsError, setOverviewKPIsError] = useState<string | null>(null);
   
   // isConnected is true if OAuth, agency mapping, OR Metricool config exists
   const isConnected = (oauthAccount !== null && oauthAccount.is_active) || 
@@ -626,8 +641,40 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     }
   };
 
+  // Fetch Metricool Overview KPIs directly from JSON API (not CSV)
+  const fetchMetricoolOverviewKPIs = async (platform: MetaPlatform, startDate: string, endDate: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("metricool-meta-overview", {
+        body: {
+          clientId,
+          platform,
+          from: startDate,
+          to: endDate,
+          timezone: "America/Chicago",
+        },
+      });
+
+      if (error) {
+        console.error(`Error fetching Metricool overview for ${platform}:`, error);
+        return null;
+      }
+
+      if (!data?.success) {
+        console.warn(`Metricool overview failed for ${platform}:`, data?.error, data?.upstreamStatus, data?.upstreamBody);
+        return null;
+      }
+
+      return data.data;
+    } catch (err) {
+      console.error(`Exception fetching Metricool overview for ${platform}:`, err);
+      return null;
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
+    setLoadingOverviewKPIs(true);
+    setOverviewKPIsError(null);
     try {
       const { start, end } = getDateRange();
       const { start: compStart, end: compEnd } = getComparisonDateRange();
@@ -669,10 +716,27 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           fetchFacebookPage(oauth.access_token, oauth.page_id);
         }
       }
+
+      // Fetch Metricool Overview KPIs if Metricool configs exist
+      if (metricool) {
+        const igKPIs = await fetchMetricoolOverviewKPIs("instagram", startDate, endDate);
+        setInstagramOverviewKPIs(igKPIs);
+      } else {
+        setInstagramOverviewKPIs(null);
+      }
+
+      if (fbMetricool) {
+        const fbKPIs = await fetchMetricoolOverviewKPIs("facebook", startDate, endDate);
+        setFacebookOverviewKPIs(fbKPIs);
+      } else {
+        setFacebookOverviewKPIs(null);
+      }
     } catch (error) {
       console.error("Error fetching Meta analytics:", error);
+      setOverviewKPIsError("Failed to load analytics data");
     } finally {
       setLoading(false);
+      setLoadingOverviewKPIs(false);
     }
   };
 
@@ -1033,95 +1097,183 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const currentLabel = `${format(currentStart, "MMM d")}-${format(currentEnd, "d")}`;
     const compLabel = `${format(compStart, "MMM d")}-${format(compEnd, "d")}`;
 
+    // Get Metricool Overview KPIs for this platform
+    const overviewKPIs = platform === "instagram" ? instagramOverviewKPIs : facebookOverviewKPIs;
+
     // Use report data from CSV uploads for comparison (more accurate than API data)
     const reportData = platform === "instagram" ? instagramReportData : facebookReportData;
     
-    // Determine which data source to use for current and comparison values
-    const currentEngagement = reportData?.engagement_rate ?? metrics?.engagement_rate;
+    // Priority: Metricool Overview KPIs > Report Data > DB Metrics
+    const currentEngagement = overviewKPIs?.engagementRate ?? reportData?.engagement_rate ?? metrics?.engagement_rate;
     const prevEngagement = reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
-    const currentTotalPosts = reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
+    const currentTotalPosts = overviewKPIs?.postsCount ?? reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
     const prevTotalPosts = reportData?.last_week_total_content ?? prevMetrics?.total_content;
-    const currentFollowers = reportData?.followers ?? metrics?.followers;
+    const currentFollowers = overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
     const prevFollowers = reportData?.new_followers != null && reportData?.followers != null 
       ? reportData.followers - reportData.new_followers 
       : prevMetrics?.followers;
 
+    // New KPIs from Metricool Overview
+    const interactions = overviewKPIs?.interactions;
+    const avgReachPerPost = overviewKPIs?.avgReachPerPost;
+    const impressions = overviewKPIs?.impressions;
+
+    // Helper to display value or N/A
+    const displayValue = (value: number | null | undefined, formatter: (v: number) => string = (v) => v.toLocaleString()) => {
+      if (value === null || value === undefined) {
+        return <span className="text-muted-foreground">N/A</span>;
+      }
+      if (value === 0) {
+        return <span className="text-muted-foreground">0</span>;
+      }
+      return formatter(value);
+    };
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Users className="h-4 w-4" />
-              <span className="text-sm">Followers</span>
-            </div>
-            <p className="text-2xl font-bold">
-              {currentFollowers?.toLocaleString() || "—"}
-            </p>
-            {prevFollowers != null && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted-foreground">
-                  vs {prevFollowers.toLocaleString()} (prev week)
-                </span>
-                {renderTrendIndicator(currentFollowers, prevFollowers, false, true)}
+      <div className="space-y-4">
+        {/* Overview KPIs Row */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <TrendingUp className="h-4 w-4" />
+                <span className="text-sm">Engagement</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm">Engagement Rate</span>
-            </div>
-            <p className="text-2xl font-bold">
-              {currentEngagement?.toFixed(2) || "0"}%
-            </p>
-            {prevEngagement != null && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted-foreground">
-                  vs {prevEngagement.toFixed(2)}% (prev week)
-                </span>
-                {renderTrendIndicator(currentEngagement, prevEngagement, true)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <ImageIcon className="h-4 w-4" />
-              <span className="text-sm">Total Posts</span>
-            </div>
-            <p className="text-2xl font-bold">
-              {currentTotalPosts || "—"}
-            </p>
-            {prevTotalPosts != null && (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted-foreground">
-                  vs {prevTotalPosts} (prev week)
-                </span>
-                {renderTrendIndicator(currentTotalPosts, prevTotalPosts, false, true)}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-sm">Reporting Period</span>
-            </div>
-            <p className="text-lg font-semibold text-foreground">
-              {currentLabel}
-            </p>
-            <div className="group relative">
-              <p className="text-xs text-muted-foreground mt-1 cursor-help underline decoration-dotted">
-                vs {compLabel}
+              <p className="text-2xl font-bold">
+                {displayValue(interactions)}
               </p>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Heart className="h-4 w-4" />
+                <span className="text-sm">Interactions</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayValue(interactions)}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Users className="h-4 w-4" />
+                <span className="text-sm">Avg Reach/Post</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayValue(avgReachPerPost)}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Eye className="h-4 w-4" />
+                <span className="text-sm">Impressions</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayValue(impressions)}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <ImageIcon className="h-4 w-4" />
+                <span className="text-sm">Posts</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayValue(currentTotalPosts)}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Standard Metrics Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Users className="h-4 w-4" />
+                <span className="text-sm">Followers</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayValue(currentFollowers)}
+              </p>
+              {prevFollowers != null && currentFollowers != null && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-muted-foreground">
+                    vs {prevFollowers.toLocaleString()} (prev week)
+                  </span>
+                  {renderTrendIndicator(currentFollowers, prevFollowers, false, true)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <TrendingUp className="h-4 w-4" />
+                <span className="text-sm">Engagement Rate</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {currentEngagement != null ? `${currentEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+              </p>
+              {prevEngagement != null && currentEngagement != null && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-muted-foreground">
+                    vs {prevEngagement.toFixed(2)}% (prev week)
+                  </span>
+                  {renderTrendIndicator(currentEngagement, prevEngagement, true)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <ImageIcon className="h-4 w-4" />
+                <span className="text-sm">Total Posts</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayValue(currentTotalPosts)}
+              </p>
+              {prevTotalPosts != null && currentTotalPosts != null && (
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-muted-foreground">
+                    vs {prevTotalPosts} (prev week)
+                  </span>
+                  {renderTrendIndicator(currentTotalPosts, prevTotalPosts, false, true)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Clock className="h-4 w-4" />
+                <span className="text-sm">Reporting Period</span>
+              </div>
+              <p className="text-lg font-semibold text-foreground">
+                {currentLabel}
+              </p>
+              <div className="group relative">
+                <p className="text-xs text-muted-foreground mt-1 cursor-help underline decoration-dotted">
+                  vs {compLabel}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Debug: Show error if overview KPIs failed */}
+        {overviewKPIsError && (
+          <Alert variant="destructive" className="mt-2">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{overviewKPIsError}</AlertDescription>
+          </Alert>
+        )}
       </div>
     );
   };
