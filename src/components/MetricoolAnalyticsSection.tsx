@@ -753,7 +753,7 @@ export const MetricoolAnalyticsSection = ({
               continue;
             }
             
-            // Upsert content metrics
+            // Upsert content metrics - use the actual unique constraint columns
             const { error: contentMetricsError } = await supabase
               .from("social_content_metrics")
               .upsert({
@@ -767,7 +767,7 @@ export const MetricoolAnalyticsSection = ({
                 comments: post.comments || 0,
                 shares: post.shares || 0,
                 reach: post.reach || 0,
-              }, { onConflict: "social_content_id,platform,period_start,period_end" });
+              }, { onConflict: "social_content_id,period_start,period_end" });
             
             if (contentMetricsError) {
               console.error("Failed to persist LinkedIn content metrics:", contentMetricsError);
