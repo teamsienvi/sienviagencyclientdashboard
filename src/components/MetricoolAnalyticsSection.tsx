@@ -252,12 +252,14 @@ export const MetricoolAnalyticsSection = ({
             published_at: c.published_at,
             content_type: c.content_type,
             metrics: metrics ? {
-              views: metrics.views || 0,
+              // For LinkedIn we persist impressions into `impressions` (and now also `views`).
+              // For backwards compatibility, fall back between the two.
+              views: metrics.views || metrics.impressions || 0,
               likes: metrics.likes || 0,
               comments: metrics.comments || 0,
               shares: metrics.shares || 0,
               reach: metrics.reach || 0,
-              impressions: metrics.impressions || 0,
+              impressions: metrics.impressions || metrics.views || 0,
             } : null,
           };
         })
@@ -407,29 +409,35 @@ export const MetricoolAnalyticsSection = ({
                 }
               }
               
-              // Map LinkedIn CSV columns correctly (case-insensitive)
+              // Map LinkedIn CSV columns (these come from our metricool-csv function)
               const impressions = parseMetricoolNumber(row.impressions ?? row.Impressions);
               const uniqueImpressions = parseMetricoolNumber(
                 row.unique_impressions ?? row["Unique Impressions"] ?? row["unique impressions"]
               );
-              const reactions = parseMetricoolNumber(row.reactions ?? row.Reactions);
-              const likeReactions = parseMetricoolNumber(
-                row.likereactions ?? row.LikeReactions ?? row["Like Reactions"]
+
+              const reactionsTotal = parseMetricoolNumber(
+                row.reactions_total ?? row.reactions ?? row.Reactions
               );
+              const reactionsLike = parseMetricoolNumber(
+                row.reactions_like ?? row.likereactions ?? row.LikeReactions ?? row["Like Reactions"]
+              );
+
               const comments = parseMetricoolNumber(row.comments ?? row.Comments);
               const shares = parseMetricoolNumber(row.shares ?? row.Shares);
-              const vidViews = parseMetricoolNumber(row.vid_views ?? row["Vid. Views"] ?? row["vid. views"]);
+              const vidViews = parseMetricoolNumber(
+                row.video_views ?? row.vid_views ?? row["Vid. Views"] ?? row["vid. views"]
+              );
               const contentType = row.type || row.Type || "post";
-              
-              // Use reactions as likes (total reactions count)
-              const totalReactions = reactions > 0 ? reactions : likeReactions;
-              
+
+              // Use total reactions as "likes" (fallback to like reactions if total missing)
+              const totalReactions = reactionsTotal > 0 ? reactionsTotal : reactionsLike;
+
               // Compute engagement from CSV or calculate
               let engagement = Number(row.engagement || row.Engagement || 0);
               if (engagement === 0 && impressions > 0) {
                 engagement = ((totalReactions + comments + shares) / impressions) * 100;
               }
-              
+
               return {
                 title: row.title || row.Title || null,
                 date: displayDate,
@@ -439,7 +447,7 @@ export const MetricoolAnalyticsSection = ({
                 comments: comments,
                 shares: shares,
                 reach: uniqueImpressions || impressions,
-                duration: row.time_watched || row["Time Watched"] || null,
+                duration: row.time_watched_total || row.time_watched || row["Time Watched"] || null,
                 engagement: engagement,
                 url: postUrl,
                 link: postUrl,
@@ -448,10 +456,10 @@ export const MetricoolAnalyticsSection = ({
                 rawData: {
                   impressions,
                   uniqueImpressions,
-                  reactions,
+                  reactions: reactionsTotal,
                   vidViews,
                   viewers: Number(row.viewers || row.Viewers || 0),
-                  timeWatched: row.time_watched || row["Time Watched"] || null,
+                  timeWatched: row.time_watched_total || row["Time Watched"] || null,
                   avgTimeWatched: row.time_watched_avg || row["Time Watched (avg)"] || null,
                 },
               };
@@ -779,6 +787,8 @@ export const MetricoolAnalyticsSection = ({
                 period_start: periodStart,
                 period_end: periodEnd,
                 collected_at: now.toISOString(),
+                // Persist impressions into both columns so UI stays consistent.
+                views: post.views || 0,
                 impressions: post.views || 0,
                 likes: post.likes || 0,
                 comments: post.comments || 0,
