@@ -116,3 +116,6 @@ verify_jwt = false
 
 [functions.validate-client-access]
 verify_jwt = false
+
+[functions.metricool-meta-overview]
+verify_jwt = false
