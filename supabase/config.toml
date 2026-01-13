@@ -111,5 +111,8 @@ verify_jwt = false
 [functions.sync-metricool-instagram]
 verify_jwt = false
 
+[functions.sync-metricool-facebook]
+verify_jwt = false
+
 [functions.validate-client-access]
 verify_jwt = false
