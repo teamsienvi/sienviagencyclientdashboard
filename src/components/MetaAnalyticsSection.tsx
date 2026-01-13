@@ -539,7 +539,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .from("social_content")
       .select(`
         id, content_id, title, url, published_at, content_type,
-        social_content_metrics(social_content_id, reach, impressions, views, likes, comments, shares, engagements, collected_at, period_start, period_end)
+        social_content_metrics(social_content_id, reach, impressions, views, likes, comments, shares, interactions, engagements, collected_at, period_start, period_end)
       `)
       .eq("client_id", clientId)
       .eq("platform", platform)
@@ -1162,17 +1162,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Post</TableHead>
+                <TableHead>Content</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Date</TableHead>
-                {platform === "instagram" && (
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <Eye className="h-3 w-3" />
-                      Views
-                    </div>
-                  </TableHead>
-                )}
+                <TableHead>Timestamp</TableHead>
+                <TableHead>
+                  <div className="flex items-center gap-1">
+                    <Eye className="h-3 w-3" />
+                    {platform === "instagram" ? "Views" : "Impressions"}
+                  </div>
+                </TableHead>
                 <TableHead>
                   <div className="flex items-center gap-1">
                     <Users className="h-3 w-3" />
@@ -1191,16 +1189,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     Comments
                   </div>
                 </TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <Share2 className="h-3 w-3" />
-                    Shares
-                  </div>
-                </TableHead>
+                {platform === "instagram" ? (
+                  <TableHead>Saved</TableHead>
+                ) : (
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <Share2 className="h-3 w-3" />
+                      Shares
+                    </div>
+                  </TableHead>
+                )}
                 <TableHead>
                   <div className="flex items-center gap-1">
                     <TrendingUp className="h-3 w-3" />
-                    Engagement
+                    Interactions
                   </div>
                 </TableHead>
               </TableRow>
@@ -1235,14 +1237,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     </span>
                   </TableCell>
                   <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
-                  {platform === "instagram" && (
-                    <TableCell>
-                      {(() => {
-                        const views = post.metrics?.views || post.metrics?.impressions;
-                        return views ? views.toLocaleString() : "—";
-                      })()}
-                    </TableCell>
-                  )}
+                  <TableCell>
+                    {(() => {
+                      // Views for IG, Impressions for FB
+                      const views = post.metrics?.views || post.metrics?.impressions;
+                      return views ? views.toLocaleString() : "—";
+                    })()}
+                  </TableCell>
                   <TableCell>
                     {(() => {
                       const reach = post.metrics?.reach;
@@ -1269,11 +1270,26 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   </TableCell>
                   <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
                   <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
-                  <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
+                  {platform === "instagram" ? (
+                    <TableCell>
+                      {/* Saved - calculate from engagements minus likes/comments/shares */}
+                      {(() => {
+                        const engagements = post.metrics?.engagements || 0;
+                        const likes = post.metrics?.likes || 0;
+                        const comments = post.metrics?.comments || 0;
+                        const shares = post.metrics?.shares || 0;
+                        // Saved = engagements - likes - comments - shares (approximate)
+                        const saved = Math.max(0, engagements - likes - comments - shares);
+                        return saved > 0 ? saved.toLocaleString() : "—";
+                      })()}
+                    </TableCell>
+                  ) : (
+                    <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
+                  )}
                   <TableCell>
                     {(() => {
-                      const engagements = post.metrics?.engagements || 0;
-                      return engagements > 0 ? engagements.toLocaleString() : "—";
+                      const interactions = post.metrics?.engagements || 0;
+                      return interactions > 0 ? interactions.toLocaleString() : "—";
                     })()}
                   </TableCell>
                 </TableRow>
