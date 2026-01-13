@@ -13,10 +13,10 @@ serve(async (req) => {
 
   try {
     const metricoolBaseUrl = Deno.env.get("METRICOOL_BASE_URL") || "https://app.metricool.com";
-    const metricoolAuth = Deno.env.get("METRICOOL_USER_TOKEN");
+    const metricoolAuth = Deno.env.get("METRICOOL_AUTH") || Deno.env.get("METRICOOL_USER_TOKEN");
 
     if (!metricoolAuth) {
-      throw new Error("METRICOOL_USER_TOKEN not configured");
+      throw new Error("METRICOOL_AUTH not configured");
     }
 
     const body = await req.json();

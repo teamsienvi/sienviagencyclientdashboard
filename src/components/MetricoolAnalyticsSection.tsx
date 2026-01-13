@@ -463,6 +463,7 @@ export const MetricoolAnalyticsSection = ({
         });
       }
 
+      // Fetch followers for current period
       const followersPromise =
         platform === "tiktok"
           ? supabase.functions.invoke("metricool-tiktok-followers", {
@@ -474,7 +475,44 @@ export const MetricoolAnalyticsSection = ({
                 blogId: config.blog_id,
               },
             })
-          : Promise.resolve({ data: null as any, error: null as any });
+          : supabase.functions.invoke("metricool-aggregation", {
+              body: {
+                from: fromUTC,
+                to: toUTC,
+                metric: "followers",
+                network: "linkedin",
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+              },
+            });
+
+      // Fetch followers for previous period (for WoW comparison)
+      const prevPeriodEnd = subDays(startDate, 1);
+      const prevPeriodStart = subDays(prevPeriodEnd, 7);
+      const prevFromUTC = formatWithOffset(prevPeriodStart, false, 0);
+      const prevToUTC = formatWithOffset(prevPeriodEnd, true, 0);
+      
+      const prevFollowersPromise =
+        platform === "tiktok"
+          ? supabase.functions.invoke("metricool-tiktok-followers", {
+              body: {
+                from: formatWithOffset(prevPeriodStart, false, 8 * 60),
+                to: formatWithOffset(prevPeriodEnd, true, 8 * 60),
+                timezone: "Asia/Shanghai",
+                userId: config.user_id,
+                blogId: config.blog_id,
+              },
+            })
+          : supabase.functions.invoke("metricool-aggregation", {
+              body: {
+                from: prevFromUTC,
+                to: prevToUTC,
+                metric: "followers",
+                network: "linkedin",
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+              },
+            });
 
       // Fetch demographics data using the distribution endpoint
       const genderDemographicsPromise = supabase.functions.invoke("metricool-distribution", {
@@ -502,36 +540,81 @@ export const MetricoolAnalyticsSection = ({
         },
       });
 
-      const [postsResult, followersResult, genderResult, countryResult] = await Promise.all([
+      const [postsResult, followersResult, prevFollowersResult, genderResult, countryResult] = await Promise.all([
         postsPromise, 
-        followersPromise, 
+        followersPromise,
+        prevFollowersPromise,
         genderDemographicsPromise,
         countryDemographicsPromise
       ]);
 
       console.log("Posts result:", postsResult);
       console.log("Followers result:", followersResult);
+      console.log("Prev Followers result:", prevFollowersResult);
 
-      // Extract follower count and persist to DB within the async mutation
+      // Extract follower count - handle both TikTok timeline format and LinkedIn aggregation format
       let persistedFollowers: number | null = null;
+      let persistedPrevFollowers: number | null = null;
       const followersData = followersResult.data;
+      const prevFollowersData = prevFollowersResult.data;
 
-      if (!followersResult.error && followersData?.success && followersData.data) {
-        const values =
-          followersData.data?.data?.[0]?.values && Array.isArray(followersData.data.data[0].values)
-            ? followersData.data.data[0].values
-            : [];
-
-        if (values.length > 0) {
-          persistedFollowers = values[values.length - 1]?.value ?? null;
+      // Parse current period followers
+      if (!followersResult.error && followersData) {
+        if (platform === "tiktok" && followersData?.success && followersData.data) {
+          // TikTok timeline format: { data: { data: [{ values: [{ value: ... }] }] } }
+          const values =
+            followersData.data?.data?.[0]?.values && Array.isArray(followersData.data.data[0].values)
+              ? followersData.data.data[0].values
+              : [];
+          if (values.length > 0) {
+            persistedFollowers = values[values.length - 1]?.value ?? null;
+          }
+        } else if (platform === "linkedin" && followersData?.success) {
+          // LinkedIn aggregation format: { success: true, data: number | { value: number } | { total: number } }
+          const aggData = followersData.data;
+          if (typeof aggData === 'number') {
+            persistedFollowers = aggData;
+          } else if (aggData?.value !== undefined) {
+            persistedFollowers = aggData.value;
+          } else if (aggData?.total !== undefined) {
+            persistedFollowers = aggData.total;
+          } else if (aggData?.followers !== undefined) {
+            persistedFollowers = aggData.followers;
+          }
+          console.log("LinkedIn current followers parsed:", persistedFollowers);
         }
       }
 
-      // Persist followers to social_account_metrics
+      // Parse previous period followers
+      if (!prevFollowersResult.error && prevFollowersData) {
+        if (platform === "tiktok" && prevFollowersData?.success && prevFollowersData.data) {
+          const values =
+            prevFollowersData.data?.data?.[0]?.values && Array.isArray(prevFollowersData.data.data[0].values)
+              ? prevFollowersData.data.data[0].values
+              : [];
+          if (values.length > 0) {
+            persistedPrevFollowers = values[values.length - 1]?.value ?? null;
+          }
+        } else if (platform === "linkedin" && prevFollowersData?.success) {
+          const aggData = prevFollowersData.data;
+          if (typeof aggData === 'number') {
+            persistedPrevFollowers = aggData;
+          } else if (aggData?.value !== undefined) {
+            persistedPrevFollowers = aggData.value;
+          } else if (aggData?.total !== undefined) {
+            persistedPrevFollowers = aggData.total;
+          } else if (aggData?.followers !== undefined) {
+            persistedPrevFollowers = aggData.followers;
+          }
+          console.log("LinkedIn prev followers parsed:", persistedPrevFollowers);
+        }
+      }
+
+      // Persist followers to social_account_metrics for current period
       if (persistedFollowers !== null) {
         const now = new Date();
-        const periodStart = subDays(now, 7).toISOString();
-        const periodEnd = now.toISOString();
+        const periodStartStr = format(startDate, "yyyy-MM-dd");
+        const periodEndStr = format(now, "yyyy-MM-dd");
 
         const { error: upsertError } = await supabase
           .from("social_account_metrics")
@@ -540,17 +623,43 @@ export const MetricoolAnalyticsSection = ({
               client_id: clientId,
               platform: platform as "tiktok" | "linkedin",
               followers: persistedFollowers,
-              period_start: periodStart,
-              period_end: periodEnd,
+              period_start: periodStartStr,
+              period_end: periodEndStr,
               collected_at: now.toISOString(),
             },
             { onConflict: "client_id,platform,period_start,period_end" }
           );
 
         if (upsertError) {
-          console.error("Failed to persist followers:", upsertError);
+          console.error("Failed to persist current followers:", upsertError);
         } else {
-          console.log("Persisted followers to database:", persistedFollowers);
+          console.log("Persisted current followers to database:", persistedFollowers);
+        }
+      }
+
+      // Also persist previous period followers to enable WoW comparison
+      if (persistedPrevFollowers !== null) {
+        const prevPeriodStartStr = format(prevPeriodStart, "yyyy-MM-dd");
+        const prevPeriodEndStr = format(prevPeriodEnd, "yyyy-MM-dd");
+
+        const { error: prevUpsertError } = await supabase
+          .from("social_account_metrics")
+          .upsert(
+            {
+              client_id: clientId,
+              platform: platform as "tiktok" | "linkedin",
+              followers: persistedPrevFollowers,
+              period_start: prevPeriodStartStr,
+              period_end: prevPeriodEndStr,
+              collected_at: new Date().toISOString(),
+            },
+            { onConflict: "client_id,platform,period_start,period_end" }
+          );
+
+        if (prevUpsertError) {
+          console.error("Failed to persist previous followers:", prevUpsertError);
+        } else {
+          console.log("Persisted previous followers to database:", persistedPrevFollowers);
         }
       }
 
@@ -560,6 +669,7 @@ export const MetricoolAnalyticsSection = ({
         followers: followersResult.data,
         followersError: followersResult.error,
         persistedFollowers,
+        persistedPrevFollowers,
         genderData: genderResult.data,
         genderError: genderResult.error,
         countryData: countryResult.data,
@@ -597,7 +707,7 @@ export const MetricoolAnalyticsSection = ({
             ? posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length
             : 0;
           
-          // Upsert account metrics
+          // Upsert account metrics - use persistedFollowers from the mutation result
           const { error: metricsError } = await supabase
             .from("social_account_metrics")
             .upsert({
@@ -608,7 +718,7 @@ export const MetricoolAnalyticsSection = ({
               collected_at: now.toISOString(),
               total_content: posts.rows.length,
               engagement_rate: avgEngagementRate,
-              followers: liveFollowers || config?.followers || null,
+              followers: result.persistedFollowers || config?.followers || null,
             }, { onConflict: "client_id,platform,period_start,period_end" });
           
           if (metricsError) {
@@ -672,33 +782,46 @@ export const MetricoolAnalyticsSection = ({
       } else if (followers?.error) {
         console.error("Followers upstream error:", followers);
         toast.error(`Followers API error: ${followers.error}`);
-      } else if (followers?.success && followers.data) {
+      } else if (followers?.success) {
         console.log("Followers raw response:", followers.data);
 
-        // Expected shape (confirmed):
-        // { data: [ { metric: "followers_count", values: [ { dateTime, value }, ... ] } ] }
-        const values =
-          followers.data?.data?.[0]?.values && Array.isArray(followers.data.data[0].values)
-            ? followers.data.data[0].values
-            : [];
+        if (platform === "tiktok" && followers.data) {
+          // TikTok timeline format
+          const values =
+            followers.data?.data?.[0]?.values && Array.isArray(followers.data.data[0].values)
+              ? followers.data.data[0].values
+              : [];
 
-        if (values.length > 0) {
-          const normalizeDateTime = (s: string) => {
-            // Metricool sometimes returns +0100 (no colon). Normalize to +01:00 for Date parsing.
-            return s.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
-          };
+          if (values.length > 0) {
+            const normalizeDateTime = (s: string) => {
+              // Metricool sometimes returns +0100 (no colon). Normalize to +01:00 for Date parsing.
+              return s.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+            };
 
-          const formattedTimeline = values.map((point: { dateTime: string; value: number }) => ({
-            date: format(new Date(normalizeDateTime(point.dateTime)), "MMM d"),
-            followers: point.value ?? 0,
-          }));
+            const formattedTimeline = values.map((point: { dateTime: string; value: number }) => ({
+              date: format(new Date(normalizeDateTime(point.dateTime)), "MMM d"),
+              followers: point.value ?? 0,
+            }));
 
-          setFollowerTimeline(formattedTimeline);
-          setLiveFollowers(result.persistedFollowers);
-        } else {
-          setFollowerTimeline([]);
-          setLiveFollowers(null);
+            setFollowerTimeline(formattedTimeline);
+          } else {
+            setFollowerTimeline([]);
+          }
         }
+        
+        // Set live followers from persisted value
+        setLiveFollowers(result.persistedFollowers);
+      }
+
+      // Update prevMetrics with fetched previous period followers
+      if (result.persistedPrevFollowers !== null) {
+        setPrevMetrics(prev => ({
+          followers: result.persistedPrevFollowers,
+          engagement_rate: prev?.engagement_rate || null,
+          total_content: prev?.total_content || null,
+          total_views: prev?.total_views || null,
+          total_likes: prev?.total_likes || null,
+        }));
       }
 
       // Handle gender demographics
