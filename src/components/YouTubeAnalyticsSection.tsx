@@ -128,19 +128,33 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     
     try {
       setIsLoading(true);
-      const { start, end } = getDateRangeFilter();
       
-      // Format dates for period comparison (YYYY-MM-DD format to match stored periods)
-      const startStr = format(start, 'yyyy-MM-dd');
-      const endStr = format(end, 'yyyy-MM-dd');
+      // Use ANALYTICS_PERIOD for 7d to ensure consistent week-over-week comparison
+      // For other ranges, use dynamic calculation
+      let startStr: string;
+      let endStr: string;
+      let prevStartStr: string;
+      let prevEndStr: string;
       
-      // Calculate previous period for comparison
-      const periodDuration = end.getTime() - start.getTime();
-      const prevStart = new Date(start.getTime() - periodDuration);
-      const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
-      const prevStartStr = format(prevStart, 'yyyy-MM-dd');
-      const prevEndStr = format(prevEnd, 'yyyy-MM-dd');
-
+      if (dateRange === "7d") {
+        // Use the standardized analytics period for proper WoW comparison
+        startStr = ANALYTICS_PERIOD.start;
+        endStr = ANALYTICS_PERIOD.end;
+        prevStartStr = ANALYTICS_PERIOD.prevStart;
+        prevEndStr = ANALYTICS_PERIOD.prevEnd;
+      } else {
+        // For other ranges, use dynamic calculation
+        const { start, end } = getDateRangeFilter();
+        startStr = format(start, 'yyyy-MM-dd');
+        endStr = format(end, 'yyyy-MM-dd');
+        
+        // Calculate previous period for comparison
+        const periodDuration = end.getTime() - start.getTime();
+        const prevStart = new Date(start.getTime() - periodDuration);
+        const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
+        prevStartStr = format(prevStart, 'yyyy-MM-dd');
+        prevEndStr = format(prevEnd, 'yyyy-MM-dd');
+      }
       // Fetch account metrics - get the most recent ones
       const { data: accountMetrics } = await supabase
         .from("social_account_metrics")
