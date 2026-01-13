@@ -233,6 +233,8 @@ serve(async (req) => {
 
     const responseText = await response.text();
     console.log("Metricool CSV response status:", response.status);
+    // Log first 1000 chars of raw CSV for debugging
+    console.log("Raw CSV sample:", responseText.substring(0, 1000));
 
     // If non-200, return upstream status and body for debugging
     if (!response.ok) {
@@ -248,21 +250,54 @@ serve(async (req) => {
     }
 
     // Parse CSV to JSON rows
+    // Metricool's LinkedIn export can have unquoted multi-line Titles, so we need to
+    // recombine "broken" lines that don't have enough columns. We'll detect the expected
+    // column count from the header and stitch lines until we hit that count or a clear
+    // delimiter pattern at the end (like ",VIDEO" or ",IMAGE").
     const normalizedText = responseText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    const lines = normalizedText.split("\n").filter((line) => line.trim());
+    const rawLines = normalizedText.split("\n");
 
-    if (lines.length === 0) {
+    if (rawLines.length === 0 || !rawLines[0].trim()) {
       return new Response(
         JSON.stringify({ success: true, rows: [] }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const delimiter = detectDelimiter(lines[0]);
+    const delimiter = detectDelimiter(rawLines[0]);
 
     // First line is headers
-    const headers = parseCSVLine(lines[0], delimiter);
-    console.log("CSV delimiter:", JSON.stringify(delimiter), "headers:", headers);
+    const headers = parseCSVLine(rawLines[0], delimiter);
+    const expectedCols = headers.length;
+    console.log("CSV delimiter:", JSON.stringify(delimiter), "headers:", headers, "expectedCols:", expectedCols);
+
+    // Stitch lines that are split mid-cell (multi-line unquoted Title)
+    const dataLines: string[] = [];
+    let buffer = "";
+    for (let i = 1; i < rawLines.length; i++) {
+      const line = rawLines[i];
+      if (!line.trim()) continue;
+
+      if (!buffer) {
+        buffer = line;
+      } else {
+        // Append to buffer with a space (or could use original newline, but space is safer for Title text)
+        buffer += " " + line;
+      }
+
+      // Check if we have enough columns now
+      const testTokens = parseCSVLine(buffer, delimiter);
+      if (testTokens.length >= expectedCols) {
+        dataLines.push(buffer);
+        buffer = "";
+      }
+    }
+    // If there's leftover, push it anyway
+    if (buffer.trim()) {
+      dataLines.push(buffer);
+    }
+
+    console.log("Stitched data lines count:", dataLines.length);
 
     // Map CSV columns to JSON field names for LinkedIn
     const columnMap: Record<string, string> = {
@@ -289,9 +324,12 @@ serve(async (req) => {
     };
 
     const rows = [];
-    for (let i = 1; i < lines.length; i++) {
-      const rawValues = parseCSVLine(lines[i], delimiter);
-      const values = alignValuesToHeaders(headers, rawValues, delimiter);
+    for (let i = 0; i < dataLines.length; i++) {
+      const rawValues = parseCSVLine(dataLines[i], delimiter);
+      // First try LinkedIn-specific recovery for Title/Date/URL misalignment
+      const linkedInAligned = alignLinkedInTitleDateUrl(rawValues, headers);
+      // Then pad/truncate to match header count
+      const values = alignValuesToHeaders(headers, linkedInAligned, delimiter);
       const row: Record<string, string | number> = {};
 
       for (let j = 0; j < headers.length; j++) {
