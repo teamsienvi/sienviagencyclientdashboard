@@ -5,15 +5,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Parse CSV line handling quoted fields
-function parseCSVLine(line: string): string[] {
+// Parse CSV line handling quoted fields + configurable delimiter
+function parseCSVLine(line: string, delimiter: string = ","): string[] {
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
-  
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    
+
     if (char === '"') {
       if (inQuotes && line[i + 1] === '"') {
         current += '"';
@@ -21,16 +21,42 @@ function parseCSVLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       result.push(current.trim());
       current = "";
     } else {
       current += char;
     }
   }
+
   result.push(current.trim());
-  
   return result;
+}
+
+function detectDelimiter(headerLine: string): string {
+  const comma = (headerLine.match(/,/g) || []).length;
+  const semi = (headerLine.match(/;/g) || []).length;
+  const tab = (headerLine.match(/\t/g) || []).length;
+
+  if (semi > comma && semi > tab) return ";";
+  if (tab > comma && tab > semi) return "\t";
+  return ",";
+}
+
+// Metricool's LinkedIn export sometimes includes commas inside the Title field without quoting.
+// In that case, a naive split produces more values than headers; we stitch the overflow back
+// into the first column (Title) so the rest of the columns line up.
+function alignValuesToHeaders(headers: string[], values: string[], delimiter: string): string[] {
+  if (values.length === headers.length) return values;
+
+  if (values.length > headers.length) {
+    const overflow = values.length - headers.length;
+    const mergedFirst = values.slice(0, overflow + 1).join(delimiter);
+    return [mergedFirst, ...values.slice(overflow + 1)];
+  }
+
+  // Pad missing trailing columns with empty strings
+  return [...values, ...Array(headers.length - values.length).fill("")];
 }
 
 // Convert value to number if possible, empty numeric -> 0
@@ -101,6 +127,71 @@ const numericFields = new Set([
   "Vid. Views", "Viewers"
 ]);
 
+function looksLikeUrl(s: string): boolean {
+  const t = (s || "").trim();
+  return /^https?:\/\//i.test(t) || t.startsWith("www.");
+}
+
+function looksLikeDate(s: string): boolean {
+  const t = (s || "").trim();
+  if (!t) return false;
+  // Common Metricool LinkedIn exports: "2026-01-13 10:37" or ISO-like
+  if (/^\d{4}-\d{2}-\d{2}(\s+\d{1,2}:\d{2})?/.test(t)) return true;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(t)) return true;
+  // e.g. "Jan 5, 2026"
+  if (/^[A-Za-z]{3,9}\s+\d{1,2},\s+\d{4}$/.test(t)) return true;
+  // e.g. "5 Jan 2026"
+  if (/^\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}$/.test(t)) return true;
+  return false;
+}
+
+// LinkedIn CSV rows sometimes come back with Title containing commas *without quoting*.
+// We recover by locating the Date+URL tokens and treating everything before Date as Title.
+function alignLinkedInTitleDateUrl(tokens: string[], headers: string[]): string[] {
+  if (headers[0] !== "Title" || headers[1] !== "Date" || headers[2] !== "URL") {
+    return tokens;
+  }
+
+  // Prefer: [ ...titleParts, date, url, ...metrics ]
+  let dateIdx = -1;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (looksLikeDate(tokens[i]) && looksLikeUrl(tokens[i + 1])) {
+      dateIdx = i;
+      break;
+    }
+  }
+
+  // Fallback: find URL then check previous token for date
+  if (dateIdx === -1) {
+    for (let i = 1; i < tokens.length; i++) {
+      if (looksLikeUrl(tokens[i]) && looksLikeDate(tokens[i - 1])) {
+        dateIdx = i - 1;
+        break;
+      }
+    }
+  }
+
+  if (dateIdx === -1) return tokens;
+
+  const urlIdx = dateIdx + 1;
+  const title = tokens.slice(0, dateIdx).join(",");
+  const date = tokens[dateIdx] ?? "";
+  const url = tokens[urlIdx] ?? "";
+
+  const restExpected = headers.length - 3;
+  const restTokens = tokens.slice(urlIdx + 1);
+
+  let rest: string[];
+  if (restTokens.length >= restExpected) {
+    // Keep the right-most columns aligned (metrics tend to be at the end)
+    rest = restTokens.slice(restTokens.length - restExpected);
+  } else {
+    rest = [...restTokens, ...Array(restExpected - restTokens.length).fill("")];
+  }
+
+  return [title, date, url, ...rest];
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -157,8 +248,9 @@ serve(async (req) => {
     }
 
     // Parse CSV to JSON rows
-    const lines = responseText.split("\n").filter(line => line.trim());
-    
+    const normalizedText = responseText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const lines = normalizedText.split("\n").filter((line) => line.trim());
+
     if (lines.length === 0) {
       return new Response(
         JSON.stringify({ success: true, rows: [] }),
@@ -166,9 +258,11 @@ serve(async (req) => {
       );
     }
 
+    const delimiter = detectDelimiter(lines[0]);
+
     // First line is headers
-    const headers = parseCSVLine(lines[0]);
-    console.log("CSV headers:", headers);
+    const headers = parseCSVLine(lines[0], delimiter);
+    console.log("CSV delimiter:", JSON.stringify(delimiter), "headers:", headers);
 
     // Map CSV columns to JSON field names for LinkedIn
     const columnMap: Record<string, string> = {
@@ -196,15 +290,16 @@ serve(async (req) => {
 
     const rows = [];
     for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
+      const rawValues = parseCSVLine(lines[i], delimiter);
+      const values = alignValuesToHeaders(headers, rawValues, delimiter);
       const row: Record<string, string | number> = {};
-      
+
       for (let j = 0; j < headers.length; j++) {
         const header = headers[j];
         const value = values[j] || "";
         const fieldName = columnMap[header] || header.toLowerCase().replace(/\s+/g, "_");
         const isNumeric = numericFields.has(header);
-        
+
         // Special handling for date field - parse to ISO
         if (header === "Date" || fieldName === "date") {
           row[fieldName] = parseDateToISO(value);
