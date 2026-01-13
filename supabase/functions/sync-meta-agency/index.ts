@@ -373,7 +373,7 @@ async function syncFacebookPage(
     
     syncLogId = syncLog?.id;
 
-    // Fetch page info
+    // Fetch page info (fallback)
     const pageResponse = await fetch(
       `https://graph.facebook.com/v21.0/${pageId}?fields=followers_count,fan_count&access_token=${accessToken}`
     );
@@ -383,39 +383,46 @@ async function syncFacebookPage(
       throw new Error(pageData.error.message);
     }
 
-    const followers = pageData.followers_count || pageData.fan_count || 0;
+    let followers = pageData.followers_count || pageData.fan_count || 0;
 
     // Parse period dates
     const periodStartDate = new Date(periodStart);
     const periodEndDate = new Date(periodEnd);
     periodEndDate.setHours(23, 59, 59, 999);
 
-    // Fetch PAGE-LEVEL insights for total reach/impressions (more reliable than per-post)
+    // Fetch PAGE-LEVEL insights for total reach/impressions + follower count (end-of-period)
     let pageReach = 0;
     let pageImpressions = 0;
-    
+
     try {
       const since = Math.floor(periodStartDate.getTime() / 1000);
       const until = Math.floor(periodEndDate.getTime() / 1000) + 86400;
-      
-      // Use page_impressions_unique (reach) and page_impressions with day period
-      const pageInsightsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions_unique,page_impressions&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+
+      const pageInsightsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions_unique,page_impressions,page_fans&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
       console.log(`Fetching page insights for ${clientName}...`);
-      
+
       const pageInsightsResp = await fetch(pageInsightsUrl);
       const pageInsightsData = await pageInsightsResp.json();
-      
+
       if (pageInsightsData.error) {
         console.log(`Page insights error: ${pageInsightsData.error.message}`);
         errorMessages.push(`Page insights: ${pageInsightsData.error.message?.substring(0, 50)}`);
       } else if (pageInsightsData.data) {
         for (const insight of pageInsightsData.data) {
-          // Sum all daily values
-          const totalValue = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
-          if (insight.name === 'page_impressions_unique') pageReach = totalValue;
-          if (insight.name === 'page_impressions') pageImpressions = totalValue;
+          if (insight.name === 'page_impressions_unique') {
+            pageReach = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+          }
+          if (insight.name === 'page_impressions') {
+            pageImpressions = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+          }
+          if (insight.name === 'page_fans') {
+            const values = insight.values || [];
+            const last = values.length > 0 ? values[values.length - 1]?.value : null;
+            if (typeof last === 'number') followers = last;
+          }
         }
-        console.log(`${clientName} page reach: ${pageReach}, impressions: ${pageImpressions}`);
+
+        console.log(`${clientName} page reach: ${pageReach}, impressions: ${pageImpressions}, followers(end): ${followers}`);
       }
     } catch (e) {
       console.log(`Error fetching page insights: ${e}`);
@@ -596,7 +603,7 @@ async function syncInstagramAccount(
     
     syncLogId = syncLog?.id;
 
-    // Fetch account info
+    // Fetch account info (fallback)
     const accountResponse = await fetch(
       `https://graph.facebook.com/v21.0/${igBusinessId}?fields=followers_count,media_count&access_token=${accessToken}`
     );
@@ -606,12 +613,31 @@ async function syncInstagramAccount(
       throw new Error(accountData.error.message);
     }
 
-    const followers = accountData.followers_count || 0;
+    let followers = accountData.followers_count || 0;
 
     // Parse period dates
     const periodStartDate = new Date(periodStart);
     const periodEndDate = new Date(periodEnd);
     periodEndDate.setHours(23, 59, 59, 999);
+
+    // Prefer historical follower count at end-of-period via insights
+    try {
+      const since = Math.floor(periodStartDate.getTime() / 1000);
+      const until = Math.floor(periodEndDate.getTime() / 1000) + 86400;
+      const followersInsightUrl = `https://graph.facebook.com/v21.0/${igBusinessId}/insights?metric=follower_count&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+      const followersResp = await fetch(followersInsightUrl);
+      const followersJson = await followersResp.json();
+
+      if (!followersJson?.error && followersJson?.data?.length > 0) {
+        const values = followersJson.data[0]?.values || [];
+        const last = values.length > 0 ? values[values.length - 1]?.value : null;
+        if (typeof last === 'number') followers = last;
+      } else if (followersJson?.error) {
+        console.log(`IG follower_count insights error (fallback): ${followersJson.error.message?.substring(0, 80)}`);
+      }
+    } catch (e) {
+      console.log(`IG follower_count insights failed (fallback): ${e}`);
+    }
 
     // Fetch media with pagination to cover the period
     const mediaUrl = `https://graph.facebook.com/v21.0/${igBusinessId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=50&access_token=${accessToken}`;

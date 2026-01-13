@@ -90,6 +90,19 @@ interface DemographicsData {
   countries?: Array<{ country: string; percentage: number }>;
 }
 
+const parseMetricoolNumber = (value: unknown): number => {
+  if (value == null) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  const s = String(value).trim();
+  if (!s) return 0;
+
+  // Metricool CSV values may include commas, spaces, or % signs.
+  const normalized = s.replace(/[,%\s]/g, "");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+};
+
 export const MetricoolAnalyticsSection = ({
   clientId,
   clientName,
@@ -395,13 +408,17 @@ export const MetricoolAnalyticsSection = ({
               }
               
               // Map LinkedIn CSV columns correctly (case-insensitive)
-              const impressions = Number(row.impressions || row.Impressions || 0);
-              const uniqueImpressions = Number(row.unique_impressions || row["Unique Impressions"] || row["unique impressions"] || 0);
-              const reactions = Number(row.reactions || row.Reactions || 0);
-              const likeReactions = Number(row.likereactions || row.LikeReactions || row["Like Reactions"] || 0);
-              const comments = Number(row.comments || row.Comments || 0);
-              const shares = Number(row.shares || row.Shares || 0);
-              const vidViews = Number(row.vid_views || row["Vid. Views"] || row["vid. views"] || 0);
+              const impressions = parseMetricoolNumber(row.impressions ?? row.Impressions);
+              const uniqueImpressions = parseMetricoolNumber(
+                row.unique_impressions ?? row["Unique Impressions"] ?? row["unique impressions"]
+              );
+              const reactions = parseMetricoolNumber(row.reactions ?? row.Reactions);
+              const likeReactions = parseMetricoolNumber(
+                row.likereactions ?? row.LikeReactions ?? row["Like Reactions"]
+              );
+              const comments = parseMetricoolNumber(row.comments ?? row.Comments);
+              const shares = parseMetricoolNumber(row.shares ?? row.Shares);
+              const vidViews = parseMetricoolNumber(row.vid_views ?? row["Vid. Views"] ?? row["vid. views"]);
               const contentType = row.type || row.Type || "post";
               
               // Use reactions as likes (total reactions count)

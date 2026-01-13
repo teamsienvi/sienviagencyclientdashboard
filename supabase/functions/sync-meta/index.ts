@@ -75,19 +75,49 @@ serve(async (req) => {
 
     // Different handling for Instagram vs Facebook
     if (platform === 'instagram') {
-      // Fetch Instagram account info for follower count (insights API is unreliable)
-      const accountInfoUrl = `${baseUrl}/${accountExternalId}?fields=followers_count,media_count&access_token=${accessToken}`;
-      
-      console.log(`Fetching Instagram account info...`);
-      const accountInfoResponse = await fetch(accountInfoUrl);
-      
-      if (accountInfoResponse.ok) {
-        const accountInfo = await accountInfoResponse.json();
-        totalFollowers = accountInfo.followers_count || 0;
-        console.log(`Instagram followers: ${totalFollowers}`);
-      } else {
-        const errorText = await accountInfoResponse.text();
-        console.error("Instagram account info error:", errorText);
+      // Prefer historical follower count via insights (end-of-period), fallback to current followers_count
+      const periodStartDate = new Date(periodStart);
+      const periodEndDate = new Date(periodEnd);
+      periodEndDate.setHours(23, 59, 59, 999);
+
+      try {
+        const since = Math.floor(periodStartDate.getTime() / 1000);
+        const until = Math.floor(periodEndDate.getTime() / 1000) + 86400;
+
+        const followersInsightUrl = `${baseUrl}/${accountExternalId}/insights?metric=follower_count&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+        console.log(`Fetching Instagram follower_count insights...`);
+
+        const followersResp = await fetch(followersInsightUrl);
+        const followersJson = await followersResp.json();
+
+        if (!followersJson?.error && followersJson?.data?.length > 0) {
+          const values = followersJson.data[0]?.values || [];
+          const last = values.length > 0 ? values[values.length - 1]?.value : null;
+          if (typeof last === 'number') {
+            totalFollowers = last;
+            console.log(`Instagram followers (period end): ${totalFollowers}`);
+          }
+        } else if (followersJson?.error) {
+          console.log(`Instagram follower_count insights error (fallback): ${followersJson.error.message?.substring(0, 80)}`);
+        }
+      } catch (e) {
+        console.log(`Instagram follower_count insights failed (fallback):`, e);
+      }
+
+      // Fallback: current follower count
+      if (!totalFollowers) {
+        const accountInfoUrl = `${baseUrl}/${accountExternalId}?fields=followers_count,media_count&access_token=${accessToken}`;
+        console.log(`Fetching Instagram account info (fallback)...`);
+        const accountInfoResponse = await fetch(accountInfoUrl);
+
+        if (accountInfoResponse.ok) {
+          const accountInfo = await accountInfoResponse.json();
+          totalFollowers = accountInfo.followers_count || 0;
+          console.log(`Instagram followers (current): ${totalFollowers}`);
+        } else {
+          const errorText = await accountInfoResponse.text();
+          console.error("Instagram account info error:", errorText);
+        }
       }
     } else {
       // For Facebook Pages, get basic info first
@@ -122,12 +152,19 @@ serve(async (req) => {
             console.log("Page insights API error:", fbInsightsData.error.message);
           } else {
             for (const insight of fbInsightsData.data || []) {
-              // Sum up all daily values for cumulative metrics
-              const totalValue = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
-              if (insight.name === 'page_impressions_unique') totalReach = totalValue;
-              if (insight.name === 'page_impressions') totalImpressions = totalValue;
+              if (insight.name === 'page_impressions_unique') {
+                totalReach = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+              }
+              if (insight.name === 'page_impressions') {
+                totalImpressions = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+              }
               if (insight.name === 'page_fans') {
-                totalFollowers = totalFollowers || (insight.values?.[insight.values.length - 1]?.value || 0);
+                // page_fans is a point-in-time metric; use the last day in the period as the follower count.
+                const values = insight.values || [];
+                const last = values.length > 0 ? values[values.length - 1]?.value : null;
+                if (typeof last === 'number') {
+                  totalFollowers = last;
+                }
               }
             }
             console.log(`Facebook page insights: reach=${totalReach}, impressions=${totalImpressions}, followers=${totalFollowers}`);
