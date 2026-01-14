@@ -193,10 +193,32 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     engagementRate: number | null;
   }
   
+  // Weekly data with WoW comparison
+  interface TimelineDataPoint {
+    dateTime: string;
+    value: number;
+  }
+  
+  interface WeeklyData {
+    followersTimeline: TimelineDataPoint[];
+    engagementTimeline: TimelineDataPoint[];
+    engagementAgg: number | null;
+    postsCount: number | null;
+  }
+  
+  interface WeeklyComparison {
+    current: WeeklyData;
+    previous: WeeklyData;
+  }
+  
   const [instagramOverviewKPIs, setInstagramOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
   const [facebookOverviewKPIs, setFacebookOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
   const [loadingOverviewKPIs, setLoadingOverviewKPIs] = useState(false);
   const [overviewKPIsError, setOverviewKPIsError] = useState<string | null>(null);
+  
+  // Weekly comparison data for WoW display
+  const [instagramWeekly, setInstagramWeekly] = useState<WeeklyComparison | null>(null);
+  const [facebookWeekly, setFacebookWeekly] = useState<WeeklyComparison | null>(null);
   
   // isConnected is true if OAuth, agency mapping, OR Metricool config exists
   const isConnected = (oauthAccount !== null && oauthAccount.is_active) || 
@@ -561,9 +583,18 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .eq("platform", platform)
       .order("published_at", { ascending: false });
 
-    // Filter and process content based on metrics period
+    // Filter, deduplicate, and process content based on metrics period
+    const seenContentIds = new Set<string>();
     const contentWithMetrics = (contentData || [])
       .filter((item: any) => item.title || item.url) // Hide posts without title or URL
+      .filter((item: any) => {
+        // Deduplicate by content_id to prevent duplicate rows
+        if (seenContentIds.has(item.content_id)) {
+          return false;
+        }
+        seenContentIds.add(item.content_id);
+        return true;
+      })
       .map((item: any) => {
         const metrics = findMetricsForPeriod(item.social_content_metrics, startDate, endDate);
         return {
@@ -718,41 +749,72 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         }
       }
 
+      // Fetch Metricool Weekly comparison data (for WoW display) and Overview KPIs
+      const fetchWeeklyData = async (platform: "instagram" | "facebook") => {
+        try {
+          const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
+            body: {
+              clientId,
+              platform,
+              from: startDate,
+              to: endDate,
+              prevFrom: compStartDate,
+              prevTo: compEndDate,
+              timezone: "America/Chicago",
+            },
+          });
+          
+          if (error || !data?.success) {
+            console.warn(`Weekly data fetch failed for ${platform}:`, error || data?.error);
+            return null;
+          }
+          return data.data as WeeklyComparison;
+        } catch (err) {
+          console.error(`Exception fetching weekly data for ${platform}:`, err);
+          return null;
+        }
+      };
+
       // Fetch Metricool Overview KPIs if Metricool configs exist
       if (metricool) {
-        const igKPIs = await fetchMetricoolOverviewKPIs("instagram", startDate, endDate);
+        const [igKPIs, igWeekly] = await Promise.all([
+          fetchMetricoolOverviewKPIs("instagram", startDate, endDate),
+          fetchWeeklyData("instagram"),
+        ]);
         setInstagramOverviewKPIs(igKPIs);
+        setInstagramWeekly(igWeekly);
       } else {
         setInstagramOverviewKPIs(null);
+        setInstagramWeekly(null);
       }
 
       if (fbMetricool) {
-        // Use dedicated Facebook overview edge function
-        try {
-          const { data: fbData, error: fbError } = await supabase.functions.invoke("metricool-facebook-overview", {
+        // Fetch Facebook overview and weekly data in parallel
+        const [fbOverviewResult, fbWeekly] = await Promise.all([
+          supabase.functions.invoke("metricool-facebook-overview", {
             body: {
               clientId,
               from: startDate,
               to: endDate,
               timezone: "America/Chicago",
             },
-          });
+          }),
+          fetchWeeklyData("facebook"),
+        ]);
 
-          if (fbError) {
-            console.error("Error fetching Facebook overview:", fbError);
-            setFacebookOverviewKPIs(null);
-          } else if (fbData?.success) {
-            setFacebookOverviewKPIs(fbData.data);
-          } else {
-            console.warn("Facebook overview failed:", fbData?.error, fbData?.notConfigured);
-            setFacebookOverviewKPIs(null);
-          }
-        } catch (err) {
-          console.error("Exception fetching Facebook overview:", err);
+        if (fbOverviewResult.error) {
+          console.error("Error fetching Facebook overview:", fbOverviewResult.error);
+          setFacebookOverviewKPIs(null);
+        } else if (fbOverviewResult.data?.success) {
+          setFacebookOverviewKPIs(fbOverviewResult.data.data);
+        } else {
+          console.warn("Facebook overview failed:", fbOverviewResult.data?.error, fbOverviewResult.data?.notConfigured);
           setFacebookOverviewKPIs(null);
         }
+        setFacebookWeekly(fbWeekly);
       } else {
         setFacebookOverviewKPIs(null);
+        setFacebookWeekly(null);
       }
     } catch (error) {
       console.error("Error fetching Meta analytics:", error);
@@ -1120,26 +1182,39 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const currentLabel = `${format(currentStart, "MMM d")}-${format(currentEnd, "d")}`;
     const compLabel = `${format(compStart, "MMM d")}-${format(compEnd, "d")}`;
 
-    // Get Metricool Overview KPIs for this platform
+    // Get Metricool Overview KPIs and Weekly comparison data for this platform
     const overviewKPIs = platform === "instagram" ? instagramOverviewKPIs : facebookOverviewKPIs;
+    const weeklyData = platform === "instagram" ? instagramWeekly : facebookWeekly;
 
     // Use report data from CSV uploads for comparison (more accurate than API data)
     const reportData = platform === "instagram" ? instagramReportData : facebookReportData;
     
-    // Priority: Metricool Overview KPIs > Report Data > DB Metrics
-    const currentEngagement = overviewKPIs?.engagementRate ?? reportData?.engagement_rate ?? metrics?.engagement_rate;
-    const prevEngagement = reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
-    const currentTotalPosts = overviewKPIs?.postsCount ?? reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
-    const prevTotalPosts = reportData?.last_week_total_content ?? prevMetrics?.total_content;
-    const currentFollowers = overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
-    const prevFollowers = reportData?.new_followers != null && reportData?.followers != null 
-      ? reportData.followers - reportData.new_followers 
-      : prevMetrics?.followers;
+    // Helper to get last value from timeline (for followers)
+    const getLastTimelineValue = (timeline: TimelineDataPoint[] | undefined): number | null => {
+      if (!timeline || timeline.length === 0) return null;
+      // Sort by date ascending to ensure we get the most recent
+      const sorted = [...timeline].sort((a, b) => 
+        new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+      );
+      return sorted[sorted.length - 1]?.value ?? null;
+    };
 
-    // New KPIs from Metricool Overview
-    const interactions = overviewKPIs?.interactions;
-    const avgReachPerPost = overviewKPIs?.avgReachPerPost;
-    const impressions = overviewKPIs?.impressions;
+    // Priority: Weekly Data (from Metricool) > Overview KPIs > Report Data > DB Metrics
+    const currentFollowersFromWeekly = getLastTimelineValue(weeklyData?.current?.followersTimeline);
+    const prevFollowersFromWeekly = getLastTimelineValue(weeklyData?.previous?.followersTimeline);
+    
+    const currentFollowers = currentFollowersFromWeekly ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
+    const prevFollowers = prevFollowersFromWeekly ?? (reportData?.new_followers != null && reportData?.followers != null 
+      ? reportData.followers - reportData.new_followers 
+      : prevMetrics?.followers);
+
+    // Engagement from weekly aggregation (matches Metricool "Organic Summary" card)
+    const currentEngagement = weeklyData?.current?.engagementAgg ?? overviewKPIs?.engagementRate ?? reportData?.engagement_rate ?? metrics?.engagement_rate;
+    const prevEngagement = weeklyData?.previous?.engagementAgg ?? reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
+    
+    // Posts count from weekly data
+    const currentTotalPosts = weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
+    const prevTotalPosts = weeklyData?.previous?.postsCount ?? reportData?.last_week_total_content ?? prevMetrics?.total_content;
 
     // Helper to display value or N/A
     const displayValue = (value: number | null | undefined, formatter: (v: number) => string = (v) => v.toLocaleString()) => {
@@ -1150,6 +1225,52 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         return <span className="text-muted-foreground">0</span>;
       }
       return formatter(value);
+    };
+
+    // WoW tooltip display like Metricool: "+Δ (X%)"
+    const renderWoWTooltip = (
+      current: number | null | undefined, 
+      previous: number | null | undefined, 
+      isPercentage = false
+    ) => {
+      if (current == null || previous == null) return null;
+      
+      const delta = current - previous;
+      const pctChange = previous !== 0 ? ((delta / previous) * 100) : null;
+      
+      // Format delta
+      const formatDelta = (d: number, isPct: boolean) => {
+        if (isPct) {
+          return d >= 0 ? `+${d.toFixed(2)}` : d.toFixed(2);
+        }
+        return d >= 0 ? `+${d.toLocaleString()}` : d.toLocaleString();
+      };
+      
+      // Format percentage
+      const formatPct = (p: number | null) => {
+        if (p === null) return "";
+        return p >= 0 ? `(${p.toFixed(1)}%)` : `(${p.toFixed(1)}%)`;
+      };
+      
+      const isPositive = delta > 0;
+      const isNegative = delta < 0;
+      const isNeutral = delta === 0;
+      
+      return (
+        <div className="flex items-center gap-1.5 mt-1">
+          <div className={`flex items-center text-xs gap-0.5 ${
+            isPositive ? "text-green-500" : isNegative ? "text-red-500" : "text-muted-foreground"
+          }`}>
+            {isPositive && <ArrowUp className="h-3 w-3" />}
+            {isNegative && <ArrowDown className="h-3 w-3" />}
+            {isNeutral && <Minus className="h-3 w-3" />}
+            <span className="font-medium">
+              {formatDelta(delta, isPercentage)}
+              {isPercentage ? "pp" : ""} {pctChange !== null ? formatPct(pctChange) : ""}
+            </span>
+          </div>
+        </div>
+      );
     };
 
     return (
@@ -1166,12 +1287,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 {displayValue(currentFollowers)}
               </p>
               {prevFollowers != null && currentFollowers != null && (
-                <div className="flex items-center gap-2 mt-1">
+                <>
                   <span className="text-xs text-muted-foreground">
-                    vs {prevFollowers.toLocaleString()} (prev week)
+                    vs {prevFollowers.toLocaleString()}
                   </span>
-                  {renderTrendIndicator(currentFollowers, prevFollowers, false, true)}
-                </div>
+                  {renderWoWTooltip(currentFollowers, prevFollowers)}
+                </>
               )}
             </CardContent>
           </Card>
@@ -1185,12 +1306,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 {currentEngagement != null ? `${currentEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
               </p>
               {prevEngagement != null && currentEngagement != null && (
-                <div className="flex items-center gap-2 mt-1">
+                <>
                   <span className="text-xs text-muted-foreground">
-                    vs {prevEngagement.toFixed(2)}% (prev week)
+                    vs {prevEngagement.toFixed(2)}%
                   </span>
-                  {renderTrendIndicator(currentEngagement, prevEngagement, true)}
-                </div>
+                  {renderWoWTooltip(currentEngagement, prevEngagement, true)}
+                </>
               )}
             </CardContent>
           </Card>
@@ -1204,12 +1325,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 {displayValue(currentTotalPosts)}
               </p>
               {prevTotalPosts != null && currentTotalPosts != null && (
-                <div className="flex items-center gap-2 mt-1">
+                <>
                   <span className="text-xs text-muted-foreground">
-                    vs {prevTotalPosts} (prev week)
+                    vs {prevTotalPosts}
                   </span>
-                  {renderTrendIndicator(currentTotalPosts, prevTotalPosts, false, true)}
-                </div>
+                  {renderWoWTooltip(currentTotalPosts, prevTotalPosts)}
+                </>
               )}
             </CardContent>
           </Card>
@@ -1222,11 +1343,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               <p className="text-lg font-semibold text-foreground">
                 {currentLabel}
               </p>
-              <div className="group relative">
-                <p className="text-xs text-muted-foreground mt-1 cursor-help underline decoration-dotted">
-                  vs {compLabel}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                vs {compLabel}
+              </p>
             </CardContent>
           </Card>
         </div>
