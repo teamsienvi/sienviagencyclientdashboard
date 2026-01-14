@@ -122,3 +122,6 @@ verify_jwt = false
 
 [functions.metricool-facebook-overview]
 verify_jwt = false
+
+[functions.metricool-social-weekly]
+verify_jwt = false
