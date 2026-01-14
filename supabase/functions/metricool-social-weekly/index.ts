@@ -11,11 +11,22 @@ interface TimelineDataPoint {
   value: number;
 }
 
+interface DebugInfo {
+  metricUsed: string;
+  networkUsed: string;
+  userIdUsed: string;
+  blogIdUsed: string | null;
+  firstPoint: { dateTime: string; value: number } | null;
+  lastPoint: { dateTime: string; value: number } | null;
+  pointsCount: number;
+}
+
 interface WeeklyData {
   followersTimeline: TimelineDataPoint[];
   engagementTimeline: TimelineDataPoint[];
   engagementAgg: number | null;
   postsCount: number | null;
+  followersDebug?: DebugInfo;
 }
 
 interface WeeklyResponse {
@@ -81,7 +92,7 @@ serve(async (req) => {
       }
     }
 
-    // Load client's metricool config for the platform
+    // Load client's metricool config for the SPECIFIC platform
     const { data: config, error: configError } = await supabase
       .from("client_metricool_config")
       .select("user_id, blog_id")
@@ -104,7 +115,7 @@ serve(async (req) => {
     const userId = config.user_id;
     const blogId = config.blog_id;
 
-    console.log(`Fetching ${platform} weekly data for:`, { clientId, userId, blogId, from, to, prevFrom, prevTo });
+    console.log(`Fetching ${platform} weekly data for:`, { clientId, userId, blogId, from, to, prevFrom, prevTo, timezone });
 
     const METRICOOL_BASE_URL = "https://app.metricool.com";
     const METRICOOL_AUTH = Deno.env.get("METRICOOL_AUTH");
@@ -150,34 +161,38 @@ serve(async (req) => {
       return res.json();
     };
 
-    // Helper to extract timeline data points
+    // Helper to extract timeline data points and sort by dateTime ascending
     const extractTimelinePoints = (data: any): TimelineDataPoint[] => {
       if (!data) return [];
+      
+      let points: TimelineDataPoint[] = [];
       
       // Handle different response formats
       if (Array.isArray(data)) {
         // Direct array of datapoints
         if (data.length > 0 && data[0]?.dateTime !== undefined) {
-          return data.map(d => ({
+          points = data.map(d => ({
             dateTime: d.dateTime || d.date || d.timestamp,
             value: typeof d.value === 'number' ? d.value : parseFloat(d.value) || 0,
           }));
         }
         // Array of objects with values array
-        if (data[0]?.values) {
-          return data[0].values.map((d: any) => ({
+        else if (data[0]?.values) {
+          points = data[0].values.map((d: any) => ({
             dateTime: d.dateTime || d.date || d.timestamp,
             value: typeof d.value === 'number' ? d.value : parseFloat(d.value) || 0,
           }));
         }
       }
-      
       // Object with data array
-      if (data.data) {
-        return extractTimelinePoints(data.data);
+      else if (data.data) {
+        points = extractTimelinePoints(data.data);
       }
       
-      return [];
+      // Sort by dateTime ascending to ensure last() is always the most recent
+      points.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
+      
+      return points;
     };
 
     // Helper to extract aggregation value
@@ -194,6 +209,22 @@ serve(async (req) => {
       return null;
     };
 
+    // Build debug info for followers timeline
+    const buildFollowersDebug = (timeline: TimelineDataPoint[], metric: string): DebugInfo => {
+      const firstPoint = timeline.length > 0 ? timeline[0] : null;
+      const lastPoint = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+      
+      return {
+        metricUsed: metric,
+        networkUsed: platform,
+        userIdUsed: userId,
+        blogIdUsed: blogId,
+        firstPoint: firstPoint ? { dateTime: firstPoint.dateTime, value: firstPoint.value } : null,
+        lastPoint: lastPoint ? { dateTime: lastPoint.dateTime, value: lastPoint.value } : null,
+        pointsCount: timeline.length,
+      };
+    };
+
     // Fetch data for both periods in parallel
     const fetchPeriodData = async (fromDate: string, toDate: string): Promise<WeeklyData> => {
       const result: WeeklyData = {
@@ -203,11 +234,14 @@ serve(async (req) => {
         postsCount: null,
       };
 
-      // Determine the correct metric name for followers based on platform
+      // CRITICAL: Use platform-specific metric for followers
+      // Instagram: "followers" | Facebook: "pageFollows"
       const followersMetric = platform === "facebook" ? "pageFollows" : "followers";
 
+      console.log(`Using followers metric "${followersMetric}" for platform "${platform}"`);
+
       const [followersRes, engagementTimelineRes, engagementAggRes, postsRes] = await Promise.allSettled([
-        // 1) Followers timeline
+        // 1) Followers timeline - PLATFORM SPECIFIC METRIC
         fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
           metric: followersMetric,
           subject: "account",
@@ -242,10 +276,14 @@ serve(async (req) => {
       // Process followers timeline
       if (followersRes.status === 'fulfilled') {
         result.followersTimeline = extractTimelinePoints(followersRes.value);
-        console.log(`Followers timeline (${fromDate} to ${toDate}): ${result.followersTimeline.length} points`);
+        // Add debug info
+        result.followersDebug = buildFollowersDebug(result.followersTimeline, followersMetric);
+        console.log(`Followers timeline (${fromDate} to ${toDate}): ${result.followersTimeline.length} points, last value: ${result.followersDebug.lastPoint?.value}`);
       } else {
         errors.push(`followers ${fromDate}: ${followersRes.reason}`);
         console.error(`Followers error:`, followersRes.reason);
+        // Still build debug even on error
+        result.followersDebug = buildFollowersDebug([], followersMetric);
       }
 
       // Process engagement timeline
