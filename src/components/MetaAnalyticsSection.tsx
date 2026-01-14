@@ -199,11 +199,22 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     value: number;
   }
   
+  interface FollowersDebugInfo {
+    metricUsed: string;
+    networkUsed: string;
+    userIdUsed: string;
+    blogIdUsed: string | null;
+    firstPoint: { dateTime: string; value: number } | null;
+    lastPoint: { dateTime: string; value: number } | null;
+    pointsCount: number;
+  }
+  
   interface WeeklyData {
     followersTimeline: TimelineDataPoint[];
     engagementTimeline: TimelineDataPoint[];
     engagementAgg: number | null;
     postsCount: number | null;
+    followersDebug?: FollowersDebugInfo;
   }
   
   interface WeeklyComparison {
@@ -584,15 +595,31 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .order("published_at", { ascending: false });
 
     // Filter, deduplicate, and process content based on metrics period
-    const seenContentIds = new Set<string>();
+    // Use a composite key for deduplication: content_id + title_hash + date
+    const seenKeys = new Set<string>();
     const contentWithMetrics = (contentData || [])
       .filter((item: any) => item.title || item.url) // Hide posts without title or URL
       .filter((item: any) => {
-        // Deduplicate by content_id to prevent duplicate rows
-        if (seenContentIds.has(item.content_id)) {
+        // Create a composite dedup key: content_id + truncated title + date
+        // This catches duplicates that may have different content_ids but same content
+        const titleHash = (item.title || "").substring(0, 40).trim().toLowerCase();
+        const dateKey = item.published_at ? item.published_at.split("T")[0] : "";
+        const compositeKey = `${item.content_id}::${titleHash}::${dateKey}`;
+        
+        if (seenKeys.has(compositeKey)) {
           return false;
         }
-        seenContentIds.add(item.content_id);
+        seenKeys.add(compositeKey);
+        
+        // Also check for duplicate titles on the same day (different content_ids)
+        const titleDateKey = `title::${titleHash}::${dateKey}`;
+        if (titleHash && seenKeys.has(titleDateKey)) {
+          return false;
+        }
+        if (titleHash) {
+          seenKeys.add(titleDateKey);
+        }
+        
         return true;
       })
       .map((item: any) => {
@@ -1189,22 +1216,36 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     // Use report data from CSV uploads for comparison (more accurate than API data)
     const reportData = platform === "instagram" ? instagramReportData : facebookReportData;
     
-    // Helper to get last value from timeline (for followers)
-    const getLastTimelineValue = (timeline: TimelineDataPoint[] | undefined): number | null => {
-      if (!timeline || timeline.length === 0) return null;
-      // Sort by date ascending to ensure we get the most recent
-      const sorted = [...timeline].sort((a, b) => 
-        new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
-      );
-      return sorted[sorted.length - 1]?.value ?? null;
-    };
-
-    // Priority: Weekly Data (from Metricool) > Overview KPIs > Report Data > DB Metrics
-    const currentFollowersFromWeekly = getLastTimelineValue(weeklyData?.current?.followersTimeline);
-    const prevFollowersFromWeekly = getLastTimelineValue(weeklyData?.previous?.followersTimeline);
+    // ALWAYS use the debug.lastPoint from the edge function response for accurate followers
+    // This ensures we get the exact last datapoint, matching Metricool UI
+    const currentDebug = weeklyData?.current?.followersDebug;
+    const prevDebug = weeklyData?.previous?.followersDebug;
     
-    const currentFollowers = currentFollowersFromWeekly ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
-    const prevFollowers = prevFollowersFromWeekly ?? (reportData?.new_followers != null && reportData?.followers != null 
+    // Log debug info for verification (dev mode)
+    if (currentDebug) {
+      console.log(`[${platform.toUpperCase()}] Followers Debug - Current:`, {
+        metric: currentDebug.metricUsed,
+        network: currentDebug.networkUsed,
+        userId: currentDebug.userIdUsed,
+        blogId: currentDebug.blogIdUsed,
+        firstPoint: currentDebug.firstPoint,
+        lastPoint: currentDebug.lastPoint,
+        pointsCount: currentDebug.pointsCount,
+      });
+    }
+    if (prevDebug) {
+      console.log(`[${platform.toUpperCase()}] Followers Debug - Previous:`, {
+        lastPoint: prevDebug.lastPoint,
+        pointsCount: prevDebug.pointsCount,
+      });
+    }
+    
+    // Priority: Use debug.lastPoint (most accurate) > fallback to timeline parsing > other sources
+    const currentFollowersFromDebug = currentDebug?.lastPoint?.value ?? null;
+    const prevFollowersFromDebug = prevDebug?.lastPoint?.value ?? null;
+    
+    const currentFollowers = currentFollowersFromDebug ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
+    const prevFollowers = prevFollowersFromDebug ?? (reportData?.new_followers != null && reportData?.followers != null 
       ? reportData.followers - reportData.new_followers 
       : prevMetrics?.followers);
 
@@ -1227,11 +1268,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       return formatter(value);
     };
 
-    // WoW tooltip display like Metricool: "+Δ (X%)"
+    // WoW tooltip display like Metricool: "+Δ (X%)" 
+    // isPercentage: for engagement rate, show % suffix on delta
+    // hidePercentChange: for total posts, only show the numeric delta, no percentage
     const renderWoWTooltip = (
       current: number | null | undefined, 
       previous: number | null | undefined, 
-      isPercentage = false
+      isPercentage = false,
+      hidePercentChange = false
     ) => {
       if (current == null || previous == null) return null;
       
@@ -1241,15 +1285,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       // Format delta
       const formatDelta = (d: number, isPct: boolean) => {
         if (isPct) {
-          return d >= 0 ? `+${d.toFixed(2)}` : d.toFixed(2);
+          // For engagement rate: show +X.XX% (not pp)
+          return d >= 0 ? `+${d.toFixed(2)}%` : `${d.toFixed(2)}%`;
         }
         return d >= 0 ? `+${d.toLocaleString()}` : d.toLocaleString();
       };
       
-      // Format percentage
+      // Format percentage change (for non-percentage metrics like followers)
       const formatPct = (p: number | null) => {
         if (p === null) return "";
-        return p >= 0 ? `(${p.toFixed(1)}%)` : `(${p.toFixed(1)}%)`;
+        return ` (${p >= 0 ? "" : ""}${p.toFixed(1)}%)`;
       };
       
       const isPositive = delta > 0;
@@ -1266,7 +1311,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             {isNeutral && <Minus className="h-3 w-3" />}
             <span className="font-medium">
               {formatDelta(delta, isPercentage)}
-              {isPercentage ? "pp" : ""} {pctChange !== null ? formatPct(pctChange) : ""}
+              {!isPercentage && !hidePercentChange && pctChange !== null ? formatPct(pctChange) : ""}
             </span>
           </div>
         </div>
@@ -1329,7 +1374,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   <span className="text-xs text-muted-foreground">
                     vs {prevTotalPosts}
                   </span>
-                  {renderWoWTooltip(currentTotalPosts, prevTotalPosts)}
+                  {renderWoWTooltip(currentTotalPosts, prevTotalPosts, false, true)}
                 </>
               )}
             </CardContent>
