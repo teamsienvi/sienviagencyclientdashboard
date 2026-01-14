@@ -192,8 +192,23 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     followers: number | null;
     engagementRate: number | null;
   }
+  
+  // Top Performing Post interface
+  interface TopPerformingPost {
+    title: string | null;
+    url: string | null;
+    views: number;
+    reach: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    date: string | null;
+    type: string | null;
+  }
+  
   const [instagramOverviewKPIs, setInstagramOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
   const [facebookOverviewKPIs, setFacebookOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
+  const [facebookTopPosts, setFacebookTopPosts] = useState<TopPerformingPost[]>([]);
   const [loadingOverviewKPIs, setLoadingOverviewKPIs] = useState(false);
   const [overviewKPIsError, setOverviewKPIsError] = useState<string | null>(null);
   
@@ -726,10 +741,37 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       }
 
       if (fbMetricool) {
-        const fbKPIs = await fetchMetricoolOverviewKPIs("facebook", startDate, endDate);
-        setFacebookOverviewKPIs(fbKPIs);
+        // Use dedicated Facebook overview edge function
+        try {
+          const { data: fbData, error: fbError } = await supabase.functions.invoke("metricool-facebook-overview", {
+            body: {
+              clientId,
+              from: startDate,
+              to: endDate,
+              timezone: "America/Chicago",
+            },
+          });
+
+          if (fbError) {
+            console.error("Error fetching Facebook overview:", fbError);
+            setFacebookOverviewKPIs(null);
+            setFacebookTopPosts([]);
+          } else if (fbData?.success) {
+            setFacebookOverviewKPIs(fbData.data);
+            setFacebookTopPosts(fbData.topPosts || []);
+          } else {
+            console.warn("Facebook overview failed:", fbData?.error, fbData?.notConfigured);
+            setFacebookOverviewKPIs(null);
+            setFacebookTopPosts([]);
+          }
+        } catch (err) {
+          console.error("Exception fetching Facebook overview:", err);
+          setFacebookOverviewKPIs(null);
+          setFacebookTopPosts([]);
+        }
       } else {
         setFacebookOverviewKPIs(null);
+        setFacebookTopPosts([]);
       }
     } catch (error) {
       console.error("Error fetching Meta analytics:", error);
@@ -1453,6 +1495,102 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     </Card>
   );
 
+  // Render Top 3 Performing Posts by Views (Facebook only)
+  const renderTopPerformingPosts = () => {
+    if (facebookTopPosts.length === 0) {
+      return null;
+    }
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-blue-500" />
+            Top 3 Performing Posts by Views
+          </CardTitle>
+          <CardDescription>
+            Best performing content this period based on video views
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {facebookTopPosts.map((post, index) => (
+              <Card key={index} className="bg-gradient-to-br from-blue-500/5 to-blue-600/10 border-blue-200/50 dark:border-blue-800/50">
+                <CardContent className="pt-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                      #{index + 1}
+                    </Badge>
+                    {post.type && (
+                      <Badge variant="outline" className="text-xs">
+                        {post.type}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  {post.title && (
+                    <p className="text-sm font-medium line-clamp-2 mb-3 min-h-[2.5rem]">
+                      {post.title}
+                    </p>
+                  )}
+                  
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Eye className="h-3.5 w-3.5" />
+                        Views
+                      </span>
+                      <span className="font-bold text-lg text-blue-600 dark:text-blue-400">
+                        {post.views > 0 ? post.views.toLocaleString() : "N/A"}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50">
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Likes</p>
+                        <p className="font-semibold text-sm">{post.likes > 0 ? post.likes.toLocaleString() : "—"}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Comments</p>
+                        <p className="font-semibold text-sm">{post.comments > 0 ? post.comments.toLocaleString() : "—"}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xs text-muted-foreground">Shares</p>
+                        <p className="font-semibold text-sm">{post.shares > 0 ? post.shares.toLocaleString() : "—"}</p>
+                      </div>
+                    </div>
+                    
+                    {post.reach > 0 && (
+                      <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Users className="h-3.5 w-3.5" />
+                          Reach
+                        </span>
+                        <span className="font-medium">{post.reach.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {post.url && (
+                    <a
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      View Post
+                    </a>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   // Render sync details panel
   const renderSyncDetailsPanel = () => {
     const currentLog = activePlatform === "instagram" ? instagramSyncLog : facebookSyncLog;
@@ -1847,6 +1985,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
         <TabsContent value="facebook" className="space-y-6 mt-4">
           {renderMetricsCards(facebookMetrics, facebookPrevMetrics, "facebook")}
+          {renderTopPerformingPosts()}
           {renderContentTable(facebookContent, "facebook")}
         </TabsContent>
       </Tabs>

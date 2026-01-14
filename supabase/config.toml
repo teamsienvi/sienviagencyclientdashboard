@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.metricool-meta-overview]
 verify_jwt = false
+
+[functions.metricool-facebook-overview]
+verify_jwt = false
