@@ -28,7 +28,8 @@ interface AdsAnalyticsSectionProps {
   clientName: string;
 }
 
-interface Campaign {
+// Meta Ads Campaign
+interface MetaCampaign {
   name: string;
   status: string;
   impressions: number;
@@ -43,7 +44,23 @@ interface Campaign {
   actions?: Record<string, number>;
 }
 
-interface AggregatedData {
+// Google Ads Campaign
+interface GoogleCampaign {
+  name: string;
+  objective: string;
+  providerCampaignId: string;
+  impressions: number;
+  clicks: number;
+  spent: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  conversions: number;
+  purchaseROAS: number;
+  allConversionsValue: number;
+}
+
+interface MetaAggregatedData {
   spend: number;
   impressions: number;
   reach: number;
@@ -54,7 +71,20 @@ interface AggregatedData {
   cpc: number;
   cpm: number;
   actions: Record<string, number>;
-  campaigns: Campaign[];
+  campaigns: MetaCampaign[];
+}
+
+interface GoogleAggregatedData {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  roas: number;
+  allConversionsValue: number;
+  campaigns: GoogleCampaign[];
 }
 
 interface TimelineDataPoint {
@@ -69,10 +99,15 @@ interface TimelineData {
   clicks: TimelineDataPoint[];
 }
 
-interface AdsData {
-  current: AggregatedData;
-  previous: AggregatedData;
+interface MetaAdsData {
+  current: MetaAggregatedData;
+  previous: MetaAggregatedData;
   timeline: TimelineData;
+}
+
+interface GoogleAdsData {
+  current: GoogleAggregatedData;
+  previous: GoogleAggregatedData;
 }
 
 interface DateRange {
@@ -91,10 +126,12 @@ const DATE_PRESETS = [
 const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [metaAds, setMetaAds] = useState<AdsData | null>(null);
+  const [metaAds, setMetaAds] = useState<MetaAdsData | null>(null);
+  const [googleAds, setGoogleAds] = useState<GoogleAdsData | null>(null);
   const [upstreamDebug, setUpstreamDebug] = useState<Record<string, unknown> | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set());
+  const [expandedMetaCampaigns, setExpandedMetaCampaigns] = useState<Set<string>>(new Set());
+  const [expandedGoogleCampaigns, setExpandedGoogleCampaigns] = useState<Set<string>>(new Set());
   
   // Default to last 7 days
   const [dateRange, setDateRange] = useState<DateRange>(() => {
@@ -116,7 +153,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   };
 
   // Merge timeline data into chart-ready format, with fallback for sparse data
-  const buildChartData = (timeline: TimelineData | undefined, aggregated: AggregatedData | null, range: DateRange) => {
+  const buildChartData = (timeline: TimelineData | undefined, aggregated: MetaAggregatedData | null, range: DateRange) => {
     // Check if timeline has enough data points for a meaningful chart
     const hasEnoughTimeline = timeline && (
       timeline.spend.length > 1 || 
@@ -238,6 +275,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
 
       if (data?.success) {
         setMetaAds(data.data?.metaAds || null);
+        setGoogleAds(data.data?.googleAds || null);
         if (data.upstreamDebug) {
           setUpstreamDebug(data.upstreamDebug);
         }
@@ -273,8 +311,20 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     fetchAdsData();
   };
 
-  const toggleCampaignExpanded = (campaignName: string) => {
-    setExpandedCampaigns(prev => {
+  const toggleMetaCampaignExpanded = (campaignName: string) => {
+    setExpandedMetaCampaigns(prev => {
+      const next = new Set(prev);
+      if (next.has(campaignName)) {
+        next.delete(campaignName);
+      } else {
+        next.add(campaignName);
+      }
+      return next;
+    });
+  };
+
+  const toggleGoogleCampaignExpanded = (campaignName: string) => {
+    setExpandedGoogleCampaigns(prev => {
       const next = new Set(prev);
       if (next.has(campaignName)) {
         next.delete(campaignName);
@@ -335,8 +385,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     );
   }
 
-  const hasData = metaAds !== null;
-  const chartData = hasData ? buildChartData(metaAds.timeline, metaAds.current, dateRange) : [];
+  const hasMetaData = metaAds !== null;
+  const hasGoogleData = googleAds !== null;
+  const hasAnyData = hasMetaData || hasGoogleData;
+  const chartData = hasMetaData ? buildChartData(metaAds.timeline, metaAds.current, dateRange) : [];
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -438,12 +490,12 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         </div>
       </div>
 
-      {!hasData && (
+      {!hasAnyData && (
         <Card className="border-dashed">
           <CardHeader className="text-center py-12">
-            <CardTitle className="text-lg text-muted-foreground">No Meta Ads Data</CardTitle>
+            <CardTitle className="text-lg text-muted-foreground">No Ads Data</CardTitle>
             <CardDescription className="max-w-md mx-auto">
-              No campaigns found for {clientName} in this period. Ensure Facebook Ads is connected in Metricool.
+              No campaigns found for {clientName} in this period. Ensure Meta Ads or Google Ads is connected in Metricool.
               {upstreamDebug && (
                 <details className="mt-4 text-xs text-left">
                   <summary className="cursor-pointer">Debug Info</summary>
@@ -457,7 +509,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         </Card>
       )}
 
-      {hasData && metaAds && (
+      {hasMetaData && metaAds && (
         <>
           {/* Reach Section - Metricool Style */}
           <Card className="overflow-hidden border-0 shadow-sm">
@@ -660,7 +712,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                         .sort((a, b) => b.spent - a.spent)
                         .map((campaign, idx) => {
                           const hasActions = campaign.actions && Object.keys(campaign.actions).length > 0;
-                          const isExpanded = expandedCampaigns.has(campaign.name);
+                          const isExpanded = expandedMetaCampaigns.has(campaign.name);
                           
                           return (
                             <>
@@ -670,7 +722,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                                   "hover:bg-muted/20",
                                   hasActions && "cursor-pointer"
                                 )}
-                                onClick={() => hasActions && toggleCampaignExpanded(campaign.name)}
+                                onClick={() => hasActions && toggleMetaCampaignExpanded(campaign.name)}
                               >
                                 <TableCell className="pl-6 w-8">
                                   {hasActions && (
@@ -737,6 +789,131 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* ========== GOOGLE ADS SECTION ========== */}
+          {googleAds && (
+            <>
+              <div className="border-t pt-6 mt-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <svg className="h-8 w-8" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                  <h2 className="text-2xl font-bold">Google Ads</h2>
+                </div>
+
+                {/* Google Ads KPI Row */}
+                <Card className="overflow-hidden border-0 shadow-sm mb-6">
+                  <CardContent className="p-6">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">Spend</p>
+                        <p className="text-2xl font-bold">{formatCurrency(googleAds.current.spend)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatCurrency(googleAds.previous.spend)}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">Impressions</p>
+                        <p className="text-2xl font-bold">{formatNumber(googleAds.current.impressions)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatNumber(googleAds.previous.impressions)}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">Clicks</p>
+                        <p className="text-2xl font-bold">{formatNumber(googleAds.current.clicks)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatNumber(googleAds.previous.clicks)}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">Conversions</p>
+                        <p className="text-2xl font-bold">{formatNumber(googleAds.current.conversions)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatNumber(googleAds.previous.conversions)}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">ROAS</p>
+                        <p className="text-2xl font-bold">{googleAds.current.roas.toFixed(2)}x</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {googleAds.previous.roas.toFixed(2)}x</p>
+                      </div>
+                    </div>
+
+                    {/* Rates Row */}
+                    <div className="grid grid-cols-3 gap-4 mt-4">
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">CTR</p>
+                        <p className="text-2xl font-bold">{formatPercent(googleAds.current.ctr)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatPercent(googleAds.previous.ctr)}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">CPC</p>
+                        <p className="text-2xl font-bold">{formatCurrency(googleAds.current.cpc)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatCurrency(googleAds.previous.cpc)}</p>
+                      </div>
+                      <div className="bg-muted rounded-lg p-4 border border-border">
+                        <p className="text-xs text-muted-foreground mb-1">CPM</p>
+                        <p className="text-2xl font-bold">{formatCurrency(googleAds.current.cpm)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">vs {formatCurrency(googleAds.previous.cpm)}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Google Ads Campaigns Table */}
+                {googleAds.current.campaigns.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">Google Campaigns ({googleAds.current.campaigns.length})</CardTitle>
+                      <CardDescription>Sorted by spend (highest first)</CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="pl-6">Campaign</TableHead>
+                              <TableHead>Objective</TableHead>
+                              <TableHead className="text-right">Impressions</TableHead>
+                              <TableHead className="text-right">Clicks</TableHead>
+                              <TableHead className="text-right">Spent</TableHead>
+                              <TableHead className="text-right">CTR</TableHead>
+                              <TableHead className="text-right">CPC</TableHead>
+                              <TableHead className="text-right">Conv.</TableHead>
+                              <TableHead className="text-right">ROAS</TableHead>
+                              <TableHead className="text-right pr-6">Conv. Value</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {[...googleAds.current.campaigns]
+                              .sort((a, b) => b.spent - a.spent)
+                              .map((campaign, idx) => (
+                                <TableRow key={idx} className="hover:bg-muted/20">
+                                  <TableCell className="font-medium max-w-[200px] truncate pl-6" title={campaign.name}>
+                                    {campaign.name}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary">
+                                      {campaign.objective || "—"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono">{formatNumber(campaign.impressions)}</TableCell>
+                                  <TableCell className="text-right font-mono">{formatNumber(campaign.clicks)}</TableCell>
+                                  <TableCell className="text-right font-mono font-medium">
+                                    {formatCurrency(campaign.spent)}
+                                  </TableCell>
+                                  <TableCell className="text-right font-mono">{formatPercent(campaign.ctr)}</TableCell>
+                                  <TableCell className="text-right font-mono">{formatCurrency(campaign.cpc)}</TableCell>
+                                  <TableCell className="text-right font-mono">{formatNumber(campaign.conversions)}</TableCell>
+                                  <TableCell className="text-right font-mono">{campaign.purchaseROAS.toFixed(2)}x</TableCell>
+                                  <TableCell className="text-right font-mono pr-6">{formatCurrency(campaign.allConversionsValue)}</TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </>
           )}
         </>
       )}

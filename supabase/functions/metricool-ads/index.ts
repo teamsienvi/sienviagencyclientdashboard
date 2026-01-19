@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface Campaign {
+// Meta Ads Campaign
+interface MetaCampaign {
   name: string;
   status: string;
   impressions: number;
@@ -21,7 +22,23 @@ interface Campaign {
   actions?: Record<string, number>;
 }
 
-interface AggregatedData {
+// Google Ads Campaign
+interface GoogleCampaign {
+  name: string;
+  objective: string;
+  providerCampaignId: string;
+  impressions: number;
+  clicks: number;
+  spent: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  conversions: number;
+  purchaseROAS: number;
+  allConversionsValue: number;
+}
+
+interface MetaAggregatedData {
   spend: number;
   impressions: number;
   reach: number;
@@ -32,7 +49,20 @@ interface AggregatedData {
   cpc: number;
   cpm: number;
   actions: Record<string, number>;
-  campaigns: Campaign[];
+  campaigns: MetaCampaign[];
+}
+
+interface GoogleAggregatedData {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  roas: number;
+  allConversionsValue: number;
+  campaigns: GoogleCampaign[];
 }
 
 interface TimelineDataPoint {
@@ -49,15 +79,24 @@ interface TimelineData {
 
 interface AdsResponse {
   metaAds: {
-    current: AggregatedData;
-    previous: AggregatedData;
+    current: MetaAggregatedData;
+    previous: MetaAggregatedData;
     timeline: TimelineData;
   } | null;
-  googleAds: null;
+  googleAds: {
+    current: GoogleAggregatedData;
+    previous: GoogleAggregatedData;
+  } | null;
   upstreamDebug?: {
-    currentWeek?: { status: number; body: string; url: string };
-    prevWeek?: { status: number; body: string; url: string };
-    timeline?: Record<string, { status: number; body: string; url: string }>;
+    meta?: {
+      currentWeek?: { status: number; body: string; url: string };
+      prevWeek?: { status: number; body: string; url: string };
+      timeline?: Record<string, { status: number; body: string; url: string }>;
+    };
+    google?: {
+      currentWeek?: { status: number; body: string; url: string };
+      prevWeek?: { status: number; body: string; url: string };
+    };
   };
 }
 
@@ -134,12 +173,11 @@ serve(async (req) => {
       );
     }
 
-    // Use first available config for userId/blogId
     const config = configList[0];
     const userId = config.user_id;
     const blogId = config.blog_id;
 
-    console.log(`[metricool-ads] Fetching Meta Ads for:`, { clientId, userId, blogId, from, to });
+    console.log(`[metricool-ads] Fetching Ads for:`, { clientId, userId, blogId, from, to });
 
     const METRICOOL_AUTH = Deno.env.get("METRICOOL_AUTH");
     if (!METRICOOL_AUTH) {
@@ -149,11 +187,10 @@ serve(async (req) => {
       );
     }
 
-    // Format date for Metricool API (YYYYMMDD - no dashes)
     const formatDate = (dateStr: string) => dateStr.replace(/-/g, "");
 
-    // Fetch Facebook Ads campaigns for a date range
-    const fetchCampaigns = async (fromDate: string, toDate: string): Promise<{ campaigns: Campaign[] | null; debug: { status: number; body: string; url: string } }> => {
+    // ========== META ADS ==========
+    const fetchMetaCampaigns = async (fromDate: string, toDate: string): Promise<{ campaigns: MetaCampaign[] | null; debug: { status: number; body: string; url: string } }> => {
       const params = new URLSearchParams({
         start: formatDate(fromDate),
         end: formatDate(toDate),
@@ -162,45 +199,31 @@ serve(async (req) => {
       });
       
       const url = `https://app.metricool.com/api/stats/facebookads/campaigns?${params.toString()}`;
-      console.log(`[metricool-ads] Fetching campaigns: ${url}`);
+      console.log(`[metricool-ads] Fetching Meta campaigns: ${url}`);
 
       try {
         const res = await fetch(url, {
           method: "GET",
-          headers: {
-            "x-mc-auth": METRICOOL_AUTH,
-            "Accept": "application/json",
-          },
+          headers: { "x-mc-auth": METRICOOL_AUTH, "Accept": "application/json" },
         });
 
         const responseText = await res.text();
-        console.log(`[metricool-ads] Campaigns response status: ${res.status}`);
+        console.log(`[metricool-ads] Meta campaigns response: ${res.status}`);
 
         if (!res.ok) {
-          return {
-            campaigns: null,
-            debug: { status: res.status, body: responseText, url }
-          };
+          return { campaigns: null, debug: { status: res.status, body: responseText, url } };
         }
 
         let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          return {
-            campaigns: null,
-            debug: { status: res.status, body: `Invalid JSON: ${responseText}`, url }
-          };
+        try { data = JSON.parse(responseText); } catch {
+          return { campaigns: null, debug: { status: res.status, body: `Invalid JSON`, url } };
         }
 
         if (!Array.isArray(data) || data.length === 0) {
-          return {
-            campaigns: [],
-            debug: { status: res.status, body: responseText, url }
-          };
+          return { campaigns: [], debug: { status: res.status, body: responseText, url } };
         }
 
-        const campaigns: Campaign[] = data.map((c: Record<string, unknown>) => ({
+        const campaigns: MetaCampaign[] = data.map((c: Record<string, unknown>) => ({
           name: String(c.name || "Unknown"),
           status: String(c.status || "unknown"),
           impressions: Number(c.impressions) || 0,
@@ -217,20 +240,69 @@ serve(async (req) => {
 
         return { campaigns, debug: { status: res.status, body: responseText.substring(0, 200), url } };
       } catch (err) {
-        console.error(`[metricool-ads] Error fetching campaigns:`, err);
-        return {
-          campaigns: null,
-          debug: { status: 0, body: String(err), url }
-        };
+        console.error(`[metricool-ads] Meta error:`, err);
+        return { campaigns: null, debug: { status: 0, body: String(err), url } };
       }
     };
 
-    // Fetch timeline data for a specific metric
-    const fetchTimeline = async (
-      metric: string, 
-      fromDate: string, 
-      toDate: string
-    ): Promise<{ data: TimelineDataPoint[]; debug: { status: number; body: string; url: string } }> => {
+    // ========== GOOGLE ADS ==========
+    const fetchGoogleCampaigns = async (fromDate: string, toDate: string): Promise<{ campaigns: GoogleCampaign[] | null; debug: { status: number; body: string; url: string } }> => {
+      const params = new URLSearchParams({
+        start: formatDate(fromDate),
+        end: formatDate(toDate),
+        userId: userId,
+        blogId: blogId || "",
+      });
+      
+      const url = `https://app.metricool.com/api/stats/adwords/campaigns?${params.toString()}`;
+      console.log(`[metricool-ads] Fetching Google campaigns: ${url}`);
+
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { "x-mc-auth": METRICOOL_AUTH, "Accept": "application/json" },
+        });
+
+        const responseText = await res.text();
+        console.log(`[metricool-ads] Google campaigns response: ${res.status}`);
+
+        if (!res.ok) {
+          return { campaigns: null, debug: { status: res.status, body: responseText, url } };
+        }
+
+        let data;
+        try { data = JSON.parse(responseText); } catch {
+          return { campaigns: null, debug: { status: res.status, body: `Invalid JSON`, url } };
+        }
+
+        if (!Array.isArray(data) || data.length === 0) {
+          return { campaigns: [], debug: { status: res.status, body: responseText, url } };
+        }
+
+        const campaigns: GoogleCampaign[] = data.map((c: Record<string, unknown>) => ({
+          name: String(c.name || "Unknown"),
+          objective: String(c.objective || ""),
+          providerCampaignId: String(c.providerCampaignId || ""),
+          impressions: Number(c.impressions) || 0,
+          clicks: Number(c.clicks) || 0,
+          spent: Number(c.spent) || 0,
+          ctr: Number(c.ctr) || 0,
+          cpc: Number(c.cpc) || 0,
+          cpm: Number(c.cpm) || 0,
+          conversions: Number(c.conversions) || 0,
+          purchaseROAS: Number(c.purchaseROAS) || 0,
+          allConversionsValue: Number(c.allConversionsValue) || 0,
+        }));
+
+        return { campaigns, debug: { status: res.status, body: responseText.substring(0, 200), url } };
+      } catch (err) {
+        console.error(`[metricool-ads] Google error:`, err);
+        return { campaigns: null, debug: { status: 0, body: String(err), url } };
+      }
+    };
+
+    // Fetch timeline
+    const fetchTimeline = async (metric: string, fromDate: string, toDate: string): Promise<{ data: TimelineDataPoint[]; debug: { status: number; body: string; url: string } }> => {
       const params = new URLSearchParams({
         start: formatDate(fromDate),
         end: formatDate(toDate),
@@ -239,98 +311,53 @@ serve(async (req) => {
       });
       
       const url = `https://app.metricool.com/api/stats/timeline/${metric}?${params.toString()}`;
-      console.log(`[metricool-ads] Fetching timeline ${metric}: ${url}`);
 
       try {
         const res = await fetch(url, {
           method: "GET",
-          headers: {
-            "x-mc-auth": METRICOOL_AUTH,
-            "Accept": "application/json",
-          },
+          headers: { "x-mc-auth": METRICOOL_AUTH, "Accept": "application/json" },
         });
 
         const responseText = await res.text();
-        console.log(`[metricool-ads] Timeline ${metric} response status: ${res.status}`);
-
-        if (!res.ok) {
-          return {
-            data: [],
-            debug: { status: res.status, body: responseText, url }
-          };
-        }
+        if (!res.ok) return { data: [], debug: { status: res.status, body: responseText, url } };
 
         let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          return {
-            data: [],
-            debug: { status: res.status, body: `Invalid JSON: ${responseText}`, url }
-          };
+        try { data = JSON.parse(responseText); } catch {
+          return { data: [], debug: { status: res.status, body: `Invalid JSON`, url } };
         }
 
-        // Handle different response formats
-        // Format 1: Array of [timestamp, value] tuples
-        // Format 2: Object with date keys and values
-        // Format 3: Array of {date, value} objects
         let timelineData: TimelineDataPoint[] = [];
-
-        if (Array.isArray(data)) {
-          if (data.length > 0) {
-            // Check if it's array of tuples [timestamp, value]
-            if (Array.isArray(data[0]) && data[0].length === 2) {
-              timelineData = data.map(([timestamp, value]: [number | string, number]) => {
-                const date = typeof timestamp === 'number' 
-                  ? new Date(timestamp).toISOString().split('T')[0]
-                  : String(timestamp);
-                return { date, value: Number(value) || 0 };
-              });
-            }
-            // Check if it's array of objects with date/value
-            else if (typeof data[0] === 'object' && data[0] !== null) {
-              timelineData = data.map((item: Record<string, unknown>) => ({
-                date: String(item.date || item.day || item.timestamp || ''),
-                value: Number(item.value || item.count || item.total || 0),
-              }));
-            }
+        if (Array.isArray(data) && data.length > 0) {
+          if (Array.isArray(data[0]) && data[0].length === 2) {
+            timelineData = data.map(([ts, val]: [number | string, number]) => ({
+              date: typeof ts === 'number' ? new Date(ts).toISOString().split('T')[0] : String(ts),
+              value: Number(val) || 0,
+            }));
+          } else if (typeof data[0] === 'object') {
+            timelineData = data.map((item: Record<string, unknown>) => ({
+              date: String(item.date || item.day || ''),
+              value: Number(item.value || item.count || 0),
+            }));
           }
         } else if (typeof data === 'object' && data !== null) {
-          // Object format: { "2025-01-13": 100, "2025-01-14": 150, ... }
           timelineData = Object.entries(data).map(([date, value]) => ({
             date,
             value: Number(value) || 0,
           }));
         }
 
-        // Sort by date
         timelineData.sort((a, b) => a.date.localeCompare(b.date));
-
-        console.log(`[metricool-ads] Timeline ${metric} parsed ${timelineData.length} points`);
-        return { data: timelineData, debug: { status: res.status, body: responseText.substring(0, 300), url } };
+        return { data: timelineData, debug: { status: res.status, body: responseText.substring(0, 200), url } };
       } catch (err) {
-        console.error(`[metricool-ads] Error fetching timeline ${metric}:`, err);
-        return {
-          data: [],
-          debug: { status: 0, body: String(err), url }
-        };
+        return { data: [], debug: { status: 0, body: String(err), url } };
       }
     };
 
-    // Aggregate campaigns data
-    const aggregateCampaigns = (campaigns: Campaign[]): AggregatedData => {
-      const result: AggregatedData = {
-        spend: 0,
-        impressions: 0,
-        reach: 0,
-        clicks: 0,
-        uniqueClicks: 0,
-        conversions: 0,
-        ctr: 0,
-        cpc: 0,
-        cpm: 0,
-        actions: {},
-        campaigns: campaigns,
+    // Aggregate Meta campaigns
+    const aggregateMetaCampaigns = (campaigns: MetaCampaign[]): MetaAggregatedData => {
+      const result: MetaAggregatedData = {
+        spend: 0, impressions: 0, reach: 0, clicks: 0, uniqueClicks: 0,
+        conversions: 0, ctr: 0, cpc: 0, cpm: 0, actions: {}, campaigns,
       };
 
       for (const c of campaigns) {
@@ -340,7 +367,6 @@ serve(async (req) => {
         result.clicks += c.clicks || 0;
         result.uniqueClicks += c.uniqueClicks || 0;
         result.conversions += c.conversions || 0;
-
         if (c.actions) {
           for (const [key, value] of Object.entries(c.actions)) {
             result.actions[key] = (result.actions[key] || 0) + (Number(value) || 0);
@@ -352,68 +378,76 @@ serve(async (req) => {
         result.ctr = (result.clicks / result.impressions) * 100;
         result.cpm = (result.spend / result.impressions) * 1000;
       }
-      if (result.clicks > 0) {
-        result.cpc = result.spend / result.clicks;
-      }
+      if (result.clicks > 0) result.cpc = result.spend / result.clicks;
 
       return result;
     };
 
-    // Fetch campaigns and timeline data in parallel
-    const [currentResult, prevResult, spendTimeline, impressionsTimeline, reachTimeline, clicksTimeline] = await Promise.all([
-      fetchCampaigns(from, to),
-      fetchCampaigns(prevFrom, prevTo),
+    // Aggregate Google campaigns
+    const aggregateGoogleCampaigns = (campaigns: GoogleCampaign[]): GoogleAggregatedData => {
+      const result: GoogleAggregatedData = {
+        spend: 0, impressions: 0, clicks: 0, conversions: 0,
+        ctr: 0, cpc: 0, cpm: 0, roas: 0, allConversionsValue: 0, campaigns,
+      };
+
+      for (const c of campaigns) {
+        result.spend += c.spent || 0;
+        result.impressions += c.impressions || 0;
+        result.clicks += c.clicks || 0;
+        result.conversions += c.conversions || 0;
+        result.allConversionsValue += c.allConversionsValue || 0;
+      }
+
+      if (result.impressions > 0) {
+        result.ctr = (result.clicks / result.impressions) * 100;
+        result.cpm = (result.spend / result.impressions) * 1000;
+      }
+      if (result.clicks > 0) result.cpc = result.spend / result.clicks;
+      if (result.spend > 0) result.roas = result.allConversionsValue / result.spend;
+
+      return result;
+    };
+
+    // Fetch all data in parallel
+    const [
+      metaCurrentResult, metaPrevResult,
+      googleCurrentResult, googlePrevResult,
+      spendTimeline, impressionsTimeline, reachTimeline, clicksTimeline
+    ] = await Promise.all([
+      fetchMetaCampaigns(from, to),
+      fetchMetaCampaigns(prevFrom, prevTo),
+      fetchGoogleCampaigns(from, to),
+      fetchGoogleCampaigns(prevFrom, prevTo),
       fetchTimeline("adSpend", from, to),
       fetchTimeline("adImpressions", from, to),
       fetchTimeline("adReach", from, to),
       fetchTimeline("adClicks", from, to),
     ]);
 
-    // Build debug info for upstream issues
+    // Build debug info
     const upstreamDebug: AdsResponse["upstreamDebug"] = {};
-    if (currentResult.campaigns === null) {
-      upstreamDebug.currentWeek = currentResult.debug;
-    }
-    if (prevResult.campaigns === null) {
-      upstreamDebug.prevWeek = prevResult.debug;
-    }
     
-    // Add timeline debug if any failed
-    const timelineDebug: Record<string, { status: number; body: string; url: string }> = {};
-    if (spendTimeline.data.length === 0 && spendTimeline.debug.status !== 200) {
-      timelineDebug.adSpend = spendTimeline.debug;
-    }
-    if (impressionsTimeline.data.length === 0 && impressionsTimeline.debug.status !== 200) {
-      timelineDebug.adImpressions = impressionsTimeline.debug;
-    }
-    if (reachTimeline.data.length === 0 && reachTimeline.debug.status !== 200) {
-      timelineDebug.adReach = reachTimeline.debug;
-    }
-    if (clicksTimeline.data.length === 0 && clicksTimeline.debug.status !== 200) {
-      timelineDebug.adClicks = clicksTimeline.debug;
-    }
-    if (Object.keys(timelineDebug).length > 0) {
-      upstreamDebug.timeline = timelineDebug;
-    }
+    // Meta debug
+    const metaDebug: NonNullable<AdsResponse["upstreamDebug"]>["meta"] = {};
+    if (metaCurrentResult.campaigns === null) metaDebug.currentWeek = metaCurrentResult.debug;
+    if (metaPrevResult.campaigns === null) metaDebug.prevWeek = metaPrevResult.debug;
+    if (Object.keys(metaDebug).length > 0) upstreamDebug.meta = metaDebug;
 
-    // If both periods have null campaigns (upstream error), return with debug
-    if (currentResult.campaigns === null && prevResult.campaigns === null) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          data: { metaAds: null, googleAds: null },
-          upstreamDebug,
-          message: "Failed to fetch Meta Ads campaigns from Metricool"
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // Google debug
+    const googleDebug: NonNullable<AdsResponse["upstreamDebug"]>["google"] = {};
+    if (googleCurrentResult.campaigns === null) googleDebug.currentWeek = googleCurrentResult.debug;
+    if (googlePrevResult.campaigns === null) googleDebug.prevWeek = googlePrevResult.debug;
+    if (Object.keys(googleDebug).length > 0) upstreamDebug.google = googleDebug;
 
-    // Aggregate data
-    const currentData = aggregateCampaigns(currentResult.campaigns || []);
-    const previousData = aggregateCampaigns(prevResult.campaigns || []);
+    // Aggregate Meta
+    const metaCurrentData = aggregateMetaCampaigns(metaCurrentResult.campaigns || []);
+    const metaPreviousData = aggregateMetaCampaigns(metaPrevResult.campaigns || []);
 
-    // Build timeline data
+    // Aggregate Google
+    const googleCurrentData = aggregateGoogleCampaigns(googleCurrentResult.campaigns || []);
+    const googlePreviousData = aggregateGoogleCampaigns(googlePrevResult.campaigns || []);
+
+    // Timeline
     const timeline: TimelineData = {
       spend: spendTimeline.data,
       impressions: impressionsTimeline.data,
@@ -421,36 +455,21 @@ serve(async (req) => {
       clicks: clicksTimeline.data,
     };
 
-    console.log(`[metricool-ads] Current aggregated:`, {
-      spend: currentData.spend,
-      impressions: currentData.impressions,
-      clicks: currentData.clicks,
-      campaignsCount: currentData.campaigns.length
-    });
-    console.log(`[metricool-ads] Timeline data points:`, {
-      spend: timeline.spend.length,
-      impressions: timeline.impressions.length,
-      reach: timeline.reach.length,
-      clicks: timeline.clicks.length,
-    });
+    console.log(`[metricool-ads] Meta aggregated:`, { spend: metaCurrentData.spend, campaigns: metaCurrentData.campaigns.length });
+    console.log(`[metricool-ads] Google aggregated:`, { spend: googleCurrentData.spend, campaigns: googleCurrentData.campaigns.length });
 
-    // Check if we have meaningful data
-    const hasData = currentData.spend > 0 || currentData.impressions > 0 || 
-                    previousData.spend > 0 || previousData.impressions > 0 ||
-                    currentData.campaigns.length > 0 || previousData.campaigns.length > 0;
+    // Check for meaningful data
+    const hasMetaData = metaCurrentData.spend > 0 || metaCurrentData.impressions > 0 || 
+                        metaPreviousData.spend > 0 || metaCurrentData.campaigns.length > 0;
+    const hasGoogleData = googleCurrentData.spend > 0 || googleCurrentData.impressions > 0 || 
+                          googlePreviousData.spend > 0 || googleCurrentData.campaigns.length > 0;
 
     const response: AdsResponse = {
-      metaAds: hasData ? {
-        current: currentData,
-        previous: previousData,
-        timeline: timeline,
-      } : null,
-      googleAds: null,
+      metaAds: hasMetaData ? { current: metaCurrentData, previous: metaPreviousData, timeline } : null,
+      googleAds: hasGoogleData ? { current: googleCurrentData, previous: googlePreviousData } : null,
     };
 
-    if (Object.keys(upstreamDebug).length > 0) {
-      response.upstreamDebug = upstreamDebug;
-    }
+    if (Object.keys(upstreamDebug).length > 0) response.upstreamDebug = upstreamDebug;
 
     return new Response(
       JSON.stringify({ success: true, data: response }),
