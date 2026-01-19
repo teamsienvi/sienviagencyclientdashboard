@@ -1,4 +1,4 @@
-import { Activity, ChevronDown, Building2 } from "lucide-react";
+import { Activity, ChevronDown, Building2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import sienviLogo from "@/assets/sienvi-agency-client-logo.jpg";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export const Header = () => {
-  const { isAdmin, isAuthenticated } = useAuth();
+  const { isAdmin, isAuthenticated, signOut, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -37,7 +37,7 @@ export const Header = () => {
 
   // Get current client from URL if on a client page
   const getCurrentClientId = () => {
-    const match = location.pathname.match(/\/client\/([^/]+)|\/(?:meta|youtube|x|tiktok|linkedin|web)-(?:analytics|metricool)\/([^/]+)/);
+    const match = location.pathname.match(/\/client\/([^/]+)|\/(?:meta|youtube|x|tiktok|linkedin|web|ads)-(?:analytics|metricool)\/([^/]+)/);
     return match?.[1] || match?.[2] || null;
   };
 
@@ -48,12 +48,27 @@ export const Header = () => {
     navigate(`/client/${clientId}`);
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login");
+  };
+
+  const handleLogoClick = () => {
+    if (isAdmin) {
+      navigate("/");
+    }
+    // Non-admin users stay on their client page - logo click does nothing
+  };
+
   return (
     <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-50 transition-colors duration-300">
       <div className="container mx-auto px-6 py-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 animate-fade-in">
-            <div className="relative group cursor-pointer" onClick={() => navigate("/")}>
+            <div 
+              className={`relative group ${isAdmin ? 'cursor-pointer' : ''}`} 
+              onClick={handleLogoClick}
+            >
               <div className="absolute -inset-1 bg-primary/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <img 
                 src={sienviLogo} 
@@ -63,8 +78,8 @@ export const Header = () => {
             </div>
             <div>
               <h1 
-                className="text-2xl font-heading font-bold text-foreground uppercase tracking-tight cursor-pointer hover:text-primary transition-colors"
-                onClick={() => navigate("/")}
+                className={`text-2xl font-heading font-bold text-foreground uppercase tracking-tight ${isAdmin ? 'cursor-pointer hover:text-primary transition-colors' : ''}`}
+                onClick={handleLogoClick}
               >
                 SIENVI AGENCY
               </h1>
@@ -72,7 +87,7 @@ export const Header = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Admin Client Selector */}
+            {/* Admin Client Selector - Only show for admins */}
             {isAdmin && clients && clients.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -115,6 +130,17 @@ export const Header = () => {
               <span className="hidden sm:inline">Live Data</span>
             </Button>
             <ThemeToggle />
+            {isAuthenticated && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSignOut}
+                className="gap-2 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive transition-all duration-300"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>

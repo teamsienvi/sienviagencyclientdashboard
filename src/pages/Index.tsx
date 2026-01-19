@@ -1,14 +1,43 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { ClientCard } from "@/components/ClientCard";
 import { DashboardStats } from "@/components/DashboardStats";
 import { ClientSearch } from "@/components/ClientSearch";
 import { clientsData } from "@/data/clients";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
+  const { isAuthenticated, isAdmin, isLoading: authLoading, user } = useAuth();
+
+  // Redirect non-admin users to their client dashboard
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && !isAdmin && user) {
+      // Find user's assigned client and redirect
+      supabase
+        .from("client_users")
+        .select("client_id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            navigate(`/client/${data[0].client_id}`, { replace: true });
+          }
+        });
+    }
+  }, [authLoading, isAuthenticated, isAdmin, user, navigate]);
+
+  // Redirect unauthenticated users to login
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      navigate("/login", { replace: true });
+    }
+  }, [authLoading, isAuthenticated, navigate]);
   
   // Fetch database clients to get their IDs
   const { data: dbClients } = useQuery({
@@ -21,6 +50,7 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
+    enabled: isAuthenticated && isAdmin,
   });
 
   // Fetch Metricool configs to know which clients have TikTok/LinkedIn setup
@@ -34,6 +64,7 @@ const Index = () => {
       if (error) throw error;
       return data;
     },
+    enabled: isAuthenticated && isAdmin,
   });
   
   // Map client names to their database IDs (for YouTube analytics)
@@ -74,6 +105,24 @@ const Index = () => {
       client.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [searchQuery]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated or not admin
+  if (!isAuthenticated || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
