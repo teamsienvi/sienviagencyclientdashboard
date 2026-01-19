@@ -398,32 +398,48 @@ async function syncFacebookPage(
       const since = Math.floor(periodStartDate.getTime() / 1000);
       const until = Math.floor(periodEndDate.getTime() / 1000) + 86400;
 
-      const pageInsightsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions_unique,page_impressions,page_fans&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
-      console.log(`Fetching page insights for ${clientName}...`);
+      // Note: page_fans was deprecated in Graph API v21.0, use page_follows instead
+      // Also fetch metrics in separate calls to avoid one failure blocking all
+      const reachMetricsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_impressions_unique,page_impressions&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+      console.log(`Fetching page reach/impressions for ${clientName}...`);
 
-      const pageInsightsResp = await fetch(pageInsightsUrl);
-      const pageInsightsData = await pageInsightsResp.json();
+      const reachResp = await fetch(reachMetricsUrl);
+      const reachData = await reachResp.json();
 
-      if (pageInsightsData.error) {
-        console.log(`Page insights error: ${pageInsightsData.error.message}`);
-        errorMessages.push(`Page insights: ${pageInsightsData.error.message?.substring(0, 50)}`);
-      } else if (pageInsightsData.data) {
-        for (const insight of pageInsightsData.data) {
+      if (reachData.error) {
+        console.log(`Page reach insights error: ${reachData.error.message}`);
+        errorMessages.push(`Page reach: ${reachData.error.message?.substring(0, 50)}`);
+      } else if (reachData.data) {
+        for (const insight of reachData.data) {
           if (insight.name === 'page_impressions_unique') {
             pageReach = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
           }
           if (insight.name === 'page_impressions') {
             pageImpressions = (insight.values || []).reduce((sum: number, v: any) => sum + (v.value || 0), 0);
           }
-          if (insight.name === 'page_fans') {
-            const values = insight.values || [];
-            const last = values.length > 0 ? values[values.length - 1]?.value : null;
-            if (typeof last === 'number') followers = last;
+        }
+      }
+
+      // Try to get page_follows separately (available in v21.0)
+      try {
+        const followsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_follows&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
+        const followsResp = await fetch(followsUrl);
+        const followsData = await followsResp.json();
+        
+        if (!followsData.error && followsData.data) {
+          for (const insight of followsData.data) {
+            if (insight.name === 'page_follows') {
+              const values = insight.values || [];
+              const last = values.length > 0 ? values[values.length - 1]?.value : null;
+              if (typeof last === 'number') followers = last;
+            }
           }
         }
-
-        console.log(`${clientName} page reach: ${pageReach}, impressions: ${pageImpressions}, followers(end): ${followers}`);
+      } catch (e) {
+        console.log(`Could not fetch page_follows, using fallback: ${e}`);
       }
+
+      console.log(`${clientName} page reach: ${pageReach}, impressions: ${pageImpressions}, followers(end): ${followers}`);
     } catch (e) {
       console.log(`Error fetching page insights: ${e}`);
       errorMessages.push('Could not fetch page-level reach');

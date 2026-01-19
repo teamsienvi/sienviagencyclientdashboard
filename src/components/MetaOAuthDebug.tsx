@@ -31,9 +31,10 @@ export function MetaOAuthDebug() {
   const buildOAuthUrl = (platform: "instagram" | "facebook") => {
     const scopes = platform === "instagram" ? instagramScopes : facebookScopes;
     const state = JSON.stringify({ clientId: "test-client", platform });
-    const encodedState = encodeURIComponent(btoa(state));
+    // Use btoa only - URLSearchParams.set() will handle URL encoding automatically
+    const encodedState = btoa(state);
     
-    const url = new URL("https://www.facebook.com/v18.0/dialog/oauth");
+    const url = new URL("https://www.facebook.com/v21.0/dialog/oauth");
     url.searchParams.set("client_id", META_APP_ID);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("scope", scopes.join(","));

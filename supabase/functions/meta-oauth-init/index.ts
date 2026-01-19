@@ -34,7 +34,8 @@ serve(async (req) => {
     ].join(",");
     // Build Meta OAuth URL
     const state = JSON.stringify({ clientId, platform });
-    const encodedState = encodeURIComponent(btoa(state));
+    // Use btoa only - URLSearchParams.set() will handle URL encoding automatically
+    const encodedState = btoa(state);
     
     const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
     authUrl.searchParams.set("client_id", metaAppId);
