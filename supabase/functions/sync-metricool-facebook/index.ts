@@ -255,7 +255,7 @@ serve(async (req) => {
             client_id: clientId,
             content_id: contentId,
             platform: "facebook",
-            content_type: post.type?.toLowerCase() === "video" ? "video" : "post",
+            content_type: post.type?.toLowerCase() === "video" || post.type?.toLowerCase() === "reel" ? "reel" : "post",
             title: post.title,
             url: postUrl,
             published_at: publishedAt,
