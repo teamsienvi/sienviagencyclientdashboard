@@ -543,7 +543,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       {/* Stats Cards */}
       {stats && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {/* Subscribers Card */}
             <Card className="bg-card">
               <CardContent className="pt-5 pb-4">
@@ -609,39 +609,6 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                     vs {stats.prevTotalViews.toLocaleString()} prev week
                   </p>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Avg View Duration Card */}
-            <Card className="bg-card">
-              <CardContent className="pt-5 pb-4">
-                <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  <Clock className="h-4 w-4" />
-                  <span className="text-xs">Avg. View Duration</span>
-                </div>
-                <p className="text-2xl font-bold">
-                  {stats.avgViewDuration > 0 
-                    ? `${Math.floor(stats.avgViewDuration / 60)}:${String(Math.floor(stats.avgViewDuration % 60)).padStart(2, '0')}`
-                    : "N/A"
-                  }
-                </p>
-                {(() => {
-                  const { delta } = calcWoW(stats.avgViewDuration, stats.prevAvgViewDuration);
-                  if (stats.avgViewDuration > 0 && stats.prevAvgViewDuration > 0 && Math.abs(delta) >= 1) {
-                    return (
-                      <div className={cn(
-                        "text-xs font-medium flex items-center gap-1 mt-1",
-                        delta > 0 ? "text-green-500" : "text-red-500"
-                      )}>
-                        {delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                        <span>
-                          {delta > 0 ? "+" : ""}{delta.toFixed(0)}s
-                        </span>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
               </CardContent>
             </Card>
 
