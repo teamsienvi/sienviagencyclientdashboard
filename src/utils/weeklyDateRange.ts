@@ -1,31 +1,33 @@
-import { startOfWeek, endOfWeek, subWeeks, format, isMonday, subDays } from "date-fns";
+import { startOfWeek, endOfWeek, subWeeks, format, subDays } from "date-fns";
 
 /**
- * Get the current reporting period (Monday-Sunday) and previous week.
- * On Monday, shows the just-completed week. Otherwise, shows the current week in progress.
+ * Get the most recent Monday (start of the current week)
+ */
+const getMostRecentMonday = (date: Date): Date => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1; // Sunday = 6 days back, otherwise day - 1
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+/**
+ * Get the current reporting period - the LAST COMPLETED week (Mon-Sun).
+ * This matches the Meta analytics date logic exactly.
+ * E.g., if today is Jan 19 (Sunday), shows Jan 13-19.
+ * If today is Jan 20 (Monday), shows Jan 13-19 (the week that just ended).
  */
 export const getCurrentReportingWeek = () => {
   const today = new Date();
-  
-  // Get the most recent Monday (start of current/last complete week)
-  // If today is Monday, we show the previous week (Mon-Sun just ended)
-  // Otherwise, show the week containing today
-  let weekStart: Date;
-  
-  if (isMonday(today)) {
-    // If it's Monday, show last week's data (Sunday just ended)
-    weekStart = startOfWeek(subDays(today, 1), { weekStartsOn: 1 });
-  } else {
-    // Show the current week in progress
-    weekStart = startOfWeek(today, { weekStartsOn: 1 });
-  }
-  
-  const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+  const thisMonday = getMostRecentMonday(today);
+  const prevMonday = subDays(thisMonday, 7); // Previous week's Monday
+  const prevSunday = subDays(thisMonday, 1); // Previous week's Sunday
   
   return {
-    start: weekStart,
-    end: weekEnd,
-    dateRange: formatDateRange(weekStart, weekEnd),
+    start: prevMonday,
+    end: prevSunday,
+    dateRange: formatDateRange(prevMonday, prevSunday),
   };
 };
 
@@ -45,12 +47,12 @@ export const formatDateRange = (start: Date, end: Date): string => {
 };
 
 /**
- * Get the previous reporting week
+ * Get the previous reporting week (two weeks ago)
  */
 export const getPreviousReportingWeek = () => {
   const { start: currentStart } = getCurrentReportingWeek();
-  const prevStart = subWeeks(currentStart, 1);
-  const prevEnd = endOfWeek(prevStart, { weekStartsOn: 1 });
+  const prevStart = subDays(currentStart, 7);
+  const prevEnd = subDays(currentStart, 1);
   
   return {
     start: prevStart,
