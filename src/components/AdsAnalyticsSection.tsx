@@ -274,9 +274,17 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       {!hasAnyData && (
         <Card>
           <CardHeader>
-            <CardTitle>No Ads Data Available</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-muted-foreground" />
+              No Ads Data Available
+            </CardTitle>
             <CardDescription>
-              No Meta Ads or Google Ads data found for this client. Make sure ads accounts are connected in Metricool.
+              No Meta Ads or Google Ads data found for {clientName}. This could mean:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Ads accounts are not connected in Metricool</li>
+                <li>No ads were running during the selected period</li>
+                <li>Ad spend is $0 for this time range</li>
+              </ul>
             </CardDescription>
           </CardHeader>
         </Card>
