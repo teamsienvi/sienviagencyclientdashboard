@@ -7,13 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, LogIn } from "lucide-react";
+import { Loader2, LogIn, ArrowLeft, Mail } from "lucide-react";
 import sienviLogo from "@/assets/sienvi-agency-client-logo.jpg";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const navigate = useNavigate();
   const { isAuthenticated, isAdmin, isLoading: authLoading, user } = useAuth();
 
@@ -26,12 +28,10 @@ const Login = () => {
 
   const redirectUser = async () => {
     if (isAdmin) {
-      // Admin goes to main dashboard
       navigate("/", { replace: true });
       return;
     }
 
-    // Regular user - find their assigned client
     try {
       const { data: clientUsers, error } = await supabase
         .from("client_users")
@@ -44,7 +44,6 @@ const Login = () => {
       if (clientUsers && clientUsers.length > 0) {
         navigate(`/client/${clientUsers[0].client_id}`, { replace: true });
       } else {
-        // No client assigned - show error
         toast.error("No client access assigned. Please contact your administrator.");
       }
     } catch (err) {
@@ -79,7 +78,6 @@ const Login = () => {
       }
 
       toast.success("Signed in successfully!");
-      // Redirect will happen via useEffect
     } catch (err) {
       console.error("Sign in error:", err);
       toast.error("An error occurred. Please try again.");
@@ -88,7 +86,36 @@ const Login = () => {
     }
   };
 
-  // Show loading while checking auth
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email) {
+      toast.error("Please enter your email address");
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      setResetEmailSent(true);
+      toast.success("Password reset email sent! Check your inbox.");
+    } catch (err) {
+      console.error("Password reset error:", err);
+      toast.error("An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -118,59 +145,151 @@ const Login = () => {
           </div>
         </div>
 
-        {/* Login Card */}
+        {/* Login/Forgot Password Card */}
         <Card className="border-border/50 shadow-xl">
-          <CardHeader className="space-y-1 text-center">
-            <CardTitle className="text-2xl">Welcome Back</CardTitle>
-            <CardDescription>
-              Sign in to access your analytics dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={isLoading}
-                  className="h-11"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  className="h-11"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full h-11"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
+          {!showForgotPassword ? (
+            <>
+              <CardHeader className="space-y-1 text-center">
+                <CardTitle className="text-2xl">Welcome Back</CardTitle>
+                <CardDescription>
+                  Sign in to access your analytics dashboard
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="your@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={isLoading}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
+                      className="h-11"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    className="w-full h-11"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="mr-2 h-4 w-4" />
+                        Sign In
+                      </>
+                    )}
+                  </Button>
+                </form>
+                <div className="mt-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Forgot your password?
+                  </button>
+                </div>
+              </CardContent>
+            </>
+          ) : (
+            <>
+              <CardHeader className="space-y-1 text-center">
+                <CardTitle className="text-2xl">Reset Password</CardTitle>
+                <CardDescription>
+                  {resetEmailSent 
+                    ? "Check your email for a password reset link"
+                    : "Enter your email to receive a password reset link"
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {resetEmailSent ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center p-4 bg-primary/10 rounded-lg">
+                      <Mail className="h-12 w-12 text-primary" />
+                    </div>
+                    <p className="text-center text-sm text-muted-foreground">
+                      We've sent a password reset link to <strong>{email}</strong>. 
+                      Click the link in your email to reset your password.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-11"
+                      onClick={() => {
+                        setShowForgotPassword(false);
+                        setResetEmailSent(false);
+                      }}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back to Sign In
+                    </Button>
+                  </div>
                 ) : (
-                  <>
-                    <LogIn className="mr-2 h-4 w-4" />
-                    Sign In
-                  </>
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="reset-email">Email</Label>
+                      <Input
+                        id="reset-email"
+                        type="email"
+                        placeholder="your@email.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        disabled={isLoading}
+                        className="h-11"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full h-11"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="mr-2 h-4 w-4" />
+                          Send Reset Link
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-11"
+                      onClick={() => setShowForgotPassword(false)}
+                      disabled={isLoading}
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back to Sign In
+                    </Button>
+                  </form>
                 )}
-              </Button>
-            </form>
-          </CardContent>
+              </CardContent>
+            </>
+          )}
         </Card>
 
         <p className="text-center text-sm text-muted-foreground">
