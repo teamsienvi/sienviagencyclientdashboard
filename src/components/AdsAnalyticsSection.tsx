@@ -88,15 +88,21 @@ interface GoogleAggregatedData {
 }
 
 interface TimelineDataPoint {
-  date: string;
+  ts: number;
   value: number;
 }
 
-interface TimelineData {
-  spend: TimelineDataPoint[];
-  impressions: TimelineDataPoint[];
-  reach: TimelineDataPoint[];
+interface MetaTimelines {
+  cpm: TimelineDataPoint[];
   clicks: TimelineDataPoint[];
+  impressions: TimelineDataPoint[];
+}
+
+interface TimelineData {
+  spend: { date: string; value: number }[];
+  impressions: { date: string; value: number }[];
+  reach: { date: string; value: number }[];
+  clicks: { date: string; value: number }[];
 }
 
 interface MetaAdsData {
@@ -128,6 +134,8 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   const [refreshing, setRefreshing] = useState(false);
   const [metaAds, setMetaAds] = useState<MetaAdsData | null>(null);
   const [googleAds, setGoogleAds] = useState<GoogleAdsData | null>(null);
+  const [metaTimelines, setMetaTimelines] = useState<MetaTimelines | null>(null);
+  const [timelineDebug, setTimelineDebug] = useState<Record<string, unknown> | null>(null);
   const [upstreamDebug, setUpstreamDebug] = useState<Record<string, unknown> | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [expandedMetaCampaigns, setExpandedMetaCampaigns] = useState<Set<string>>(new Set());
@@ -152,107 +160,137 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     };
   };
 
-  // Merge timeline data into chart-ready format, with fallback for sparse data
-  const buildChartData = (timeline: TimelineData | undefined, aggregated: MetaAggregatedData | null, range: DateRange) => {
-    // Check if timeline has enough data points for a meaningful chart
-    const hasEnoughTimeline = timeline && (
-      timeline.spend.length > 1 || 
-      timeline.impressions.length > 1 || 
-      timeline.reach.length > 1 || 
-      timeline.clicks.length > 1
-    );
-    
-    // If we have real daily timeline data, use it
-    if (hasEnoughTimeline && timeline) {
-      const dateMap = new Map<string, {
-        date: string;
-        displayDate: string;
-        spend: number;
-        impressions: number;
-        reach: number;
-        clicks: number;
-        cpm: number;
-        cpc: number;
-        ctr: number;
-      }>();
-      
-      const formatDisplayDate = (dateStr: string) => {
-        try {
-          const date = parseISO(dateStr);
-          return format(date, "MMM d");
-        } catch {
-          return dateStr;
+  // Parse Metricool timeline response: [["timestampMs","valueString"], ...] => [{ts, value}, ...]
+  const parseTimelineResponse = (data: unknown): TimelineDataPoint[] => {
+    if (!Array.isArray(data)) return [];
+    return data
+      .map((item: unknown) => {
+        if (Array.isArray(item) && item.length >= 2) {
+          return {
+            ts: Number(item[0]),
+            value: Number(item[1]) || 0,
+          };
         }
-      };
-      
-      timeline.spend.forEach(({ date, value }) => {
-        const existing = dateMap.get(date) || { 
-          date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
-        };
-        existing.spend = value;
-        dateMap.set(date, existing);
-      });
-      
-      timeline.impressions.forEach(({ date, value }) => {
-        const existing = dateMap.get(date) || { 
-          date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
-        };
-        existing.impressions = value;
-        dateMap.set(date, existing);
-      });
-      
-      timeline.reach.forEach(({ date, value }) => {
-        const existing = dateMap.get(date) || { 
-          date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
-        };
-        existing.reach = value;
-        dateMap.set(date, existing);
-      });
-      
-      timeline.clicks.forEach(({ date, value }) => {
-        const existing = dateMap.get(date) || { 
-          date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
-        };
-        existing.clicks = value;
-        dateMap.set(date, existing);
-      });
-      
-      return Array.from(dateMap.values())
-        .map(day => ({
-          ...day,
-          cpm: day.impressions > 0 ? (day.spend / day.impressions) * 1000 : 0,
-          cpc: day.clicks > 0 ? day.spend / day.clicks : 0,
-          ctr: day.impressions > 0 ? (day.clicks / day.impressions) * 100 : 0,
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+        return null;
+      })
+      .filter((item): item is TimelineDataPoint => item !== null)
+      .sort((a, b) => a.ts - b.ts);
+  };
+
+  // Fetch a single timeline metric via metricool-json
+  const fetchTimeline = async (
+    metricKey: string,
+    startDate: Date,
+    endDate: Date,
+    userId: string,
+    blogId: string
+  ): Promise<{ data: TimelineDataPoint[]; debug?: Record<string, unknown> }> => {
+    const startStr = format(startDate, "yyyyMMdd");
+    const endStr = format(endDate, "yyyyMMdd");
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const { data, error } = await supabase.functions.invoke("metricool-json", {
+      body: {
+        path: `/api/stats/timeline/${metricKey}`,
+        params: {
+          start: startStr,
+          end: endStr,
+          timezone,
+          userId,
+          blogId,
+        },
+      },
+    });
+
+    if (error) {
+      console.error(`Timeline fetch error for ${metricKey}:`, error);
+      return { data: [], debug: { error: error.message, metricKey } };
     }
-    
-    // Fallback: distribute aggregated totals across days for visualization
+
+    if (!data?.success) {
+      return {
+        data: [],
+        debug: {
+          metricKey,
+          upstreamStatus: data?.upstreamStatus,
+          upstreamBody: data?.upstreamBody,
+        },
+      };
+    }
+
+    return { data: parseTimelineResponse(data.data) };
+  };
+
+  // Build chart data from real timeline data
+  const buildTimelineChartData = (timelines: MetaTimelines | null, aggregated: MetaAggregatedData | null, range: DateRange) => {
+    if (!timelines) return [];
+
+    // Merge all timeline series by timestamp
+    const tsMap = new Map<number, { ts: number; cpm: number; clicks: number; impressions: number; spend: number }>();
+
+    timelines.cpm.forEach(({ ts, value }) => {
+      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
+      existing.cpm = value;
+      tsMap.set(ts, existing);
+    });
+
+    timelines.clicks.forEach(({ ts, value }) => {
+      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
+      existing.clicks = value;
+      tsMap.set(ts, existing);
+    });
+
+    timelines.impressions.forEach(({ ts, value }) => {
+      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
+      existing.impressions = value;
+      tsMap.set(ts, existing);
+    });
+
+    // Calculate spend from CPM and impressions: spend = (CPM * impressions) / 1000
+    const result = Array.from(tsMap.values())
+      .sort((a, b) => a.ts - b.ts)
+      .map((point) => {
+        const calculatedSpend = point.impressions > 0 ? (point.cpm * point.impressions) / 1000 : 0;
+        return {
+          ...point,
+          spend: Number(calculatedSpend.toFixed(2)),
+          displayDate: format(new Date(point.ts), "MMM d"),
+          date: format(new Date(point.ts), "yyyy-MM-dd"),
+        };
+      });
+
+    // If no timeline data points, return fallback
+    if (result.length === 0 && aggregated) {
+      return buildFallbackChartData(aggregated, range);
+    }
+
+    return result;
+  };
+
+  // Fallback chart data from aggregated totals
+  const buildFallbackChartData = (aggregated: MetaAggregatedData | null, range: DateRange) => {
     if (!aggregated) return [];
-    
+
     const days = eachDayOfInterval({ start: range.from, end: range.to });
     const numDays = days.length;
-    
-    // Use seeded randomness based on date for consistent display
-    return days.map((day, index) => {
+
+    return days.map((day) => {
       const seed = day.getTime();
-      const pseudoRandom = ((seed % 1000) / 1000) * 0.6 + 0.7; // Range 0.7-1.3
-      
+      const pseudoRandom = ((seed % 1000) / 1000) * 0.6 + 0.7;
+
       const dailySpend = (aggregated.spend / numDays) * pseudoRandom;
       const dailyImpressions = Math.round((aggregated.impressions / numDays) * pseudoRandom);
-      const dailyReach = Math.round((aggregated.reach / numDays) * pseudoRandom);
       const dailyClicks = Math.round((aggregated.clicks / numDays) * pseudoRandom);
-      
+      const dailyCpm = dailyImpressions > 0 ? (dailySpend / dailyImpressions) * 1000 : 0;
+
       return {
         date: format(day, "yyyy-MM-dd"),
         displayDate: format(day, "MMM d"),
-        spend: Number(dailySpend.toFixed(2)),
+        ts: day.getTime(),
         impressions: dailyImpressions,
-        reach: dailyReach,
         clicks: dailyClicks,
-        cpm: dailyImpressions > 0 ? (dailySpend / dailyImpressions) * 1000 : 0,
-        cpc: dailyClicks > 0 ? dailySpend / dailyClicks : 0,
-        ctr: dailyImpressions > 0 ? (dailyClicks / dailyImpressions) * 100 : 0,
+        cpm: Number(dailyCpm.toFixed(2)),
+        spend: Number(dailySpend.toFixed(2)),
       };
     });
   };
@@ -278,6 +316,35 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         setGoogleAds(data.data?.googleAds || null);
         if (data.upstreamDebug) {
           setUpstreamDebug(data.upstreamDebug);
+        }
+
+        // Fetch Meta Ads timelines if we have metricool config
+        if (data.debug?.userId && data.debug?.blogId) {
+          const userId = data.debug.userId;
+          const blogId = data.debug.blogId;
+
+          // Fetch all 3 timelines in parallel
+          const [cpmResult, clicksResult, impressionsResult] = await Promise.all([
+            fetchTimeline("cpm", dateRange.from, dateRange.to, userId, blogId),
+            fetchTimeline("clicks", dateRange.from, dateRange.to, userId, blogId),
+            fetchTimeline("impressions", dateRange.from, dateRange.to, userId, blogId),
+          ]);
+
+          // Check for any debug info
+          const debugInfo: Record<string, unknown> = {};
+          if (cpmResult.debug) debugInfo.cpm = cpmResult.debug;
+          if (clicksResult.debug) debugInfo.clicks = clicksResult.debug;
+          if (impressionsResult.debug) debugInfo.impressions = impressionsResult.debug;
+
+          if (Object.keys(debugInfo).length > 0) {
+            setTimelineDebug(debugInfo);
+          }
+
+          setMetaTimelines({
+            cpm: cpmResult.data,
+            clicks: clicksResult.data,
+            impressions: impressionsResult.data,
+          });
         }
       } else if (data?.upstreamDebug) {
         setUpstreamDebug(data.upstreamDebug);
@@ -388,7 +455,16 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   const hasMetaData = metaAds !== null;
   const hasGoogleData = googleAds !== null;
   const hasAnyData = hasMetaData || hasGoogleData;
-  const chartData = hasMetaData ? buildChartData(metaAds.timeline, metaAds.current, dateRange) : [];
+  
+  // Use real timeline data if available, otherwise fallback to aggregated distribution
+  const hasRealTimelines = metaTimelines && (
+    metaTimelines.cpm.length > 1 || 
+    metaTimelines.clicks.length > 1 || 
+    metaTimelines.impressions.length > 1
+  );
+  const chartData = hasRealTimelines 
+    ? buildTimelineChartData(metaTimelines, metaAds?.current || null, dateRange) 
+    : buildFallbackChartData(metaAds?.current || null, dateRange);
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -511,11 +587,21 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
 
       {hasMetaData && metaAds && (
         <>
-          {/* Reach Section - Metricool Style */}
+          {/* Timeline Debug Info (if any issues) */}
+          {timelineDebug && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted-foreground">Timeline Debug Info</summary>
+              <pre className="mt-2 p-2 bg-muted rounded overflow-auto max-h-32 text-xs">
+                {JSON.stringify(timelineDebug, null, 2)}
+              </pre>
+            </details>
+          )}
+
+          {/* Impressions Section - Metricool Style */}
           <Card className="overflow-hidden border-0 shadow-sm">
             <CardContent className="p-0">
               <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                <h3 className="text-lg font-semibold">Reach</h3>
+                <h3 className="text-lg font-semibold">Impressions</h3>
                 <div className="flex gap-2">
                   <KPIBadge
                     value={formatNumber(metaAds.current.impressions)}
