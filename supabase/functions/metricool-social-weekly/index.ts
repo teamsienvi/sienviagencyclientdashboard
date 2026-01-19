@@ -246,8 +246,35 @@ serve(async (req) => {
 
       console.log(`Using followers metric "${followersMetric}" for platform "${platform}"`);
 
-      // Fetch CSV for posts to get posts/reels breakdown with engagement
-      const fetchPostsCSV = async (): Promise<{ posts: any[]; reels: any[] }> => {
+      // Fetch posts/reels engagement from aggregation endpoint (correct API for KPIs)
+      const fetchPostsEngagement = async (): Promise<number | null> => {
+        try {
+          const data = await fetchMetricool("/api/v2/analytics/aggregation", buildParams(fromDate, toDate, {
+            metric: "engagement",
+            subject: "posts",
+          }));
+          return extractAggValue(data);
+        } catch (e) {
+          errors.push(`posts_engagement ${fromDate}: ${e}`);
+          return null;
+        }
+      };
+
+      const fetchReelsEngagement = async (): Promise<number | null> => {
+        try {
+          const data = await fetchMetricool("/api/v2/analytics/aggregation", buildParams(fromDate, toDate, {
+            metric: "engagement",
+            subject: "reels",
+          }));
+          return extractAggValue(data);
+        } catch (e) {
+          errors.push(`reels_engagement ${fromDate}: ${e}`);
+          return null;
+        }
+      };
+
+      // Fetch CSV for posts to get posts/reels breakdown counts only
+      const fetchPostsCSV = async (): Promise<{ postsCount: number; reelsCount: number }> => {
         const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
         Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) => 
           postsUrl.searchParams.set(k, v)
@@ -258,36 +285,32 @@ serve(async (req) => {
         if (!res.ok) throw new Error(`Posts CSV: ${res.status}`);
         const csv = await res.text();
         
-        // Parse CSV to get posts and reels separately with engagement data
+        // Parse CSV to count posts and reels
         const lines = csv.split('\n').filter(l => l.trim());
-        if (lines.length < 2) return { posts: [], reels: [] };
+        if (lines.length < 2) return { postsCount: 0, reelsCount: 0 };
         
         const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
         const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
-        const engagementIdx = headers.findIndex(h => h === 'engagement');
         
-        const posts: any[] = [];
-        const reels: any[] = [];
+        let postsCount = 0;
+        let reelsCount = 0;
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
           const type = values[typeIdx]?.toLowerCase() || 'post';
-          const engagement = parseFloat(values[engagementIdx] || '0') || 0;
-          
-          const item = { type, engagement };
           
           // Categorize as reel or post
           if (type === 'reel' || type === 'video') {
-            reels.push(item);
+            reelsCount++;
           } else {
-            posts.push(item);
+            postsCount++;
           }
         }
         
-        return { posts, reels };
+        return { postsCount, reelsCount };
       };
 
-      const [followersRes, engagementTimelineRes, postsCSVRes] = await Promise.allSettled([
+      const [followersRes, engagementTimelineRes, postsEngagementRes, reelsEngagementRes, postsCSVRes] = await Promise.allSettled([
         // 1) Followers timeline - PLATFORM SPECIFIC METRIC
         fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
           metric: followersMetric,
@@ -298,7 +321,11 @@ serve(async (req) => {
           metric: "engagement",
           subject: "posts",
         })),
-        // 3) Posts CSV with engagement data per post/reel
+        // 3) Posts engagement aggregation (correct endpoint!)
+        fetchPostsEngagement(),
+        // 4) Reels engagement aggregation (correct endpoint!)
+        fetchReelsEngagement(),
+        // 5) Posts CSV for counts
         fetchPostsCSV(),
       ]);
 
@@ -323,34 +350,33 @@ serve(async (req) => {
         errors.push(`engagement_timeline ${fromDate}: ${engagementTimelineRes.reason}`);
       }
 
-      // Process posts CSV data - separate engagement for posts vs reels
+      // Process posts engagement from aggregation API
+      if (postsEngagementRes.status === 'fulfilled') {
+        result.postsEngagement = postsEngagementRes.value;
+        console.log(`Posts engagement (${fromDate} to ${toDate}): ${result.postsEngagement?.toFixed(2)}%`);
+      }
+
+      // Process reels engagement from aggregation API
+      if (reelsEngagementRes.status === 'fulfilled') {
+        result.reelsEngagement = reelsEngagementRes.value;
+        console.log(`Reels engagement (${fromDate} to ${toDate}): ${result.reelsEngagement?.toFixed(2)}%`);
+      }
+
+      // Combined engagement (average of posts and reels if both exist)
+      if (result.postsEngagement != null && result.reelsEngagement != null) {
+        result.engagementAgg = (result.postsEngagement + result.reelsEngagement) / 2;
+      } else if (result.postsEngagement != null) {
+        result.engagementAgg = result.postsEngagement;
+      } else if (result.reelsEngagement != null) {
+        result.engagementAgg = result.reelsEngagement;
+      }
+
+      // Process posts CSV data - just for counts
       if (postsCSVRes.status === 'fulfilled') {
-        const { posts, reels } = postsCSVRes.value;
-        
-        result.postsCount = posts.length;
-        result.reelsCount = reels.length;
-        
-        // Calculate average engagement for posts
-        if (posts.length > 0) {
-          const totalPostsEngagement = posts.reduce((sum, p) => sum + p.engagement, 0);
-          result.postsEngagement = totalPostsEngagement / posts.length;
-        }
-        
-        // Calculate average engagement for reels
-        if (reels.length > 0) {
-          const totalReelsEngagement = reels.reduce((sum, r) => sum + r.engagement, 0);
-          result.reelsEngagement = totalReelsEngagement / reels.length;
-        }
-        
-        // Overall engagement is combined average (for backward compatibility)
-        const allItems = [...posts, ...reels];
-        if (allItems.length > 0) {
-          const totalEngagement = allItems.reduce((sum, i) => sum + i.engagement, 0);
-          result.engagementAgg = totalEngagement / allItems.length;
-        }
-        
-        console.log(`Posts/Reels count (${fromDate} to ${toDate}): ${posts.length} posts, ${reels.length} reels`);
-        console.log(`Posts engagement: ${result.postsEngagement?.toFixed(2)}%, Reels engagement: ${result.reelsEngagement?.toFixed(2)}%`);
+        const { postsCount, reelsCount } = postsCSVRes.value;
+        result.postsCount = postsCount;
+        result.reelsCount = reelsCount;
+        console.log(`Posts/Reels count (${fromDate} to ${toDate}): ${postsCount} posts, ${reelsCount} reels`);
       } else {
         errors.push(`posts_csv ${fromDate}: ${postsCSVRes.reason}`);
       }

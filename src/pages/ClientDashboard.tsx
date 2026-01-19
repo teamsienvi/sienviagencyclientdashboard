@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useMemo } from "react";
 import { format, subDays } from "date-fns";
+import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { 
   ArrowLeft, Calendar, TrendingUp, Users, Eye, 
   Youtube, Music2, Linkedin, FileText, ExternalLink,
@@ -299,10 +300,10 @@ const ClientDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-lg font-bold">
-                  {latestReport?.dateRange || "No reports"}
+                  {getCurrentReportingWeek().dateRange}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Most recent period
+                  Current reporting period
                 </p>
               </CardContent>
             </Card>
