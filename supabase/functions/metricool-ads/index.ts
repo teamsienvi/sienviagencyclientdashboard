@@ -6,28 +6,44 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface AdsWeeklyData {
-  spend: number;
+interface Campaign {
+  name: string;
+  status: string;
   impressions: number;
-  clicks: number;
   reach: number;
+  clicks: number;
+  uniqueClicks: number;
+  spent: number;
+  ctr: number;
   cpc: number;
   cpm: number;
-  ctr: number;
   conversions: number;
+  actions?: Record<string, number>;
+}
+
+interface AggregatedData {
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  uniqueClicks: number;
+  conversions: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  actions: Record<string, number>;
+  campaigns: Campaign[];
 }
 
 interface AdsResponse {
   metaAds: {
-    current: AdsWeeklyData;
-    previous: AdsWeeklyData;
+    current: AggregatedData;
+    previous: AggregatedData;
   } | null;
-  googleAds: {
-    current: AdsWeeklyData;
-    previous: AdsWeeklyData;
-  } | null;
-  debug?: {
-    errors: string[];
+  googleAds: null;
+  upstreamDebug?: {
+    currentWeek?: { status: number; body: string; url: string };
+    prevWeek?: { status: number; body: string; url: string };
   };
 }
 
@@ -37,7 +53,7 @@ serve(async (req) => {
   }
 
   try {
-    const { clientId, from, to, prevFrom, prevTo, timezone = "America/Chicago" } = await req.json();
+    const { clientId, from, to, prevFrom, prevTo } = await req.json();
 
     if (!clientId || !from || !to || !prevFrom || !prevTo) {
       return new Response(
@@ -109,11 +125,9 @@ serve(async (req) => {
     const userId = config.user_id;
     const blogId = config.blog_id;
 
-    console.log(`[metricool-ads] Fetching ads data for:`, { clientId, userId, blogId, from, to });
+    console.log(`[metricool-ads] Fetching Meta Ads for:`, { clientId, userId, blogId, from, to });
 
-    const METRICOOL_BASE_URL = "https://app.metricool.com";
     const METRICOOL_AUTH = Deno.env.get("METRICOOL_AUTH");
-
     if (!METRICOOL_AUTH) {
       return new Response(
         JSON.stringify({ success: false, error: "METRICOOL_AUTH not configured" }),
@@ -121,145 +135,191 @@ serve(async (req) => {
       );
     }
 
-    const errors: string[] = [];
-
-    // Format date for Metricool API (YYYYMMDD)
+    // Format date for Metricool API (YYYYMMDD - no dashes)
     const formatDate = (dateStr: string) => dateStr.replace(/-/g, "");
 
-    // Fetch timeline data and sum values
-    const fetchTimelineSum = async (metric: string, fromDate: string, toDate: string): Promise<number> => {
-      const url = new URL(`${METRICOOL_BASE_URL}/api/stats/timeline/${metric}`);
-      url.searchParams.set("start", formatDate(fromDate));
-      url.searchParams.set("end", formatDate(toDate));
-      url.searchParams.set("timezone", timezone);
-      url.searchParams.set("userId", userId);
-      if (blogId) url.searchParams.set("blogId", blogId);
-
-      console.log(`[metricool-ads] Fetching: ${url.toString()}`);
+    // Fetch Facebook Ads campaigns for a date range
+    const fetchCampaigns = async (fromDate: string, toDate: string): Promise<{ campaigns: Campaign[] | null; debug: { status: number; body: string; url: string } }> => {
+      const params = new URLSearchParams({
+        start: formatDate(fromDate),
+        end: formatDate(toDate),
+        userId: userId,
+        blogId: blogId || "",
+      });
+      
+      const url = `https://app.metricool.com/api/stats/facebookads/campaigns?${params.toString()}`;
+      console.log(`[metricool-ads] Fetching: ${url}`);
 
       try {
-        const res = await fetch(url.toString(), {
-          headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
+        const res = await fetch(url, {
+          method: "GET",
+          headers: {
+            "x-mc-auth": METRICOOL_AUTH,
+            "Accept": "application/json",
+          },
         });
 
-        const statusCode = res.status;
         const responseText = await res.text();
-        console.log(`[metricool-ads] Timeline ${metric} status: ${statusCode}, response: ${responseText.substring(0, 200)}`);
+        console.log(`[metricool-ads] Response status: ${res.status}, body: ${responseText.substring(0, 500)}`);
 
         if (!res.ok) {
-          errors.push(`${metric}: HTTP ${statusCode}`);
-          return 0;
+          return {
+            campaigns: null,
+            debug: { status: res.status, body: responseText, url }
+          };
         }
 
+        // Parse response
         let data;
         try {
           data = JSON.parse(responseText);
         } catch {
-          return 0;
+          return {
+            campaigns: null,
+            debug: { status: res.status, body: `Invalid JSON: ${responseText}`, url }
+          };
         }
-        
-        // Timeline returns [[timestamp, value], ...] - sum all values
-        if (Array.isArray(data)) {
-          const sum = data.reduce((acc: number, item: [number, number | string]) => {
-            const val = typeof item[1] === 'string' ? parseFloat(item[1]) : item[1];
-            return acc + (isNaN(val) ? 0 : val);
-          }, 0);
-          console.log(`[metricool-ads] ${metric} sum: ${sum} from ${data.length} entries`);
-          return sum;
+
+        // If empty array or not an array, return null campaigns
+        if (!Array.isArray(data) || data.length === 0) {
+          return {
+            campaigns: [],
+            debug: { status: res.status, body: responseText, url }
+          };
         }
-        
-        return 0;
+
+        // Map campaigns
+        const campaigns: Campaign[] = data.map((c: Record<string, unknown>) => ({
+          name: String(c.name || "Unknown"),
+          status: String(c.status || "unknown"),
+          impressions: Number(c.impressions) || 0,
+          reach: Number(c.reach) || 0,
+          clicks: Number(c.clicks) || 0,
+          uniqueClicks: Number(c.uniqueClicks) || 0,
+          spent: Number(c.spent) || 0,
+          ctr: Number(c.ctr) || 0,
+          cpc: Number(c.cpc) || 0,
+          cpm: Number(c.cpm) || 0,
+          conversions: Number(c.conversions) || 0,
+          actions: c.actions as Record<string, number> || {},
+        }));
+
+        return { campaigns, debug: { status: res.status, body: responseText.substring(0, 200), url } };
       } catch (err) {
-        console.error(`[metricool-ads] Error fetching ${metric}:`, err);
-        errors.push(`${metric}: ${err}`);
-        return 0;
+        console.error(`[metricool-ads] Error fetching campaigns:`, err);
+        return {
+          campaigns: null,
+          debug: { status: 0, body: String(err), url }
+        };
       }
     };
 
-    // Fetch timeline average (for rates like CTR, CPC, CPM)
-    const fetchTimelineAvg = async (metric: string, fromDate: string, toDate: string): Promise<number> => {
-      const url = new URL(`${METRICOOL_BASE_URL}/api/stats/timeline/${metric}`);
-      url.searchParams.set("start", formatDate(fromDate));
-      url.searchParams.set("end", formatDate(toDate));
-      url.searchParams.set("timezone", timezone);
-      url.searchParams.set("userId", userId);
-      if (blogId) url.searchParams.set("blogId", blogId);
+    // Aggregate campaigns data
+    const aggregateCampaigns = (campaigns: Campaign[]): AggregatedData => {
+      const result: AggregatedData = {
+        spend: 0,
+        impressions: 0,
+        reach: 0,
+        clicks: 0,
+        uniqueClicks: 0,
+        conversions: 0,
+        ctr: 0,
+        cpc: 0,
+        cpm: 0,
+        actions: {},
+        campaigns: campaigns,
+      };
 
-      try {
-        const res = await fetch(url.toString(), {
-          headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
-        });
+      // Sum metrics across all campaigns
+      for (const c of campaigns) {
+        result.spend += c.spent || 0;
+        result.impressions += c.impressions || 0;
+        result.reach += c.reach || 0;
+        result.clicks += c.clicks || 0;
+        result.uniqueClicks += c.uniqueClicks || 0;
+        result.conversions += c.conversions || 0;
 
-        if (!res.ok) return 0;
-
-        const data = await res.json();
-        
-        if (Array.isArray(data) && data.length > 0) {
-          const validValues = data.filter((item: [number, number | string]) => {
-            const val = typeof item[1] === 'string' ? parseFloat(item[1]) : item[1];
-            return !isNaN(val) && val !== 0;
-          });
-          
-          if (validValues.length === 0) return 0;
-          
-          const sum = validValues.reduce((acc: number, item: [number, number | string]) => {
-            const val = typeof item[1] === 'string' ? parseFloat(item[1]) : item[1];
-            return acc + val;
-          }, 0);
-          
-          return sum / validValues.length;
+        // Aggregate actions
+        if (c.actions) {
+          for (const [key, value] of Object.entries(c.actions)) {
+            result.actions[key] = (result.actions[key] || 0) + (Number(value) || 0);
+          }
         }
-        
-        return 0;
-      } catch (err) {
-        console.error(`[metricool-ads] Error fetching avg ${metric}:`, err);
-        errors.push(`${metric}: ${err}`);
-        return 0;
       }
+
+      // Compute rates from totals (NOT averaging campaign rates)
+      if (result.impressions > 0) {
+        result.ctr = (result.clicks / result.impressions) * 100;
+        result.cpm = (result.spend / result.impressions) * 1000;
+      }
+      if (result.clicks > 0) {
+        result.cpc = result.spend / result.clicks;
+      }
+
+      return result;
     };
 
-    // Fetch ads data for a period using timeline APIs
-    const fetchAdsData = async (fromDate: string, toDate: string): Promise<AdsWeeklyData> => {
-      console.log(`[metricool-ads] Fetching ads data for period: ${fromDate} to ${toDate}`);
-      
-      const [spend, impressions, clicks, reach, cpc, cpm, ctr, conversions] = await Promise.all([
-        fetchTimelineSum("adSpend", fromDate, toDate),
-        fetchTimelineSum("adImpressions", fromDate, toDate),
-        fetchTimelineSum("adClicks", fromDate, toDate),
-        fetchTimelineSum("adReach", fromDate, toDate),
-        fetchTimelineAvg("adCpc", fromDate, toDate),
-        fetchTimelineAvg("adCpm", fromDate, toDate),
-        fetchTimelineAvg("adCtr", fromDate, toDate),
-        fetchTimelineSum("adConversions", fromDate, toDate),
-      ]);
-
-      return { spend, impressions, clicks, reach, cpc, cpm, ctr, conversions };
-    };
-
-    // Fetch current and previous period data
-    const [currentData, previousData] = await Promise.all([
-      fetchAdsData(from, to),
-      fetchAdsData(prevFrom, prevTo),
+    // Fetch current and previous period
+    const [currentResult, prevResult] = await Promise.all([
+      fetchCampaigns(from, to),
+      fetchCampaigns(prevFrom, prevTo),
     ]);
 
-    // Check if we have any meaningful data
-    const hasData = currentData.spend > 0 || currentData.impressions > 0 || 
-                    previousData.spend > 0 || previousData.impressions > 0;
+    // Build debug info for upstream issues
+    const upstreamDebug: AdsResponse["upstreamDebug"] = {};
+    if (currentResult.campaigns === null) {
+      upstreamDebug.currentWeek = currentResult.debug;
+    }
+    if (prevResult.campaigns === null) {
+      upstreamDebug.prevWeek = prevResult.debug;
+    }
 
-    console.log(`[metricool-ads] Current data:`, currentData);
-    console.log(`[metricool-ads] Previous data:`, previousData);
-    console.log(`[metricool-ads] Has meaningful data: ${hasData}`);
+    // If both periods have null campaigns (upstream error), return with debug
+    if (currentResult.campaigns === null && prevResult.campaigns === null) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          data: { metaAds: null, googleAds: null },
+          upstreamDebug,
+          message: "Failed to fetch Meta Ads campaigns from Metricool"
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Aggregate data
+    const currentData = aggregateCampaigns(currentResult.campaigns || []);
+    const previousData = aggregateCampaigns(prevResult.campaigns || []);
+
+    console.log(`[metricool-ads] Current aggregated:`, {
+      spend: currentData.spend,
+      impressions: currentData.impressions,
+      clicks: currentData.clicks,
+      campaignsCount: currentData.campaigns.length
+    });
+    console.log(`[metricool-ads] Previous aggregated:`, {
+      spend: previousData.spend,
+      impressions: previousData.impressions,
+      clicks: previousData.clicks,
+      campaignsCount: previousData.campaigns.length
+    });
+
+    // Check if we have meaningful data
+    const hasData = currentData.spend > 0 || currentData.impressions > 0 || 
+                    previousData.spend > 0 || previousData.impressions > 0 ||
+                    currentData.campaigns.length > 0 || previousData.campaigns.length > 0;
 
     const response: AdsResponse = {
       metaAds: hasData ? {
         current: currentData,
         previous: previousData,
       } : null,
-      googleAds: null, // Will implement when Google Ads is connected
+      googleAds: null,
     };
 
-    if (errors.length > 0) {
-      response.debug = { errors };
+    // Include upstream debug if there were any issues
+    if (Object.keys(upstreamDebug).length > 0) {
+      response.upstreamDebug = upstreamDebug;
     }
 
     return new Response(

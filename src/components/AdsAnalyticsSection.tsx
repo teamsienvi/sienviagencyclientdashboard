@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, DollarSign, Eye, MousePointer, Users, TrendingUp, TrendingDown, ArrowUp, ArrowDown, Minus, Target, Percent } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RefreshCw, DollarSign, Eye, MousePointer, Users, ArrowUp, ArrowDown, Minus, Target, Percent, MousePointerClick, Activity } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
@@ -13,20 +14,38 @@ interface AdsAnalyticsSectionProps {
   clientName: string;
 }
 
-interface AdsWeeklyData {
-  spend: number | null;
-  impressions: number | null;
-  clicks: number | null;
-  reach: number | null;
-  cpc: number | null;
-  cpm: number | null;
-  ctr: number | null;
-  conversions: number | null;
+interface Campaign {
+  name: string;
+  status: string;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  uniqueClicks: number;
+  spent: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  conversions: number;
+  actions?: Record<string, number>;
+}
+
+interface AggregatedData {
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  uniqueClicks: number;
+  conversions: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  actions: Record<string, number>;
+  campaigns: Campaign[];
 }
 
 interface AdsData {
-  current: AdsWeeklyData;
-  previous: AdsWeeklyData;
+  current: AggregatedData;
+  previous: AggregatedData;
 }
 
 // Get the most recent Monday
@@ -39,11 +58,26 @@ const getMostRecentMonday = (fromDate: Date = new Date()) => {
   return date;
 };
 
+// Tracked action keys
+const TRACKED_ACTIONS = [
+  "link_click",
+  "landing_page_view",
+  "view_content",
+  "add_to_cart",
+  "purchase",
+  "video_view",
+  "video_play_actions.video_views",
+  "video_15_sec_watched_actions.video_views",
+  "post_engagement",
+  "page_engagement",
+  "outbound_click",
+];
+
 const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [metaAds, setMetaAds] = useState<AdsData | null>(null);
-  const [googleAds, setGoogleAds] = useState<AdsData | null>(null);
+  const [upstreamDebug, setUpstreamDebug] = useState<Record<string, unknown> | null>(null);
 
   // Get reporting period dates (last completed Mon-Sun)
   const getDateRange = () => {
@@ -80,7 +114,11 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
 
       if (data?.success) {
         setMetaAds(data.data?.metaAds || null);
-        setGoogleAds(data.data?.googleAds || null);
+        if (data.upstreamDebug) {
+          setUpstreamDebug(data.upstreamDebug);
+        }
+      } else if (data?.upstreamDebug) {
+        setUpstreamDebug(data.upstreamDebug);
       }
     } catch (error) {
       console.error("Error fetching ads data:", error);
@@ -100,27 +138,25 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     fetchAdsData();
   };
 
-  // Format currency
-  const formatCurrency = (value: number | null) => {
-    if (value === null) return "N/A";
+  // Formatters
+  const formatCurrency = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return "N/A";
     return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  // Format number
-  const formatNumber = (value: number | null) => {
-    if (value === null) return "N/A";
+  const formatNumber = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return "N/A";
     return value.toLocaleString();
   };
 
-  // Format percentage
-  const formatPercent = (value: number | null) => {
-    if (value === null) return "N/A";
+  const formatPercent = (value: number | null | undefined) => {
+    if (value === null || value === undefined) return "N/A";
     return `${value.toFixed(2)}%`;
   };
 
   // Render WoW change indicator
-  const renderWoW = (current: number | null, previous: number | null, isCurrency = false, isPercent = false) => {
-    if (current === null || previous === null) return null;
+  const renderWoW = (current: number | null | undefined, previous: number | null | undefined, isCurrency = false, isPercent = false) => {
+    if (current === null || current === undefined || previous === null || previous === undefined) return null;
     
     const delta = current - previous;
     const isPositive = delta > 0;
@@ -131,6 +167,8 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     const colorClass = invertColors
       ? (isNegative ? "text-green-500" : isPositive ? "text-red-500" : "text-muted-foreground")
       : (isPositive ? "text-green-500" : isNegative ? "text-red-500" : "text-muted-foreground");
+    
+    const percentChange = previous > 0 ? ((delta / previous) * 100) : null;
     
     const formatDelta = () => {
       if (isCurrency) {
@@ -151,6 +189,9 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         {isNegative && <ArrowDown className="h-3 w-3" />}
         {delta === 0 && <Minus className="h-3 w-3" />}
         <span className="font-medium">{formatDelta()}</span>
+        {percentChange !== null && !isPercent && (
+          <span className="text-muted-foreground ml-1">({percentChange >= 0 ? "+" : ""}{percentChange.toFixed(1)}%)</span>
+        )}
       </div>
     );
   };
@@ -159,9 +200,9 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   const renderKPICard = (
     label: string,
     icon: React.ReactNode,
-    current: number | null,
-    previous: number | null,
-    formatter: (v: number | null) => string,
+    current: number | null | undefined,
+    previous: number | null | undefined,
+    formatter: (v: number | null | undefined) => string,
     isCurrency = false,
     isPercent = false
   ) => (
@@ -174,10 +215,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         <p className="text-2xl font-bold">
           {formatter(current)}
         </p>
-        {previous !== null && current !== null && (
+        {previous !== null && previous !== undefined && current !== null && current !== undefined && (
           <>
             <span className="text-xs text-muted-foreground">
-              vs {formatter(previous)}
+              vs {formatter(previous)} (prev week)
             </span>
             {renderWoW(current, previous, isCurrency, isPercent)}
           </>
@@ -185,50 +226,6 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       </CardContent>
     </Card>
   );
-
-  // Render platform section
-  const renderPlatformSection = (title: string, data: AdsData | null, platformIcon: React.ReactNode) => {
-    if (!data) {
-      return (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {platformIcon}
-              {title}
-              <Badge variant="secondary" className="ml-2">Not Connected</Badge>
-            </CardTitle>
-            <CardDescription>No data available for this platform</CardDescription>
-          </CardHeader>
-        </Card>
-      );
-    }
-
-    const { current, previous } = data;
-
-    return (
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {platformIcon}
-            {title}
-            <Badge variant="default" className="ml-2 bg-blue-500">Metricool</Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {renderKPICard("Ad Spend", <DollarSign className="h-4 w-4" />, current.spend, previous.spend, formatCurrency, true)}
-            {renderKPICard("Impressions", <Eye className="h-4 w-4" />, current.impressions, previous.impressions, formatNumber)}
-            {renderKPICard("Clicks", <MousePointer className="h-4 w-4" />, current.clicks, previous.clicks, formatNumber)}
-            {renderKPICard("Reach", <Users className="h-4 w-4" />, current.reach, previous.reach, formatNumber)}
-            {renderKPICard("CPC", <DollarSign className="h-4 w-4" />, current.cpc, previous.cpc, formatCurrency, true)}
-            {renderKPICard("CPM", <DollarSign className="h-4 w-4" />, current.cpm, previous.cpm, formatCurrency, true)}
-            {renderKPICard("CTR", <Percent className="h-4 w-4" />, current.ctr, previous.ctr, formatPercent, false, true)}
-            {renderKPICard("Conversions", <Target className="h-4 w-4" />, current.conversions, previous.conversions, formatNumber)}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
 
   const { start, end } = getDateRange();
   const currentLabel = `${format(start, "MMM d")}-${format(end, "d, yyyy")}`;
@@ -249,13 +246,13 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     );
   }
 
-  const hasAnyData = metaAds !== null || googleAds !== null;
+  const hasData = metaAds !== null;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Ads Analytics</h2>
+          <h2 className="text-2xl font-bold">Meta Ads Analytics</h2>
           <p className="text-sm text-muted-foreground">
             Reporting Period: {currentLabel}
           </p>
@@ -271,42 +268,176 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         </Button>
       </div>
 
-      {!hasAnyData && (
+      {!hasData && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-muted-foreground" />
-              No Ads Data Available
+              No Meta Ads Data Available
             </CardTitle>
             <CardDescription>
-              No Meta Ads or Google Ads data found for {clientName}. This could mean:
+              No Meta Ads data found for {clientName}. This could mean:
               <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>Ads accounts are not connected in Metricool</li>
+                <li>Facebook Ads account is not connected in Metricool</li>
                 <li>No ads were running during the selected period</li>
                 <li>Ad spend is $0 for this time range</li>
               </ul>
+              {upstreamDebug && (
+                <details className="mt-4 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">Debug Info</summary>
+                  <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-40">
+                    {JSON.stringify(upstreamDebug, null, 2)}
+                  </pre>
+                </details>
+              )}
             </CardDescription>
           </CardHeader>
         </Card>
       )}
 
-      {renderPlatformSection(
-        "Meta Ads",
-        metaAds,
-        <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-        </svg>
-      )}
+      {hasData && metaAds && (
+        <>
+          {/* KPI Cards */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                Meta Ads
+                <Badge variant="default" className="ml-2 bg-blue-500">Metricool</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {renderKPICard("Ad Spend", <DollarSign className="h-4 w-4" />, metaAds.current.spend, metaAds.previous.spend, formatCurrency, true)}
+                {renderKPICard("Impressions", <Eye className="h-4 w-4" />, metaAds.current.impressions, metaAds.previous.impressions, formatNumber)}
+                {renderKPICard("Reach", <Users className="h-4 w-4" />, metaAds.current.reach, metaAds.previous.reach, formatNumber)}
+                {renderKPICard("Clicks", <MousePointer className="h-4 w-4" />, metaAds.current.clicks, metaAds.previous.clicks, formatNumber)}
+                {renderKPICard("Unique Clicks", <MousePointerClick className="h-4 w-4" />, metaAds.current.uniqueClicks, metaAds.previous.uniqueClicks, formatNumber)}
+                {renderKPICard("CTR", <Percent className="h-4 w-4" />, metaAds.current.ctr, metaAds.previous.ctr, formatPercent, false, true)}
+                {renderKPICard("CPC", <DollarSign className="h-4 w-4" />, metaAds.current.cpc, metaAds.previous.cpc, formatCurrency, true)}
+                {renderKPICard("CPM", <DollarSign className="h-4 w-4" />, metaAds.current.cpm, metaAds.previous.cpm, formatCurrency, true)}
+                {renderKPICard("Conversions", <Target className="h-4 w-4" />, metaAds.current.conversions, metaAds.previous.conversions, formatNumber)}
+              </div>
+            </CardContent>
+          </Card>
 
-      {renderPlatformSection(
-        "Google Ads",
-        googleAds,
-        <svg className="h-5 w-5" viewBox="0 0 24 24">
-          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-        </svg>
+          {/* Actions Breakdown */}
+          {Object.keys(metaAds.current.actions).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Actions Breakdown
+                </CardTitle>
+                <CardDescription>Aggregated action totals across all campaigns</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {TRACKED_ACTIONS.map((actionKey) => {
+                    const currentVal = metaAds.current.actions[actionKey] || 0;
+                    const prevVal = metaAds.previous.actions[actionKey] || 0;
+                    
+                    // Only show if we have any data for this action
+                    if (currentVal === 0 && prevVal === 0) return null;
+                    
+                    return (
+                      <Card key={actionKey}>
+                        <CardContent className="pt-4 pb-4">
+                          <p className="text-xs text-muted-foreground mb-1 capitalize">
+                            {actionKey.replace(/_/g, " ").replace(/\./g, " ")}
+                          </p>
+                          <p className="text-xl font-bold">{formatNumber(currentVal)}</p>
+                          <span className="text-xs text-muted-foreground">
+                            vs {formatNumber(prevVal)}
+                          </span>
+                          {renderWoW(currentVal, prevVal)}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                  {/* Show any other actions not in TRACKED_ACTIONS */}
+                  {Object.entries(metaAds.current.actions)
+                    .filter(([key]) => !TRACKED_ACTIONS.includes(key))
+                    .map(([key, currentVal]) => {
+                      const prevVal = metaAds.previous.actions[key] || 0;
+                      if (currentVal === 0 && prevVal === 0) return null;
+                      
+                      return (
+                        <Card key={key}>
+                          <CardContent className="pt-4 pb-4">
+                            <p className="text-xs text-muted-foreground mb-1 capitalize">
+                              {key.replace(/_/g, " ").replace(/\./g, " ")}
+                            </p>
+                            <p className="text-xl font-bold">{formatNumber(currentVal)}</p>
+                            <span className="text-xs text-muted-foreground">
+                              vs {formatNumber(prevVal)}
+                            </span>
+                            {renderWoW(currentVal, prevVal)}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Campaigns Table */}
+          {metaAds.current.campaigns.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Campaigns ({metaAds.current.campaigns.length})</CardTitle>
+                <CardDescription>Individual campaign performance for current period</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Campaign Name</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Impressions</TableHead>
+                        <TableHead className="text-right">Reach</TableHead>
+                        <TableHead className="text-right">Clicks</TableHead>
+                        <TableHead className="text-right">Spent</TableHead>
+                        <TableHead className="text-right">CTR</TableHead>
+                        <TableHead className="text-right">CPC</TableHead>
+                        <TableHead className="text-right">CPM</TableHead>
+                        <TableHead className="text-right">Conversions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...metaAds.current.campaigns]
+                        .sort((a, b) => b.spent - a.spent)
+                        .map((campaign, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell className="font-medium max-w-[200px] truncate" title={campaign.name}>
+                              {campaign.name}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={campaign.status === "ACTIVE" ? "default" : "secondary"}>
+                                {campaign.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(campaign.reach)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(campaign.spent)}</TableCell>
+                            <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(campaign.cpm)}</TableCell>
+                            <TableCell className="text-right">{formatNumber(campaign.conversions)}</TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
