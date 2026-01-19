@@ -37,28 +37,29 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, subDays, subMonths, parseISO, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
-import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
+import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
+import { format as formatDate } from "date-fns";
 
 interface YouTubeStats {
   followers: number;
   newFollowers: number;
   prevFollowers: number;
-  followerChangePercent: number; // Percentage change for WoW display
+  followerChangePercent: number;
   totalVideos: number;
   totalViews: number;
   totalLikes: number;
   totalComments: number;
   totalShares: number;
-  avgRetentionRate: number;
+  avgViewDuration: number;
   engagementRate: number;
-  // Previous period stats for comparison
+  // Previous period stats for WoW comparison
   prevTotalViews: number;
   prevTotalLikes: number;
   prevTotalComments: number;
   prevTotalShares: number;
   prevTotalVideos: number;
   prevEngagementRate: number;
-  prevAvgRetentionRate: number;
+  prevAvgViewDuration: number;
 }
 
 interface VideoData {
@@ -76,12 +77,12 @@ interface VideoData {
   engagement_rate: number;
 }
 
-type DateRange = "today" | "7d" | "30d" | "custom";
+type DateRange = "7d" | "30d" | "custom";
 
 interface YouTubeAnalyticsSectionProps {
   clientId: string;
   clientName: string;
-  channelHandle?: string; // Optional YouTube channel handle (e.g., "@FatherFigureFormula")
+  channelHandle?: string;
 }
 
 const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChannelHandle }: YouTubeAnalyticsSectionProps) => {
@@ -94,23 +95,21 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     from: Date | undefined;
     to: Date | undefined;
   }>({ from: undefined, to: undefined });
+  const [useMetricool, setUseMetricool] = useState(false);
 
   const computeEngagementRate = (
     likes: number,
     comments: number,
     shares: number,
-    views: number,
-    newSubscribers: number = 0
+    views: number
   ): number => {
     if (views === 0) return 0;
-    return ((likes + comments + shares + Math.abs(newSubscribers)) / views) * 100;
+    return ((likes + comments + shares) / views) * 100;
   };
 
   const getDateRangeFilter = (): { start: Date; end: Date } => {
     const now = new Date();
     switch (dateRange) {
-      case "today":
-        return { start: startOfDay(now), end: now };
       case "7d":
         return { start: subDays(now, 7), end: now };
       case "30d":
@@ -125,237 +124,303 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     }
   };
 
-  const fetchYouTubeData = async () => {
-    if (!clientId) return;
-    
+  // Fetch from Metricool edge function
+  const fetchMetricoolData = async () => {
     try {
-      setIsLoading(true);
+      // Use last completed week for 7d range (Monday-Sunday)
+      const currentWeek = getCurrentReportingWeek();
+      const previousWeek = getPreviousReportingWeek();
       
-      // Use ANALYTICS_PERIOD for 7d to ensure consistent week-over-week comparison
-      // For other ranges, use dynamic calculation
       let startStr: string;
       let endStr: string;
       let prevStartStr: string;
       let prevEndStr: string;
       
       if (dateRange === "7d") {
-        // Use the standardized analytics period for proper WoW comparison
-        startStr = ANALYTICS_PERIOD.start;
-        endStr = ANALYTICS_PERIOD.end;
-        prevStartStr = ANALYTICS_PERIOD.prevStart;
-        prevEndStr = ANALYTICS_PERIOD.prevEnd;
+        startStr = formatDate(currentWeek.start, 'yyyy-MM-dd');
+        endStr = formatDate(currentWeek.end, 'yyyy-MM-dd');
+        prevStartStr = formatDate(previousWeek.start, 'yyyy-MM-dd');
+        prevEndStr = formatDate(previousWeek.end, 'yyyy-MM-dd');
       } else {
-        // For other ranges, use dynamic calculation
         const { start, end } = getDateRangeFilter();
         startStr = format(start, 'yyyy-MM-dd');
         endStr = format(end, 'yyyy-MM-dd');
         
-        // Calculate previous period for comparison
         const periodDuration = end.getTime() - start.getTime();
         const prevStart = new Date(start.getTime() - periodDuration);
-        const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
+        const prevEnd = new Date(start.getTime() - 1);
         prevStartStr = format(prevStart, 'yyyy-MM-dd');
         prevEndStr = format(prevEnd, 'yyyy-MM-dd');
       }
-      // Fetch account metrics - get metrics for current and previous periods
-      const { data: currentPeriodMetrics } = await supabase
-        .from("social_account_metrics")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("platform", "youtube")
-        .gte("period_start", startStr)
-        .lte("period_end", endStr)
-        .order("collected_at", { ascending: false })
-        .limit(1);
 
-      const { data: prevPeriodMetrics } = await supabase
-        .from("social_account_metrics")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("platform", "youtube")
-        .gte("period_start", prevStartStr)
-        .lte("period_end", prevEndStr)
-        .order("collected_at", { ascending: false })
-        .limit(1);
+      const { data, error } = await supabase.functions.invoke("metricool-youtube", {
+        body: {
+          clientId,
+          from: startStr,
+          to: endStr,
+          prevFrom: prevStartStr,
+          prevTo: prevEndStr,
+          timezone: "America/Chicago",
+        },
+      });
 
-      // Get followers from period-specific metrics
-      const currentFollowers = currentPeriodMetrics?.[0]?.followers || 0;
-      const previousFollowers = prevPeriodMetrics?.[0]?.followers || 0;
-      const newFollowers = currentFollowers - previousFollowers;
+      if (error) throw error;
       
-      // Calculate percentage change for display
-      const followerChangePercent = previousFollowers > 0 
-        ? ((newFollowers / previousFollowers) * 100) 
+      if (!data?.success) {
+        if (data?.notConfigured) {
+          // Fall back to database method
+          return false;
+        }
+        throw new Error(data?.error || "Failed to fetch YouTube data");
+      }
+
+      const currentData = data.data.current;
+      const prevData = data.data.previous;
+
+      // Calculate WoW changes
+      const subscribersDelta = currentData.subscribersGained;
+      const subscribersPercent = prevData.totalSubscribers > 0 
+        ? (subscribersDelta / prevData.totalSubscribers) * 100 
         : 0;
 
-      // Fetch ALL content for this client/platform with their metrics
-      // We'll filter by metric period_start/period_end client-side
-      const { data: allContentData } = await supabase
-        .from("social_content")
-        .select(`
-          id,
-          title,
-          url,
-          content_type,
-          published_at,
-          social_content_metrics (
-            views,
-            likes,
-            comments,
-            shares,
-            watch_time_hours,
-            period_start,
-            period_end,
-            collected_at
-          )
-        `)
-        .eq("client_id", clientId)
-        .eq("platform", "youtube")
-        .order("published_at", { ascending: false });
+      // Transform videos to component format
+      const videoList: VideoData[] = currentData.videos.map((v: any, idx: number) => ({
+        id: `metricool-${idx}`,
+        title: v.title,
+        url: v.url,
+        content_type: "video",
+        published_at: v.publishedAt || new Date().toISOString(),
+        views: v.views,
+        likes: v.likes,
+        comments: v.comments,
+        shares: v.shares,
+        avg_view_duration: v.averageViewDuration,
+        watch_time_hours: v.watchTimeHours,
+        engagement_rate: v.views > 0 ? ((v.likes + v.comments + v.shares) / v.views) * 100 : 0,
+      }));
 
-      let totalViews = 0;
-      let totalLikes = 0;
-      let totalComments = 0;
-      let totalShares = 0;
-      let shortCount = 0;
-      let videoCount = 0;
-      const videoList: VideoData[] = [];
+      setVideos(videoList);
+      setStats({
+        followers: currentData.totalSubscribers,
+        newFollowers: subscribersDelta,
+        prevFollowers: prevData.totalSubscribers,
+        followerChangePercent: subscribersPercent,
+        totalVideos: currentData.videosCount,
+        totalViews: currentData.totalViews,
+        totalLikes: currentData.totalLikes,
+        totalComments: currentData.totalComments,
+        totalShares: currentData.totalShares,
+        avgViewDuration: currentData.avgViewDuration,
+        engagementRate: currentData.engagementPct || 0,
+        prevTotalViews: prevData.totalViews,
+        prevTotalLikes: prevData.totalLikes,
+        prevTotalComments: prevData.totalComments,
+        prevTotalShares: prevData.totalShares,
+        prevTotalVideos: prevData.videosCount,
+        prevEngagementRate: prevData.engagementPct || 0,
+        prevAvgViewDuration: prevData.avgViewDuration,
+      });
 
-      // Helper to get estimated retention rate based on content type
-      const getEstimatedRetention = (contentType: string): number => {
-        const type = contentType.toLowerCase();
-        if (type === "short") return 75; // Shorts have ~75% retention
-        return 40; // Regular videos average ~40%
-      };
+      return true;
+    } catch (err) {
+      console.error("Metricool YouTube fetch error:", err);
+      return false;
+    }
+  };
 
-      // Helper to find metrics for a specific period range
-      const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
-        if (!metrics || metrics.length === 0) return null;
-        
-        // Sort by collected_at descending to get most recent first
-        const sorted = [...metrics].sort((a, b) => 
-          new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
-        );
-        
-        // First try to find exact period match
-        const exactMatch = sorted.find(m => 
-          m.period_start === targetStart && m.period_end === targetEnd
-        );
-        if (exactMatch) return exactMatch;
-        
-        // Then try to find overlapping period
-        const targetStartDate = new Date(targetStart);
-        const targetEndDate = new Date(targetEnd);
-        
-        const overlapping = sorted.find(m => {
-          if (!m.period_start || !m.period_end) return false;
-          const periodStart = new Date(m.period_start);
-          const periodEnd = new Date(m.period_end);
-          // Check if periods overlap
-          return periodStart <= targetEndDate && periodEnd >= targetStartDate;
-        });
-        if (overlapping) return overlapping;
-        
-        // Fallback to most recent metrics
-        return sorted[0];
-      };
+  // Fetch from database (fallback)
+  const fetchDatabaseData = async () => {
+    const currentWeek = getCurrentReportingWeek();
+    const previousWeek = getPreviousReportingWeek();
+    
+    let startStr: string;
+    let endStr: string;
+    let prevStartStr: string;
+    let prevEndStr: string;
+    
+    if (dateRange === "7d") {
+      startStr = formatDate(currentWeek.start, 'yyyy-MM-dd');
+      endStr = formatDate(currentWeek.end, 'yyyy-MM-dd');
+      prevStartStr = formatDate(previousWeek.start, 'yyyy-MM-dd');
+      prevEndStr = formatDate(previousWeek.end, 'yyyy-MM-dd');
+    } else {
+      const { start, end } = getDateRangeFilter();
+      startStr = format(start, 'yyyy-MM-dd');
+      endStr = format(end, 'yyyy-MM-dd');
+      
+      const periodDuration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - periodDuration);
+      const prevEnd = new Date(start.getTime() - 1);
+      prevStartStr = format(prevStart, 'yyyy-MM-dd');
+      prevEndStr = format(prevEnd, 'yyyy-MM-dd');
+    }
 
-      // Process content data - filter and aggregate by selected date range
-      allContentData?.forEach((content: any) => {
-        const metrics = findMetricsForPeriod(content.social_content_metrics, startStr, endStr);
-        const views = metrics?.views || 0;
-        const likes = metrics?.likes || 0;
-        const comments = metrics?.comments || 0;
-        const shares = metrics?.shares || 0;
-        const watchTimeHours = metrics?.watch_time_hours || 0;
-        const contentType = content.content_type || "video";
-        const avgViewDuration = getEstimatedRetention(contentType);
+    // Fetch account metrics for current and previous periods
+    const { data: currentPeriodMetrics } = await supabase
+      .from("social_account_metrics")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("platform", "youtube")
+      .gte("period_start", startStr)
+      .lte("period_end", endStr)
+      .order("collected_at", { ascending: false })
+      .limit(1);
 
-        totalViews += views;
-        totalLikes += likes;
-        totalComments += comments;
-        totalShares += shares;
-        
-        if (contentType.toLowerCase() === "short") {
-          shortCount++;
-        } else {
-          videoCount++;
-        }
+    const { data: prevPeriodMetrics } = await supabase
+      .from("social_account_metrics")
+      .select("*")
+      .eq("client_id", clientId)
+      .eq("platform", "youtube")
+      .gte("period_start", prevStartStr)
+      .lte("period_end", prevEndStr)
+      .order("collected_at", { ascending: false })
+      .limit(1);
 
-        videoList.push({
-          id: content.id,
-          title: content.title,
-          url: content.url,
-          content_type: contentType,
-          published_at: content.published_at,
+    const currentFollowers = currentPeriodMetrics?.[0]?.followers || 0;
+    const previousFollowers = prevPeriodMetrics?.[0]?.followers || 0;
+    const newFollowers = currentFollowers - previousFollowers;
+    const followerChangePercent = previousFollowers > 0 
+      ? ((newFollowers / previousFollowers) * 100) 
+      : 0;
+
+    // Fetch content with metrics
+    const { data: allContentData } = await supabase
+      .from("social_content")
+      .select(`
+        id,
+        title,
+        url,
+        content_type,
+        published_at,
+        social_content_metrics (
           views,
           likes,
           comments,
           shares,
-          avg_view_duration: avgViewDuration,
-          watch_time_hours: watchTimeHours,
-          engagement_rate: computeEngagementRate(likes, comments, shares, views),
-        });
+          watch_time_hours,
+          period_start,
+          period_end,
+          collected_at
+        )
+      `)
+      .eq("client_id", clientId)
+      .eq("platform", "youtube")
+      .order("published_at", { ascending: false });
+
+    const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
+      if (!metrics || metrics.length === 0) return null;
+      const sorted = [...metrics].sort((a, b) => 
+        new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+      );
+      const exactMatch = sorted.find(m => 
+        m.period_start === targetStart && m.period_end === targetEnd
+      );
+      if (exactMatch) return exactMatch;
+      const targetStartDate = new Date(targetStart);
+      const targetEndDate = new Date(targetEnd);
+      const overlapping = sorted.find(m => {
+        if (!m.period_start || !m.period_end) return false;
+        const periodStart = new Date(m.period_start);
+        const periodEnd = new Date(m.period_end);
+        return periodStart <= targetEndDate && periodEnd >= targetStartDate;
       });
+      if (overlapping) return overlapping;
+      return sorted[0];
+    };
 
-      // Calculate previous period totals
-      let prevTotalViews = 0;
-      let prevTotalLikes = 0;
-      let prevTotalComments = 0;
-      let prevTotalShares = 0;
-      let prevShortCount = 0;
-      let prevVideoCount = 0;
+    let totalViews = 0;
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+    let prevTotalViews = 0;
+    let prevTotalLikes = 0;
+    let prevTotalComments = 0;
+    let prevTotalShares = 0;
+    let prevVideoCount = 0;
+    const videoList: VideoData[] = [];
 
-      allContentData?.forEach((content: any) => {
-        const metrics = findMetricsForPeriod(content.social_content_metrics, prevStartStr, prevEndStr);
-        if (metrics) {
-          prevTotalViews += metrics.views || 0;
-          prevTotalLikes += metrics.likes || 0;
-          prevTotalComments += metrics.comments || 0;
-          prevTotalShares += metrics.shares || 0;
-          
-          if (content.content_type?.toLowerCase() === "short") {
-            prevShortCount++;
-          } else {
-            prevVideoCount++;
-          }
-        }
+    allContentData?.forEach((content: any) => {
+      const metrics = findMetricsForPeriod(content.social_content_metrics, startStr, endStr);
+      const views = metrics?.views || 0;
+      const likes = metrics?.likes || 0;
+      const comments = metrics?.comments || 0;
+      const shares = metrics?.shares || 0;
+      const watchTimeHours = metrics?.watch_time_hours || 0;
+      const contentType = content.content_type || "video";
+
+      totalViews += views;
+      totalLikes += likes;
+      totalComments += comments;
+      totalShares += shares;
+
+      videoList.push({
+        id: content.id,
+        title: content.title,
+        url: content.url,
+        content_type: contentType,
+        published_at: content.published_at,
+        views,
+        likes,
+        comments,
+        shares,
+        avg_view_duration: 0,
+        watch_time_hours: watchTimeHours,
+        engagement_rate: computeEngagementRate(likes, comments, shares, views),
       });
+    });
 
-      const prevTotalVideos = prevShortCount + prevVideoCount;
-      const prevTotalContent = prevShortCount + prevVideoCount;
-      const prevAvgRetention = prevTotalContent > 0 
-        ? ((prevShortCount * 75) + (prevVideoCount * 40)) / prevTotalContent 
-        : 0;
-      const prevEngagementRate = computeEngagementRate(prevTotalLikes, prevTotalComments, prevTotalShares, prevTotalViews);
+    allContentData?.forEach((content: any) => {
+      const metrics = findMetricsForPeriod(content.social_content_metrics, prevStartStr, prevEndStr);
+      if (metrics) {
+        prevTotalViews += metrics.views || 0;
+        prevTotalLikes += metrics.likes || 0;
+        prevTotalComments += metrics.comments || 0;
+        prevTotalShares += metrics.shares || 0;
+        prevVideoCount++;
+      }
+    });
 
-      // Calculate weighted average retention rate
-      const totalContent = shortCount + videoCount;
-      const avgRetention = totalContent > 0 
-        ? ((shortCount * 75) + (videoCount * 40)) / totalContent 
-        : 0;
+    const prevEngagementRate = computeEngagementRate(prevTotalLikes, prevTotalComments, prevTotalShares, prevTotalViews);
 
-      setVideos(videoList);
-      setStats({
-        followers: currentFollowers,
-        newFollowers,
-        prevFollowers: previousFollowers,
-        followerChangePercent,
-        totalVideos: videoList.length,
-        totalViews,
-        totalLikes,
-        totalComments,
-        totalShares,
-        avgRetentionRate: avgRetention,
-        engagementRate: computeEngagementRate(totalLikes, totalComments, totalShares, totalViews, newFollowers),
-        prevTotalViews,
-        prevTotalLikes,
-        prevTotalComments,
-        prevTotalShares,
-        prevTotalVideos,
-        prevEngagementRate,
-        prevAvgRetentionRate: prevAvgRetention,
-      });
+    setVideos(videoList);
+    setStats({
+      followers: currentFollowers,
+      newFollowers,
+      prevFollowers: previousFollowers,
+      followerChangePercent,
+      totalVideos: videoList.length,
+      totalViews,
+      totalLikes,
+      totalComments,
+      totalShares,
+      avgViewDuration: 0,
+      engagementRate: computeEngagementRate(totalLikes, totalComments, totalShares, totalViews),
+      prevTotalViews,
+      prevTotalLikes,
+      prevTotalComments,
+      prevTotalShares,
+      prevTotalVideos: prevVideoCount,
+      prevEngagementRate,
+      prevAvgViewDuration: 0,
+    });
+  };
+
+  const fetchYouTubeData = async () => {
+    if (!clientId) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Try Metricool first
+      const metricoolSuccess = await fetchMetricoolData();
+      if (metricoolSuccess) {
+        setUseMetricool(true);
+        return;
+      }
+      
+      // Fall back to database
+      setUseMetricool(false);
+      await fetchDatabaseData();
     } catch (err: any) {
       console.error("Error fetching YouTube data:", err);
       toast.error("Failed to load YouTube data");
@@ -371,57 +436,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
   const handleSyncYouTube = async () => {
     setIsSyncing(true);
     try {
-      const { data: accounts } = await supabase
-        .from("social_accounts")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("platform", "youtube")
-        .eq("is_active", true)
-        .limit(1);
-
-      let channelHandle = "";
-      let accountId = "";
-
-      // Check for connected YouTube account first
-      if (accounts && accounts.length > 0) {
-        channelHandle = accounts[0].account_id;
-        accountId = accounts[0].id;
-      } else if (propChannelHandle) {
-        channelHandle = propChannelHandle;
-      } else {
-        toast.error("No YouTube channel connected. Please add a YouTube account in the admin settings.");
-        setIsSyncing(false);
-        return;
-      }
-
-      // Sync both current and previous periods for comparison
-      const periods = [
-        { start: ANALYTICS_PERIOD.start, end: ANALYTICS_PERIOD.end },
-        { start: ANALYTICS_PERIOD.prevStart, end: ANALYTICS_PERIOD.prevEnd },
-      ];
-
-      let totalSynced = 0;
-      for (const period of periods) {
-        const { data, error } = await supabase.functions.invoke("sync-youtube", {
-          body: {
-            clientId,
-            accountId,
-            channelHandle,
-            periodStart: period.start,
-            periodEnd: period.end,
-          },
-        });
-
-        if (error) throw error;
-        if (data?.success) {
-          totalSynced += data.recordsSynced || 0;
-        } else {
-          throw new Error(data?.error || "Sync failed");
-        }
-      }
-
-      toast.success(`Synced ${totalSynced} videos (current + previous week)`);
+      // Just refresh data from Metricool
       await fetchYouTubeData();
+      toast.success("YouTube data refreshed");
     } catch (error: any) {
       console.error("YouTube sync error:", error);
       toast.error(error.message || "Failed to sync");
@@ -435,6 +452,13 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     if (lowerType === "short") return "bg-pink-500 text-white";
     if (lowerType === "video") return "bg-red-500 text-white";
     return "bg-secondary text-secondary-foreground";
+  };
+
+  // Helper to calculate change and percent
+  const calcWoW = (current: number, prev: number) => {
+    const delta = current - prev;
+    const percent = prev > 0 ? (delta / prev) * 100 : 0;
+    return { delta, percent };
   };
 
   if (isLoading) {
@@ -455,7 +479,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       {/* Controls */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-muted p-1 rounded-lg">
-          {(["today", "7d", "30d"] as const).map((range) => (
+          {(["7d", "30d"] as const).map((range) => (
             <Button
               key={range}
               variant={dateRange === range ? "default" : "ghost"}
@@ -463,7 +487,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               onClick={() => setDateRange(range)}
               className="text-xs"
             >
-              {range === "today" ? "Today" : range === "7d" ? "7 Days" : "30 Days"}
+              {range === "7d" ? "7 Days" : "30 Days"}
             </Button>
           ))}
           <Popover>
@@ -497,31 +521,37 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
           </Popover>
         </div>
 
-        <Button onClick={handleSyncYouTube} disabled={isSyncing} size="sm">
-          {isSyncing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Sync YouTube
-            </>
+        <div className="flex items-center gap-2">
+          {useMetricool && (
+            <Badge variant="secondary" className="text-xs">
+              Metricool
+            </Badge>
           )}
-        </Button>
+          <Button onClick={handleSyncYouTube} disabled={isSyncing} size="sm">
+            {isSyncing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
       {stats && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Subscribers Card */}
             <Card className="bg-card">
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <Users className="h-4 w-4" />
                   <span className="text-xs">Subscribers</span>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-2xl font-bold">{stats.followers.toLocaleString()}</p>
-                </div>
+                <p className="text-2xl font-bold">{stats.followers.toLocaleString()}</p>
                 {stats.newFollowers !== 0 && (
                   <div className={cn(
                     "text-xs font-medium flex items-center gap-1 mt-1",
@@ -535,121 +565,114 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                     <span>
                       {stats.newFollowers > 0 ? "+" : ""}{stats.newFollowers.toLocaleString()}
                       {stats.followerChangePercent !== 0 && (
-                        <> ({stats.followerChangePercent > 0 ? "" : ""}{stats.followerChangePercent.toFixed(2)}%)</>
+                        <> ({stats.followerChangePercent.toFixed(2)}%)</>
                       )}
                     </span>
                   </div>
                 )}
-                {stats.prevFollowers > 0 && stats.newFollowers === 0 && (
+                {stats.prevFollowers > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    vs {stats.prevFollowers.toLocaleString()} (prev week)
+                    vs {stats.prevFollowers.toLocaleString()} prev week
                   </p>
                 )}
               </CardContent>
             </Card>
 
+            {/* Total Views Card */}
             <Card className="bg-card">
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <Eye className="h-4 w-4" />
                   <span className="text-xs">Total Views</span>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-2xl font-bold">{stats.totalViews.toLocaleString()}</p>
-                  {(() => {
-                    const viewsChange = stats.totalViews - stats.prevTotalViews;
-                    if (viewsChange !== 0) {
-                      return (
-                        <span className={cn(
-                          "text-xs font-medium flex items-center",
-                          viewsChange > 0 ? "text-green-500" : "text-red-500"
-                        )}>
-                          {viewsChange > 0 ? "+" : ""}{viewsChange.toLocaleString()}
-                          {viewsChange > 0 ? (
-                            <TrendingUp className="h-3 w-3 ml-0.5" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3 ml-0.5" />
-                          )}
+                <p className="text-2xl font-bold">{stats.totalViews.toLocaleString()}</p>
+                {(() => {
+                  const { delta, percent } = calcWoW(stats.totalViews, stats.prevTotalViews);
+                  if (delta !== 0) {
+                    return (
+                      <div className={cn(
+                        "text-xs font-medium flex items-center gap-1 mt-1",
+                        delta > 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                        <span>
+                          {delta > 0 ? "+" : ""}{delta.toLocaleString()}
+                          {stats.prevTotalViews > 0 && <> ({percent.toFixed(2)}%)</>}
                         </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 {stats.prevTotalViews > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    vs {stats.prevTotalViews.toLocaleString()} (prev week)
+                    vs {stats.prevTotalViews.toLocaleString()} prev week
                   </p>
                 )}
               </CardContent>
             </Card>
 
+            {/* Avg View Duration Card */}
             <Card className="bg-card">
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <Clock className="h-4 w-4" />
                   <span className="text-xs">Avg. View Duration</span>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-2xl font-bold">{stats.avgRetentionRate.toFixed(0)}%</p>
-                  {(() => {
-                    const retentionChange = stats.avgRetentionRate - stats.prevAvgRetentionRate;
-                    if (stats.prevAvgRetentionRate > 0 && Math.abs(retentionChange) >= 1) {
-                      return (
-                        <span className={cn(
-                          "text-xs font-medium flex items-center",
-                          retentionChange > 0 ? "text-green-500" : "text-red-500"
-                        )}>
-                          {retentionChange > 0 ? "+" : ""}{retentionChange.toFixed(0)}%
-                          {retentionChange > 0 ? (
-                            <TrendingUp className="h-3 w-3 ml-0.5" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3 ml-0.5" />
-                          )}
+                <p className="text-2xl font-bold">
+                  {stats.avgViewDuration > 0 
+                    ? `${Math.floor(stats.avgViewDuration / 60)}:${String(Math.floor(stats.avgViewDuration % 60)).padStart(2, '0')}`
+                    : "N/A"
+                  }
+                </p>
+                {(() => {
+                  const { delta, percent } = calcWoW(stats.avgViewDuration, stats.prevAvgViewDuration);
+                  if (stats.avgViewDuration > 0 && stats.prevAvgViewDuration > 0 && Math.abs(delta) >= 1) {
+                    return (
+                      <div className={cn(
+                        "text-xs font-medium flex items-center gap-1 mt-1",
+                        delta > 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                        <span>
+                          {delta > 0 ? "+" : ""}{delta.toFixed(0)}s ({percent.toFixed(2)}%)
                         </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </CardContent>
             </Card>
 
+            {/* Engagement Card */}
             <Card className="bg-card">
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <BarChart3 className="h-4 w-4" />
                   <span className="text-xs">Engagement</span>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-2xl font-bold">{stats.engagementRate.toFixed(2)}%</p>
-                  {(() => {
-                    const engagementChange = stats.engagementRate - stats.prevEngagementRate;
-                    if (stats.prevEngagementRate > 0) {
-                      return (
-                        <span className={cn(
-                          "text-xs font-medium flex items-center",
-                          engagementChange >= 0 ? "text-green-500" : "text-red-500"
-                        )}>
-                          {engagementChange >= 0 ? "+" : ""}{engagementChange.toFixed(2)}%
-                          {engagementChange >= 0 ? (
-                            <TrendingUp className="h-3 w-3 ml-0.5" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3 ml-0.5" />
-                          )}
+                <p className="text-2xl font-bold">{stats.engagementRate.toFixed(2)}%</p>
+                {(() => {
+                  const { delta, percent } = calcWoW(stats.engagementRate, stats.prevEngagementRate);
+                  if (stats.prevEngagementRate > 0) {
+                    return (
+                      <div className={cn(
+                        "text-xs font-medium flex items-center gap-1 mt-1",
+                        delta >= 0 ? "text-green-500" : "text-red-500"
+                      )}>
+                        {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                        <span>
+                          {delta >= 0 ? "+" : ""}{delta.toFixed(2)}pp
                         </span>
-                      );
-                    }
-                    return stats.engagementRate >= 3 ? (
-                      <TrendingUp className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-500" />
+                      </div>
                     );
-                  })()}
-                </div>
+                  }
+                  return null;
+                })()}
                 {stats.prevEngagementRate > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    vs {stats.prevEngagementRate.toFixed(2)}% (prev week)
+                    vs {stats.prevEngagementRate.toFixed(2)}% prev week
                   </p>
                 )}
               </CardContent>
@@ -663,19 +686,15 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <ThumbsUp className="h-4 w-4 mx-auto mb-1 text-blue-500" />
                 <p className="text-lg font-semibold">{stats.totalLikes.toLocaleString()}</p>
                 {(() => {
-                  const likesChange = stats.totalLikes - stats.prevTotalLikes;
-                  if (likesChange !== 0) {
+                  const { delta, percent } = calcWoW(stats.totalLikes, stats.prevTotalLikes);
+                  if (delta !== 0) {
                     return (
                       <span className={cn(
                         "text-xs font-medium flex items-center justify-center",
-                        likesChange > 0 ? "text-green-500" : "text-red-500"
+                        delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
-                        {likesChange > 0 ? "+" : ""}{likesChange.toLocaleString()}
-                        {likesChange > 0 ? (
-                          <TrendingUp className="h-3 w-3 ml-0.5" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 ml-0.5" />
-                        )}
+                        {delta > 0 ? "+" : ""}{delta.toLocaleString()}
+                        {stats.prevTotalLikes > 0 && <> ({percent.toFixed(1)}%)</>}
                       </span>
                     );
                   }
@@ -689,19 +708,15 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <MessageCircle className="h-4 w-4 mx-auto mb-1 text-green-500" />
                 <p className="text-lg font-semibold">{stats.totalComments.toLocaleString()}</p>
                 {(() => {
-                  const commentsChange = stats.totalComments - stats.prevTotalComments;
-                  if (commentsChange !== 0) {
+                  const { delta, percent } = calcWoW(stats.totalComments, stats.prevTotalComments);
+                  if (delta !== 0) {
                     return (
                       <span className={cn(
                         "text-xs font-medium flex items-center justify-center",
-                        commentsChange > 0 ? "text-green-500" : "text-red-500"
+                        delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
-                        {commentsChange > 0 ? "+" : ""}{commentsChange.toLocaleString()}
-                        {commentsChange > 0 ? (
-                          <TrendingUp className="h-3 w-3 ml-0.5" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 ml-0.5" />
-                        )}
+                        {delta > 0 ? "+" : ""}{delta.toLocaleString()}
+                        {stats.prevTotalComments > 0 && <> ({percent.toFixed(1)}%)</>}
                       </span>
                     );
                   }
@@ -715,19 +730,15 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <Share2 className="h-4 w-4 mx-auto mb-1 text-purple-500" />
                 <p className="text-lg font-semibold">{stats.totalShares.toLocaleString()}</p>
                 {(() => {
-                  const sharesChange = stats.totalShares - stats.prevTotalShares;
-                  if (sharesChange !== 0) {
+                  const { delta, percent } = calcWoW(stats.totalShares, stats.prevTotalShares);
+                  if (delta !== 0) {
                     return (
                       <span className={cn(
                         "text-xs font-medium flex items-center justify-center",
-                        sharesChange > 0 ? "text-green-500" : "text-red-500"
+                        delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
-                        {sharesChange > 0 ? "+" : ""}{sharesChange.toLocaleString()}
-                        {sharesChange > 0 ? (
-                          <TrendingUp className="h-3 w-3 ml-0.5" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 ml-0.5" />
-                        )}
+                        {delta > 0 ? "+" : ""}{delta.toLocaleString()}
+                        {stats.prevTotalShares > 0 && <> ({percent.toFixed(1)}%)</>}
                       </span>
                     );
                   }
@@ -741,19 +752,14 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <PlayCircle className="h-4 w-4 mx-auto mb-1 text-red-500" />
                 <p className="text-lg font-semibold">{stats.totalVideos}</p>
                 {(() => {
-                  const videosChange = stats.totalVideos - stats.prevTotalVideos;
-                  if (videosChange !== 0) {
+                  const delta = stats.totalVideos - stats.prevTotalVideos;
+                  if (delta !== 0) {
                     return (
                       <span className={cn(
                         "text-xs font-medium flex items-center justify-center",
-                        videosChange > 0 ? "text-green-500" : "text-red-500"
+                        delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
-                        {videosChange > 0 ? "+" : ""}{videosChange}
-                        {videosChange > 0 ? (
-                          <TrendingUp className="h-3 w-3 ml-0.5" />
-                        ) : (
-                          <TrendingDown className="h-3 w-3 ml-0.5" />
-                        )}
+                        {delta > 0 ? "+" : ""}{delta}
                       </span>
                     );
                   }
@@ -776,7 +782,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
             <div className="p-8 text-center">
               <PlayCircle className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
               <p className="text-muted-foreground">No videos found</p>
-              <p className="text-xs text-muted-foreground mt-1">Try syncing or selecting a different date range</p>
+              <p className="text-xs text-muted-foreground mt-1">Try refreshing or selecting a different date range</p>
             </div>
           ) : (
             <Table>
@@ -788,13 +794,12 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   <TableHead className="text-right">Likes</TableHead>
                   <TableHead className="text-right">Comments</TableHead>
                   <TableHead className="text-right">Shares</TableHead>
-                  <TableHead className="text-right">Watch Time</TableHead>
-                  <TableHead className="text-right">Stayed to Watch</TableHead>
+                  <TableHead className="text-right">Avg Duration</TableHead>
                   <TableHead className="text-right">Engagement</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {videos.map((video) => (
+                {videos.slice(0, 10).map((video) => (
                   <TableRow key={video.id}>
                     <TableCell>
                       <Badge className={getTypeBadgeColor(video.content_type)}>
@@ -818,9 +823,11 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                             {video.title || "Untitled"}
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                          {format(parseISO(video.published_at), "MMM d, yyyy")}
-                        </p>
+                        {video.published_at && (
+                          <p className="text-xs text-muted-foreground">
+                            {format(parseISO(video.published_at), "MMM d, yyyy")}
+                          </p>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-medium">
@@ -836,12 +843,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                       {video.shares.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      {video.watch_time_hours > 0 
-                        ? `${video.watch_time_hours.toFixed(1)}h` 
+                      {video.avg_view_duration > 0 
+                        ? `${Math.floor(video.avg_view_duration / 60)}:${String(Math.floor(video.avg_view_duration % 60)).padStart(2, '0')}`
                         : "-"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {video.avg_view_duration}%
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge
