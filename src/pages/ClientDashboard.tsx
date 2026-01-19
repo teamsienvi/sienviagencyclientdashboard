@@ -489,7 +489,29 @@ const ClientDashboard = () => {
                   </Card>
                 )}
 
-                {/* Web Analytics - For any client with supabase_url configured */}
+                {/* Ads Analytics - Only for Snarky Pets */}
+                {clientId === "d8a121fe-cdd9-4e19-90dc-dd32b159f973" && (
+                  <Card 
+                    className="hover:border-primary/30 transition-all cursor-pointer group"
+                    onClick={() => navigate(`/ads-analytics/${clientId}`)}
+                  >
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                          <BarChart3 className="h-5 w-5 text-orange-500" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">Ads</CardTitle>
+                          <CardDescription>Meta & Google Ads</CardDescription>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                    </CardHeader>
+                    <CardContent>
+                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                    </CardContent>
+                  </Card>
+                )}
                 {client.supabase_url && (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
