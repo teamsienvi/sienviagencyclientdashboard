@@ -31,7 +31,8 @@ serve(async (req) => {
 
     // State indicates this is an agency-level connection
     const state = JSON.stringify({ type: 'agency' });
-    const encodedState = encodeURIComponent(btoa(state));
+    // Use btoa only - URLSearchParams.set() will handle URL encoding automatically
+    const encodedState = btoa(state);
     
     const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
     authUrl.searchParams.set("client_id", metaAppId);
