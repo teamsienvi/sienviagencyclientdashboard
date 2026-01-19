@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { subDays, format, startOfDay, endOfDay, formatDistanceToNow } from "date-fns";
 import { MetaPageSelector } from "@/components/MetaPageSelector";
+import MetaGrowthChart from "@/components/MetaGrowthChart";
 
 interface MetaAnalyticsSectionProps {
   clientId: string;
@@ -1452,6 +1453,45 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     );
   };
 
+  // Render growth chart for a platform
+  const renderGrowthChart = (platform: MetaPlatform) => {
+    const weeklyData = platform === "instagram" ? instagramWeekly : facebookWeekly;
+    const overviewKPIs = platform === "instagram" ? instagramOverviewKPIs : facebookOverviewKPIs;
+    const reportData = platform === "instagram" ? instagramReportData : facebookReportData;
+    const content = platform === "instagram" ? instagramContent : facebookContent;
+    const metrics = platform === "instagram" ? instagramMetrics : facebookMetrics;
+
+    // Get followers timeline from weekly data
+    const followersTimeline = weeklyData?.current?.followersTimeline ?? [];
+    
+    // Get current followers from debug lastPoint (most accurate)
+    const currentDebug = weeklyData?.current?.followersDebug;
+    const prevDebug = weeklyData?.previous?.followersDebug;
+    const currentFollowers = currentDebug?.lastPoint?.value ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers ?? null;
+    const prevFollowers = prevDebug?.lastPoint?.value ?? null;
+    const newFollowers = currentFollowers != null && prevFollowers != null 
+      ? currentFollowers - prevFollowers 
+      : (reportData?.new_followers ?? null);
+    
+    // Total content count
+    const totalContent = weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? content.length;
+
+    // Only render if we have timeline data
+    if (followersTimeline.length === 0) {
+      return null;
+    }
+
+    return (
+      <MetaGrowthChart
+        followersTimeline={followersTimeline}
+        currentFollowers={currentFollowers}
+        newFollowers={newFollowers}
+        totalContent={totalContent}
+        platform={platform}
+      />
+    );
+  };
+
   // Build a valid URL for a post
   const buildPostUrl = (post: MetaContent, platform: MetaPlatform): string | null => {
     // If we have a direct URL, use it
@@ -2096,11 +2136,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
           {renderMetricsCards(instagramMetrics, instagramPrevMetrics, "instagram")}
+          {renderGrowthChart("instagram")}
           {renderContentTable(instagramContent, "instagram")}
         </TabsContent>
 
         <TabsContent value="facebook" className="space-y-6 mt-4">
           {renderMetricsCards(facebookMetrics, facebookPrevMetrics, "facebook")}
+          {renderGrowthChart("facebook")}
           {renderContentTable(facebookContent, "facebook")}
         </TabsContent>
       </Tabs>
