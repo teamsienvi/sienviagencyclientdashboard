@@ -218,6 +218,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     engagementTimeline: TimelineDataPoint[];
     engagementAgg: number | null;
     postsCount: number | null;
+    reelsCount: number | null;
+    postsEngagement: number | null;
+    reelsEngagement: number | null;
     followersDebug?: FollowersDebugInfo;
   }
   
@@ -1322,28 +1325,22 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       );
     };
 
-    // Compute separate engagement rates for Posts vs Reels
+    // Get content for this platform to count posts/reels as fallback
     const contentForPlatform = platform === "instagram" ? instagramContent : facebookContent;
     const postsContent = contentForPlatform.filter(c => c.content_type === "post" || c.content_type === "carousel");
     const reelsContent = contentForPlatform.filter(c => c.content_type === "reel" || c.content_type === "video");
+
+    // Get posts/reels engagement from Metricool API (accurate data)
+    const currentPostsEngagement = weeklyData?.current?.postsEngagement ?? null;
+    const prevPostsEngagement = weeklyData?.previous?.postsEngagement ?? null;
+    const currentReelsEngagement = weeklyData?.current?.reelsEngagement ?? null;
+    const prevReelsEngagement = weeklyData?.previous?.reelsEngagement ?? null;
     
-    // Calculate engagement rate for posts
-    const calcEngagementRate = (items: typeof contentForPlatform) => {
-      if (items.length === 0 || !currentFollowers) return null;
-      const totalEngagements = items.reduce((sum, item) => {
-        const engagements = item.metrics?.engagements || 
-          ((item.metrics?.likes || 0) + (item.metrics?.comments || 0) + (item.metrics?.shares || 0));
-        return sum + engagements;
-      }, 0);
-      return items.length > 0 ? (totalEngagements / items.length / currentFollowers) * 100 : null;
-    };
-    
-    const postsEngagement = calcEngagementRate(postsContent);
-    const reelsEngagement = calcEngagementRate(reelsContent);
-    
-    // Use overall engagement as fallback
-    const displayPostsEngagement = postsEngagement ?? currentEngagement;
-    const displayReelsEngagement = reelsEngagement ?? currentEngagement;
+    // Get posts/reels counts from API, fallback to local content count
+    const apiPostsCount = weeklyData?.current?.postsCount ?? postsContent.length;
+    const apiReelsCount = weeklyData?.current?.reelsCount ?? reelsContent.length;
+    const prevApiPostsCount = weeklyData?.previous?.postsCount ?? null;
+    const prevApiReelsCount = weeklyData?.previous?.reelsCount ?? null;
 
     return (
       <div className="space-y-4">
@@ -1375,11 +1372,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <span className="text-sm">Engagement (Posts)</span>
               </div>
               <p className="text-2xl font-bold">
-                {displayPostsEngagement != null ? `${displayPostsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+                {currentPostsEngagement != null ? `${currentPostsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
               </p>
-              <span className="text-xs text-muted-foreground">
-                {postsContent.length} posts
-              </span>
+              {prevPostsEngagement != null && currentPostsEngagement != null ? (
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    vs {prevPostsEngagement.toFixed(2)}%
+                  </span>
+                  {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, true)}
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {apiPostsCount} posts
+                </span>
+              )}
             </CardContent>
           </Card>
           <Card>
@@ -1389,11 +1395,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <span className="text-sm">Engagement (Reels)</span>
               </div>
               <p className="text-2xl font-bold">
-                {displayReelsEngagement != null ? `${displayReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+                {currentReelsEngagement != null ? `${currentReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
               </p>
-              <span className="text-xs text-muted-foreground">
-                {reelsContent.length} reels
-              </span>
+              {prevReelsEngagement != null && currentReelsEngagement != null ? (
+                <>
+                  <span className="text-xs text-muted-foreground">
+                    vs {prevReelsEngagement.toFixed(2)}%
+                  </span>
+                  {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, true)}
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {apiReelsCount} reels
+                </span>
+              )}
             </CardContent>
           </Card>
           <Card>
