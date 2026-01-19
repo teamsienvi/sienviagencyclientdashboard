@@ -1345,8 +1345,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
     return (
       <div className="space-y-4">
-        {/* KPI Cards: Followers, Engagement Rates (grouped), Total Posts, Reporting Period */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* KPI Cards: Followers, Engagement (Posts/Reels separated for IG), Total Posts, Reporting Period */}
+        <div className={`grid grid-cols-2 gap-4 ${platform === "instagram" ? "md:grid-cols-5" : "md:grid-cols-4"}`}>
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -1367,45 +1367,89 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             </CardContent>
           </Card>
           
-          {/* Grouped Engagement Card - Posts + Reels in one bubble */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-2 text-muted-foreground mb-2">
-                <TrendingUp className="h-4 w-4" />
-                <span className="text-sm">Engagement Rate</span>
-              </div>
-              <div className="space-y-3">
-                {/* Posts Engagement */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Posts:</span>
-                  <div className="text-right">
-                    <span className="text-lg font-bold">
-                      {currentPostsEngagement != null ? `${currentPostsEngagement.toFixed(2)}%` : <span className="text-muted-foreground text-sm">N/A</span>}
-                    </span>
-                    {prevPostsEngagement != null && currentPostsEngagement != null && (
-                      <div className="flex items-center justify-end gap-1">
-                        {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, true)}
-                      </div>
-                    )}
+          {/* Engagement (Posts) - Raw value for Instagram */}
+          {platform === "instagram" ? (
+            <>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <TrendingUp className="h-4 w-4" />
+                    <span className="text-sm">Engagement (Posts)</span>
+                  </div>
+                  <p className="text-2xl font-bold">
+                    {currentPostsEngagement != null ? currentPostsEngagement.toLocaleString(undefined, { maximumFractionDigits: 0 }) : <span className="text-muted-foreground">N/A</span>}
+                  </p>
+                  {prevPostsEngagement != null && currentPostsEngagement != null && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        vs {prevPostsEngagement.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                      {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, false, true)}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <TrendingUp className="h-4 w-4" />
+                    <span className="text-sm">Engagement (Reels)</span>
+                  </div>
+                  <p className="text-2xl font-bold">
+                    {currentReelsEngagement != null ? `${currentReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+                  </p>
+                  {prevReelsEngagement != null && currentReelsEngagement != null && (
+                    <>
+                      <span className="text-xs text-muted-foreground">
+                        vs {prevReelsEngagement.toFixed(2)}%
+                      </span>
+                      {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, true)}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            /* Facebook keeps grouped Engagement Rate card */
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 text-muted-foreground mb-2">
+                  <TrendingUp className="h-4 w-4" />
+                  <span className="text-sm">Engagement Rate</span>
+                </div>
+                <div className="space-y-3">
+                  {/* Posts Engagement */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Posts:</span>
+                    <div className="text-right">
+                      <span className="text-lg font-bold">
+                        {currentPostsEngagement != null ? `${currentPostsEngagement.toFixed(2)}%` : <span className="text-muted-foreground text-sm">N/A</span>}
+                      </span>
+                      {prevPostsEngagement != null && currentPostsEngagement != null && (
+                        <div className="flex items-center justify-end gap-1">
+                          {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, true)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Reels Engagement */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Reels:</span>
+                    <div className="text-right">
+                      <span className="text-lg font-bold">
+                        {currentReelsEngagement != null ? `${currentReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground text-sm">N/A</span>}
+                      </span>
+                      {prevReelsEngagement != null && currentReelsEngagement != null && (
+                        <div className="flex items-center justify-end gap-1">
+                          {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, true)}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                {/* Reels Engagement */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Reels:</span>
-                  <div className="text-right">
-                    <span className="text-lg font-bold">
-                      {currentReelsEngagement != null ? `${currentReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground text-sm">N/A</span>}
-                    </span>
-                    {prevReelsEngagement != null && currentReelsEngagement != null && (
-                      <div className="flex items-center justify-end gap-1">
-                        {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, true)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
           
           <Card>
             <CardContent className="pt-6">
