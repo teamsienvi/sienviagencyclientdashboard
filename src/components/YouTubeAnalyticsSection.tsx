@@ -42,7 +42,8 @@ import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
 interface YouTubeStats {
   followers: number;
   newFollowers: number;
-  prevFollowers: number; // Added for WoW comparison
+  prevFollowers: number;
+  followerChangePercent: number; // Percentage change for WoW display
   totalVideos: number;
   totalViews: number;
   totalLikes: number;
@@ -156,18 +157,36 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         prevStartStr = format(prevStart, 'yyyy-MM-dd');
         prevEndStr = format(prevEnd, 'yyyy-MM-dd');
       }
-      // Fetch account metrics - get the most recent ones
-      const { data: accountMetrics } = await supabase
+      // Fetch account metrics - get metrics for current and previous periods
+      const { data: currentPeriodMetrics } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", "youtube")
+        .gte("period_start", startStr)
+        .lte("period_end", endStr)
         .order("collected_at", { ascending: false })
-        .limit(2);
+        .limit(1);
 
-      const currentFollowers = accountMetrics?.[0]?.followers || 0;
-      const previousFollowers = accountMetrics?.[1]?.followers || currentFollowers;
+      const { data: prevPeriodMetrics } = await supabase
+        .from("social_account_metrics")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", "youtube")
+        .gte("period_start", prevStartStr)
+        .lte("period_end", prevEndStr)
+        .order("collected_at", { ascending: false })
+        .limit(1);
+
+      // Get followers from period-specific metrics
+      const currentFollowers = currentPeriodMetrics?.[0]?.followers || 0;
+      const previousFollowers = prevPeriodMetrics?.[0]?.followers || 0;
       const newFollowers = currentFollowers - previousFollowers;
+      
+      // Calculate percentage change for display
+      const followerChangePercent = previousFollowers > 0 
+        ? ((newFollowers / previousFollowers) * 100) 
+        : 0;
 
       // Fetch ALL content for this client/platform with their metrics
       // We'll filter by metric period_start/period_end client-side
@@ -321,6 +340,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         followers: currentFollowers,
         newFollowers,
         prevFollowers: previousFollowers,
+        followerChangePercent,
         totalVideos: videoList.length,
         totalViews,
         totalLikes,
@@ -501,21 +521,26 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 </div>
                 <div className="flex items-baseline gap-2">
                   <p className="text-2xl font-bold">{stats.followers.toLocaleString()}</p>
-                  {stats.newFollowers !== 0 && (
-                    <span className={cn(
-                      "text-xs font-medium flex items-center",
-                      stats.newFollowers > 0 ? "text-green-500" : "text-red-500"
-                    )}>
+                </div>
+                {stats.newFollowers !== 0 && (
+                  <div className={cn(
+                    "text-xs font-medium flex items-center gap-1 mt-1",
+                    stats.newFollowers > 0 ? "text-green-500" : "text-red-500"
+                  )}>
+                    {stats.newFollowers > 0 ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : (
+                      <TrendingDown className="h-3 w-3" />
+                    )}
+                    <span>
                       {stats.newFollowers > 0 ? "+" : ""}{stats.newFollowers.toLocaleString()}
-                      {stats.newFollowers > 0 ? (
-                        <TrendingUp className="h-3 w-3 ml-0.5" />
-                      ) : (
-                        <TrendingDown className="h-3 w-3 ml-0.5" />
+                      {stats.followerChangePercent !== 0 && (
+                        <> ({stats.followerChangePercent > 0 ? "" : ""}{stats.followerChangePercent.toFixed(2)}%)</>
                       )}
                     </span>
-                  )}
-                </div>
-                {stats.prevFollowers > 0 && (
+                  </div>
+                )}
+                {stats.prevFollowers > 0 && stats.newFollowers === 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
                     vs {stats.prevFollowers.toLocaleString()} (prev week)
                   </p>
