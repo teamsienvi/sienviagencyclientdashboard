@@ -626,7 +626,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   }
                 </p>
                 {(() => {
-                  const { delta, percent } = calcWoW(stats.avgViewDuration, stats.prevAvgViewDuration);
+                  const { delta } = calcWoW(stats.avgViewDuration, stats.prevAvgViewDuration);
                   if (stats.avgViewDuration > 0 && stats.prevAvgViewDuration > 0 && Math.abs(delta) >= 1) {
                     return (
                       <div className={cn(
@@ -635,7 +635,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                       )}>
                         {delta > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                         <span>
-                          {delta > 0 ? "+" : ""}{delta.toFixed(0)}s ({percent.toFixed(2)}%)
+                          {delta > 0 ? "+" : ""}{delta.toFixed(0)}s
                         </span>
                       </div>
                     );
@@ -654,7 +654,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 </div>
                 <p className="text-2xl font-bold">{stats.engagementRate.toFixed(2)}%</p>
                 {(() => {
-                  const { delta, percent } = calcWoW(stats.engagementRate, stats.prevEngagementRate);
+                  const { delta } = calcWoW(stats.engagementRate, stats.prevEngagementRate);
                   if (stats.prevEngagementRate > 0) {
                     return (
                       <div className={cn(
@@ -663,7 +663,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                       )}>
                         {delta >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                         <span>
-                          {delta >= 0 ? "+" : ""}{delta.toFixed(2)}pp
+                          {delta >= 0 ? "+" : ""}{delta.toFixed(2)}%
                         </span>
                       </div>
                     );
@@ -686,7 +686,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <ThumbsUp className="h-4 w-4 mx-auto mb-1 text-blue-500" />
                 <p className="text-lg font-semibold">{stats.totalLikes.toLocaleString()}</p>
                 {(() => {
-                  const { delta, percent } = calcWoW(stats.totalLikes, stats.prevTotalLikes);
+                  const { delta } = calcWoW(stats.totalLikes, stats.prevTotalLikes);
                   if (delta !== 0) {
                     return (
                       <span className={cn(
@@ -694,7 +694,6 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                         delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
                         {delta > 0 ? "+" : ""}{delta.toLocaleString()}
-                        {stats.prevTotalLikes > 0 && <> ({percent.toFixed(1)}%)</>}
                       </span>
                     );
                   }
@@ -708,7 +707,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <MessageCircle className="h-4 w-4 mx-auto mb-1 text-green-500" />
                 <p className="text-lg font-semibold">{stats.totalComments.toLocaleString()}</p>
                 {(() => {
-                  const { delta, percent } = calcWoW(stats.totalComments, stats.prevTotalComments);
+                  const { delta } = calcWoW(stats.totalComments, stats.prevTotalComments);
                   if (delta !== 0) {
                     return (
                       <span className={cn(
@@ -716,7 +715,6 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                         delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
                         {delta > 0 ? "+" : ""}{delta.toLocaleString()}
-                        {stats.prevTotalComments > 0 && <> ({percent.toFixed(1)}%)</>}
                       </span>
                     );
                   }
@@ -730,7 +728,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 <Share2 className="h-4 w-4 mx-auto mb-1 text-purple-500" />
                 <p className="text-lg font-semibold">{stats.totalShares.toLocaleString()}</p>
                 {(() => {
-                  const { delta, percent } = calcWoW(stats.totalShares, stats.prevTotalShares);
+                  const { delta } = calcWoW(stats.totalShares, stats.prevTotalShares);
                   if (delta !== 0) {
                     return (
                       <span className={cn(
@@ -738,7 +736,6 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                         delta > 0 ? "text-green-500" : "text-red-500"
                       )}>
                         {delta > 0 ? "+" : ""}{delta.toLocaleString()}
-                        {stats.prevTotalShares > 0 && <> ({percent.toFixed(1)}%)</>}
                       </span>
                     );
                   }
