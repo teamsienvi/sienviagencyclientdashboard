@@ -42,6 +42,7 @@ import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
 interface YouTubeStats {
   followers: number;
   newFollowers: number;
+  prevFollowers: number; // Added for WoW comparison
   totalVideos: number;
   totalViews: number;
   totalLikes: number;
@@ -319,6 +320,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       setStats({
         followers: currentFollowers,
         newFollowers,
+        prevFollowers: previousFollowers,
         totalVideos: videoList.length,
         totalViews,
         totalLikes,
@@ -513,6 +515,11 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                     </span>
                   )}
                 </div>
+                {stats.prevFollowers > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    vs {stats.prevFollowers.toLocaleString()} (prev week)
+                  </p>
+                )}
               </CardContent>
             </Card>
 

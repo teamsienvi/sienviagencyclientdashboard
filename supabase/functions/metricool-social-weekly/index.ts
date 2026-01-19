@@ -26,6 +26,9 @@ interface WeeklyData {
   engagementTimeline: TimelineDataPoint[];
   engagementAgg: number | null;
   postsCount: number | null;
+  reelsCount: number | null;
+  postsEngagement: number | null;
+  reelsEngagement: number | null;
   followersDebug?: DebugInfo;
 }
 
@@ -232,6 +235,9 @@ serve(async (req) => {
         engagementTimeline: [],
         engagementAgg: null,
         postsCount: null,
+        reelsCount: null,
+        postsEngagement: null,
+        reelsEngagement: null,
       };
 
       // CRITICAL: Use platform-specific metric for followers
@@ -240,7 +246,48 @@ serve(async (req) => {
 
       console.log(`Using followers metric "${followersMetric}" for platform "${platform}"`);
 
-      const [followersRes, engagementTimelineRes, engagementAggRes, postsRes] = await Promise.allSettled([
+      // Fetch CSV for posts to get posts/reels breakdown with engagement
+      const fetchPostsCSV = async (): Promise<{ posts: any[]; reels: any[] }> => {
+        const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
+        Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) => 
+          postsUrl.searchParams.set(k, v)
+        );
+        const res = await fetch(postsUrl.toString(), {
+          headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "text/csv" },
+        });
+        if (!res.ok) throw new Error(`Posts CSV: ${res.status}`);
+        const csv = await res.text();
+        
+        // Parse CSV to get posts and reels separately with engagement data
+        const lines = csv.split('\n').filter(l => l.trim());
+        if (lines.length < 2) return { posts: [], reels: [] };
+        
+        const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+        const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
+        const engagementIdx = headers.findIndex(h => h === 'engagement');
+        
+        const posts: any[] = [];
+        const reels: any[] = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          const type = values[typeIdx]?.toLowerCase() || 'post';
+          const engagement = parseFloat(values[engagementIdx] || '0') || 0;
+          
+          const item = { type, engagement };
+          
+          // Categorize as reel or post
+          if (type === 'reel' || type === 'video') {
+            reels.push(item);
+          } else {
+            posts.push(item);
+          }
+        }
+        
+        return { posts, reels };
+      };
+
+      const [followersRes, engagementTimelineRes, postsCSVRes] = await Promise.allSettled([
         // 1) Followers timeline - PLATFORM SPECIFIC METRIC
         fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
           metric: followersMetric,
@@ -251,26 +298,8 @@ serve(async (req) => {
           metric: "engagement",
           subject: "posts",
         })),
-        // 3) Engagement aggregation (for KPI value)
-        fetchMetricool("/api/v2/analytics/aggregation", buildParams(fromDate, toDate, {
-          metric: "engagement",
-          subject: "posts",
-        })),
-        // 4) Posts count via CSV (count rows)
-        (async () => {
-          const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
-          Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) => 
-            postsUrl.searchParams.set(k, v)
-          );
-          const res = await fetch(postsUrl.toString(), {
-            headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "text/csv" },
-          });
-          if (!res.ok) throw new Error(`Posts CSV: ${res.status}`);
-          const csv = await res.text();
-          // Count non-empty lines minus header
-          const lines = csv.split('\n').filter(l => l.trim());
-          return Math.max(0, lines.length - 1);
-        })(),
+        // 3) Posts CSV with engagement data per post/reel
+        fetchPostsCSV(),
       ]);
 
       // Process followers timeline
@@ -294,20 +323,36 @@ serve(async (req) => {
         errors.push(`engagement_timeline ${fromDate}: ${engagementTimelineRes.reason}`);
       }
 
-      // Process engagement aggregation
-      if (engagementAggRes.status === 'fulfilled') {
-        result.engagementAgg = extractAggValue(engagementAggRes.value);
-        console.log(`Engagement agg (${fromDate} to ${toDate}): ${result.engagementAgg}`);
+      // Process posts CSV data - separate engagement for posts vs reels
+      if (postsCSVRes.status === 'fulfilled') {
+        const { posts, reels } = postsCSVRes.value;
+        
+        result.postsCount = posts.length;
+        result.reelsCount = reels.length;
+        
+        // Calculate average engagement for posts
+        if (posts.length > 0) {
+          const totalPostsEngagement = posts.reduce((sum, p) => sum + p.engagement, 0);
+          result.postsEngagement = totalPostsEngagement / posts.length;
+        }
+        
+        // Calculate average engagement for reels
+        if (reels.length > 0) {
+          const totalReelsEngagement = reels.reduce((sum, r) => sum + r.engagement, 0);
+          result.reelsEngagement = totalReelsEngagement / reels.length;
+        }
+        
+        // Overall engagement is combined average (for backward compatibility)
+        const allItems = [...posts, ...reels];
+        if (allItems.length > 0) {
+          const totalEngagement = allItems.reduce((sum, i) => sum + i.engagement, 0);
+          result.engagementAgg = totalEngagement / allItems.length;
+        }
+        
+        console.log(`Posts/Reels count (${fromDate} to ${toDate}): ${posts.length} posts, ${reels.length} reels`);
+        console.log(`Posts engagement: ${result.postsEngagement?.toFixed(2)}%, Reels engagement: ${result.reelsEngagement?.toFixed(2)}%`);
       } else {
-        errors.push(`engagement_agg ${fromDate}: ${engagementAggRes.reason}`);
-      }
-
-      // Process posts count
-      if (postsRes.status === 'fulfilled') {
-        result.postsCount = postsRes.value as number;
-        console.log(`Posts count (${fromDate} to ${toDate}): ${result.postsCount}`);
-      } else {
-        errors.push(`posts_count ${fromDate}: ${postsRes.reason}`);
+        errors.push(`posts_csv ${fromDate}: ${postsCSVRes.reason}`);
       }
 
       return result;
