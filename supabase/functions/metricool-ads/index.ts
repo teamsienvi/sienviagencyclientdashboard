@@ -472,7 +472,11 @@ serve(async (req) => {
     if (Object.keys(upstreamDebug).length > 0) response.upstreamDebug = upstreamDebug;
 
     return new Response(
-      JSON.stringify({ success: true, data: response }),
+      JSON.stringify({ 
+        success: true, 
+        data: response,
+        debug: { userId, blogId }
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
