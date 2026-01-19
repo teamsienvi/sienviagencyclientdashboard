@@ -142,6 +142,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [facebookContent, setFacebookContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
   
+  // Content type tab state for Posts/Reels
+  const [instagramContentTab, setInstagramContentTab] = useState<"posts" | "reels">("posts");
+  const [facebookContentTab, setFacebookContentTab] = useState<"posts" | "reels">("posts");
+  
   // Date range state - weekly reports reset every Tuesday
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
@@ -1318,10 +1322,33 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       );
     };
 
+    // Compute separate engagement rates for Posts vs Reels
+    const contentForPlatform = platform === "instagram" ? instagramContent : facebookContent;
+    const postsContent = contentForPlatform.filter(c => c.content_type === "post" || c.content_type === "carousel");
+    const reelsContent = contentForPlatform.filter(c => c.content_type === "reel" || c.content_type === "video");
+    
+    // Calculate engagement rate for posts
+    const calcEngagementRate = (items: typeof contentForPlatform) => {
+      if (items.length === 0 || !currentFollowers) return null;
+      const totalEngagements = items.reduce((sum, item) => {
+        const engagements = item.metrics?.engagements || 
+          ((item.metrics?.likes || 0) + (item.metrics?.comments || 0) + (item.metrics?.shares || 0));
+        return sum + engagements;
+      }, 0);
+      return items.length > 0 ? (totalEngagements / items.length / currentFollowers) * 100 : null;
+    };
+    
+    const postsEngagement = calcEngagementRate(postsContent);
+    const reelsEngagement = calcEngagementRate(reelsContent);
+    
+    // Use overall engagement as fallback
+    const displayPostsEngagement = postsEngagement ?? currentEngagement;
+    const displayReelsEngagement = reelsEngagement ?? currentEngagement;
+
     return (
       <div className="space-y-4">
-        {/* KPI Cards: Followers, Engagement Rate, Total Posts, Reporting Period */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* KPI Cards: Followers, Engagement Rate (Posts), Engagement Rate (Reels), Total Posts, Reporting Period */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -1345,19 +1372,28 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <TrendingUp className="h-4 w-4" />
-                <span className="text-sm">Engagement Rate</span>
+                <span className="text-sm">Engagement (Posts)</span>
               </div>
               <p className="text-2xl font-bold">
-                {currentEngagement != null ? `${currentEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+                {displayPostsEngagement != null ? `${displayPostsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
               </p>
-              {prevEngagement != null && currentEngagement != null && (
-                <>
-                  <span className="text-xs text-muted-foreground">
-                    vs {prevEngagement.toFixed(2)}%
-                  </span>
-                  {renderWoWTooltip(currentEngagement, prevEngagement, true)}
-                </>
-              )}
+              <span className="text-xs text-muted-foreground">
+                {postsContent.length} posts
+              </span>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <TrendingUp className="h-4 w-4" />
+                <span className="text-sm">Engagement (Reels)</span>
+              </div>
+              <p className="text-2xl font-bold">
+                {displayReelsEngagement != null ? `${displayReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+              </p>
+              <span className="text-xs text-muted-foreground">
+                {reelsContent.length} reels
+              </span>
             </CardContent>
           </Card>
           <Card>
@@ -1406,183 +1442,260 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     );
   };
 
-  const renderContentTable = (content: (MetaContent & { metrics?: MetaContentMetrics })[], platform: MetaPlatform) => (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          Recent Posts
-          {syncingContent && (
-            <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {syncingContent ? (
-          <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <Skeleton className="h-4 w-[200px]" />
-                <Skeleton className="h-4 w-[60px]" />
-                <Skeleton className="h-4 w-[80px]" />
-                <Skeleton className="h-4 w-[60px]" />
-                <Skeleton className="h-4 w-[60px]" />
-                <Skeleton className="h-4 w-[60px]" />
-              </div>
-            ))}
+  // Build a valid URL for a post
+  const buildPostUrl = (post: MetaContent, platform: MetaPlatform): string | null => {
+    // If we have a direct URL, use it
+    if (post.url && (post.url.startsWith("http://") || post.url.startsWith("https://"))) {
+      return post.url;
+    }
+    
+    // Try to build URL from content_id
+    if (post.content_id) {
+      // Instagram URLs
+      if (platform === "instagram") {
+        // Instagram post IDs are typically numeric
+        const cleanId = post.content_id.replace(/^ig_/, "").replace(/[^a-zA-Z0-9_-]/g, "");
+        if (cleanId) {
+          // Try shortcode-based URL (most common)
+          return `https://www.instagram.com/p/${cleanId}/`;
+        }
+      }
+      // Facebook URLs
+      if (platform === "facebook") {
+        const cleanId = post.content_id.replace(/^fb_/, "").replace(/[^a-zA-Z0-9_-]/g, "");
+        if (cleanId) {
+          return `https://www.facebook.com/${cleanId}`;
+        }
+      }
+    }
+    
+    return null;
+  };
+
+  const renderContentTable = (content: (MetaContent & { metrics?: MetaContentMetrics })[], platform: MetaPlatform) => {
+    // Filter content by type
+    const contentTab = platform === "instagram" ? instagramContentTab : facebookContentTab;
+    const setContentTab = platform === "instagram" ? setInstagramContentTab : setFacebookContentTab;
+    
+    // Determine what constitutes "posts" vs "reels" based on platform
+    // IG: reel = reel, post = post/carousel
+    // FB: reel = video, post = post
+    const isReel = (type: string) => type === "reel" || type === "video";
+    const isPost = (type: string) => type === "post" || type === "carousel";
+    
+    const filteredContent = content.filter(item => {
+      if (contentTab === "reels") {
+        return isReel(item.content_type);
+      }
+      return isPost(item.content_type);
+    });
+    
+    const postsCount = content.filter(item => isPost(item.content_type)).length;
+    const reelsCount = content.filter(item => isReel(item.content_type)).length;
+
+    // Platform-specific column headers
+    // IG Posts: Impressions, Organic Reach
+    // IG Reels: Organic Views, Reach
+    // FB Posts: Views, Reach
+    // FB Reels: Video Views, Reach
+    const getViewsHeader = () => {
+      if (platform === "instagram") {
+        return contentTab === "reels" ? "Organic Views" : "Impressions";
+      }
+      return contentTab === "reels" ? "Video Views" : "Views";
+    };
+    
+    const getReachHeader = () => {
+      if (platform === "instagram") {
+        return contentTab === "posts" ? "Organic Reach" : "Reach";
+      }
+      return "Reach";
+    };
+
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              Recent Content
+              {syncingContent && (
+                <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </CardTitle>
+            <Tabs value={contentTab} onValueChange={(v) => setContentTab(v as "posts" | "reels")}>
+              <TabsList className="h-8">
+                <TabsTrigger value="posts" className="text-xs px-3 py-1">
+                  📷 Posts ({postsCount})
+                </TabsTrigger>
+                <TabsTrigger value="reels" className="text-xs px-3 py-1">
+                  🎬 Reels ({reelsCount})
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-        ) : content.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No {platform === "instagram" ? "Instagram" : "Facebook"} posts synced yet</p>
-            <p className="text-sm mt-2">
-              Click 'Sync' to fetch your latest posts
-            </p>
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Content</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <Eye className="h-3 w-3" />
-                    {platform === "instagram" ? "Views" : "Impressions"}
-                  </div>
-                </TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    Reach
-                  </div>
-                </TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <Heart className="h-3 w-3" />
-                    Likes
-                  </div>
-                </TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <MessageSquare className="h-3 w-3" />
-                    Comments
-                  </div>
-                </TableHead>
-                {platform === "instagram" ? (
-                  <TableHead>Saved</TableHead>
-                ) : (
+        </CardHeader>
+        <CardContent>
+          {syncingContent ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-4 w-[200px]" />
+                  <Skeleton className="h-4 w-[60px]" />
+                  <Skeleton className="h-4 w-[80px]" />
+                  <Skeleton className="h-4 w-[60px]" />
+                  <Skeleton className="h-4 w-[60px]" />
+                  <Skeleton className="h-4 w-[60px]" />
+                </div>
+              ))}
+            </div>
+          ) : filteredContent.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No {platform === "instagram" ? "Instagram" : "Facebook"} {contentTab} synced yet</p>
+              <p className="text-sm mt-2">
+                Click 'Sync' to fetch your latest content
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Content</TableHead>
+                  <TableHead>Timestamp</TableHead>
                   <TableHead>
                     <div className="flex items-center gap-1">
-                      <Share2 className="h-3 w-3" />
-                      Shares
+                      <Eye className="h-3 w-3" />
+                      {getViewsHeader()}
                     </div>
                   </TableHead>
-                )}
-                <TableHead>
-                  <div className="flex items-center gap-1">
-                    <TrendingUp className="h-3 w-3" />
-                    Interactions
-                  </div>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {content.map((post) => {
-                // Try to get a valid URL - check url field, or try content_id for Instagram/Facebook
-                const postUrl = post.url || null;
-                const displayTitle = post.title?.substring(0, 50) || "View Post";
-                const truncatedTitle = post.title && post.title.length > 50 ? displayTitle + "..." : displayTitle;
-                
-                return (
-                <TableRow key={post.id}>
-                  <TableCell className="max-w-[250px]">
-                    {postUrl ? (
-                      <a
-                        href={postUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1"
-                      >
-                        <span className="truncate">{truncatedTitle}</span>
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                      </a>
-                    ) : (
-                      <span className="text-foreground truncate" title={post.title || undefined}>
-                        {truncatedTitle !== "View Post" ? truncatedTitle : "—"}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span title={post.content_type}>
-                      {getContentTypeIcon(post.content_type)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
-                  <TableCell>
-                    {(() => {
-                      // Views for IG, Impressions for FB
-                      const views = post.metrics?.views || post.metrics?.impressions;
-                      return views ? views.toLocaleString() : "—";
-                    })()}
-                  </TableCell>
-                  <TableCell>
-                    {(() => {
-                      const reach = post.metrics?.reach;
-                      const impressions = post.metrics?.impressions;
-                      const likes = post.metrics?.likes || 0;
-                      const comments = post.metrics?.comments || 0;
-                      const shares = post.metrics?.shares || 0;
-                      const hasEngagement = likes > 0 || comments > 0 || shares > 0;
-                      
-                      // For Facebook, fallback to impressions if reach is 0/null
-                      if (platform === "facebook" && (reach === 0 || reach == null) && impressions && impressions > 0) {
-                        return impressions.toLocaleString();
-                      }
-                      
-                      if ((reach === 0 || reach == null) && hasEngagement) {
-                        return (
-                          <span className="text-muted-foreground cursor-help" title="Reach unavailable">
-                            N/A
-                          </span>
-                        );
-                      }
-                      return reach?.toLocaleString() || "—";
-                    })()}
-                  </TableCell>
-                  <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
-                  <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {getReachHeader()}
+                    </div>
+                  </TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <Heart className="h-3 w-3" />
+                      Likes
+                    </div>
+                  </TableHead>
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      Comments
+                    </div>
+                  </TableHead>
                   {platform === "instagram" ? (
+                    <TableHead>Saved</TableHead>
+                  ) : (
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <Share2 className="h-3 w-3" />
+                        Shares
+                      </div>
+                    </TableHead>
+                  )}
+                  <TableHead>
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      Interactions
+                    </div>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredContent.map((post) => {
+                  // Build a valid URL for the post
+                  const postUrl = buildPostUrl(post, platform);
+                  const displayTitle = post.title?.substring(0, 50) || "View Post";
+                  const truncatedTitle = post.title && post.title.length > 50 ? displayTitle + "..." : displayTitle;
+                  
+                  return (
+                  <TableRow key={post.id}>
+                    <TableCell className="max-w-[250px]">
+                      {postUrl ? (
+                        <a
+                          href={postUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1"
+                        >
+                          <span className="truncate">{truncatedTitle}</span>
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        </a>
+                      ) : (
+                        <span className="text-foreground truncate" title={post.title || undefined}>
+                          {truncatedTitle !== "View Post" ? truncatedTitle : "—"}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
                     <TableCell>
-                      {/* Saved - calculate from engagements minus likes/comments/shares */}
                       {(() => {
-                        const engagements = post.metrics?.engagements || 0;
+                        // Views/Impressions based on platform and content type
+                        const views = post.metrics?.views || post.metrics?.impressions;
+                        return views ? views.toLocaleString() : "—";
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const reach = post.metrics?.reach;
+                        const impressions = post.metrics?.impressions;
                         const likes = post.metrics?.likes || 0;
                         const comments = post.metrics?.comments || 0;
                         const shares = post.metrics?.shares || 0;
-                        // Saved = engagements - likes - comments - shares (approximate)
-                        const saved = Math.max(0, engagements - likes - comments - shares);
-                        return saved > 0 ? saved.toLocaleString() : "—";
+                        const hasEngagement = likes > 0 || comments > 0 || shares > 0;
+                        
+                        // For Facebook, fallback to impressions if reach is 0/null
+                        if (platform === "facebook" && (reach === 0 || reach == null) && impressions && impressions > 0) {
+                          return impressions.toLocaleString();
+                        }
+                        
+                        if ((reach === 0 || reach == null) && hasEngagement) {
+                          return (
+                            <span className="text-muted-foreground cursor-help" title="Reach unavailable">
+                              N/A
+                            </span>
+                          );
+                        }
+                        return reach?.toLocaleString() || "—";
                       })()}
                     </TableCell>
-                  ) : (
-                    <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
-                  )}
-                  <TableCell>
-                    {(() => {
-                      const interactions = post.metrics?.engagements || 0;
-                      return interactions > 0 ? interactions.toLocaleString() : "—";
-                    })()}
-                  </TableCell>
-                </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  );
+                    <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
+                    <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
+                    {platform === "instagram" ? (
+                      <TableCell>
+                        {/* Saved - calculate from engagements minus likes/comments/shares */}
+                        {(() => {
+                          const engagements = post.metrics?.engagements || 0;
+                          const likes = post.metrics?.likes || 0;
+                          const comments = post.metrics?.comments || 0;
+                          const shares = post.metrics?.shares || 0;
+                          // Saved = engagements - likes - comments - shares (approximate)
+                          const saved = Math.max(0, engagements - likes - comments - shares);
+                          return saved > 0 ? saved.toLocaleString() : "—";
+                        })()}
+                      </TableCell>
+                    ) : (
+                      <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
+                    )}
+                    <TableCell>
+                      {(() => {
+                        const interactions = post.metrics?.engagements || 0;
+                        return interactions > 0 ? interactions.toLocaleString() : "—";
+                      })()}
+                    </TableCell>
+                  </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Render sync details panel
   const renderSyncDetailsPanel = () => {
