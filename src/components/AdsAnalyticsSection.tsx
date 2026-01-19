@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { RefreshCw, CalendarIcon, ChevronDown, ChevronRight } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format, subDays, startOfDay, endOfDay, eachDayOfInterval, parseISO } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
 import {
   AreaChart,
   Area,
@@ -57,9 +57,22 @@ interface AggregatedData {
   campaigns: Campaign[];
 }
 
+interface TimelineDataPoint {
+  date: string;
+  value: number;
+}
+
+interface TimelineData {
+  spend: TimelineDataPoint[];
+  impressions: TimelineDataPoint[];
+  reach: TimelineDataPoint[];
+  clicks: TimelineDataPoint[];
+}
+
 interface AdsData {
   current: AggregatedData;
   previous: AggregatedData;
+  timeline: TimelineData;
 }
 
 interface DateRange {
@@ -102,30 +115,77 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     };
   };
 
-  // Generate mock daily data for charts (since we don't have daily endpoint)
-  const generateDailyData = (data: AggregatedData | null, range: DateRange) => {
-    if (!data) return [];
+  // Merge timeline data into chart-ready format
+  const buildChartData = (timeline: TimelineData | undefined) => {
+    if (!timeline) return [];
     
-    const days = eachDayOfInterval({ start: range.from, end: range.to });
-    const numDays = days.length;
+    // Create a map of dates to all metrics
+    const dateMap = new Map<string, {
+      date: string;
+      displayDate: string;
+      spend: number;
+      impressions: number;
+      reach: number;
+      clicks: number;
+      cpm: number;
+      cpc: number;
+      ctr: number;
+    }>();
     
-    // Distribute totals across days with some variance
-    return days.map((day, index) => {
-      const variance = 0.5 + Math.random();
-      const weight = variance / numDays;
-      
-      return {
-        date: format(day, "MMM d"),
-        fullDate: format(day, "yyyy-MM-dd"),
-        impressions: Math.round((data.impressions / numDays) * variance),
-        reach: Math.round((data.reach / numDays) * variance),
-        spend: Number(((data.spend / numDays) * variance).toFixed(2)),
-        clicks: Math.round((data.clicks / numDays) * variance),
-        cpm: data.impressions > 0 ? Number(((data.spend / data.impressions) * 1000 * variance).toFixed(2)) : 0,
-        cpc: data.clicks > 0 ? Number(((data.spend / data.clicks) * variance).toFixed(2)) : 0,
-        ctr: data.impressions > 0 ? Number(((data.clicks / data.impressions) * 100 * variance).toFixed(2)) : 0,
+    // Helper to format date for display
+    const formatDisplayDate = (dateStr: string) => {
+      try {
+        const date = parseISO(dateStr);
+        return format(date, "MMM d");
+      } catch {
+        return dateStr;
+      }
+    };
+    
+    // Merge all timeline metrics by date
+    timeline.spend.forEach(({ date, value }) => {
+      const existing = dateMap.get(date) || { 
+        date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
       };
+      existing.spend = value;
+      dateMap.set(date, existing);
     });
+    
+    timeline.impressions.forEach(({ date, value }) => {
+      const existing = dateMap.get(date) || { 
+        date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
+      };
+      existing.impressions = value;
+      dateMap.set(date, existing);
+    });
+    
+    timeline.reach.forEach(({ date, value }) => {
+      const existing = dateMap.get(date) || { 
+        date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
+      };
+      existing.reach = value;
+      dateMap.set(date, existing);
+    });
+    
+    timeline.clicks.forEach(({ date, value }) => {
+      const existing = dateMap.get(date) || { 
+        date, displayDate: formatDisplayDate(date), spend: 0, impressions: 0, reach: 0, clicks: 0, cpm: 0, cpc: 0, ctr: 0 
+      };
+      existing.clicks = value;
+      dateMap.set(date, existing);
+    });
+    
+    // Compute rates for each day
+    const chartData = Array.from(dateMap.values())
+      .map(day => ({
+        ...day,
+        cpm: day.impressions > 0 ? (day.spend / day.impressions) * 1000 : 0,
+        cpc: day.clicks > 0 ? day.spend / day.clicks : 0,
+        ctr: day.impressions > 0 ? (day.clicks / day.impressions) * 100 : 0,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    
+    return chartData;
   };
 
   const fetchAdsData = async () => {
@@ -246,7 +306,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   }
 
   const hasData = metaAds !== null;
-  const dailyData = hasData ? generateDailyData(metaAds.current, dateRange) : [];
+  const chartData = hasData ? buildChartData(metaAds.timeline) : [];
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -394,7 +454,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
               </div>
               <div className="p-4">
                 <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={dailyData}>
+                  <ComposedChart data={chartData}>
                     <defs>
                       <linearGradient id="reachGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
@@ -403,7 +463,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis 
-                      dataKey="date" 
+                      dataKey="displayDate" 
                       tickLine={false} 
                       axisLine={false} 
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
@@ -450,7 +510,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
               </div>
               <div className="p-4">
                 <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={dailyData}>
+                  <ComposedChart data={chartData}>
                     <defs>
                       <linearGradient id="clicksGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
@@ -459,7 +519,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis 
-                      dataKey="date" 
+                      dataKey="displayDate" 
                       tickLine={false} 
                       axisLine={false} 
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
@@ -515,7 +575,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
               </div>
               <div className="p-4">
                 <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={dailyData}>
+                  <ComposedChart data={chartData}>
                     <defs>
                       <linearGradient id="cpmGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
@@ -524,7 +584,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis 
-                      dataKey="date" 
+                      dataKey="displayDate" 
                       tickLine={false} 
                       axisLine={false} 
                       tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
