@@ -243,11 +243,16 @@ This script will:
       };
     }) : undefined);
 
-  // Normalize topPages - handle both url and path formats
-  const normalizedTopPages = analytics?.topPages?.map((page: { url?: string; path?: string; views: number }) => ({
-    url: page.url || page.path || '/',
-    views: page.views,
-  }));
+  // Normalize topPages - handle both url and path formats, filter out dashboard/admin paths
+  const dashboardPaths = ['/admin', '/client/', '/login', '/reset-password', '/web-analytics', '/youtube-analytics', '/tiktok-analytics', '/x-analytics', '/meta-analytics', '/linkedin-analytics', '/analytics/', '/report/'];
+  const normalizedTopPages = analytics?.topPages
+    ?.map((page: { url?: string; path?: string; views: number }) => ({
+      url: page.url || page.path || '/',
+      views: page.views,
+    }))
+    .filter((page: { url: string; views: number }) => 
+      !dashboardPaths.some(dashPath => page.url.startsWith(dashPath))
+    );
   
   const normalizedAnalytics = analytics 
     ? {
