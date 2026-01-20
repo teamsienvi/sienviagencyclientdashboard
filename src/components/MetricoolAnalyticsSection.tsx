@@ -163,6 +163,158 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
+  // Automatically fetch live followers from Metricool API on config load
+  useQuery({
+    queryKey: ["metricool-live-followers", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
+    queryFn: async () => {
+      if (!config) return null;
+      
+      const { start, end } = getDateRange();
+      const startDate = format(startOfDay(start), "yyyy-MM-dd");
+      const endDate = format(endOfDay(end), "yyyy-MM-dd");
+      
+      // Calculate previous period
+      const periodDuration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - periodDuration);
+      const prevEnd = new Date(start.getTime() - 1);
+      const prevStartDate = format(startOfDay(prevStart), "yyyy-MM-dd");
+      const prevEndDate = format(endOfDay(prevEnd), "yyyy-MM-dd");
+      
+      const { data, error } = await supabase.functions.invoke("metricool-tiktok-followers", {
+        body: {
+          userId: config.user_id,
+          blogId: config.blog_id,
+          from: `${startDate}T00:00:00+08:00`,
+          to: `${endDate}T23:59:59+08:00`,
+          timezone: "Asia/Shanghai",
+        },
+      });
+      
+      if (!error && data?.success && data?.data?.data?.[0]?.values) {
+        const values = data.data.data[0].values;
+        if (values.length > 0) {
+          // Get last point as current followers
+          const sorted = [...values].sort((a: any, b: any) => 
+            new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()
+          );
+          const currentFollowers = sorted[0]?.value ?? null;
+          if (currentFollowers !== null) {
+            setLiveFollowers(currentFollowers);
+          }
+          
+          // Set follower timeline for chart
+          const normalizeDateTime = (s: string) => s.replace(/([+-]\d{2})(\d{2})$/, "$1:$2");
+          const formattedTimeline = values.map((point: { dateTime: string; value: number }) => ({
+            date: format(new Date(normalizeDateTime(point.dateTime)), "MMM d"),
+            followers: point.value ?? 0,
+          }));
+          setFollowerTimeline(formattedTimeline);
+        }
+      }
+      
+      // Also fetch previous period to get WoW comparison
+      const { data: prevData } = await supabase.functions.invoke("metricool-tiktok-followers", {
+        body: {
+          userId: config.user_id,
+          blogId: config.blog_id,
+          from: `${prevStartDate}T00:00:00+08:00`,
+          to: `${prevEndDate}T23:59:59+08:00`,
+          timezone: "Asia/Shanghai",
+        },
+      });
+      
+      if (prevData?.success && prevData?.data?.data?.[0]?.values) {
+        const prevValues = prevData.data.data[0].values;
+        if (prevValues.length > 0) {
+          const sorted = [...prevValues].sort((a: any, b: any) => 
+            new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()
+          );
+          const prevFollowers = sorted[0]?.value ?? null;
+          if (prevFollowers !== null) {
+            setPrevMetrics(prev => ({
+              ...prev,
+              followers: prevFollowers,
+              engagement_rate: prev?.engagement_rate ?? null,
+              total_content: prev?.total_content ?? null,
+              total_views: prev?.total_views ?? null,
+              total_likes: prev?.total_likes ?? null,
+            }));
+          }
+        }
+      }
+      
+      return data;
+    },
+    enabled: !!config && platform === "tiktok",
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Automatically fetch live followers for LinkedIn using metricool-social-weekly
+  useQuery({
+    queryKey: ["metricool-linkedin-live-followers", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
+    queryFn: async () => {
+      if (!config) return null;
+      
+      const { start, end } = getDateRange();
+      const startDate = format(startOfDay(start), "yyyy-MM-dd");
+      const endDate = format(endOfDay(end), "yyyy-MM-dd");
+      
+      // Calculate previous period
+      const periodDuration = end.getTime() - start.getTime();
+      const prevStart = new Date(start.getTime() - periodDuration);
+      const prevEnd = new Date(start.getTime() - 1);
+      const prevStartDate = format(startOfDay(prevStart), "yyyy-MM-dd");
+      const prevEndDate = format(endOfDay(prevEnd), "yyyy-MM-dd");
+      
+      const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
+        body: {
+          clientId,
+          platform: "linkedin",
+          from: startDate,
+          to: endDate,
+          prevFrom: prevStartDate,
+          prevTo: prevEndDate,
+          timezone: "America/Chicago",
+        },
+      });
+      
+      if (!error && data?.success && data?.data?.current?.followersDebug?.lastPoint) {
+        const currentFollowers = data.data.current.followersDebug.lastPoint.value;
+        if (currentFollowers !== null && currentFollowers !== undefined) {
+          setLiveFollowers(currentFollowers);
+        }
+        
+        // Set timeline if available
+        if (data.data.current.followersTimeline?.length > 0) {
+          const formattedTimeline = data.data.current.followersTimeline.map((point: { dateTime: string; value: number }) => ({
+            date: format(new Date(point.dateTime), "MMM d"),
+            followers: point.value ?? 0,
+          }));
+          setFollowerTimeline(formattedTimeline);
+        }
+        
+        // Get previous period followers
+        if (data.data.previous?.followersDebug?.lastPoint) {
+          const prevFollowers = data.data.previous.followersDebug.lastPoint.value;
+          if (prevFollowers !== null && prevFollowers !== undefined) {
+            setPrevMetrics(prev => ({
+              ...prev,
+              followers: prevFollowers,
+              engagement_rate: prev?.engagement_rate ?? null,
+              total_content: prev?.total_content ?? null,
+              total_views: prev?.total_views ?? null,
+              total_likes: prev?.total_likes ?? null,
+            }));
+          }
+        }
+      }
+      
+      return data;
+    },
+    enabled: !!config && platform === "linkedin",
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
   // Fetch latest account metrics with date range
   const { data: accountMetrics, isLoading: metricsLoading, refetch: refetchMetrics } = useQuery({
     queryKey: ["metricool-account-metrics", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],

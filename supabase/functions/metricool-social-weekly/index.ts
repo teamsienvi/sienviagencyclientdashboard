@@ -241,8 +241,13 @@ serve(async (req) => {
       };
 
       // CRITICAL: Use platform-specific metric for followers
-      // Instagram: "followers" | Facebook: "pageFollows"
-      const followersMetric = platform === "facebook" ? "pageFollows" : "followers";
+      // Instagram: "followers" | Facebook: "pageFollows" | LinkedIn: "followers" | TikTok: "followers"
+      const getFollowersMetric = (p: string) => {
+        if (p === "facebook") return "pageFollows";
+        if (p === "linkedin") return "followers";
+        return "followers"; // Instagram and TikTok use "followers"
+      };
+      const followersMetric = getFollowersMetric(platform);
 
       console.log(`Using followers metric "${followersMetric}" for platform "${platform}"`);
 
