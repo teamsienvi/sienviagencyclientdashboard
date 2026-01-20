@@ -221,29 +221,118 @@ serve(async (req) => {
     const bounceRate = totalSessions > 0 ? (bounceSessions / totalSessions) * 100 : 0;
     const avgPagesPerSession = totalSessions > 0 ? totalPageViews / totalSessions : 0;
 
-    // Traffic sources breakdown
-    const trafficSources: Record<string, number> = {};
-    sessionList.forEach(session => {
-      let source = 'Direct';
-      if (session.utm_source) {
-        source = session.utm_source;
-      } else if (session.referrer) {
-        try {
-          const url = new URL(session.referrer);
-          source = url.hostname.replace('www.', '');
-        } catch {
-          source = 'Referral';
-        }
+    // Traffic sources breakdown (Direct / Organic / Social / Referral / Email / Paid)
+    const trafficSourceCounts: Record<string, number> = {
+      Direct: 0,
+      Organic: 0,
+      Social: 0,
+      Referral: 0,
+      Email: 0,
+      Paid: 0,
+    };
+
+    const searchHostnames = [
+      "google.com",
+      "bing.com",
+      "yahoo.com",
+      "duckduckgo.com",
+      "baidu.com",
+      "yandex.com",
+    ];
+
+    const socialHostnames = [
+      "facebook.com",
+      "m.facebook.com",
+      "l.facebook.com",
+      "instagram.com",
+      "l.instagram.com",
+      "twitter.com",
+      "t.co",
+      "linkedin.com",
+      "tiktok.com",
+      "youtube.com",
+      "pinterest.com",
+      "reddit.com",
+    ];
+
+    const getHostname = (referrer: string): string => {
+      try {
+        return new URL(referrer).hostname.replace(/^www\./, "");
+      } catch {
+        return "";
       }
-      trafficSources[source] = (trafficSources[source] || 0) + 1;
+    };
+
+    const categorizeTrafficSource = (item: any): keyof typeof trafficSourceCounts => {
+      const utmMedium = String(item.utm_medium || "").toLowerCase();
+      const utmSource = String(item.utm_source || "").toLowerCase();
+      const referrer = String(item.referrer || "");
+      const hostname = referrer ? getHostname(referrer) : "";
+
+      if (["cpc", "ppc", "paid", "paid_social", "display"].includes(utmMedium)) return "Paid";
+      if (utmMedium === "email" || utmSource.includes("mail") || hostname.includes("mail")) return "Email";
+
+      if (!utmSource && !hostname) return "Direct";
+
+      // Prefer explicit utm_source when it matches a known category
+      if (searchHostnames.some((se) => utmSource.includes(se.split(".")[0]) || utmSource.includes(se))) return "Organic";
+      if (socialHostnames.some((sp) => utmSource.includes(sp.split(".")[0]) || utmSource.includes(sp))) return "Social";
+
+      if (hostname) {
+        if (searchHostnames.includes(hostname)) return "Organic";
+        if (socialHostnames.includes(hostname)) return "Social";
+        return "Referral";
+      }
+
+      // If utm_source exists but isn't recognized, treat as Referral rather than Direct
+      return "Referral";
+    };
+
+    const dataForAttribution = sessionList.length > 0 ? sessionList : pageViewList;
+    dataForAttribution.forEach((item: any) => {
+      const source = categorizeTrafficSource(item);
+      trafficSourceCounts[source] = (trafficSourceCounts[source] || 0) + 1;
     });
 
-    // Device breakdown
-    const deviceBreakdown: Record<string, number> = { desktop: 0, mobile: 0, tablet: 0 };
-    sessionList.forEach(session => {
-      const device = session.device_type || 'desktop';
-      deviceBreakdown[device] = (deviceBreakdown[device] || 0) + 1;
+    const trafficSourcesArr = Object.entries(trafficSourceCounts)
+      .map(([source, count]) => ({ source, count }))
+      .filter((s) => s.count > 0)
+      .sort((a, b) => b.count - a.count);
+
+    // Device breakdown (Desktop / Mobile / Tablet)
+    const deviceCounts: Record<string, number> = {
+      Desktop: 0,
+      Mobile: 0,
+      Tablet: 0,
+    };
+
+    const detectDevice = (item: any): keyof typeof deviceCounts => {
+      const explicit = String(item.device_type || item.device || "").toLowerCase();
+      const ua = String(item.user_agent || item.ua || "").toLowerCase();
+
+      if (explicit) {
+        if (explicit.includes("mobile") || explicit.includes("phone")) return "Mobile";
+        if (explicit.includes("tablet") || explicit.includes("ipad")) return "Tablet";
+        return "Desktop";
+      }
+
+      if (ua) {
+        if (/tablet|ipad/i.test(ua)) return "Tablet";
+        if (/mobile|android|iphone|ipod|blackberry|opera mini|iemobile/i.test(ua)) return "Mobile";
+      }
+
+      return "Desktop";
+    };
+
+    dataForAttribution.forEach((item: any) => {
+      const device = detectDevice(item);
+      deviceCounts[device] = (deviceCounts[device] || 0) + 1;
     });
+
+    const devicesArr = Object.entries(deviceCounts)
+      .map(([device, count]) => ({ device, count }))
+      .filter((d) => d.count > 0)
+      .sort((a, b) => b.count - a.count);
 
     // Daily breakdown
     const dailyData: Record<string, { sessions: number; pageViews: number }> = {};
@@ -258,12 +347,41 @@ serve(async (req) => {
       dailyData[date].pageViews++;
     });
 
-    // Top pages
+    // Top pages (normalize to pathname, drop query params, filter dashboard paths)
+    const dashboardPaths = [
+      "/admin",
+      "/client/",
+      "/login",
+      "/reset-password",
+      "/web-analytics",
+      "/youtube-analytics",
+      "/tiktok-analytics",
+      "/x-analytics",
+      "/meta-analytics",
+      "/linkedin-analytics",
+      "/analytics/",
+      "/report/",
+    ];
+
+    const normalizePath = (raw: string): string => {
+      if (!raw) return "";
+      // If it's a full URL, keep only pathname; otherwise treat as path.
+      try {
+        const url = new URL(raw);
+        return url.pathname || "/";
+      } catch {
+        return raw.split("?")[0] || "/";
+      }
+    };
+
     const pageCounts: Record<string, number> = {};
-    pageViewList.forEach(pv => {
-      const page = pv.page_url;
-      pageCounts[page] = (pageCounts[page] || 0) + 1;
+    pageViewList.forEach((pv) => {
+      const path = normalizePath(pv.page_url);
+      if (!path) return;
+      if (dashboardPaths.some((dashPath) => path.startsWith(dashPath))) return;
+      pageCounts[path] = (pageCounts[path] || 0) + 1;
     });
+
     const topPages = Object.entries(pageCounts)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
@@ -278,12 +396,12 @@ serve(async (req) => {
         avgPagesPerSession: Math.round(avgPagesPerSession * 10) / 10,
         avgSessionDuration: 0, // Would need timestamps to calculate
       },
-      trafficSources: Object.entries(trafficSources).map(([source, sessions]) => ({
+      trafficSources: trafficSourcesArr.map(({ source, count }) => ({
         source,
-        sessions,
-        percentage: totalSessions > 0 ? Math.round((sessions / totalSessions) * 1000) / 10 : 0,
+        sessions: count,
+        percentage: totalSessions > 0 ? Math.round((count / totalSessions) * 1000) / 10 : 0,
       })),
-      deviceBreakdown: Object.entries(deviceBreakdown).map(([device, count]) => ({
+      deviceBreakdown: devicesArr.map(({ device, count }) => ({
         device,
         sessions: count,
         percentage: totalSessions > 0 ? Math.round((count / totalSessions) * 1000) / 10 : 0,
@@ -297,6 +415,7 @@ serve(async (req) => {
         })),
       topPages,
     };
+
 
     console.log('Analytics fetched successfully from local tables for client:', client.name);
 
