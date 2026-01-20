@@ -367,21 +367,21 @@ serve(async (req) => {
         console.log(`Reels engagement (${fromDate} to ${toDate}): ${result.reelsEngagement?.toFixed(2)}%`);
       }
 
-      // Combined engagement (average of posts and reels if both exist)
-      if (result.postsEngagement != null && result.reelsEngagement != null) {
-        result.engagementAgg = (result.postsEngagement + result.reelsEngagement) / 2;
-      } else if (result.postsEngagement != null) {
+      // Combined engagement - use posts engagement as the primary value for Facebook
+      // (Metricool's "Engagement Rate" in Organic Summary is based on posts, not average)
+      // For Instagram, we show them separately
+      if (result.postsEngagement != null) {
         result.engagementAgg = result.postsEngagement;
       } else if (result.reelsEngagement != null) {
         result.engagementAgg = result.reelsEngagement;
       }
 
-      // Process posts CSV data - just for counts
+      // Process posts CSV data - count TOTAL content (posts + reels)
       if (postsCSVRes.status === 'fulfilled') {
         const { postsCount, reelsCount } = postsCSVRes.value;
-        result.postsCount = postsCount;
-        result.reelsCount = reelsCount;
-        console.log(`Posts/Reels count (${fromDate} to ${toDate}): ${postsCount} posts, ${reelsCount} reels`);
+        result.postsCount = postsCount + reelsCount; // Total content count
+        result.reelsCount = reelsCount; // Keep track of reels separately for reference
+        console.log(`Total content (${fromDate} to ${toDate}): ${postsCount + reelsCount} (${postsCount} posts + ${reelsCount} reels)`);
       } else {
         errors.push(`posts_csv ${fromDate}: ${postsCSVRes.reason}`);
       }
