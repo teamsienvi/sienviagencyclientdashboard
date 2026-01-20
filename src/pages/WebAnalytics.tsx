@@ -218,6 +218,31 @@ This script will:
 
   // Normalize analytics data - handle both legacy external format and new local format
   const analytics = analyticsData?.analytics || null;
+  
+  // Convert external sources format to trafficSources format
+  const normalizedTrafficSources = analytics?.trafficSources || (analytics?.sources ? 
+    analytics.sources.map((s: { source: string; count: number }) => {
+      const totalCount = analytics.sources!.reduce((sum: number, item: { count: number }) => sum + item.count, 0);
+      return {
+        source: s.source,
+        visitors: s.count,
+        sessions: s.count,
+        percentage: totalCount > 0 ? Math.round((s.count / totalCount) * 100) : 0,
+      };
+    }) : undefined);
+
+  // Convert external devices format to deviceBreakdown format
+  const normalizedDeviceBreakdown = analytics?.deviceBreakdown || (analytics?.devices ?
+    analytics.devices.map((d: { device: string; count: number }) => {
+      const totalCount = analytics.devices!.reduce((sum: number, item: { count: number }) => sum + item.count, 0);
+      return {
+        device: d.device.charAt(0).toUpperCase() + d.device.slice(1),
+        visitors: d.count,
+        sessions: d.count,
+        percentage: totalCount > 0 ? Math.round((d.count / totalCount) * 100) : 0,
+      };
+    }) : undefined);
+  
   const normalizedAnalytics = analytics 
     ? {
         // Support both legacy (visitors/pageViews) and new format (summary.uniqueVisitors/summary.totalPageViews)
@@ -228,8 +253,8 @@ This script will:
         bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
         pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ?? 
           (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
-        trafficSources: analytics.trafficSources,
-        deviceBreakdown: analytics.deviceBreakdown,
+        trafficSources: normalizedTrafficSources,
+        deviceBreakdown: normalizedDeviceBreakdown,
         dailyBreakdown: analytics.dailyBreakdown,
         topPages: analytics.topPages,
       }
