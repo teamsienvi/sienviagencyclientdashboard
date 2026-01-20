@@ -489,8 +489,8 @@ const ClientDashboard = () => {
                   </Card>
                 )}
 
-                {/* Ads Analytics - Only for Snarky Pets */}
-                {clientId === "d8a121fe-cdd9-4e19-90dc-dd32b159f973" && (
+                {/* Ads Analytics - Show for clients with meta_ads config */}
+                {(clientId === "d8a121fe-cdd9-4e19-90dc-dd32b159f973" || clientId === "ef580ebf-439f-4305-826a-f1f8aa89fd03") && (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/ads-analytics/${clientId}`)}
