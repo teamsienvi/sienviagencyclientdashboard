@@ -1,0 +1,376 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.87.1";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface SyncResult {
+  clientId: string;
+  clientName: string;
+  platform: string;
+  success: boolean;
+  data?: any;
+  error?: string;
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const METRICOOL_AUTH = Deno.env.get("METRICOOL_AUTH");
+
+    if (!METRICOOL_AUTH) {
+      return new Response(
+        JSON.stringify({ success: false, error: "METRICOOL_AUTH not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const METRICOOL_BASE_URL = "https://app.metricool.com";
+    const timezone = "America/Los_Angeles";
+
+    // Calculate reporting periods (previous completed week = Jan 13-19 if today is Jan 20)
+    const now = new Date();
+    const pstOffset = -8 * 60;
+    const nowPST = new Date(now.getTime() + (pstOffset - now.getTimezoneOffset()) * 60000);
+    
+    const dayOfWeek = nowPST.getDay();
+    const daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    
+    const thisMonday = new Date(nowPST);
+    thisMonday.setDate(nowPST.getDate() - daysToLastMonday);
+    thisMonday.setHours(0, 0, 0, 0);
+    
+    const prevWeekStart = new Date(thisMonday);
+    prevWeekStart.setDate(thisMonday.getDate() - 7);
+    
+    const prevWeekEnd = new Date(thisMonday);
+    prevWeekEnd.setDate(thisMonday.getDate() - 1);
+    
+    const prevPrevWeekStart = new Date(prevWeekStart);
+    prevPrevWeekStart.setDate(prevWeekStart.getDate() - 7);
+    
+    const prevPrevWeekEnd = new Date(prevWeekStart);
+    prevPrevWeekEnd.setDate(prevWeekStart.getDate() - 1);
+
+    const formatDate = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    const from = formatDate(prevWeekStart);
+    const to = formatDate(prevWeekEnd);
+    const prevFrom = formatDate(prevPrevWeekStart);
+    const prevTo = formatDate(prevPrevWeekEnd);
+
+    console.log(`Sync periods: Current ${from} to ${to}, Previous ${prevFrom} to ${prevTo}`);
+
+    // Get all active Metricool configs
+    const { data: configs, error: configError } = await supabase
+      .from("client_metricool_config")
+      .select(`
+        client_id,
+        platform,
+        user_id,
+        blog_id,
+        clients!inner(id, name, is_active)
+      `)
+      .eq("is_active", true);
+
+    if (configError) {
+      throw new Error(`Failed to fetch configs: ${configError.message}`);
+    }
+
+    const activeConfigs = configs?.filter((c: any) => c.clients?.is_active) || [];
+    console.log(`Found ${activeConfigs.length} active platform configurations`);
+
+    const results: SyncResult[] = [];
+
+    // Helper to build params (matching metricool-social-weekly format)
+    const buildParams = (userId: string, blogId: string | null, platform: string, fromDate: string, toDate: string, extra: Record<string, string> = {}) => {
+      const params: Record<string, string> = {
+        from: `${fromDate}T00:00:00`,
+        to: `${toDate}T23:59:59`,
+        network: platform,
+        timezone,
+        userId,
+        ...extra,
+      };
+      if (blogId) params.blogId = blogId;
+      return params;
+    };
+
+    // Helper to fetch from Metricool (using x-mc-auth header like the working function)
+    const fetchMetricool = async (endpoint: string, params: Record<string, string>): Promise<any> => {
+      const url = new URL(`${METRICOOL_BASE_URL}${endpoint}`);
+      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      
+      const res = await fetch(url.toString(), {
+        headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`${res.status}: ${errorText.substring(0, 200)}`);
+      }
+      
+      return res.json();
+    };
+
+    // Helper to fetch CSV
+    const fetchMetricoolCSV = async (endpoint: string, params: Record<string, string>): Promise<string> => {
+      const url = new URL(`${METRICOOL_BASE_URL}${endpoint}`);
+      Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+      
+      const res = await fetch(url.toString(), {
+        headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "text/csv" },
+      });
+      
+      if (!res.ok) {
+        throw new Error(`CSV ${res.status}`);
+      }
+      
+      return res.text();
+    };
+
+    // Helper to extract value from timeline
+    const extractTimelineValue = (data: any): number | null => {
+      if (!data) return null;
+      
+      let points: any[] = [];
+      if (Array.isArray(data)) {
+        if (data[0]?.values) {
+          points = data[0].values;
+        } else {
+          points = data;
+        }
+      } else if (data.data) {
+        return extractTimelineValue(data.data);
+      }
+      
+      if (points.length === 0) return null;
+      
+      // Sort by dateTime and get latest
+      points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
+      return points[points.length - 1]?.value ?? null;
+    };
+
+    // Helper to extract aggregation value
+    const extractAggValue = (data: any): number | null => {
+      if (data === null || data === undefined) return null;
+      if (typeof data === 'number') return data;
+      if (typeof data === 'object') {
+        if (data.data !== undefined) {
+          return typeof data.data === 'number' ? data.data : null;
+        }
+        if (data.value !== undefined) return data.value;
+        if (data.total !== undefined) return data.total;
+      }
+      return null;
+    };
+
+    // Get followers metric based on platform
+    const getFollowersMetric = (platform: string) => {
+      if (platform === "facebook") return "pageFollows";
+      if (platform === "youtube") return "totalSubscribers";
+      return "followers"; // Instagram, TikTok, LinkedIn
+    };
+
+    // Process each config
+    for (const config of activeConfigs) {
+      const clientData = config.clients as any;
+      const clientId = config.client_id;
+      const clientName = clientData?.name || "Unknown";
+      const platform = config.platform;
+      const userId = config.user_id;
+      const blogId = config.blog_id;
+
+      // Skip meta_ads - it doesn't have the same metrics
+      if (platform === "meta_ads") {
+        console.log(`Skipping ${clientName} - ${platform} (ads platform)`);
+        results.push({
+          clientId,
+          clientName,
+          platform,
+          success: true,
+          data: { skipped: true, reason: "ads platform" },
+        });
+        continue;
+      }
+
+      console.log(`Syncing ${clientName} - ${platform}...`);
+
+      try {
+        let followers: number | null = null;
+        let newFollowers: number | null = null;
+        let engagementRate: number | null = null;
+        let totalContent: number | null = null;
+
+        const followersMetric = getFollowersMetric(platform);
+        const params = buildParams(userId, blogId, platform, from, to);
+
+        // 1. Fetch followers timeline
+        try {
+          const data = await fetchMetricool("/api/v2/analytics/timelines", {
+            ...params,
+            metric: followersMetric,
+            subject: "account",
+          });
+          followers = extractTimelineValue(data);
+          
+          // Also calculate new followers from timeline
+          if (data) {
+            let points: any[] = [];
+            if (Array.isArray(data)) {
+              points = data[0]?.values || data;
+            } else if (data.data) {
+              points = Array.isArray(data.data) ? data.data : (data.data.values || []);
+            }
+            if (points.length > 1) {
+              points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
+              const first = points[0]?.value ?? 0;
+              const last = points[points.length - 1]?.value ?? 0;
+              newFollowers = last - first;
+            }
+          }
+          console.log(`  ${platform} followers: ${followers}, new: ${newFollowers}`);
+        } catch (e: any) {
+          console.error(`  Error fetching followers for ${clientName} ${platform}:`, e.message);
+        }
+
+        // 2. Fetch engagement rate (posts engagement)
+        try {
+          const data = await fetchMetricool("/api/v2/analytics/aggregation", {
+            ...params,
+            metric: "engagement",
+            subject: "posts",
+          });
+          engagementRate = extractAggValue(data);
+          console.log(`  ${platform} engagement: ${engagementRate?.toFixed(2)}%`);
+        } catch (e: any) {
+          console.error(`  Error fetching engagement for ${clientName} ${platform}:`, e.message);
+        }
+
+        // 3. Fetch total content count via CSV
+        try {
+          const csv = await fetchMetricoolCSV(`/api/v2/analytics/posts/${platform}`, params);
+          const lines = csv.split('\n').filter(l => l.trim());
+          totalContent = Math.max(0, lines.length - 1); // Subtract header
+          console.log(`  ${platform} content count: ${totalContent}`);
+        } catch (e: any) {
+          console.error(`  Error fetching posts for ${clientName} ${platform}:`, e.message);
+        }
+
+        // Store metrics in database
+        const validPlatforms = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'x'];
+        if (validPlatforms.includes(platform)) {
+          if (followers !== null || engagementRate !== null || totalContent !== null) {
+            const { error: upsertError } = await supabase
+              .from("social_account_metrics")
+              .upsert({
+                client_id: clientId,
+                platform: platform as any,
+                period_start: from,
+                period_end: to,
+                followers,
+                new_followers: newFollowers,
+                engagement_rate: engagementRate,
+                total_content: totalContent,
+                collected_at: new Date().toISOString(),
+              }, {
+                onConflict: "client_id,platform,period_start,period_end",
+              });
+
+            if (upsertError) {
+              console.error(`  Error upserting metrics:`, upsertError);
+            } else {
+              console.log(`  ✓ Saved to database`);
+            }
+          }
+
+          // Log sync
+          await supabase.from("social_sync_logs").insert({
+            client_id: clientId,
+            platform: platform as any,
+            status: "completed",
+            records_synced: 1,
+            started_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          });
+        }
+
+        results.push({
+          clientId,
+          clientName,
+          platform,
+          success: true,
+          data: { followers, newFollowers, engagementRate, totalContent },
+        });
+
+        console.log(`✓ ${clientName} - ${platform}: followers=${followers}, engagement=${engagementRate?.toFixed(2)}%, content=${totalContent}`);
+
+      } catch (err: any) {
+        console.error(`✗ ${clientName} - ${platform}:`, err.message);
+        
+        const validPlatforms = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'x'];
+        if (validPlatforms.includes(platform)) {
+          await supabase.from("social_sync_logs").insert({
+            client_id: clientId,
+            platform: platform as any,
+            status: "failed",
+            error_message: err.message,
+            started_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+          });
+        }
+
+        results.push({
+          clientId,
+          clientName,
+          platform,
+          success: false,
+          error: err.message,
+        });
+      }
+
+      // Small delay to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
+
+    console.log(`\nBulk sync complete: ${successCount} succeeded, ${failCount} failed`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        period: { from, to, prevFrom, prevTo },
+        totalConfigs: activeConfigs.length,
+        successCount,
+        failCount,
+        results,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+
+  } catch (error) {
+    console.error("Error in bulk-sync-all:", error);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
