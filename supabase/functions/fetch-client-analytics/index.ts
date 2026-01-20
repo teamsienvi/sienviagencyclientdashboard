@@ -171,6 +171,29 @@ serve(async (req) => {
       console.error('Error fetching page views:', pageViewsError);
     }
 
+    // Try to fetch Airbnb outbound clicks (only available on some client projects like Haven)
+    let airbnbClicks = 0;
+    try {
+      // First check if the table exists by trying to query it
+      const { data: outboundClicks, error: outboundError } = await supabase
+        .from('analytics_outbound_clicks')
+        .select('*')
+        .gte('clicked_at', startISO)
+        .lt('clicked_at', endISO);
+      
+      if (!outboundError && outboundClicks) {
+        // Filter for Airbnb links
+        airbnbClicks = outboundClicks.filter((click: any) => {
+          const url = String(click.target_url || click.url || '').toLowerCase();
+          return url.includes('airbnb.com');
+        }).length;
+        console.log('Airbnb outbound clicks found:', airbnbClicks);
+      }
+    } catch (e) {
+      // Table might not exist on this client - that's okay
+      console.log('analytics_outbound_clicks table not available');
+    }
+
     const sessionList = sessions || [];
     const pageViewList = pageViews || [];
 
@@ -414,6 +437,7 @@ serve(async (req) => {
           pageViews: data.pageViews,
         })),
       topPages,
+      airbnbClicks: airbnbClicks > 0 ? airbnbClicks : undefined,
     };
 
 

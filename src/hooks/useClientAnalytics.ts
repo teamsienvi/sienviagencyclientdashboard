@@ -55,6 +55,8 @@ export interface AnalyticsData {
   // External API format (sources/devices arrays)
   sources?: { source: string; count: number }[];
   devices?: { device: string; count: number }[];
+  // Outbound click tracking (client-specific)
+  airbnbClicks?: number;
 }
 
 export type AnalyticsErrorType = 
