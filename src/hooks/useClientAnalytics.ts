@@ -51,6 +51,9 @@ export interface AnalyticsData {
   deviceBreakdown?: DeviceBreakdown[];
   dailyBreakdown?: DailyBreakdown[];
   topPages?: TopPage[];
+  // External API format (sources/devices arrays)
+  sources?: { source: string; count: number }[];
+  devices?: { device: string; count: number }[];
 }
 
 export type AnalyticsErrorType = 
