@@ -65,11 +65,17 @@ function parseCSV(csvText: string): TikTokPost[] {
     }
     values.push(current.trim());
 
-    // Map values to object
+    // Map values to object - normalize header keys
     const row: Record<string, string> = {};
     headers.forEach((header, idx) => {
+      // Normalize header: lowercase, trim, replace spaces with underscores
+      const normalizedHeader = header.toLowerCase().trim().replace(/\s+/g, "_");
+      row[normalizedHeader] = values[idx] || "";
+      // Also store original for backward compatibility
       row[header] = values[idx] || "";
     });
+
+    console.log("Row keys:", Object.keys(row).join(", "));
 
     // Convert to TikTokPost with numeric casting
     // Calculate engagement if not provided: (likes + comments + shares) / views * 100
@@ -86,6 +92,10 @@ function parseCSV(csvText: string): TikTokPost[] {
       engagement = ((likes + comments + shares) / views) * 100;
     }
     
+    // Extract URL - try multiple possible column names from Metricool CSV
+    // Metricool TikTok CSV typically uses "link" or "url" column
+    const postUrl = row["link"] || row["url"] || row["post_link"] || row["video_link"] || row["tiktok_link"] || null;
+    
     const post: TikTokPost = {
       title: row["title"] || null,
       date: row["date"] || null,
@@ -97,9 +107,9 @@ function parseCSV(csvText: string): TikTokPost[] {
       reach: parseInt(row["reach"] || "0", 10) || 0,
       duration: row["duration"] || null,
       engagement,
-      url: row["url"] || null,
-      link: row["link"] || null,
-      image: row["image"] || null,
+      url: postUrl,
+      link: postUrl,
+      image: row["image"] || row["thumbnail"] || row["cover"] || null,
     };
 
     rows.push(post);
