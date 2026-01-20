@@ -17,7 +17,7 @@ import { toast } from "sonner";
 const WebAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
-  const [dateRange, setDateRange] = useState<DateRangePreset>("all");
+  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
