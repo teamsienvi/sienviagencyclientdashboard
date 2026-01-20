@@ -650,6 +650,7 @@ export const MetricoolAnalyticsSection = ({
                 timezone: "Asia/Shanghai",
                 userId: config.user_id,
                 blogId: config.blog_id,
+                clientId, // enable persistence
               },
             })
           : supabase.functions.invoke("metricool-aggregation", {
@@ -679,6 +680,7 @@ export const MetricoolAnalyticsSection = ({
                 timezone: "Asia/Shanghai",
                 userId: config.user_id,
                 blogId: config.blog_id,
+                clientId, // enable persistence
               },
             })
           : supabase.functions.invoke("metricool-aggregation", {
@@ -703,6 +705,7 @@ export const MetricoolAnalyticsSection = ({
           to: toUTC,
           userId: config.user_id,
           blogId: config.blog_id || undefined,
+          clientId, // enable persistence (TikTok)
         },
       });
 
@@ -716,6 +719,7 @@ export const MetricoolAnalyticsSection = ({
           to: toUTC,
           userId: config.user_id,
           blogId: config.blog_id || undefined,
+          clientId, // enable persistence (TikTok)
         },
       });
 
