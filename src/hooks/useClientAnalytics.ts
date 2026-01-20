@@ -46,6 +46,10 @@ export interface AnalyticsData {
   bounceRate?: number;
   pagesPerVisit?: number;
   totalSessions?: number;
+  // Alternative field names from different get-analytics implementations
+  uniqueVisitors?: number;
+  totalPageViews?: number;
+  avgSessionDuration?: number;
   // New format (local analytics)
   summary?: AnalyticsSummary;
   trafficSources?: TrafficSource[];
