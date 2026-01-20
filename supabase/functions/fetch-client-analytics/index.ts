@@ -114,12 +114,35 @@ serve(async (req) => {
             // External returned zeros - fall through to local or show no_data
             console.log('External source returned no data, checking local tables...');
           } else {
+            // Try to fetch Airbnb outbound clicks from external project
+            let airbnbClicks = data.airbnbClicks || 0;
+            if (!airbnbClicks && client.supabase_url && client.api_key) {
+              try {
+                const outboundUrl = `${client.supabase_url}/rest/v1/analytics_outbound_clicks?select=target_url&clicked_at=gte.${startDate}&clicked_at=lt.${endDate}`;
+                const outboundResponse = await fetch(outboundUrl, {
+                  headers: {
+                    'apikey': client.api_key,
+                    'Authorization': `Bearer ${client.api_key}`,
+                  },
+                });
+                if (outboundResponse.ok) {
+                  const outboundData = await outboundResponse.json();
+                  airbnbClicks = outboundData.filter((click: any) => 
+                    String(click.target_url || '').toLowerCase().includes('airbnb.com')
+                  ).length;
+                  console.log('Fetched Airbnb clicks from external:', airbnbClicks);
+                }
+              } catch (e) {
+                console.log('Could not fetch outbound clicks from external:', e);
+              }
+            }
+
             console.log('Analytics fetched successfully from external source for client:', client.name);
             return new Response(
               JSON.stringify({ 
                 clientId: client.id,
                 clientName: client.name,
-                analytics: data,
+                analytics: { ...data, airbnbClicks: airbnbClicks > 0 ? airbnbClicks : undefined },
                 dateRange: { startDate, endDate },
                 source: 'external',
               }),
