@@ -255,29 +255,19 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       prevEndStr = format(prevEnd, 'yyyy-MM-dd');
     }
 
-    // Fetch account metrics for current and previous periods
-    const { data: currentPeriodMetrics } = await supabase
+    // Fetch the MOST RECENT account metrics (regardless of period)
+    // This ensures we always get the latest subscriber count
+    const { data: latestMetrics } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", "youtube")
-      .gte("period_start", startStr)
-      .lte("period_end", endStr)
       .order("collected_at", { ascending: false })
-      .limit(1);
+      .limit(2);
 
-    const { data: prevPeriodMetrics } = await supabase
-      .from("social_account_metrics")
-      .select("*")
-      .eq("client_id", clientId)
-      .eq("platform", "youtube")
-      .gte("period_start", prevStartStr)
-      .lte("period_end", prevEndStr)
-      .order("collected_at", { ascending: false })
-      .limit(1);
-
-    const currentFollowers = currentPeriodMetrics?.[0]?.followers || 0;
-    const previousFollowers = prevPeriodMetrics?.[0]?.followers || 0;
+    // Latest record is current, second-latest is previous (for comparison)
+    const currentFollowers = latestMetrics?.[0]?.followers || 0;
+    const previousFollowers = latestMetrics?.[1]?.followers || latestMetrics?.[0]?.followers || 0;
     const newFollowers = currentFollowers - previousFollowers;
     const followerChangePercent = previousFollowers > 0 
       ? ((newFollowers / previousFollowers) * 100) 
