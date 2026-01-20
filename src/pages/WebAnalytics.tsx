@@ -176,11 +176,11 @@ const WebAnalytics = () => {
   
   const normalizedAnalytics = analytics 
     ? {
-        // Support both legacy (visitors/pageViews) and new format (summary.uniqueVisitors/summary.totalPageViews)
-        visitors: analytics.visitors ?? analytics.summary?.uniqueVisitors ?? 0,
-        pageViews: analytics.pageViews ?? analytics.summary?.totalPageViews ?? 0,
+        // Support all field name variations from different get-analytics implementations
+        visitors: analytics.visitors ?? analytics.uniqueVisitors ?? analytics.summary?.uniqueVisitors ?? 0,
+        pageViews: analytics.pageViews ?? analytics.totalPageViews ?? analytics.summary?.totalPageViews ?? 0,
         totalSessions: analytics.totalSessions ?? analytics.summary?.totalSessions ?? 0,
-        avgDuration: analytics.avgDuration ?? analytics.summary?.avgSessionDuration ?? 0,
+        avgDuration: analytics.avgDuration ?? analytics.avgSessionDuration ?? analytics.summary?.avgSessionDuration ?? 0,
         bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
         pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ?? 
           (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
