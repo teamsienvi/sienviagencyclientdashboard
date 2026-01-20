@@ -9,6 +9,8 @@ import {
   getPerformanceTierColor,
   formatPlatformName 
 } from "@/utils/topPerformingInsights";
+import { format } from "date-fns";
+import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 
 interface TopPerformingPostsProps {
   clientId: string;
@@ -83,10 +85,18 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TrendingUp className="h-5 w-5" />
-          Top Performing Posts
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Top Performing Posts
+          </CardTitle>
+          <Badge variant="outline" className="text-xs">
+            {(() => {
+              const { start, end } = getCurrentReportingWeek();
+              return formatDateRange(start, end);
+            })()}
+          </Badge>
+        </div>
         <CardDescription>Top 3 posts from last 7 days, ranked by views</CardDescription>
       </CardHeader>
       <CardContent>
@@ -95,6 +105,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
             <thead>
               <tr className="border-b text-left">
                 <th className="pb-2 pr-4 font-medium text-muted-foreground">Post Link</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground">Date</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Views</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Engage %</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground">Platform</th>
@@ -131,6 +142,11 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                     ) : (
                       <span className="text-muted-foreground">No URL</span>
                     )}
+                  </td>
+
+                  {/* Date */}
+                  <td className="py-3 px-3 text-muted-foreground whitespace-nowrap">
+                    {post.published_at ? format(new Date(post.published_at), "EEE, MMM d") : "-"}
                   </td>
 
                   {/* Views */}
