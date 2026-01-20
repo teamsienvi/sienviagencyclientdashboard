@@ -24,7 +24,8 @@ export interface DailyBreakdown {
 }
 
 export interface TopPage {
-  url: string;
+  url?: string;
+  path?: string;
   views: number;
 }
 

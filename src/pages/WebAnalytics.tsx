@@ -242,6 +242,12 @@ This script will:
         percentage: totalCount > 0 ? Math.round((d.count / totalCount) * 100) : 0,
       };
     }) : undefined);
+
+  // Normalize topPages - handle both url and path formats
+  const normalizedTopPages = analytics?.topPages?.map((page: { url?: string; path?: string; views: number }) => ({
+    url: page.url || page.path || '/',
+    views: page.views,
+  }));
   
   const normalizedAnalytics = analytics 
     ? {
@@ -256,7 +262,7 @@ This script will:
         trafficSources: normalizedTrafficSources,
         deviceBreakdown: normalizedDeviceBreakdown,
         dailyBreakdown: analytics.dailyBreakdown,
-        topPages: analytics.topPages,
+        topPages: normalizedTopPages,
       }
     : null;
 
