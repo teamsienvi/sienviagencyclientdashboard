@@ -317,6 +317,154 @@ serve(async (req) => {
           console.error(`  Error fetching posts for ${clientName} ${platform}:`, e.message);
         }
 
+        // 4. Fetch and persist follower timeline (for charts)
+        if (platform === "tiktok" || platform === "instagram" || platform === "facebook") {
+          try {
+            const timelineData = await fetchMetricool("/api/v2/analytics/timelines", {
+              ...params,
+              metric: followersMetric,
+              subject: "account",
+            });
+            
+            let points: any[] = [];
+            if (Array.isArray(timelineData)) {
+              points = timelineData[0]?.values || timelineData;
+            } else if (timelineData?.data) {
+              points = Array.isArray(timelineData.data) ? timelineData.data : (timelineData.data.values || []);
+            }
+            
+            // Persist each daily follower count
+            let persistedCount = 0;
+            for (const point of points) {
+              const dateStr = point.dateTime || point.date;
+              if (!dateStr) continue;
+              const date = dateStr.split('T')[0];
+              const followerCount = point.value ?? 0;
+              
+              const { error: tlError } = await supabase.from("social_follower_timeline").upsert({
+                client_id: clientId,
+                platform,
+                date,
+                followers: followerCount,
+                collected_at: new Date().toISOString(),
+              }, { onConflict: "client_id,platform,date" });
+              
+              if (tlError) {
+                console.error(`  Timeline upsert error for ${date}:`, tlError.message);
+              } else {
+                persistedCount++;
+              }
+            }
+            console.log(`  ${platform} timeline: ${persistedCount}/${points.length} data points persisted`);
+          } catch (e: any) {
+            console.error(`  Error fetching timeline for ${clientName} ${platform}:`, e.message);
+          }
+        }
+
+        // 5. Fetch and persist demographics (gender, country) for TikTok
+        if (platform === "tiktok") {
+          try {
+            // Demographics need 30-day window
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            const demoFrom = formatDate(thirtyDaysAgo);
+            const demoTo = formatDate(new Date());
+            
+            const demoParams = buildParams(userId, blogId, platform, demoFrom, demoTo);
+            
+            let genderMale: number | null = null;
+            let genderFemale: number | null = null;
+            let genderUnknown: number | null = null;
+            let countries: any[] = [];
+            
+            // Fetch gender demographics
+            try {
+              const genderData = await fetchMetricool("/api/v2/analytics/aggregation", {
+                ...demoParams,
+                metric: "followers_gender",
+                subject: "account",
+              });
+              
+              if (genderData && Array.isArray(genderData.data)) {
+                for (const item of genderData.data) {
+                  const label = (item.metric || item.label || item.gender || "").toLowerCase();
+                  const value = item.value || item.percentage || 0;
+                  
+                  if (label.includes("male") && !label.includes("female")) {
+                    genderMale = value;
+                  } else if (label.includes("female")) {
+                    genderFemale = value;
+                  } else if (label.includes("unknown") || label.includes("other")) {
+                    genderUnknown = value;
+                  }
+                }
+              } else if (genderData?.male !== undefined || genderData?.female !== undefined) {
+                genderMale = genderData.male || 0;
+                genderFemale = genderData.female || 0;
+                genderUnknown = genderData.unknown || 0;
+              }
+              console.log(`  ${platform} gender: M=${genderMale}% F=${genderFemale}%`);
+            } catch (e: any) {
+              console.error(`  Error fetching gender for ${clientName}:`, e.message);
+            }
+            
+            // Fetch country demographics
+            try {
+              const countryData = await fetchMetricool("/api/v2/analytics/aggregation", {
+                ...demoParams,
+                metric: "followers_country",
+                subject: "account",
+              });
+              
+              if (countryData && Array.isArray(countryData.data)) {
+                countries = countryData.data
+                  .map((item: any) => ({
+                    country: item.country || item.label || item.name || item.metric || "Unknown",
+                    percentage: item.percentage || item.value || 0,
+                  }))
+                  .filter((c: any) => c.percentage > 0)
+                  .sort((a: any, b: any) => b.percentage - a.percentage)
+                  .slice(0, 10);
+              } else if (Array.isArray(countryData)) {
+                countries = countryData
+                  .map((item: any) => ({
+                    country: item.country || item.label || item.name || item.metric || "Unknown",
+                    percentage: item.percentage || item.value || 0,
+                  }))
+                  .filter((c: any) => c.percentage > 0)
+                  .sort((a: any, b: any) => b.percentage - a.percentage)
+                  .slice(0, 10);
+              }
+              console.log(`  ${platform} countries: ${countries.length} found`);
+            } catch (e: any) {
+              console.error(`  Error fetching countries for ${clientName}:`, e.message);
+            }
+            
+            // Persist demographics
+            if (genderMale !== null || genderFemale !== null || countries.length > 0) {
+              const { error: demoError } = await supabase.from("social_account_demographics").upsert({
+                client_id: clientId,
+                platform,
+                period_start: from,
+                period_end: to,
+                gender_male: genderMale,
+                gender_female: genderFemale,
+                gender_unknown: genderUnknown,
+                countries: countries.length > 0 ? countries : null,
+                collected_at: new Date().toISOString(),
+              }, { onConflict: "client_id,platform,period_start,period_end" });
+              
+              if (demoError) {
+                console.error(`  Error persisting demographics:`, demoError);
+              } else {
+                console.log(`  ✓ Demographics saved`);
+              }
+            }
+          } catch (e: any) {
+            console.error(`  Error in demographics sync for ${clientName}:`, e.message);
+          }
+        }
+
         // Store metrics in database
         const validPlatforms = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'x'];
         if (validPlatforms.includes(platform)) {

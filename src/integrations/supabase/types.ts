@@ -460,6 +460,56 @@ export type Database = {
           },
         ]
       }
+      social_account_demographics: {
+        Row: {
+          client_id: string
+          collected_at: string
+          countries: Json | null
+          created_at: string
+          gender_female: number | null
+          gender_male: number | null
+          gender_unknown: number | null
+          id: string
+          period_end: string
+          period_start: string
+          platform: string
+        }
+        Insert: {
+          client_id: string
+          collected_at?: string
+          countries?: Json | null
+          created_at?: string
+          gender_female?: number | null
+          gender_male?: number | null
+          gender_unknown?: number | null
+          id?: string
+          period_end: string
+          period_start: string
+          platform: string
+        }
+        Update: {
+          client_id?: string
+          collected_at?: string
+          countries?: Json | null
+          created_at?: string
+          gender_female?: number | null
+          gender_male?: number | null
+          gender_unknown?: number | null
+          id?: string
+          period_end?: string
+          period_start?: string
+          platform?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_account_demographics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_account_metrics: {
         Row: {
           client_id: string
@@ -700,6 +750,44 @@ export type Database = {
             columns: ["social_content_id"]
             isOneToOne: false
             referencedRelation: "social_content"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_follower_timeline: {
+        Row: {
+          client_id: string
+          collected_at: string
+          created_at: string
+          date: string
+          followers: number
+          id: string
+          platform: string
+        }
+        Insert: {
+          client_id: string
+          collected_at?: string
+          created_at?: string
+          date: string
+          followers: number
+          id?: string
+          platform: string
+        }
+        Update: {
+          client_id?: string
+          collected_at?: string
+          created_at?: string
+          date?: string
+          followers?: number
+          id?: string
+          platform?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_follower_timeline_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
             referencedColumns: ["id"]
           },
         ]
