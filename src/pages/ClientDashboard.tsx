@@ -7,7 +7,7 @@ import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { 
   ArrowLeft, Calendar, TrendingUp, Users, Eye, 
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,15 @@ import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Helper to extract month from date range
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -221,7 +230,7 @@ const ClientDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <ClientHeader clientName={client.name} clientLogo={client.logo_url} />
+      <ClientHeader clientName={client.name} clientLogo={client.logo_url} currentClientId={clientId} />
       
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
@@ -669,8 +678,28 @@ const ClientDashboard = () => {
 };
 
 // Client-specific header component
-const ClientHeader = ({ clientName, clientLogo }: { clientName?: string; clientLogo?: string | null }) => {
+const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?: string; clientLogo?: string | null; currentClientId?: string }) => {
   const navigate = useNavigate();
+  const { isAdmin, isAuthenticated } = useAuth();
+
+  // Fetch clients for admin dropdown
+  const { data: clients } = useQuery({
+    queryKey: ["admin-clients-dropdown"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: isAdmin && isAuthenticated,
+  });
+
+  const handleClientSelect = (clientId: string) => {
+    navigate(`/client/${clientId}`);
+  };
   
   return (
     <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-50">
@@ -704,7 +733,45 @@ const ClientHeader = ({ clientName, clientLogo }: { clientName?: string; clientL
             </div>
           </div>
           
-          <ThemeToggle />
+          <div className="flex items-center gap-3">
+            {/* Admin Client Selector */}
+            {isAdmin && clients && clients.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
+                    <Building2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">Switch Client</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[220px] max-h-[400px] overflow-y-auto">
+                  <DropdownMenuLabel>Switch Client</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {clients.map((client) => (
+                    <DropdownMenuItem
+                      key={client.id}
+                      onClick={() => handleClientSelect(client.id)}
+                      className={`cursor-pointer flex items-center gap-2 ${currentClientId === client.id ? 'bg-accent' : ''}`}
+                    >
+                      {client.logo_url ? (
+                        <img 
+                          src={client.logo_url} 
+                          alt={client.name} 
+                          className="h-6 w-6 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
+                          <Building2 className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="truncate">{client.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </header>
