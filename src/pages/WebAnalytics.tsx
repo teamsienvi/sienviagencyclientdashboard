@@ -131,9 +131,184 @@ const WebAnalytics = () => {
 
   // Copy the universal tracking prompt for Lovable sites
   const copyUniversalTrackingPrompt = () => {
-    const prompt = `Add web analytics tracking to this site. Install the tracking script that sends page views to our analytics backend.
+    const prompt = `Update the web analytics for this site to include accurate traffic sources, device breakdown, and top pages.
 
-Add this tracking code to the index.html file inside the <head> tag:
+## Step 1: Update the get-analytics edge function
+
+Replace the entire content of \`supabase/functions/get-analytics/index.ts\` with this:
+
+\`\`\`typescript
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
+};
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { startDate, endDate } = await req.json();
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Query sessions
+    const { data: sessions, error: sessError } = await supabase
+      .from('analytics_sessions')
+      .select('*')
+      .gte('started_at', startDate)
+      .lte('started_at', endDate + 'T23:59:59.999Z');
+
+    // Query page views - try different table names
+    let pageViews: any[] = [];
+    const { data: pvData1 } = await supabase
+      .from('analytics_page_views')
+      .select('*')
+      .gte('viewed_at', startDate)
+      .lte('viewed_at', endDate + 'T23:59:59.999Z');
+    
+    if (pvData1 && pvData1.length > 0) {
+      pageViews = pvData1;
+    } else {
+      // Try analytics_pageviews (no underscore)
+      const { data: pvData2 } = await supabase
+        .from('analytics_pageviews')
+        .select('*')
+        .gte('viewed_at', startDate)
+        .lte('viewed_at', endDate + 'T23:59:59.999Z');
+      if (pvData2) pageViews = pvData2;
+    }
+
+    // Also try analytics_events for page views
+    const { data: events } = await supabase
+      .from('analytics_events')
+      .select('*')
+      .eq('event_type', 'page_view')
+      .gte('timestamp', startDate)
+      .lte('timestamp', endDate + 'T23:59:59.999Z');
+
+    const sessionList = sessions || [];
+    const pageViewList = pageViews.length > 0 ? pageViews : (events || []);
+    
+    // Calculate metrics
+    const totalSessions = sessionList.length;
+    const totalPageViews = pageViewList.length;
+    const uniqueVisitors = new Set([
+      ...sessionList.map((s: any) => s.visitor_id),
+      ...pageViewList.map((p: any) => p.visitor_id)
+    ].filter(Boolean)).size;
+    
+    const bounceSessions = sessionList.filter((s: any) => s.bounce || s.page_count === 1).length;
+    const bounceRate = totalSessions > 0 ? (bounceSessions / totalSessions) * 100 : 0;
+    const pagesPerVisit = uniqueVisitors > 0 ? totalPageViews / uniqueVisitors : 0;
+
+    // Calculate avg duration
+    let totalDuration = 0;
+    let durationCount = 0;
+    sessionList.forEach((s: any) => {
+      if (s.started_at && s.ended_at) {
+        const duration = (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 1000;
+        if (duration > 0 && duration < 3600) {
+          totalDuration += duration;
+          durationCount++;
+        }
+      }
+    });
+    const avgDuration = durationCount > 0 ? totalDuration / durationCount : 0;
+
+    // Traffic sources breakdown
+    const sourceCounts: Record<string, number> = {};
+    sessionList.forEach((s: any) => {
+      let source = 'Direct';
+      if (s.utm_source) {
+        source = s.utm_source;
+      } else if (s.referrer) {
+        try {
+          const url = new URL(s.referrer);
+          const hostname = url.hostname.replace('www.', '');
+          // Categorize sources
+          if (['google.com', 'bing.com', 'yahoo.com', 'duckduckgo.com'].includes(hostname)) {
+            source = 'Organic';
+          } else if (['facebook.com', 'm.facebook.com', 'l.facebook.com', 'instagram.com', 'l.instagram.com', 'twitter.com', 't.co', 'linkedin.com', 'tiktok.com'].includes(hostname)) {
+            source = 'Social';
+          } else {
+            source = hostname;
+          }
+        } catch {
+          source = 'Referral';
+        }
+      }
+      sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+    });
+    
+    const sources = Object.entries(sourceCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([source, count]) => ({ source, count }));
+
+    // Device breakdown
+    const deviceCounts: Record<string, number> = { desktop: 0, mobile: 0, tablet: 0 };
+    sessionList.forEach((s: any) => {
+      const device = (s.device_type || s.device || 'desktop').toLowerCase();
+      if (device.includes('mobile') || device.includes('phone')) {
+        deviceCounts.mobile++;
+      } else if (device.includes('tablet') || device.includes('ipad')) {
+        deviceCounts.tablet++;
+      } else {
+        deviceCounts.desktop++;
+      }
+    });
+    
+    const devices = Object.entries(deviceCounts)
+      .filter(([_, count]) => count > 0)
+      .map(([device, count]) => ({ device, count }));
+
+    // Top pages
+    const pageCounts: Record<string, number> = {};
+    pageViewList.forEach((pv: any) => {
+      const page = pv.page_url || pv.path || pv.url || '/';
+      // Clean up the path
+      const cleanPath = page.split('?')[0];
+      pageCounts[cleanPath] = (pageCounts[cleanPath] || 0) + 1;
+    });
+    
+    const topPages = Object.entries(pageCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([path, views]) => ({ path, views }));
+
+    return new Response(
+      JSON.stringify({
+        visitors: uniqueVisitors,
+        pageViews: totalPageViews,
+        totalSessions,
+        avgDuration: Math.round(avgDuration),
+        bounceRate: Math.round(bounceRate * 10) / 10,
+        pagesPerVisit: Math.round(pagesPerVisit * 100) / 100,
+        sources,
+        devices,
+        topPages,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('Analytics error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
+\`\`\`
+
+## Step 2: Make sure the tracking script in index.html is up to date
+
+Add/update this tracking code in the \`<head>\` tag of index.html:
 
 \`\`\`html
 <!-- Web Analytics Tracking -->
@@ -142,7 +317,6 @@ Add this tracking code to the index.html file inside the <head> tag:
   const CLIENT_ID = "${clientId}";
   const ANALYTICS_ENDPOINT = "${getTrackingEndpoint()}";
   
-  // Generate or retrieve visitor ID
   function getVisitorId() {
     let visitorId = localStorage.getItem('_analytics_visitor_id');
     if (!visitorId) {
@@ -152,7 +326,6 @@ Add this tracking code to the index.html file inside the <head> tag:
     return visitorId;
   }
   
-  // Get UTM parameters
   function getUTMParams() {
     const params = new URLSearchParams(window.location.search);
     return {
@@ -162,7 +335,6 @@ Add this tracking code to the index.html file inside the <head> tag:
     };
   }
   
-  // Track page view
   function trackPageView() {
     const utm = getUTMParams();
     fetch(ANALYTICS_ENDPOINT, {
@@ -181,14 +353,12 @@ Add this tracking code to the index.html file inside the <head> tag:
     }).catch(function(err) { console.log('Analytics error:', err); });
   }
   
-  // Track on page load
   if (document.readyState === 'complete') {
     trackPageView();
   } else {
     window.addEventListener('load', trackPageView);
   }
   
-  // Track on SPA navigation (for React Router)
   let lastPath = window.location.pathname;
   const observer = new MutationObserver(function() {
     if (window.location.pathname !== lastPath) {
@@ -201,15 +371,10 @@ Add this tracking code to the index.html file inside the <head> tag:
 </script>
 \`\`\`
 
-This script will:
-1. Generate a unique visitor ID stored in localStorage
-2. Track page views including page URL, title, and referrer
-3. Capture UTM parameters for campaign tracking
-4. Work with React Router for SPA navigation
-5. Send data to our centralized analytics endpoint`;
+This update adds traffic sources (Direct, Organic, Social, Referral), device breakdown (desktop, mobile, tablet), and top pages to your analytics. The data will match what's shown in your Lovable Project Analytics.`;
 
     navigator.clipboard.writeText(prompt);
-    toast.success("Universal tracking prompt copied! Paste this in your client's Lovable project.");
+    toast.success("Full analytics update prompt copied! Paste this in your client's Lovable project.");
   };
 
   // Check for error state from hook
