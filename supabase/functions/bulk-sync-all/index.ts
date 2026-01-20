@@ -327,32 +327,47 @@ serve(async (req) => {
             });
             
             let points: any[] = [];
-            if (Array.isArray(timelineData)) {
-              points = timelineData[0]?.values || timelineData;
-            } else if (timelineData?.data) {
-              points = Array.isArray(timelineData.data) ? timelineData.data : (timelineData.data.values || []);
+            if (Array.isArray(timelineData) && timelineData[0]?.values) {
+              // Format: [{metric: "...", values: [{dateTime, value}]}]
+              points = timelineData[0].values;
+            } else if (Array.isArray(timelineData)) {
+              points = timelineData;
+            } else if (timelineData?.data?.values) {
+              points = timelineData.data.values;
+            } else if (Array.isArray(timelineData?.data)) {
+              points = timelineData.data;
             }
             
             // Persist each daily follower count
             let persistedCount = 0;
-            for (const point of points) {
-              const dateStr = point.dateTime || point.date;
-              if (!dateStr) continue;
-              const date = dateStr.split('T')[0];
-              const followerCount = point.value ?? 0;
-              
-              const { error: tlError } = await supabase.from("social_follower_timeline").upsert({
+            console.log(`  ${platform} timeline raw points:`, JSON.stringify(points.slice(0, 2)));
+            
+            const timelineRecords = points.map((point: any) => {
+              const dateStr = point.dateTime || point.date || point.timestamp;
+              if (!dateStr) return null;
+              const date = String(dateStr).split('T')[0];
+              const followerCount = point.value ?? point.followers ?? point.count ?? 0;
+              return {
                 client_id: clientId,
                 platform,
                 date,
                 followers: followerCount,
                 collected_at: new Date().toISOString(),
-              }, { onConflict: "client_id,platform,date" });
+              };
+            }).filter(Boolean);
+            
+            if (timelineRecords.length > 0) {
+              const dates = timelineRecords.map((r: any) => r.date);
+              await supabase.from("social_follower_timeline").delete()
+                .eq("client_id", clientId).eq("platform", platform).in("date", dates);
+              
+              const { error: tlError, data: insertedData } = await supabase
+                .from("social_follower_timeline").insert(timelineRecords).select();
               
               if (tlError) {
-                console.error(`  Timeline upsert error for ${date}:`, tlError.message);
+                console.error(`  Timeline insert error:`, tlError.message);
               } else {
-                persistedCount++;
+                persistedCount = insertedData?.length || 0;
               }
             }
             console.log(`  ${platform} timeline: ${persistedCount}/${points.length} data points persisted`);
@@ -440,9 +455,18 @@ serve(async (req) => {
               console.error(`  Error fetching countries for ${clientName}:`, e.message);
             }
             
-            // Persist demographics
+            // Persist demographics (delete then insert approach)
             if (genderMale !== null || genderFemale !== null || countries.length > 0) {
-              const { error: demoError } = await supabase.from("social_account_demographics").upsert({
+              // Delete existing record for this period
+              await supabase
+                .from("social_account_demographics")
+                .delete()
+                .eq("client_id", clientId)
+                .eq("platform", platform)
+                .eq("period_start", from)
+                .eq("period_end", to);
+              
+              const { error: demoError } = await supabase.from("social_account_demographics").insert({
                 client_id: clientId,
                 platform,
                 period_start: from,
@@ -452,7 +476,7 @@ serve(async (req) => {
                 gender_unknown: genderUnknown,
                 countries: countries.length > 0 ? countries : null,
                 collected_at: new Date().toISOString(),
-              }, { onConflict: "client_id,platform,period_start,period_end" });
+              });
               
               if (demoError) {
                 console.error(`  Error persisting demographics:`, demoError);
