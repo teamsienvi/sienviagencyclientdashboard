@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy } from "lucide-react";
+import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy, ExternalLink } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { useClientAnalytics, AnalyticsErrorType, DateRangePreset } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
@@ -188,6 +188,7 @@ const WebAnalytics = () => {
         deviceBreakdown: normalizedDeviceBreakdown,
         dailyBreakdown: analytics.dailyBreakdown,
         topPages: normalizedTopPages,
+        airbnbClicks: analytics.airbnbClicks,
       }
     : null;
 
@@ -584,7 +585,27 @@ const WebAnalytics = () => {
                         </CardContent>
                       </Card>
                     </div>
-                  ) : (
+                  ) : null}
+
+                  {/* Airbnb Clicks Card - shown only when data exists */}
+                  {normalizedAnalytics?.airbnbClicks !== undefined && normalizedAnalytics.airbnbClicks > 0 && (
+                    <Card className="border-accent/30 bg-gradient-to-br from-accent/5 to-transparent">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Airbnb Clicks</CardTitle>
+                        <ExternalLink className="h-4 w-4 text-accent" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-accent">
+                          {normalizedAnalytics.airbnbClicks.toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Outbound clicks to Airbnb listings
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {!normalizedAnalytics && !isLoadingAnalytics && !errorType && !analyticsError && (
                     <Card>
                       <CardContent className="py-8 text-center text-muted-foreground">
                         No analytics data available
