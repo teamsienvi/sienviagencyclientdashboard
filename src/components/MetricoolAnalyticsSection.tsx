@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus, Globe, User } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import { toast } from "sonner";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
+import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
@@ -1664,14 +1665,22 @@ export const MetricoolAnalyticsSection = ({
       {/* Content Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            Recent {platform === "tiktok" ? "Videos" : "Posts"}
-            {livePosts.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">Live</Badge>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              Recent {platform === "tiktok" ? "Videos" : "Posts"}
+              {livePosts.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">Live</Badge>
+              )}
+            </CardTitle>
+            <Badge variant="outline" className="text-xs">
+              {(() => {
+                const { start, end } = getDateRange();
+                return formatDateRange(start, end);
+              })()}
+            </Badge>
+          </div>
           <CardDescription>
-            Latest {platform === "tiktok" ? "videos" : "posts"} with performance metrics from the past 7 days
+            Latest {platform === "tiktok" ? "videos" : "posts"} with performance metrics
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1737,7 +1746,15 @@ export const MetricoolAnalyticsSection = ({
                           </p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          {post.date || "Unknown date"}
+                          {post.date ? (() => {
+                            try {
+                              const parsed = new Date(post.date);
+                              if (!isNaN(parsed.getTime())) {
+                                return format(parsed, "EEEE, MMM d");
+                              }
+                            } catch (e) {}
+                            return post.date;
+                          })() : "Unknown date"}
                         </p>
                       </div>
                     </TableCell>
@@ -1832,7 +1849,7 @@ export const MetricoolAnalyticsSection = ({
                           </p>
                         )}
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(content.published_at), "MMM d, yyyy")}
+                          {format(new Date(content.published_at), "EEEE, MMM d")}
                         </p>
                       </div>
                     </TableCell>
