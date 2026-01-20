@@ -1,16 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
-import { subDays, isAfter, parseISO } from "date-fns";
+import { subDays, format } from "date-fns";
 
 export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
   return useQuery({
     queryKey: ["top-performing-posts", clientId, limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
-      // Calculate 7 days ago for filtering
+      // Calculate date range for the last 7 days
       const sevenDaysAgo = subDays(new Date(), 7);
+      const sevenDaysAgoStr = format(sevenDaysAgo, "yyyy-MM-dd");
 
       // Fetch content with metrics for this client across all platforms
+      // Filter by metrics period_end (most recent data collection) instead of published_at
       const { data: content, error: contentError } = await supabase
         .from("social_content")
         .select(`
@@ -21,6 +23,8 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           title,
           social_content_metrics (
             collected_at,
+            period_start,
+            period_end,
             views,
             reach,
             impressions,
@@ -31,9 +35,8 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           )
         `)
         .eq("client_id", clientId)
-        .gte("published_at", sevenDaysAgo.toISOString())
         .order("published_at", { ascending: false })
-        .limit(200);
+        .limit(500);
 
       if (contentError) throw contentError;
       if (!content || content.length === 0) return [];
@@ -54,20 +57,33 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       });
 
       // Transform to TopInsightContent format
+      // Filter by metrics that have recent period_end (within last 7 days)
       const topInsightContent: TopInsightContent[] = content
         .filter((c) => {
-          // Must have metrics and be within last 7 days
+          // Must have metrics
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
-          const publishedDate = parseISO(c.published_at);
-          return isAfter(publishedDate, sevenDaysAgo);
+          
+          // Check if any metric has a period_end within last 7 days
+          const hasRecentMetrics = c.social_content_metrics.some((m: any) => {
+            if (!m.period_end) return false;
+            return m.period_end >= sevenDaysAgoStr;
+          });
+          
+          return hasRecentMetrics;
         })
         .map((c) => {
-          const latestMetric = [...c.social_content_metrics].sort(
-            (a: any, b: any) =>
-              new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
-          )[0];
+          // Get the most recent metric (by period_end, then collected_at)
+          const sortedMetrics = [...c.social_content_metrics].sort((a: any, b: any) => {
+            // First by period_end descending
+            const periodCompare = (b.period_end || "").localeCompare(a.period_end || "");
+            if (periodCompare !== 0) return periodCompare;
+            // Then by collected_at descending
+            return new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime();
+          });
+          
+          const latestMetric = sortedMetrics[0];
 
-          // Use views first, then video_views equivalent, then impressions as fallback
+          // Use views first, then impressions as fallback
           const viewsValue = latestMetric?.views || latestMetric?.impressions || 0;
           const reachValue = latestMetric?.reach || 0;
 
@@ -87,7 +103,7 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
         // Filter out posts with no views/impressions
         .filter((c) => c.views > 0);
 
-      // Rank by views DESC and return top 3 posts
+      // Rank by views DESC and return top posts
       return rankTopInsights(topInsightContent, limit);
     },
     enabled: !!clientId,
