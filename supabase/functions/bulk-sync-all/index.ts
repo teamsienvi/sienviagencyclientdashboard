@@ -182,7 +182,8 @@ serve(async (req) => {
     const getFollowersMetric = (platform: string) => {
       if (platform === "facebook") return "pageFollows";
       if (platform === "youtube") return "totalSubscribers";
-      return "followers"; // Instagram, TikTok, LinkedIn
+      if (platform === "tiktok") return "followers_count";
+      return "followers"; // Instagram, LinkedIn
     };
 
     // Process each config
@@ -247,24 +248,70 @@ serve(async (req) => {
           console.error(`  Error fetching followers for ${clientName} ${platform}:`, e.message);
         }
 
-        // 2. Fetch engagement rate (posts engagement)
-        try {
-          const data = await fetchMetricool("/api/v2/analytics/aggregation", {
-            ...params,
-            metric: "engagement",
-            subject: "posts",
-          });
-          engagementRate = extractAggValue(data);
-          console.log(`  ${platform} engagement: ${engagementRate?.toFixed(2)}%`);
-        } catch (e: any) {
-          console.error(`  Error fetching engagement for ${clientName} ${platform}:`, e.message);
+        // 2. Fetch engagement rate (posts engagement) - for TikTok calculate from CSV
+        if (platform !== "tiktok") {
+          try {
+            const data = await fetchMetricool("/api/v2/analytics/aggregation", {
+              ...params,
+              metric: "engagement",
+              subject: "posts",
+            });
+            engagementRate = extractAggValue(data);
+            console.log(`  ${platform} engagement: ${engagementRate?.toFixed(2)}%`);
+          } catch (e: any) {
+            console.error(`  Error fetching engagement for ${clientName} ${platform}:`, e.message);
+          }
         }
 
-        // 3. Fetch total content count via CSV
+        // 3. Fetch total content count via CSV (and calculate TikTok engagement)
         try {
           const csv = await fetchMetricoolCSV(`/api/v2/analytics/posts/${platform}`, params);
           const lines = csv.split('\n').filter(l => l.trim());
           totalContent = Math.max(0, lines.length - 1); // Subtract header
+          
+          // For TikTok, calculate engagement from CSV data
+          if (platform === "tiktok" && lines.length > 1) {
+            const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+            const viewsIdx = headers.findIndex(h => h === 'views');
+            const likesIdx = headers.findIndex(h => h === 'likes');
+            const commentsIdx = headers.findIndex(h => h === 'comments');
+            const sharesIdx = headers.findIndex(h => h === 'shares');
+            const engIdx = headers.findIndex(h => h === 'engagement' || h === 'engageme');
+            
+            let totalEngagement = 0;
+            let postCount = 0;
+            
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+              let postEngagement = 0;
+              
+              // Try to get engagement directly first
+              if (engIdx >= 0) {
+                postEngagement = parseFloat(values[engIdx]) || 0;
+              }
+              
+              // If no engagement value, calculate from views/likes/comments/shares
+              if (postEngagement === 0 && viewsIdx >= 0) {
+                const views = parseInt(values[viewsIdx]) || 0;
+                const likes = likesIdx >= 0 ? (parseInt(values[likesIdx]) || 0) : 0;
+                const comments = commentsIdx >= 0 ? (parseInt(values[commentsIdx]) || 0) : 0;
+                const shares = sharesIdx >= 0 ? (parseInt(values[sharesIdx]) || 0) : 0;
+                
+                if (views > 0) {
+                  postEngagement = ((likes + comments + shares) / views) * 100;
+                }
+              }
+              
+              totalEngagement += postEngagement;
+              postCount++;
+            }
+            
+            if (postCount > 0) {
+              engagementRate = totalEngagement / postCount;
+              console.log(`  tiktok avg engagement (${postCount} posts): ${engagementRate.toFixed(2)}%`);
+            }
+          }
+          
           console.log(`  ${platform} content count: ${totalContent}`);
         } catch (e: any) {
           console.error(`  Error fetching posts for ${clientName} ${platform}:`, e.message);
