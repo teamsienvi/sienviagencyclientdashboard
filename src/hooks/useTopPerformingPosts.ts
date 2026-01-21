@@ -1,15 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
-import { subDays, format } from "date-fns";
+import { format } from "date-fns";
+import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 
 export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
   return useQuery({
     queryKey: ["top-performing-posts", clientId, limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
-      // Calculate date range for the last 7 days
-      const sevenDaysAgo = subDays(new Date(), 7);
-      const sevenDaysAgoStr = format(sevenDaysAgo, "yyyy-MM-dd");
+      // Use the current reporting period (last completed Mon-Sun week)
+      const { start, end } = getCurrentReportingWeek();
+      const periodStartStr = format(start, "yyyy-MM-dd");
+      const periodEndStr = format(end, "yyyy-MM-dd");
 
       // Fetch content with metrics for this client across all platforms
       // Filter by metrics period_end (most recent data collection) instead of published_at
@@ -57,16 +59,17 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       });
 
       // Transform to TopInsightContent format
-      // Filter by metrics that have recent period_end (within last 7 days)
+      // Filter by metrics that have period_end within the reporting period
       const topInsightContent: TopInsightContent[] = content
         .filter((c) => {
           // Must have metrics
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           
-          // Check if any metric has a period_end within last 7 days
+          // Check if any metric has a period_end within the reporting period
           const hasRecentMetrics = c.social_content_metrics.some((m: any) => {
             if (!m.period_end) return false;
-            return m.period_end >= sevenDaysAgoStr;
+            // Metric period_end should be within or after the reporting period start
+            return m.period_end >= periodStartStr && m.period_end <= periodEndStr;
           });
           
           return hasRecentMetrics;
