@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { RefreshCw, CalendarIcon, ChevronDown, ChevronRight } from "lucide-react";
+import { RefreshCw, CalendarIcon, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, subDays, startOfDay, endOfDay, parseISO, eachDayOfInterval } from "date-fns";
@@ -42,6 +42,7 @@ interface MetaCampaign {
   cpm: number;
   conversions: number;
   actions?: Record<string, number>;
+  campaignId?: string;
 }
 
 // Google Ads Campaign
@@ -977,8 +978,22 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                                       : <ChevronRight className="h-4 w-4 text-muted-foreground" />
                                   )}
                                 </TableCell>
-                                <TableCell className="font-medium max-w-[200px] truncate" title={campaign.name}>
-                                  {campaign.name}
+                                <TableCell className="font-medium max-w-[200px]" title={campaign.name}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate">{campaign.name}</span>
+                                    {campaign.campaignId && (
+                                      <a
+                                        href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${campaign.campaignId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="text-muted-foreground hover:text-primary shrink-0"
+                                        title="Open in Meta Ads Manager"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      </a>
+                                    )}
+                                  </div>
                                 </TableCell>
                                 <TableCell>
                                   <Badge 
@@ -1310,8 +1325,22 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                               .sort((a, b) => b.spent - a.spent)
                               .map((campaign, idx) => (
                                 <TableRow key={idx} className="hover:bg-muted/20">
-                                  <TableCell className="font-medium max-w-[200px] truncate pl-6" title={campaign.name}>
-                                    {campaign.name}
+                                  <TableCell className="font-medium max-w-[200px] pl-6" title={campaign.name}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="truncate">{campaign.name}</span>
+                                      {campaign.providerCampaignId && (
+                                        <a
+                                          href={`https://ads.google.com/aw/campaigns?campaignId=${campaign.providerCampaignId}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="text-muted-foreground hover:text-primary shrink-0"
+                                          title="Open in Google Ads"
+                                        >
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        </a>
+                                      )}
+                                    </div>
                                   </TableCell>
                                   <TableCell>
                                     <Badge variant="secondary">

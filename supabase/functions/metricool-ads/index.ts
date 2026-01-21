@@ -20,6 +20,7 @@ interface MetaCampaign {
   cpm: number;
   conversions: number;
   actions?: Record<string, number>;
+  campaignId?: string;
 }
 
 // Google Ads Campaign
@@ -236,6 +237,7 @@ serve(async (req) => {
           cpm: Number(c.cpm) || 0,
           conversions: Number(c.conversions) || 0,
           actions: c.actions as Record<string, number> || {},
+          campaignId: c.id ? String(c.id) : (c.campaignId ? String(c.campaignId) : (c.providerCampaignId ? String(c.providerCampaignId) : undefined)),
         }));
 
         return { campaigns, debug: { status: res.status, body: responseText.substring(0, 200), url } };

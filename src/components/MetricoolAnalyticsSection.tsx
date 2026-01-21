@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -422,6 +422,53 @@ export const MetricoolAnalyticsSection = ({
     },
     enabled: !!config,
   });
+
+  // Fetch persisted demographics from database (TikTok only)
+  const { data: persistedDemographics } = useQuery({
+    queryKey: ["persisted-demographics", clientId, platform],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("social_account_demographics")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", platform)
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error fetching persisted demographics:", error);
+        return null;
+      }
+
+      if (!data) return null;
+
+      // Transform to DemographicsData format
+      const result: DemographicsData = {};
+      
+      if (data.gender_male !== null || data.gender_female !== null) {
+        result.gender = {
+          male: data.gender_male ?? 0,
+          female: data.gender_female ?? 0,
+          unknown: data.gender_unknown ?? 0,
+        };
+      }
+
+      if (data.countries && Array.isArray(data.countries)) {
+        result.countries = data.countries as Array<{ country: string; percentage: number }>;
+      }
+
+      return result;
+    },
+    enabled: !!config && platform === "tiktok",
+  });
+
+  // Set demographics from persisted data if not already set by sync
+  useEffect(() => {
+    if (persistedDemographics && !demographics) {
+      setDemographics(persistedDemographics);
+    }
+  }, [persistedDemographics, demographics]);
 
   // Save config mutation
   const saveConfigMutation = useMutation({
