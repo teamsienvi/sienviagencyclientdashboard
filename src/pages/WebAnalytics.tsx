@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/Header";
@@ -8,18 +8,55 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy, ExternalLink } from "lucide-react";
+import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy, ExternalLink, ChevronRight, Building2, ChevronDown } from "lucide-react";
 import { format, subDays } from "date-fns";
 import { useClientAnalytics, AnalyticsErrorType, DateRangePreset } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 const WebAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
+  const { isAdmin, isAuthenticated } = useAuth();
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+
+  // Fetch clients for admin dropdown
+  const { data: clients } = useQuery({
+    queryKey: ["admin-clients-dropdown"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+    enabled: isAdmin && isAuthenticated,
+  });
+
+  const handleClientSelect = (newClientId: string) => {
+    navigate(`/client/${newClientId}`);
+  };
 
   // Fetch client details
   const { data: client, isLoading: isLoadingClient } = useQuery({
@@ -359,12 +396,77 @@ const WebAnalytics = () => {
       <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
+          {/* Breadcrumb Navigation */}
+          <div className="flex items-center justify-between">
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link to="/" className="hover:text-primary transition-colors">
+                      Dashboard
+                    </Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator>
+                  <ChevronRight className="h-4 w-4" />
+                </BreadcrumbSeparator>
+                <BreadcrumbItem>
+                  <BreadcrumbLink asChild>
+                    <Link to={`/client/${clientId}`} className="hover:text-primary transition-colors">
+                      {client?.name || "Client"}
+                    </Link>
+                  </BreadcrumbLink>
+                </BreadcrumbItem>
+                <BreadcrumbSeparator>
+                  <ChevronRight className="h-4 w-4" />
+                </BreadcrumbSeparator>
+                <BreadcrumbItem>
+                  <BreadcrumbPage>Web Analytics</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+
+            {/* Admin Client Switcher */}
+            {isAdmin && clients && clients.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
+                    <Building2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">Switch Client</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[220px] max-h-[400px] overflow-y-auto">
+                  <DropdownMenuLabel>Switch Client</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {clients.map((c) => (
+                    <DropdownMenuItem
+                      key={c.id}
+                      onClick={() => handleClientSelect(c.id)}
+                      className={`cursor-pointer flex items-center gap-2 ${clientId === c.id ? 'bg-accent' : ''}`}
+                    >
+                      {c.logo_url ? (
+                        <img 
+                          src={c.logo_url} 
+                          alt={c.name} 
+                          className="h-6 w-6 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
+                          <Building2 className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                      )}
+                      <span className="truncate">{c.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate(`/client/${clientId}`)}>
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
               <div>
                 <h1 className="text-3xl font-bold flex items-center gap-2">
                   <Globe className="h-8 w-8" />
