@@ -463,12 +463,12 @@ export const MetricoolAnalyticsSection = ({
     enabled: !!config && platform === "tiktok",
   });
 
-  // Set demographics from persisted data if not already set by sync
+  // Set demographics from persisted data on load
   useEffect(() => {
-    if (persistedDemographics && !demographics) {
+    if (persistedDemographics) {
       setDemographics(persistedDemographics);
     }
-  }, [persistedDemographics, demographics]);
+  }, [persistedDemographics]);
 
   // Save config mutation
   const saveConfigMutation = useMutation({
