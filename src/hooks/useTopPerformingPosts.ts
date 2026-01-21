@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
-import { format } from "date-fns";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 
 export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
@@ -10,11 +10,10 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
     queryFn: async (): Promise<RankedTopInsight[]> => {
       // Use the current reporting period (last completed Mon-Sun week)
       const { start, end } = getCurrentReportingWeek();
-      const periodStartStr = format(start, "yyyy-MM-dd");
-      const periodEndStr = format(end, "yyyy-MM-dd");
+      const periodStartDate = startOfDay(start);
+      const periodEndDate = endOfDay(end);
 
       // Fetch content with metrics for this client across all platforms
-      // Filter by metrics period_end (most recent data collection) instead of published_at
       const { data: content, error: contentError } = await supabase
         .from("social_content")
         .select(`
@@ -59,20 +58,20 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       });
 
       // Transform to TopInsightContent format
-      // Filter by metrics that have period_end within the reporting period
+      // Filter content that was published within the reporting period
       const topInsightContent: TopInsightContent[] = content
         .filter((c) => {
           // Must have metrics
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           
-          // Check if any metric has a period_end within the reporting period
-          const hasRecentMetrics = c.social_content_metrics.some((m: any) => {
-            if (!m.period_end) return false;
-            // Metric period_end should be within or after the reporting period start
-            return m.period_end >= periodStartStr && m.period_end <= periodEndStr;
-          });
+          // Check if content was published within the reporting period
+          if (!c.published_at) return false;
+          const publishedDate = parseISO(c.published_at);
           
-          return hasRecentMetrics;
+          return isWithinInterval(publishedDate, { 
+            start: periodStartDate, 
+            end: periodEndDate 
+          });
         })
         .map((c) => {
           // Get the most recent metric (by period_end, then collected_at)
