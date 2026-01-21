@@ -25,7 +25,7 @@ type CountryEntry = { country: string; percentage: number };
 const toDateOnly = (s: string): string => (s.length >= 10 ? s.slice(0, 10) : s);
 
 const parseGender = (data: any): { male: number | null; female: number | null; unknown: number | null } => {
-  // Metricool commonly returns { data: [{ key/label/name, value/percentage }] }
+  // Metricool returns { data: [{ key, value }] } where key is "M", "F", "U"
   const rows: any[] = data?.data && Array.isArray(data.data) ? data.data : [];
 
   let male: number | null = null;
@@ -39,9 +39,10 @@ const parseGender = (data: any): { male: number | null; female: number | null; u
 
     if (!label) continue;
 
-    if (label.includes("male")) male = value;
-    else if (label.includes("female")) female = value;
-    else if (label.includes("unknown") || label.includes("other")) unknown = value;
+    // Handle short codes (M, F, U) and full words (male, female, unknown)
+    if (label === "m" || label.includes("male") && !label.includes("female")) male = value;
+    else if (label === "f" || label.includes("female")) female = value;
+    else if (label === "u" || label.includes("unknown") || label.includes("other")) unknown = value;
   }
 
   return { male, female, unknown };
