@@ -157,4 +157,8 @@ export const clientsData: Client[] = [
       { dateRange: "Dec 29 - Jan 2", link: "/dynamic-report/c3d4e5f6-a7b8-9012-cdef-123456789012", isInternal: true },
     ],
   },
+  {
+    name: "BlingyBag",
+    reports: [],
+  },
 ];
