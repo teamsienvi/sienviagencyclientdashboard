@@ -106,7 +106,8 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
               <tr className="border-b text-left">
                 <th className="pb-2 pr-4 font-medium text-muted-foreground">Post Link</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground">Date</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Views</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">IG Organic Views</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">FB Views</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Engage %</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground">Platform</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Followers</th>
@@ -149,8 +150,15 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                     {post.published_at ? format(new Date(post.published_at), "EEE, MMM d") : "-"}
                   </td>
 
-                  {/* Views */}
-                  <td className="py-3 px-3 text-right font-medium">{formatNumber(post.views)}</td>
+                  {/* IG Organic Views */}
+                  <td className="py-3 px-3 text-right font-medium">
+                    {post.platform === "instagram" ? formatNumber(post.views) : "-"}
+                  </td>
+
+                  {/* FB Views */}
+                  <td className="py-3 px-3 text-right font-medium">
+                    {post.platform === "facebook" ? formatNumber(post.views) : "-"}
+                  </td>
 
                   {/* Engagement % */}
                   <td className="py-3 px-3 text-right">{post.engagement_percentage.toFixed(1)}%</td>
