@@ -7,7 +7,7 @@ import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { 
   ArrowLeft, Calendar, TrendingUp, Users, Eye, 
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -680,10 +680,10 @@ const ClientDashboard = () => {
 // Client-specific header component
 const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?: string; clientLogo?: string | null; currentClientId?: string }) => {
   const navigate = useNavigate();
-  const { isAdmin, isAuthenticated } = useAuth();
+  const { isAdmin, isAuthenticated, signOut, user } = useAuth();
 
-  // Fetch clients for admin dropdown
-  const { data: clients } = useQuery({
+  // Fetch all clients for admin dropdown
+  const { data: adminClients } = useQuery({
     queryKey: ["admin-clients-dropdown"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -697,8 +697,53 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
     enabled: isAdmin && isAuthenticated,
   });
 
+  // Fetch assigned clients for non-admin users
+  const { data: userClients } = useQuery({
+    queryKey: ["user-assigned-clients", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      // Get client IDs assigned to user
+      const { data: clientMappings, error: mappingError } = await supabase
+        .from("client_users")
+        .select("client_id")
+        .eq("user_id", user.id);
+
+      if (mappingError) throw mappingError;
+      if (!clientMappings || clientMappings.length === 0) return [];
+
+      const clientIds = clientMappings.map(m => m.client_id);
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .in("id", clientIds)
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !isAdmin && isAuthenticated && !!user,
+  });
+
+  // Use admin clients for admins, user clients for regular users
+  const clients = isAdmin ? adminClients : userClients;
+  const showClientSwitcher = clients && clients.length > 1;
+
   const handleClientSelect = (clientId: string) => {
     navigate(`/client/${clientId}`);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login");
+  };
+
+  const handleBackClick = () => {
+    if (isAdmin) {
+      navigate("/");
+    }
+    // Non-admin users with single client - no back navigation
+    // Non-admin users with multiple clients can use the switcher
   };
   
   return (
@@ -706,14 +751,17 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => navigate("/")}
-              className="shrink-0"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+            {/* Only show back button for admins */}
+            {isAdmin && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleBackClick}
+                className="shrink-0"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            )}
             
             {clientLogo && (
               <div className="h-10 w-10 rounded-lg overflow-hidden border">
@@ -734,8 +782,8 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Admin Client Selector */}
-            {isAdmin && clients && clients.length > 0 && (
+            {/* Client Selector - for admins OR users with multiple assigned clients */}
+            {showClientSwitcher && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
@@ -771,6 +819,18 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
               </DropdownMenu>
             )}
             <ThemeToggle />
+            {/* Logout button for all authenticated users */}
+            {isAuthenticated && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSignOut}
+                className="gap-2 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive transition-all duration-300"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
