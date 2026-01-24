@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ExternalLink, TrendingUp } from "lucide-react";
 import { useTopPerformingPosts } from "@/hooks/useTopPerformingPosts";
 import { 
@@ -16,6 +18,17 @@ interface TopPerformingPostsProps {
   clientId: string;
 }
 
+type RankingChoice = "all" | "instagram" | "facebook" | "tiktok" | "youtube" | "x";
+
+const rankingLabels: Record<RankingChoice, string> = {
+  all: "All Views",
+  instagram: "IG Organic Views",
+  facebook: "FB Views",
+  tiktok: "TikTok Views",
+  youtube: "YouTube Views",
+  x: "X Impressions",
+};
+
 const formatNumber = (num: number): string => {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
@@ -23,8 +36,15 @@ const formatNumber = (num: number): string => {
 };
 
 export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
+  const [rankingChoice, setRankingChoice] = useState<RankingChoice>("all");
+  
   // Always show top 3 posts from last 7 days, ranked by views
-  const { data: posts, isLoading, error } = useTopPerformingPosts(clientId, 3);
+  const { data: allPosts, isLoading, error } = useTopPerformingPosts(clientId, 10); // Fetch more, filter client-side
+  
+  // Filter and re-rank based on ranking choice
+  const posts = allPosts
+    ?.filter(post => rankingChoice === "all" || post.platform === rankingChoice)
+    .slice(0, 3) || [];
 
   if (isLoading) {
     return (
@@ -85,19 +105,33 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
             Top Performing Posts
           </CardTitle>
-          <Badge variant="outline" className="text-xs">
-            {(() => {
-              const { start, end } = getCurrentReportingWeek();
-              return formatDateRange(start, end);
-            })()}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Select value={rankingChoice} onValueChange={(v) => setRankingChoice(v as RankingChoice)}>
+              <SelectTrigger className="w-[160px] h-8 text-xs">
+                <SelectValue placeholder="Rank by..." />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(rankingLabels).map(([value, label]) => (
+                  <SelectItem key={value} value={value} className="text-xs">
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline" className="text-xs">
+              {(() => {
+                const { start, end } = getCurrentReportingWeek();
+                return formatDateRange(start, end);
+              })()}
+            </Badge>
+          </div>
         </div>
-        <CardDescription>Top 3 posts from last 7 days, ranked by views</CardDescription>
+        <CardDescription>Top 3 posts ranked by {rankingLabels[rankingChoice].toLowerCase()}</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -106,8 +140,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
               <tr className="border-b text-left">
                 <th className="pb-2 pr-4 font-medium text-muted-foreground">Post Link</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground">Date</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">IG Organic Views</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">FB Views</th>
+                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Views</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Engage %</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground">Platform</th>
                 <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Followers</th>
@@ -150,15 +183,8 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
                     {post.published_at ? format(new Date(post.published_at), "EEE, MMM d") : "-"}
                   </td>
 
-                  {/* IG Organic Views */}
-                  <td className="py-3 px-3 text-right font-medium">
-                    {post.platform === "instagram" ? formatNumber(post.views) : "-"}
-                  </td>
-
-                  {/* FB Views */}
-                  <td className="py-3 px-3 text-right font-medium">
-                    {post.platform === "facebook" ? formatNumber(post.views) : "-"}
-                  </td>
+                  {/* Views */}
+                  <td className="py-3 px-3 text-right font-medium">{formatNumber(post.views)}</td>
 
                   {/* Engagement % */}
                   <td className="py-3 px-3 text-right">{post.engagement_percentage.toFixed(1)}%</td>
