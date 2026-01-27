@@ -294,6 +294,9 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         if (error) throw error;
         if (data?.success) {
           totalSynced += data.recordsSynced || 0;
+        } else if (data?.rateLimited) {
+          toast.error("X API rate limit exceeded. Try again in 15 mins or use CSV upload.");
+          return;
         } else {
           toast.error(data?.error || "Failed to sync X data");
           return;

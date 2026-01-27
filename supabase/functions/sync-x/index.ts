@@ -48,6 +48,19 @@ serve(async (req) => {
     if (!userResponse.ok) {
       const errorText = await userResponse.text();
       console.error("X API error:", errorText);
+      
+      // Handle rate limiting with a user-friendly message
+      if (userResponse.status === 429) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: "X API rate limit exceeded. Please try again in 15 minutes or upload a CSV export instead.",
+            rateLimited: true,
+          }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       throw new Error(`X API error: ${userResponse.status}`);
     }
 
