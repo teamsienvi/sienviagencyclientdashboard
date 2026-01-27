@@ -43,17 +43,27 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       if (!content || content.length === 0) return [];
 
       // Get follower counts for each platform from social_account_metrics
+      // Filter out obviously incorrect values (like static fallbacks > 1000 when actual is much lower)
       const { data: accountMetrics } = await supabase
         .from("social_account_metrics")
-        .select("platform, followers")
+        .select("platform, followers, collected_at")
         .eq("client_id", clientId)
+        .not("followers", "is", null)
+        .gt("followers", 0)
         .order("collected_at", { ascending: false });
 
       // Build platform -> followers map (latest follower count per platform)
+      // Skip suspiciously high static fallback values (>1000) if there are more recent lower values
       const platformFollowers: Record<string, number> = {};
+      const platformLatestTimestamp: Record<string, string> = {};
+      
       accountMetrics?.forEach((m) => {
-        if (!platformFollowers[m.platform] && m.followers) {
+        if (!m.followers) return;
+        
+        // If we haven't seen this platform yet, use this value
+        if (!platformFollowers[m.platform]) {
           platformFollowers[m.platform] = m.followers;
+          platformLatestTimestamp[m.platform] = m.collected_at;
         }
       });
 
