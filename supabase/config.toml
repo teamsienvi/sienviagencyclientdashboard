@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.metricool-social-weekly]
 verify_jwt = false
+
+[functions.sync-metricool-x]
+verify_jwt = false
