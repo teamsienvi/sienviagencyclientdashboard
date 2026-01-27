@@ -68,10 +68,12 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [syncingMetricool, setSyncingMetricool] = useState(false);
   const [accountMetrics, setAccountMetrics] = useState<XAccountMetrics | null>(null);
   const [prevMetrics, setPrevMetrics] = useState<XPrevMetrics | null>(null);
   const [content, setContent] = useState<(XContent & { metrics?: XContentMetrics })[]>([]);
   const [socialAccount, setSocialAccount] = useState<{ id: string; account_id: string } | null>(null);
+  const [metricoolConfig, setMetricoolConfig] = useState<{ user_id: string; blog_id: string | null } | null>(null);
 
   // Date range state
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
@@ -172,6 +174,17 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
       setSocialAccount(accountData);
 
+      // Fetch Metricool config for X
+      const { data: mcConfig } = await supabase
+        .from("client_metricool_config")
+        .select("user_id, blog_id")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .eq("is_active", true)
+        .maybeSingle();
+      
+      setMetricoolConfig(mcConfig);
+
       // Fetch latest account metrics - get most recent that overlaps with selected range
       const { data: metricsData } = await supabase
         .from("social_account_metrics")
@@ -206,7 +219,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       } : null);
 
       // Fetch ALL content for this client/platform with their metrics
-      // We filter by metrics period_start/period_end instead of published_at
+      // Show recent posts even if no metrics exist for the selected period
       const { data: contentData } = await supabase
         .from("social_content")
         .select(`
@@ -215,19 +228,26 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         `)
         .eq("client_id", clientId)
         .eq("platform", "x")
-        .order("published_at", { ascending: false });
+        .order("published_at", { ascending: false })
+        .limit(100);
 
       if (contentData) {
-        // Filter and process content based on metrics period
+        // Process content - try to find metrics for selected period, fallback to most recent metrics
         const contentWithMetrics = contentData
           .map((item: any) => {
-            const metrics = findMetricsForPeriod(item.social_content_metrics, startDate, endDate);
+            // First try to find metrics matching the selected period
+            const periodMetrics = findMetricsForPeriod(item.social_content_metrics, startDate, endDate);
+            // If no period match, use most recent metrics available
+            const latestMetrics = item.social_content_metrics?.length > 0
+              ? [...item.social_content_metrics].sort((a: any, b: any) => 
+                  new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+                )[0]
+              : null;
             return {
               ...item,
-              metrics: metrics || null,
+              metrics: periodMetrics || latestMetrics || null,
             };
           })
-          .filter((item: any) => item.metrics !== null) // Only show content with metrics in the period
           .slice(0, 50); // Limit to 50 items
         
         setContent(contentWithMetrics);
@@ -287,6 +307,43 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       toast.error(error.message || "Failed to sync X analytics");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  // Sync X via Metricool
+  const handleMetricoolSync = async () => {
+    if (!metricoolConfig) {
+      toast.error("No Metricool configuration found for X");
+      return;
+    }
+
+    setSyncingMetricool(true);
+    try {
+      const { start, end } = getDateRange();
+      const periodStart = format(startOfDay(start), "yyyy-MM-dd");
+      const periodEnd = format(endOfDay(end), "yyyy-MM-dd");
+
+      const { data, error } = await supabase.functions.invoke("sync-metricool-x", {
+        body: {
+          clientId,
+          periodStart,
+          periodEnd,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(`Synced ${data.recordsSynced} posts from X via Metricool`);
+        await fetchData();
+      } else {
+        toast.error(data?.error || "Failed to sync X data from Metricool");
+      }
+    } catch (error: any) {
+      console.error("Metricool sync error:", error);
+      toast.error(error.message || "Failed to sync X via Metricool");
+    } finally {
+      setSyncingMetricool(false);
     }
   };
 
@@ -378,15 +435,28 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
               </Button>
             }
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSync}
-            disabled={syncing || !socialAccount}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing..." : "Sync from X"}
-          </Button>
+          {metricoolConfig && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMetricoolSync}
+              disabled={syncingMetricool}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncingMetricool ? "animate-spin" : ""}`} />
+              {syncingMetricool ? "Syncing..." : "Sync via Metricool"}
+            </Button>
+          )}
+          {socialAccount && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing..." : "Sync from X API"}
+            </Button>
+          )}
         </div>
       </div>
 
