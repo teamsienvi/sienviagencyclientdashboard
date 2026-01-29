@@ -41,116 +41,43 @@ interface TopProduct {
   refunds: number;
 }
 
-// Generate mock data for development/demo purposes
-function generateMockSummary(startDate: string, endDate: string, compare: boolean): ShopifySummary {
-  // Generate realistic-looking mock data based on date range
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  
-  const baseOrders = days * 8 + Math.floor(Math.random() * days * 5);
-  const avgOrderValue = 45 + Math.random() * 30;
-  const grossSales = baseOrders * avgOrderValue;
-  const discountAmount = grossSales * (0.05 + Math.random() * 0.1);
-  const refunds = grossSales * (0.02 + Math.random() * 0.03);
-  const netSales = grossSales - discountAmount - refunds;
-  const totalCustomers = Math.floor(baseOrders * 0.85);
-  const returningRate = 0.25 + Math.random() * 0.15;
-  const returningCustomers = Math.floor(totalCustomers * returningRate);
-  const newCustomers = totalCustomers - returningCustomers;
-
-  const summary: ShopifySummary = {
-    netSales: Number(netSales.toFixed(2)),
-    grossSales: Number(grossSales.toFixed(2)),
-    orders: baseOrders,
-    averageOrderValue: Number(avgOrderValue.toFixed(2)),
-    refunds: Number(refunds.toFixed(2)),
-    discountAmount: Number(discountAmount.toFixed(2)),
-    newCustomers,
-    returningCustomers,
+// Return empty/zero data - awaiting real Shopify integration
+function generateEmptySummary(): ShopifySummary {
+  return {
+    netSales: 0,
+    grossSales: 0,
+    orders: 0,
+    averageOrderValue: 0,
+    refunds: 0,
+    discountAmount: 0,
+    newCustomers: 0,
+    returningCustomers: 0,
   };
-
-  if (compare) {
-    // Generate comparison data (slightly different from current)
-    const prevMultiplier = 0.85 + Math.random() * 0.3; // 85% to 115% of current
-    summary.prevNetSales = Number((netSales * prevMultiplier).toFixed(2));
-    summary.prevGrossSales = Number((grossSales * prevMultiplier).toFixed(2));
-    summary.prevOrders = Math.floor(baseOrders * prevMultiplier);
-    summary.prevAverageOrderValue = Number((avgOrderValue * (0.9 + Math.random() * 0.2)).toFixed(2));
-    summary.prevRefunds = Number((refunds * prevMultiplier).toFixed(2));
-    summary.prevDiscountAmount = Number((discountAmount * prevMultiplier).toFixed(2));
-    summary.prevNewCustomers = Math.floor(newCustomers * prevMultiplier);
-    summary.prevReturningCustomers = Math.floor(returningCustomers * prevMultiplier);
-  }
-
-  return summary;
 }
 
-function generateMockTimeseries(startDate: string, endDate: string, metric: string): TimeseriesPoint[] {
+// Return empty timeseries - awaiting real Shopify integration
+function generateEmptyTimeseries(startDate: string, endDate: string): TimeseriesPoint[] {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const points: TimeseriesPoint[] = [];
   
   const current = new Date(start);
   while (current <= end) {
-    const dayOfWeek = current.getDay();
-    // Higher values on weekends for e-commerce
-    const weekendMultiplier = dayOfWeek === 0 || dayOfWeek === 6 ? 1.3 : 1;
-    
-    let baseValue: number;
-    if (metric === "net_sales") {
-      baseValue = 250 + Math.random() * 400;
-    } else if (metric === "orders") {
-      baseValue = 5 + Math.random() * 12;
-    } else {
-      baseValue = 100 + Math.random() * 200;
-    }
-    
     points.push({
       date: current.toISOString().split("T")[0],
-      value: Number((baseValue * weekendMultiplier).toFixed(2)),
+      value: 0,
     });
-    
     current.setDate(current.getDate() + 1);
   }
   
   return points;
 }
 
-function generateMockTopProducts(page: number, pageSize: number, sort: string): { products: TopProduct[]; total: number } {
-  const allProducts = [
-    { id: "prod_1", title: "Snarky Pet Bandana - Sass Level Expert", imageUrl: null, unitsSold: 156, revenue: 3899.44, refunds: 78.00 },
-    { id: "prod_2", title: "Attitude Adjustment Cat Collar", imageUrl: null, unitsSold: 132, revenue: 2639.68, refunds: 52.79 },
-    { id: "prod_3", title: "Professional Treat Beggar Dog Tag", imageUrl: null, unitsSold: 98, revenue: 1960.02, refunds: 39.20 },
-    { id: "prod_4", title: "Drama Queen Leash - Limited Edition", imageUrl: null, unitsSold: 87, revenue: 2609.13, refunds: 0 },
-    { id: "prod_5", title: "Sarcasm Loading... Pet Bowl", imageUrl: null, unitsSold: 76, revenue: 1139.24, refunds: 22.78 },
-    { id: "prod_6", title: "Not Your Average Pet Parent Tote", imageUrl: null, unitsSold: 65, revenue: 1624.35, refunds: 32.49 },
-    { id: "prod_7", title: "Fluffy Overlord Throne Bed", imageUrl: null, unitsSold: 54, revenue: 2699.46, refunds: 53.99 },
-    { id: "prod_8", title: "Zero Barks Given Sweater", imageUrl: null, unitsSold: 48, revenue: 1439.52, refunds: 28.79 },
-    { id: "prod_9", title: "Certified Good Boy Certificate Frame", imageUrl: null, unitsSold: 42, revenue: 839.58, refunds: 0 },
-    { id: "prod_10", title: "Chaos Coordinator Pet Parent Mug", imageUrl: null, unitsSold: 38, revenue: 569.62, refunds: 11.39 },
-    { id: "prod_11", title: "Professional Zoomies Champion Medal", imageUrl: null, unitsSold: 35, revenue: 524.65, refunds: 0 },
-    { id: "prod_12", title: "Nap Expert Cat Blanket", imageUrl: null, unitsSold: 31, revenue: 774.69, refunds: 15.49 },
-  ];
-
-  // Sort products
-  const sortedProducts = [...allProducts];
-  if (sort === "revenue_desc") {
-    sortedProducts.sort((a, b) => b.revenue - a.revenue);
-  } else if (sort === "revenue_asc") {
-    sortedProducts.sort((a, b) => a.revenue - b.revenue);
-  } else if (sort === "units_desc") {
-    sortedProducts.sort((a, b) => b.unitsSold - a.unitsSold);
-  } else if (sort === "units_asc") {
-    sortedProducts.sort((a, b) => a.unitsSold - b.unitsSold);
-  }
-
-  const startIdx = (page - 1) * pageSize;
-  const endIdx = startIdx + pageSize;
-  
+// Return empty products - awaiting real Shopify integration
+function generateEmptyTopProducts(): { products: TopProduct[]; total: number } {
   return {
-    products: sortedProducts.slice(startIdx, endIdx),
-    total: sortedProducts.length,
+    products: [],
+    total: 0,
   };
 }
 
@@ -231,9 +158,8 @@ serve(async (req) => {
       case "summary": {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
-        const compare = body.compare === true || body.compare === "true";
 
-        const summary = generateMockSummary(start, end, compare);
+        const summary = generateEmptySummary();
         
         return new Response(
           JSON.stringify({
@@ -251,7 +177,7 @@ serve(async (req) => {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
 
-        const timeseries = generateMockTimeseries(start, end, metric);
+        const timeseries = generateEmptyTimeseries(start, end);
         
         return new Response(
           JSON.stringify({
@@ -267,9 +193,8 @@ serve(async (req) => {
       case "top-products": {
         const page = parseInt(body.page) || 1;
         const pageSize = parseInt(body.pageSize) || 10;
-        const sort = body.sort || "revenue_desc";
 
-        const { products, total } = generateMockTopProducts(page, pageSize, sort);
+        const { products, total } = generateEmptyTopProducts();
         
         return new Response(
           JSON.stringify({
@@ -279,7 +204,7 @@ serve(async (req) => {
               page,
               pageSize,
               total,
-              totalPages: Math.ceil(total / pageSize),
+              totalPages: 0,
             },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
