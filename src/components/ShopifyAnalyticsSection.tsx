@@ -3,8 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
@@ -108,7 +107,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>("7d");
-  const [compareEnabled, setCompareEnabled] = useState(true);
   
   // Data state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
@@ -172,7 +170,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             endpoint: "summary",
             start: dateRange.start,
             end: dateRange.end,
-            compare: compareEnabled,
           },
         }),
         supabase.functions.invoke("shopify-analytics", {
@@ -262,7 +259,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     if (!loading) {
       fetchData(false);
     }
-  }, [dateRange.start, dateRange.end, compareEnabled]);
+  }, [dateRange.start, dateRange.end]);
 
   // Handle sort change
   const handleSort = (field: SortField) => {
@@ -410,17 +407,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             </SelectContent>
           </Select>
 
-          {/* Compare Toggle */}
-          <div className="flex items-center gap-2">
-            <Switch
-              id="compare-toggle"
-              checked={compareEnabled}
-              onCheckedChange={setCompareEnabled}
-            />
-            <Label htmlFor="compare-toggle" className="text-sm cursor-pointer">
-              Compare
-            </Label>
-          </div>
 
           {/* Refresh Button */}
           <Button
@@ -441,7 +427,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Net Sales"
           value={formatCurrency(summary?.netSales || 0)}
           icon={DollarSign}
-          change={compareEnabled ? calcChange(summary?.netSales || 0, summary?.prevNetSales) : null}
           iconBg="bg-green-500/10"
           iconColor="text-green-600"
         />
@@ -451,7 +436,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Gross Sales"
           value={formatCurrency(summary?.grossSales || 0)}
           icon={TrendingUp}
-          change={compareEnabled ? calcChange(summary?.grossSales || 0, summary?.prevGrossSales) : null}
           iconBg="bg-blue-500/10"
           iconColor="text-blue-600"
         />
@@ -461,7 +445,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Orders"
           value={summary?.orders?.toLocaleString() || "0"}
           icon={ShoppingCart}
-          change={compareEnabled ? calcChange(summary?.orders || 0, summary?.prevOrders) : null}
           iconBg="bg-purple-500/10"
           iconColor="text-purple-600"
         />
@@ -471,7 +454,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Avg Order Value"
           value={formatCurrency(summary?.averageOrderValue || 0)}
           icon={Package}
-          change={compareEnabled ? calcChange(summary?.averageOrderValue || 0, summary?.prevAverageOrderValue) : null}
           iconBg="bg-orange-500/10"
           iconColor="text-orange-600"
         />
@@ -481,10 +463,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Refunds"
           value={formatCurrency(summary?.refunds || 0)}
           icon={ArrowDownRight}
-          change={compareEnabled ? calcChange(summary?.refunds || 0, summary?.prevRefunds) : null}
           iconBg="bg-red-500/10"
           iconColor="text-red-600"
-          invertChange
         />
 
         {/* Discounts */}
@@ -492,7 +472,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Discounts"
           value={formatCurrency(summary?.discountAmount || 0)}
           icon={DollarSign}
-          change={compareEnabled ? calcChange(summary?.discountAmount || 0, summary?.prevDiscountAmount) : null}
           iconBg="bg-amber-500/10"
           iconColor="text-amber-600"
         />
@@ -502,7 +481,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="New Customers"
           value={summary?.newCustomers?.toLocaleString() || "0"}
           icon={Users}
-          change={compareEnabled ? calcChange(summary?.newCustomers || 0, summary?.prevNewCustomers) : null}
           iconBg="bg-teal-500/10"
           iconColor="text-teal-600"
         />
@@ -512,7 +490,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Returning Customers"
           value={summary?.returningCustomers?.toLocaleString() || "0"}
           icon={Users}
-          change={compareEnabled ? calcChange(summary?.returningCustomers || 0, summary?.prevReturningCustomers) : null}
           iconBg="bg-indigo-500/10"
           iconColor="text-indigo-600"
         />
@@ -776,15 +753,11 @@ interface KPICardProps {
   title: string;
   value: string;
   icon: React.ElementType;
-  change?: { value: number; isPositive: boolean } | null;
   iconBg: string;
   iconColor: string;
-  invertChange?: boolean;
 }
 
-const KPICard = ({ title, value, icon: Icon, change, iconBg, iconColor, invertChange }: KPICardProps) => {
-  const isPositive = invertChange ? !change?.isPositive : change?.isPositive;
-
+const KPICard = ({ title, value, icon: Icon, iconBg, iconColor }: KPICardProps) => {
   return (
     <Card>
       <CardContent className="p-4">
@@ -792,19 +765,6 @@ const KPICard = ({ title, value, icon: Icon, change, iconBg, iconColor, invertCh
           <div className={cn("p-2 rounded-lg", iconBg)}>
             <Icon className={cn("h-4 w-4", iconColor)} />
           </div>
-          {change && (
-            <div className={cn(
-              "flex items-center gap-0.5 text-xs font-medium",
-              isPositive ? "text-green-600" : "text-red-600"
-            )}>
-              {isPositive ? (
-                <ArrowUpRight className="h-3 w-3" />
-              ) : (
-                <ArrowDownRight className="h-3 w-3" />
-              )}
-              {change.value.toFixed(1)}%
-            </div>
-          )}
         </div>
         <div className="mt-3">
           <p className="text-2xl font-bold">{value}</p>
