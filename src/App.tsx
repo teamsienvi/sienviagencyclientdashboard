@@ -21,6 +21,7 @@ import LinkedInAnalytics from "./pages/LinkedInAnalytics";
 import TikTokMetricoolAnalytics from "./pages/TikTokMetricoolAnalytics";
 import LinkedInMetricoolAnalytics from "./pages/LinkedInMetricoolAnalytics";
 import AdsAnalytics from "./pages/AdsAnalytics";
+import ShopifyAnalytics from "./pages/ShopifyAnalytics";
 import WebAnalytics from "./pages/WebAnalytics";
 import UnifiedAnalytics from "./pages/UnifiedAnalytics";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
@@ -79,6 +80,7 @@ const App = () => (
           <Route path="/linkedin-metricool/:clientId" element={<LinkedInMetricoolAnalytics />} />
           <Route path="/web-analytics/:clientId" element={<WebAnalytics />} />
           <Route path="/ads-analytics/:clientId" element={<AdsAnalytics />} />
+          <Route path="/shopify-analytics/:clientId" element={<ShopifyAnalytics />} />
           <Route path="/analytics/:clientId" element={<UnifiedAnalytics />} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
