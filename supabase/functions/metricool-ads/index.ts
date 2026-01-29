@@ -228,18 +228,42 @@ serve(async (req) => {
           return { campaigns: [], debug: { status: res.status, body: responseText, url } };
         }
 
+        // Log the first campaign's raw data for debugging ROAS fields
+        if (data.length > 0) {
+          const sample = data[0];
+          console.log(`[metricool-ads] Raw Meta campaign fields:`, {
+            name: sample.name,
+            conversions: sample.conversions,
+            // Note: Metricool uses purchaseROAS (capital ROAS)
+            purchaseROAS: sample.purchaseROAS,
+            conversionsValue: sample.conversionsValue,
+            allConversionsValue: sample.allConversionsValue,
+            costPerConversion: sample.costPerConversion,
+            conversionRate: sample.conversionRate,
+          });
+        }
+
         const campaigns: MetaCampaign[] = data.map((c: Record<string, unknown>) => {
           const spent = Number(c.spent) || 0;
           const actions = c.actions as Record<string, number> || {};
           
-          // Calculate ROAS from purchase_roas action or from conversion value / spend
-          let purchaseRoas = Number(c.purchaseRoas) || Number(c.purchase_roas) || 0;
-          let conversionValue = Number(c.conversionValue) || Number(c.conversion_value) || Number(c.allConversionsValue) || 0;
+          // Look for ROAS - Metricool uses purchaseROAS (capital ROAS)
+          let purchaseRoas = Number(c.purchaseROAS) || Number(c.purchaseRoas) || Number(c.purchase_roas) || 0;
           
-          // If ROAS is in actions (e.g., actions.purchase_roas or actions.omni_purchase_roas)
-          if (!purchaseRoas && actions) {
-            purchaseRoas = Number(actions.purchase_roas) || Number(actions.omni_purchase_roas) || 0;
-            conversionValue = Number(actions.omni_purchase) || Number(actions.purchase) || conversionValue;
+          // Look for conversion value - Metricool uses conversionsValue
+          let conversionValue = Number(c.conversionsValue) || Number(c.conversionValue) || 
+                                Number(c.allConversionsValue) || 0;
+          
+          // Check in actions object for ROAS and purchase values
+          if (actions) {
+            if (!purchaseRoas) {
+              purchaseRoas = Number(actions.purchase_roas) || Number(actions.omni_purchase_roas) || 
+                             Number(actions.website_purchase_roas) || 0;
+            }
+            if (!conversionValue) {
+              conversionValue = Number(actions.omni_purchase) || Number(actions.purchase) || 
+                                Number(actions.website_purchases_value) || 0;
+            }
           }
           
           // Calculate ROAS if we have conversion value but no ROAS
@@ -266,7 +290,7 @@ serve(async (req) => {
           };
         });
 
-        return { campaigns, debug: { status: res.status, body: responseText.substring(0, 200), url } };
+        return { campaigns, debug: { status: res.status, body: responseText.substring(0, 500), url } };
       } catch (err) {
         console.error(`[metricool-ads] Meta error:`, err);
         return { campaigns: null, debug: { status: 0, body: String(err), url } };
