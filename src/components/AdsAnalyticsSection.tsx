@@ -41,6 +41,8 @@ interface MetaCampaign {
   cpc: number;
   cpm: number;
   conversions: number;
+  purchaseRoas: number;
+  conversionValue: number;
   actions?: Record<string, number>;
   campaignId?: string;
 }
@@ -71,6 +73,8 @@ interface MetaAggregatedData {
   ctr: number;
   cpc: number;
   cpm: number;
+  roas: number;
+  conversionValue: number;
   actions: Record<string, number>;
   campaigns: MetaCampaign[];
 }
@@ -874,7 +878,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
             <CardContent className="p-0">
               <div className="flex items-center justify-between p-4 border-b bg-muted/20">
                 <h3 className="text-lg font-semibold">Performance</h3>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <KPIBadge
                     value={formatCurrency(metaAds.current.cpm)}
                     label="CPM"
@@ -886,6 +890,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                   <KPIBadge
                     value={formatPercent(metaAds.current.ctr)}
                     label="CTR"
+                  />
+                  <KPIBadge
+                    value={`${metaAds.current.roas?.toFixed(2) || '0.00'}x`}
+                    label="ROAS"
                   />
                   <KPIBadge
                     value={formatCurrency(metaAds.current.spend)}
@@ -951,7 +959,9 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                         <TableHead className="text-right">Spent</TableHead>
                         <TableHead className="text-right">CTR</TableHead>
                         <TableHead className="text-right">CPC</TableHead>
-                        <TableHead className="text-right pr-6">Conv.</TableHead>
+                        <TableHead className="text-right">Conv.</TableHead>
+                        <TableHead className="text-right">ROAS</TableHead>
+                        <TableHead className="text-right pr-6">Conv. Value</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1012,13 +1022,15 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                                 </TableCell>
                                 <TableCell className="text-right font-mono">{formatPercent(campaign.ctr)}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(campaign.cpc)}</TableCell>
-                                <TableCell className="text-right font-mono pr-6">{formatNumber(campaign.conversions)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatNumber(campaign.conversions)}</TableCell>
+                                <TableCell className="text-right font-mono">{(campaign.purchaseRoas || 0).toFixed(2)}x</TableCell>
+                                <TableCell className="text-right font-mono pr-6">{formatCurrency(campaign.conversionValue || 0)}</TableCell>
                               </TableRow>
                               
                               {/* Expanded Actions Row */}
                               {isExpanded && hasActions && (
                                 <TableRow className="bg-muted/10">
-                                  <TableCell colSpan={10} className="px-6 py-4">
+                                  <TableCell colSpan={12} className="px-6 py-4">
                                     <div className="pl-8">
                                       <p className="text-sm font-medium text-muted-foreground mb-3">Actions Breakdown</p>
                                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">

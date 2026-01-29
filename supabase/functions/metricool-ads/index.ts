@@ -19,6 +19,8 @@ interface MetaCampaign {
   cpc: number;
   cpm: number;
   conversions: number;
+  purchaseRoas: number;
+  conversionValue: number;
   actions?: Record<string, number>;
   campaignId?: string;
 }
@@ -49,6 +51,8 @@ interface MetaAggregatedData {
   ctr: number;
   cpc: number;
   cpm: number;
+  roas: number;
+  conversionValue: number;
   actions: Record<string, number>;
   campaigns: MetaCampaign[];
 }
@@ -224,21 +228,43 @@ serve(async (req) => {
           return { campaigns: [], debug: { status: res.status, body: responseText, url } };
         }
 
-        const campaigns: MetaCampaign[] = data.map((c: Record<string, unknown>) => ({
-          name: String(c.name || "Unknown"),
-          status: String(c.status || "unknown"),
-          impressions: Number(c.impressions) || 0,
-          reach: Number(c.reach) || 0,
-          clicks: Number(c.clicks) || 0,
-          uniqueClicks: Number(c.uniqueClicks) || 0,
-          spent: Number(c.spent) || 0,
-          ctr: Number(c.ctr) || 0,
-          cpc: Number(c.cpc) || 0,
-          cpm: Number(c.cpm) || 0,
-          conversions: Number(c.conversions) || 0,
-          actions: c.actions as Record<string, number> || {},
-          campaignId: c.id ? String(c.id) : (c.campaignId ? String(c.campaignId) : (c.providerCampaignId ? String(c.providerCampaignId) : undefined)),
-        }));
+        const campaigns: MetaCampaign[] = data.map((c: Record<string, unknown>) => {
+          const spent = Number(c.spent) || 0;
+          const actions = c.actions as Record<string, number> || {};
+          
+          // Calculate ROAS from purchase_roas action or from conversion value / spend
+          let purchaseRoas = Number(c.purchaseRoas) || Number(c.purchase_roas) || 0;
+          let conversionValue = Number(c.conversionValue) || Number(c.conversion_value) || Number(c.allConversionsValue) || 0;
+          
+          // If ROAS is in actions (e.g., actions.purchase_roas or actions.omni_purchase_roas)
+          if (!purchaseRoas && actions) {
+            purchaseRoas = Number(actions.purchase_roas) || Number(actions.omni_purchase_roas) || 0;
+            conversionValue = Number(actions.omni_purchase) || Number(actions.purchase) || conversionValue;
+          }
+          
+          // Calculate ROAS if we have conversion value but no ROAS
+          if (!purchaseRoas && conversionValue > 0 && spent > 0) {
+            purchaseRoas = conversionValue / spent;
+          }
+          
+          return {
+            name: String(c.name || "Unknown"),
+            status: String(c.status || "unknown"),
+            impressions: Number(c.impressions) || 0,
+            reach: Number(c.reach) || 0,
+            clicks: Number(c.clicks) || 0,
+            uniqueClicks: Number(c.uniqueClicks) || 0,
+            spent,
+            ctr: Number(c.ctr) || 0,
+            cpc: Number(c.cpc) || 0,
+            cpm: Number(c.cpm) || 0,
+            conversions: Number(c.conversions) || 0,
+            purchaseRoas,
+            conversionValue,
+            actions,
+            campaignId: c.id ? String(c.id) : (c.campaignId ? String(c.campaignId) : (c.providerCampaignId ? String(c.providerCampaignId) : undefined)),
+          };
+        });
 
         return { campaigns, debug: { status: res.status, body: responseText.substring(0, 200), url } };
       } catch (err) {
@@ -359,7 +385,7 @@ serve(async (req) => {
     const aggregateMetaCampaigns = (campaigns: MetaCampaign[]): MetaAggregatedData => {
       const result: MetaAggregatedData = {
         spend: 0, impressions: 0, reach: 0, clicks: 0, uniqueClicks: 0,
-        conversions: 0, ctr: 0, cpc: 0, cpm: 0, actions: {}, campaigns,
+        conversions: 0, ctr: 0, cpc: 0, cpm: 0, roas: 0, conversionValue: 0, actions: {}, campaigns,
       };
 
       for (const c of campaigns) {
@@ -369,6 +395,7 @@ serve(async (req) => {
         result.clicks += c.clicks || 0;
         result.uniqueClicks += c.uniqueClicks || 0;
         result.conversions += c.conversions || 0;
+        result.conversionValue += c.conversionValue || 0;
         if (c.actions) {
           for (const [key, value] of Object.entries(c.actions)) {
             result.actions[key] = (result.actions[key] || 0) + (Number(value) || 0);
@@ -381,6 +408,9 @@ serve(async (req) => {
         result.cpm = (result.spend / result.impressions) * 1000;
       }
       if (result.clicks > 0) result.cpc = result.spend / result.clicks;
+      if (result.spend > 0 && result.conversionValue > 0) {
+        result.roas = result.conversionValue / result.spend;
+      }
 
       return result;
     };
