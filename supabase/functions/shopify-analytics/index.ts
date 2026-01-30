@@ -124,8 +124,9 @@ serve(async (req) => {
       );
     }
 
-    // For demo purposes, only enable Shopify for "Snarky Pets"
-    const isShopifyConnected = client.name === "Snarky Pets";
+    // Enable Shopify for Snarky Pets and OxiSure Tech
+    const shopifyEnabledClients = ["Snarky Pets", "OxiSure Tech"];
+    const isShopifyConnected = shopifyEnabledClients.includes(client.name);
 
     if (endpoint === "status") {
       return new Response(
