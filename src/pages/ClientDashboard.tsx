@@ -539,8 +539,8 @@ const ClientDashboard = () => {
                   </Card>
                 )}
 
-                {/* Shopify Analytics - Show for Snarky Pets and OxiSure Tech */}
-                {(client.name === "Snarky Pets" || client.name === "OxiSure Tech") && (
+                {/* Shopify Analytics - Show for Snarky Pets and Snarky Humans */}
+                {(client.name === "Snarky Pets" || client.name === "Snarky Humans") && (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/shopify-analytics/${clientId}`)}
