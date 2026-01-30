@@ -16,7 +16,6 @@ interface ShopifySummary {
   discountAmount: number;
   newCustomers: number;
   returningCustomers: number;
-  // Comparison values (previous period)
   prevNetSales?: number;
   prevGrossSales?: number;
   prevOrders?: number;
@@ -41,48 +40,214 @@ interface TopProduct {
   refunds: number;
 }
 
-// Return empty/zero data - awaiting real Shopify integration
-function generateEmptySummary(): ShopifySummary {
+// Get Shopify credentials for a client
+function getShopifyCredentials(clientName: string): { store: string; token: string } | null {
+  if (clientName === "Snarky Pets") {
+    const store = Deno.env.get("SHOPIFY_SNARKY_PETS_STORE")?.trim();
+    const clientId = Deno.env.get("SHOPIFY_SNARKY_PETS_CLIENT_ID")?.trim();
+    const secret = Deno.env.get("SHOPIFY_SNARKY_PETS_SECRET")?.trim();
+    if (store && clientId && secret) {
+      // For Admin API, we use Basic auth with client_id:secret
+      return { store, token: btoa(`${clientId}:${secret}`) };
+    }
+  } else if (clientName === "Snarky Humans") {
+    const store = Deno.env.get("SHOPIFY_SNARKY_HUMANS_STORE")?.trim();
+    const clientId = Deno.env.get("SHOPIFY_SNARKY_HUMANS_CLIENT_ID")?.trim();
+    const secret = Deno.env.get("SHOPIFY_SNARKY_HUMANS_SECRET")?.trim();
+    if (store && clientId && secret) {
+      return { store, token: btoa(`${clientId}:${secret}`) };
+    }
+  }
+  return null;
+}
+
+// Make Shopify Admin API request
+async function shopifyRequest(store: string, token: string, endpoint: string) {
+  const url = `https://${store}/admin/api/2024-01/${endpoint}`;
+  console.log(`[shopify-analytics] Fetching: ${url}`);
+  
+  const response = await fetch(url, {
+    headers: {
+      "Authorization": `Basic ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[shopify-analytics] API error: ${response.status} - ${errorText}`);
+    throw new Error(`Shopify API error: ${response.status}`);
+  }
+  
+  return response.json();
+}
+
+// Fetch orders within a date range
+async function fetchOrders(store: string, token: string, startDate: string, endDate: string) {
+  const params = new URLSearchParams({
+    created_at_min: `${startDate}T00:00:00Z`,
+    created_at_max: `${endDate}T23:59:59Z`,
+    status: "any",
+    limit: "250",
+  });
+  
+  const data = await shopifyRequest(store, token, `orders.json?${params}`);
+  return data.orders || [];
+}
+
+// Fetch products
+async function fetchProducts(store: string, token: string, limit = 50) {
+  const data = await shopifyRequest(store, token, `products.json?limit=${limit}`);
+  return data.products || [];
+}
+
+// Fetch customers
+async function fetchCustomers(store: string, token: string, startDate: string, endDate: string) {
+  const params = new URLSearchParams({
+    created_at_min: `${startDate}T00:00:00Z`,
+    created_at_max: `${endDate}T23:59:59Z`,
+    limit: "250",
+  });
+  
+  const data = await shopifyRequest(store, token, `customers.json?${params}`);
+  return data.customers || [];
+}
+
+// Calculate summary from orders
+function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
+  let grossSales = 0;
+  let netSales = 0;
+  let refunds = 0;
+  let discountAmount = 0;
+  
+  for (const order of orders) {
+    const subtotal = parseFloat(order.subtotal_price || "0");
+    const totalDiscount = parseFloat(order.total_discounts || "0");
+    const totalRefund = (order.refunds || []).reduce((sum: number, r: any) => {
+      return sum + (r.transactions || []).reduce((tSum: number, t: any) => tSum + parseFloat(t.amount || "0"), 0);
+    }, 0);
+    
+    grossSales += subtotal + totalDiscount;
+    netSales += subtotal - totalRefund;
+    refunds += totalRefund;
+    discountAmount += totalDiscount;
+  }
+  
+  const orderCount = orders.filter(o => o.financial_status !== "refunded").length;
+  const avgOrderValue = orderCount > 0 ? netSales / orderCount : 0;
+  
+  // Count new vs returning customers
+  const newCustomers = customers.filter(c => c.orders_count === 1).length;
+  const returningCustomers = customers.filter(c => c.orders_count > 1).length;
+  
   return {
-    netSales: 0,
-    grossSales: 0,
-    orders: 0,
-    averageOrderValue: 0,
-    refunds: 0,
-    discountAmount: 0,
-    newCustomers: 0,
-    returningCustomers: 0,
+    netSales: Math.round(netSales * 100) / 100,
+    grossSales: Math.round(grossSales * 100) / 100,
+    orders: orderCount,
+    averageOrderValue: Math.round(avgOrderValue * 100) / 100,
+    refunds: Math.round(refunds * 100) / 100,
+    discountAmount: Math.round(discountAmount * 100) / 100,
+    newCustomers,
+    returningCustomers,
   };
 }
 
-// Return empty timeseries - awaiting real Shopify integration
-function generateEmptyTimeseries(startDate: string, endDate: string): TimeseriesPoint[] {
+// Calculate timeseries from orders
+function calculateTimeseries(orders: any[], startDate: string, endDate: string, metric: string): TimeseriesPoint[] {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const points: TimeseriesPoint[] = [];
+  const dailyData: Record<string, number> = {};
   
+  // Initialize all days
   const current = new Date(start);
   while (current <= end) {
-    points.push({
-      date: current.toISOString().split("T")[0],
-      value: 0,
-    });
+    const dateStr = current.toISOString().split("T")[0];
+    dailyData[dateStr] = 0;
     current.setDate(current.getDate() + 1);
+  }
+  
+  // Aggregate order data by day
+  for (const order of orders) {
+    if (order.financial_status === "refunded") continue;
+    
+    const orderDate = new Date(order.created_at).toISOString().split("T")[0];
+    if (dailyData[orderDate] !== undefined) {
+      switch (metric) {
+        case "net_sales":
+          dailyData[orderDate] += parseFloat(order.subtotal_price || "0");
+          break;
+        case "orders":
+          dailyData[orderDate] += 1;
+          break;
+        case "average_order_value":
+          // This needs special handling - we'll calculate after
+          dailyData[orderDate] += parseFloat(order.subtotal_price || "0");
+          break;
+      }
+    }
+  }
+  
+  // Convert to array
+  for (const [date, value] of Object.entries(dailyData).sort()) {
+    points.push({ date, value: Math.round(value * 100) / 100 });
   }
   
   return points;
 }
 
-// Return empty products - awaiting real Shopify integration
-function generateEmptyTopProducts(): { products: TopProduct[]; total: number } {
-  return {
-    products: [],
-    total: 0,
-  };
+// Calculate top products from orders
+function calculateTopProducts(orders: any[], products: any[]): { products: TopProduct[]; total: number } {
+  const productSales: Record<string, { unitsSold: number; revenue: number; refunds: number }> = {};
+  
+  // Aggregate sales data
+  for (const order of orders) {
+    for (const lineItem of order.line_items || []) {
+      const productId = String(lineItem.product_id);
+      if (!productSales[productId]) {
+        productSales[productId] = { unitsSold: 0, revenue: 0, refunds: 0 };
+      }
+      productSales[productId].unitsSold += lineItem.quantity;
+      productSales[productId].revenue += parseFloat(lineItem.price || "0") * lineItem.quantity;
+    }
+    
+    // Track refunds
+    for (const refund of order.refunds || []) {
+      for (const lineItem of refund.refund_line_items || []) {
+        const productId = String(lineItem.line_item?.product_id);
+        if (productSales[productId]) {
+          productSales[productId].refunds += lineItem.quantity;
+        }
+      }
+    }
+  }
+  
+  // Create product map for details
+  const productMap: Record<string, any> = {};
+  for (const product of products) {
+    productMap[String(product.id)] = product;
+  }
+  
+  // Build top products list
+  const topProducts: TopProduct[] = Object.entries(productSales)
+    .map(([id, stats]) => {
+      const product = productMap[id];
+      return {
+        id,
+        title: product?.title || `Product ${id}`,
+        imageUrl: product?.image?.src || null,
+        unitsSold: stats.unitsSold,
+        revenue: Math.round(stats.revenue * 100) / 100,
+        refunds: stats.refunds,
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10);
+  
+  return { products: topProducts, total: Object.keys(productSales).length };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -91,14 +256,12 @@ serve(async (req) => {
     const url = new URL(req.url);
     const pathParts = url.pathname.split("/").filter(Boolean);
     
-    // Parse the endpoint from URL or body
     const body = req.method === "POST" ? await req.json() : {};
     const endpoint = body.endpoint || pathParts[pathParts.length - 1];
     const clientId = body.clientId;
 
     console.log(`[shopify-analytics] Endpoint: ${endpoint}, Client: ${clientId}`);
 
-    // Validate clientId
     if (!clientId) {
       return new Response(
         JSON.stringify({ success: false, error: "clientId is required" }),
@@ -106,7 +269,6 @@ serve(async (req) => {
       );
     }
 
-    // Check if client has Shopify connected (stub - always true for Snarky Pets)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -124,9 +286,9 @@ serve(async (req) => {
       );
     }
 
-    // Enable Shopify for Snarky Pets and OxiSure Tech
-    const shopifyEnabledClients = ["Snarky Pets", "OxiSure Tech"];
-    const isShopifyConnected = shopifyEnabledClients.includes(client.name);
+    // Get Shopify credentials
+    const credentials = getShopifyCredentials(client.name);
+    const isShopifyConnected = credentials !== null;
 
     if (endpoint === "status") {
       return new Response(
@@ -134,7 +296,7 @@ serve(async (req) => {
           success: true,
           data: {
             connected: isShopifyConnected,
-            storeName: isShopifyConnected ? "Snarky Pets Store" : null,
+            storeName: isShopifyConnected ? `${client.name} Store` : null,
             lastSyncedAt: isShopifyConnected ? new Date().toISOString() : null,
             syncStatus: "synced",
           },
@@ -143,7 +305,7 @@ serve(async (req) => {
       );
     }
 
-    if (!isShopifyConnected) {
+    if (!isShopifyConnected || !credentials) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -154,18 +316,50 @@ serve(async (req) => {
       );
     }
 
-    // Handle different endpoints
+    const { store, token } = credentials;
+
     switch (endpoint) {
       case "summary": {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
-
-        const summary = generateEmptySummary();
+        
+        // Calculate previous period for comparison
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const periodLength = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const prevStart = new Date(startDate);
+        prevStart.setDate(prevStart.getDate() - periodLength);
+        const prevEnd = new Date(startDate);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+        
+        const prevStartStr = prevStart.toISOString().split("T")[0];
+        const prevEndStr = prevEnd.toISOString().split("T")[0];
+        
+        // Fetch current and previous period data
+        const [orders, customers, prevOrders, prevCustomers] = await Promise.all([
+          fetchOrders(store, token, start, end),
+          fetchCustomers(store, token, start, end),
+          fetchOrders(store, token, prevStartStr, prevEndStr),
+          fetchCustomers(store, token, prevStartStr, prevEndStr),
+        ]);
+        
+        const summary = calculateSummary(orders, customers);
+        const prevSummary = calculateSummary(prevOrders, prevCustomers);
         
         return new Response(
           JSON.stringify({
             success: true,
-            data: summary,
+            data: {
+              ...summary,
+              prevNetSales: prevSummary.netSales,
+              prevGrossSales: prevSummary.grossSales,
+              prevOrders: prevSummary.orders,
+              prevAverageOrderValue: prevSummary.averageOrderValue,
+              prevRefunds: prevSummary.refunds,
+              prevDiscountAmount: prevSummary.discountAmount,
+              prevNewCustomers: prevSummary.newCustomers,
+              prevReturningCustomers: prevSummary.returningCustomers,
+            },
             period: { start, end },
             lastSyncedAt: new Date().toISOString(),
           }),
@@ -178,7 +372,8 @@ serve(async (req) => {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
 
-        const timeseries = generateEmptyTimeseries(start, end);
+        const orders = await fetchOrders(store, token, start, end);
+        const timeseries = calculateTimeseries(orders, start, end, metric);
         
         return new Response(
           JSON.stringify({
@@ -194,18 +389,25 @@ serve(async (req) => {
       case "top-products": {
         const page = parseInt(body.page) || 1;
         const pageSize = parseInt(body.pageSize) || 10;
+        const start = body.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const end = body.end || new Date().toISOString().split("T")[0];
 
-        const { products, total } = generateEmptyTopProducts();
+        const [orders, products] = await Promise.all([
+          fetchOrders(store, token, start, end),
+          fetchProducts(store, token, 100),
+        ]);
+        
+        const { products: topProducts, total } = calculateTopProducts(orders, products);
         
         return new Response(
           JSON.stringify({
             success: true,
-            data: products,
+            data: topProducts.slice((page - 1) * pageSize, page * pageSize),
             pagination: {
               page,
               pageSize,
               total,
-              totalPages: 0,
+              totalPages: Math.ceil(total / pageSize),
             },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
