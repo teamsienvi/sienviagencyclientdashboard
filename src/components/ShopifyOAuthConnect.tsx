@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +23,20 @@ export const ShopifyOAuthConnect = ({ clientId, clientName, onConnected }: Shopi
   const [connecting, setConnecting] = useState(false);
   const [shopDomain, setShopDomain] = useState(STORE_DOMAINS[clientName] || "");
 
+  const redirectUri = useMemo(() => {
+    // Shopify requires an exact, whitelisted redirect URI.
+    return `${window.location.origin}/shopify/callback`;
+  }, []);
+
+  const handleCopyRedirectUri = async () => {
+    try {
+      await navigator.clipboard.writeText(redirectUri);
+      toast.success("Redirect URI copied");
+    } catch {
+      toast.error("Could not copy redirect URI");
+    }
+  };
+
   const handleConnect = async () => {
     if (!shopDomain) {
       toast.error("Please enter your Shopify store domain");
@@ -32,9 +46,6 @@ export const ShopifyOAuthConnect = ({ clientId, clientName, onConnected }: Shopi
     setConnecting(true);
 
     try {
-      // Get the redirect URI - use the current origin
-      const redirectUri = `${window.location.origin}/shopify/callback`;
-
       const { data, error } = await supabase.functions.invoke("shopify-oauth-init", {
         body: {
           clientId,
@@ -81,6 +92,27 @@ export const ShopifyOAuthConnect = ({ clientId, clientName, onConnected }: Shopi
           />
           <p className="text-xs text-muted-foreground">
             Enter your Shopify store domain (e.g., your-store.myshopify.com)
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <Label>Redirect URI (must be whitelisted)</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleCopyRedirectUri}
+              disabled={connecting}
+            >
+              Copy
+            </Button>
+          </div>
+          <div className="rounded-md border bg-muted/40 px-3 py-2">
+            <code className="text-xs break-all text-muted-foreground">{redirectUri}</code>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Add this exact URL (no trailing slash) to your Shopify app’s Allowed redirection URL(s).
           </p>
         </div>
 
