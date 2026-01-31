@@ -52,8 +52,13 @@ serve(async (req) => {
       "read_reports",
     ].join(",");
 
-    // Encode state with client info
-    const state = btoa(JSON.stringify({ clientId, shopDomain: cleanShopDomain, platform: "shopify" }));
+    // Encode state with client info + origin so callback knows where to redirect
+    const state = btoa(JSON.stringify({ 
+      clientId, 
+      shopDomain: cleanShopDomain, 
+      platform: "shopify",
+      redirectOrigin: redirectUri.replace(/\/shopify\/callback$/, "")
+    }));
 
     // Shopify OAuth authorization URL
     const authUrl = new URL(`https://${cleanShopDomain}/admin/oauth/authorize`);

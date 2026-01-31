@@ -40,7 +40,7 @@ serve(async (req) => {
     }
 
     // Decode state
-    let stateData: { clientId: string; shopDomain: string; platform: string };
+    let stateData: { clientId: string; shopDomain: string; platform: string; redirectOrigin?: string };
     try {
       stateData = JSON.parse(atob(state));
     } catch {
@@ -50,7 +50,7 @@ serve(async (req) => {
       );
     }
 
-    const { clientId, shopDomain } = stateData;
+    const { clientId, shopDomain, redirectOrigin } = stateData;
     console.log("[shopify-oauth-callback] State decoded - clientId:", clientId, "shopDomain:", shopDomain);
 
     // Get credentials based on shop domain
@@ -130,7 +130,11 @@ serve(async (req) => {
 
     // If Shopify hit us directly (GET), redirect back to the app.
     if (req.method !== "POST") {
-      const redirectUrl = `${Deno.env.get("SITE_URL") || "https://sienviagencyclientdashboard.lovable.app"}/shopify/callback?success=true&clientId=${clientId}`;
+      // Use the origin from state (saved during init) to redirect to the correct domain
+      const baseUrl = redirectOrigin || Deno.env.get("SITE_URL") || "https://sienviagencyclientdashboard.lovable.app";
+      const redirectUrl = `${baseUrl}/shopify/callback?success=true&clientId=${clientId}`;
+
+      console.log("[shopify-oauth-callback] Redirecting to:", redirectUrl);
 
       return new Response(null, {
         status: 302,
