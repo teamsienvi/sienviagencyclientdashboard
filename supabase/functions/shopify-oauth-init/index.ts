@@ -24,9 +24,9 @@ serve(async (req) => {
     let shopifyClientId: string | undefined;
     
     if (shopDomain.includes("fhfwar-jc") || shopDomain.toLowerCase().includes("snarky") && shopDomain.toLowerCase().includes("pet")) {
-      shopifyClientId = Deno.env.get("SHOPIFY_SNARKY_PETS_CLIENT_ID");
+      shopifyClientId = Deno.env.get("SHOPIFY_SNARKY_PETS_CLIENT_ID")?.trim().replace(/\s+/g, '');
     } else if (shopDomain.includes("bedd78-a1") || shopDomain.toLowerCase().includes("snarky") && shopDomain.toLowerCase().includes("human")) {
-      shopifyClientId = Deno.env.get("SHOPIFY_SNARKY_HUMANS_CLIENT_ID");
+      shopifyClientId = Deno.env.get("SHOPIFY_SNARKY_HUMANS_CLIENT_ID")?.trim().replace(/\s+/g, '');
     }
 
     if (!shopifyClientId) {
