@@ -63,6 +63,9 @@ serve(async (req) => {
     } else if (shop.includes("bedd78-a1")) {
       shopifyClientId = Deno.env.get("SHOPIFY_SNARKY_HUMANS_CLIENT_ID");
       shopifyClientSecret = Deno.env.get("SHOPIFY_SNARKY_HUMANS_SECRET");
+    } else if (shop.includes("3bc448-da")) {
+      shopifyClientId = Deno.env.get("SHOPIFY_BLINGYBAG_CLIENT_ID");
+      shopifyClientSecret = Deno.env.get("SHOPIFY_BLINGYBAG_SECRET");
     }
 
     if (!shopifyClientId || !shopifyClientSecret) {
