@@ -3,42 +3,88 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Loader2, ShoppingBag } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const ShopifyOAuthCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [resolvedClientId, setResolvedClientId] = useState<string>("");
 
   const success = searchParams.get("success");
   const clientId = searchParams.get("clientId");
   const error = searchParams.get("error");
 
   useEffect(() => {
-    if (success === "true" && clientId) {
-      setStatus("success");
-    } else if (error) {
-      setStatus("error");
-      setErrorMessage(error);
-    } else {
-      // Check if this is a direct callback from Shopify (will have code and shop params)
+    let cancelled = false;
+
+    const run = async () => {
+      if (success === "true" && clientId) {
+        if (cancelled) return;
+        setResolvedClientId(clientId);
+        setStatus("success");
+        return;
+      }
+
+      if (error) {
+        if (cancelled) return;
+        setStatus("error");
+        setErrorMessage(error);
+        return;
+      }
+
+      // Direct callback from Shopify (code/shop/state). We'll hand off to backend.
       const code = searchParams.get("code");
       const shop = searchParams.get("shop");
-      
-      if (code && shop) {
-        // This means the edge function redirect failed - show error
-        setStatus("error");
-        setErrorMessage("OAuth callback not handled properly. Please try again.");
-      } else {
-        setStatus("error");
-        setErrorMessage("Invalid callback parameters");
+      const state = searchParams.get("state");
+
+      if (code && shop && state) {
+        if (cancelled) return;
+        setStatus("loading");
+        setErrorMessage("");
+
+        try {
+          const { data, error: fnError } = await supabase.functions.invoke("shopify-oauth-callback", {
+            body: { code, shop, state },
+          });
+
+          if (fnError) throw fnError;
+
+          const nextClientId = data?.clientId ?? "";
+          if (!cancelled && nextClientId) setResolvedClientId(nextClientId);
+
+          if (data?.success) {
+            if (cancelled) return;
+            setStatus("success");
+            return;
+          }
+
+          throw new Error(data?.error || "OAuth callback not handled properly. Please try again.");
+        } catch (err) {
+          if (cancelled) return;
+          setStatus("error");
+          setErrorMessage(err instanceof Error ? err.message : "OAuth callback not handled properly. Please try again.");
+          return;
+        }
       }
-    }
+
+      if (cancelled) return;
+      setStatus("error");
+      setErrorMessage("Invalid callback parameters");
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
   }, [success, clientId, error, searchParams]);
 
   const handleContinue = () => {
-    if (clientId) {
-      navigate(`/shopify/${clientId}`);
+    const id = resolvedClientId || clientId;
+    if (id) {
+      navigate(`/shopify/${id}`);
     } else {
       navigate("/");
     }

@@ -3,19 +3,32 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     const url = new URL(req.url);
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-    const shop = url.searchParams.get("shop");
+
+    let code: string | null = null;
+    let state: string | null = null;
+    let shop: string | null = null;
+
+    // Shopify will redirect with GET query params, but the app can also POST via functions.invoke.
+    if (req.method === "POST") {
+      const body = await req.json().catch(() => ({} as Record<string, unknown>));
+      code = typeof body.code === "string" ? body.code : null;
+      state = typeof body.state === "string" ? body.state : null;
+      shop = typeof body.shop === "string" ? body.shop : null;
+    } else {
+      code = url.searchParams.get("code");
+      state = url.searchParams.get("state");
+      shop = url.searchParams.get("shop");
+    }
 
     console.log("[shopify-oauth-callback] Received callback - shop:", shop, "state:", state);
 
@@ -115,15 +128,23 @@ serve(async (req) => {
 
     console.log("[shopify-oauth-callback] Connection saved for client:", clientId);
 
-    // Redirect back to the app
-    const redirectUrl = `${Deno.env.get("SITE_URL") || "https://sienviagencyclientdashboard.lovable.app"}/shopify/callback?success=true&clientId=${clientId}`;
-    
-    return new Response(null, {
-      status: 302,
-      headers: {
-        ...corsHeaders,
-        "Location": redirectUrl,
-      },
+    // If Shopify hit us directly (GET), redirect back to the app.
+    if (req.method !== "POST") {
+      const redirectUrl = `${Deno.env.get("SITE_URL") || "https://sienviagencyclientdashboard.lovable.app"}/shopify/callback?success=true&clientId=${clientId}`;
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...corsHeaders,
+          "Location": redirectUrl,
+        },
+      });
+    }
+
+    // If the app called us (POST), return JSON so the UI can render immediately.
+    return new Response(JSON.stringify({ success: true, clientId }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("[shopify-oauth-callback] Error:", error);
