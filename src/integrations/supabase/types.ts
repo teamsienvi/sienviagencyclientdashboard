@@ -460,6 +460,47 @@ export type Database = {
           },
         ]
       }
+      shopify_oauth_connections: {
+        Row: {
+          access_token: string
+          client_id: string
+          connected_at: string
+          id: string
+          is_active: boolean
+          scope: string | null
+          shop_domain: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          client_id: string
+          connected_at?: string
+          id?: string
+          is_active?: boolean
+          scope?: string | null
+          shop_domain: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          client_id?: string
+          connected_at?: string
+          id?: string
+          is_active?: boolean
+          scope?: string | null
+          shop_domain?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_oauth_connections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       social_account_demographics: {
         Row: {
           client_id: string

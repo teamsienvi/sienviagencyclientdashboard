@@ -52,6 +52,7 @@ import MetaOAuthCallback from "./pages/MetaOAuthCallback";
 import MetaAgencyOAuthCallback from "./pages/MetaAgencyOAuthCallback";
 import TikTokOAuthCallback from "./pages/TikTokOAuthCallback";
 import LinkedInOAuthCallback from "./pages/LinkedInOAuthCallback";
+import ShopifyOAuthCallback from "./pages/ShopifyOAuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -110,6 +111,7 @@ const App = () => (
           <Route path="/oauth/meta/agency/callback" element={<MetaAgencyOAuthCallback />} />
           <Route path="/oauth/tiktok/callback" element={<TikTokOAuthCallback />} />
           <Route path="/oauth/linkedin/callback" element={<LinkedInOAuthCallback />} />
+          <Route path="/shopify/callback" element={<ShopifyOAuthCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
