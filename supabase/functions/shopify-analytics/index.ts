@@ -3,8 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 interface ShopifySummary {
@@ -40,35 +39,14 @@ interface TopProduct {
   refunds: number;
 }
 
-// Get Shopify credentials for a client
-function getShopifyCredentials(clientName: string): { store: string; token: string } | null {
-  if (clientName === "Snarky Pets") {
-    const store = Deno.env.get("SHOPIFY_SNARKY_PETS_STORE")?.trim();
-    const clientId = Deno.env.get("SHOPIFY_SNARKY_PETS_CLIENT_ID")?.trim();
-    const secret = Deno.env.get("SHOPIFY_SNARKY_PETS_SECRET")?.trim();
-    if (store && clientId && secret) {
-      // For Admin API, we use Basic auth with client_id:secret
-      return { store, token: btoa(`${clientId}:${secret}`) };
-    }
-  } else if (clientName === "Snarky Humans") {
-    const store = Deno.env.get("SHOPIFY_SNARKY_HUMANS_STORE")?.trim();
-    const clientId = Deno.env.get("SHOPIFY_SNARKY_HUMANS_CLIENT_ID")?.trim();
-    const secret = Deno.env.get("SHOPIFY_SNARKY_HUMANS_SECRET")?.trim();
-    if (store && clientId && secret) {
-      return { store, token: btoa(`${clientId}:${secret}`) };
-    }
-  }
-  return null;
-}
-
-// Make Shopify Admin API request
-async function shopifyRequest(store: string, token: string, endpoint: string) {
-  const url = `https://${store}/admin/api/2024-01/${endpoint}`;
+// Make Shopify Admin API request using OAuth token
+async function shopifyRequest(shopDomain: string, accessToken: string, endpoint: string) {
+  const url = `https://${shopDomain}/admin/api/2024-01/${endpoint}`;
   console.log(`[shopify-analytics] Fetching: ${url}`);
   
   const response = await fetch(url, {
     headers: {
-      "Authorization": `Basic ${token}`,
+      "X-Shopify-Access-Token": accessToken,
       "Content-Type": "application/json",
     },
   });
@@ -83,7 +61,7 @@ async function shopifyRequest(store: string, token: string, endpoint: string) {
 }
 
 // Fetch orders within a date range
-async function fetchOrders(store: string, token: string, startDate: string, endDate: string) {
+async function fetchOrders(shopDomain: string, accessToken: string, startDate: string, endDate: string) {
   const params = new URLSearchParams({
     created_at_min: `${startDate}T00:00:00Z`,
     created_at_max: `${endDate}T23:59:59Z`,
@@ -91,25 +69,25 @@ async function fetchOrders(store: string, token: string, startDate: string, endD
     limit: "250",
   });
   
-  const data = await shopifyRequest(store, token, `orders.json?${params}`);
+  const data = await shopifyRequest(shopDomain, accessToken, `orders.json?${params}`);
   return data.orders || [];
 }
 
 // Fetch products
-async function fetchProducts(store: string, token: string, limit = 50) {
-  const data = await shopifyRequest(store, token, `products.json?limit=${limit}`);
+async function fetchProducts(shopDomain: string, accessToken: string, limit = 50) {
+  const data = await shopifyRequest(shopDomain, accessToken, `products.json?limit=${limit}`);
   return data.products || [];
 }
 
 // Fetch customers
-async function fetchCustomers(store: string, token: string, startDate: string, endDate: string) {
+async function fetchCustomers(shopDomain: string, accessToken: string, startDate: string, endDate: string) {
   const params = new URLSearchParams({
     created_at_min: `${startDate}T00:00:00Z`,
     created_at_max: `${endDate}T23:59:59Z`,
     limit: "250",
   });
   
-  const data = await shopifyRequest(store, token, `customers.json?${params}`);
+  const data = await shopifyRequest(shopDomain, accessToken, `customers.json?${params}`);
   return data.customers || [];
 }
 
@@ -156,7 +134,6 @@ function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
 function calculateTimeseries(orders: any[], startDate: string, endDate: string, metric: string): TimeseriesPoint[] {
   const start = new Date(startDate);
   const end = new Date(endDate);
-  const points: TimeseriesPoint[] = [];
   const dailyData: Record<string, number> = {};
   
   // Initialize all days
@@ -181,7 +158,6 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
           dailyData[orderDate] += 1;
           break;
         case "average_order_value":
-          // This needs special handling - we'll calculate after
           dailyData[orderDate] += parseFloat(order.subtotal_price || "0");
           break;
       }
@@ -189,6 +165,7 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
   }
   
   // Convert to array
+  const points: TimeseriesPoint[] = [];
   for (const [date, value] of Object.entries(dailyData).sort()) {
     points.push({ date, value: Math.round(value * 100) / 100 });
   }
@@ -273,50 +250,42 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data: client } = await supabase
-      .from("clients")
-      .select("id, name")
-      .eq("id", clientId)
+    // Check for OAuth connection
+    const { data: connection, error: connError } = await supabase
+      .from("shopify_oauth_connections")
+      .select("shop_domain, access_token, is_active")
+      .eq("client_id", clientId)
+      .eq("is_active", true)
       .maybeSingle();
 
-    if (!client) {
-      return new Response(
-        JSON.stringify({ success: false, error: "Client not found" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
-      );
-    }
-
-    // Get Shopify credentials
-    const credentials = getShopifyCredentials(client.name);
-    const isShopifyConnected = credentials !== null;
-
     if (endpoint === "status") {
+      const isConnected = !!connection && !!connection.access_token;
       return new Response(
         JSON.stringify({
           success: true,
           data: {
-            connected: isShopifyConnected,
-            storeName: isShopifyConnected ? `${client.name} Store` : null,
-            lastSyncedAt: isShopifyConnected ? new Date().toISOString() : null,
-            syncStatus: "synced",
+            connected: isConnected,
+            storeName: isConnected ? connection.shop_domain : null,
+            lastSyncedAt: isConnected ? new Date().toISOString() : null,
+            syncStatus: isConnected ? "synced" : "not_connected",
           },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!isShopifyConnected || !credentials) {
+    if (!connection || !connection.access_token) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Shopify not connected for this client",
+          error: "Shopify not connected. Please connect via OAuth.",
           connected: false,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 }
       );
     }
 
-    const { store, token } = credentials;
+    const { shop_domain: shopDomain, access_token: accessToken } = connection;
 
     switch (endpoint) {
       case "summary": {
@@ -337,10 +306,10 @@ serve(async (req) => {
         
         // Fetch current and previous period data
         const [orders, customers, prevOrders, prevCustomers] = await Promise.all([
-          fetchOrders(store, token, start, end),
-          fetchCustomers(store, token, start, end),
-          fetchOrders(store, token, prevStartStr, prevEndStr),
-          fetchCustomers(store, token, prevStartStr, prevEndStr),
+          fetchOrders(shopDomain, accessToken, start, end),
+          fetchCustomers(shopDomain, accessToken, start, end),
+          fetchOrders(shopDomain, accessToken, prevStartStr, prevEndStr),
+          fetchCustomers(shopDomain, accessToken, prevStartStr, prevEndStr),
         ]);
         
         const summary = calculateSummary(orders, customers);
@@ -372,7 +341,7 @@ serve(async (req) => {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
 
-        const orders = await fetchOrders(store, token, start, end);
+        const orders = await fetchOrders(shopDomain, accessToken, start, end);
         const timeseries = calculateTimeseries(orders, start, end, metric);
         
         return new Response(
@@ -393,8 +362,8 @@ serve(async (req) => {
         const end = body.end || new Date().toISOString().split("T")[0];
 
         const [orders, products] = await Promise.all([
-          fetchOrders(store, token, start, end),
-          fetchProducts(store, token, 100),
+          fetchOrders(shopDomain, accessToken, start, end),
+          fetchProducts(shopDomain, accessToken, 100),
         ]);
         
         const { products: topProducts, total } = calculateTopProducts(orders, products);

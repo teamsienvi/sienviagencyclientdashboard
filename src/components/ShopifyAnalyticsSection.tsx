@@ -24,6 +24,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { ShopifyOAuthConnect } from "./ShopifyOAuthConnect";
 import {
   LineChart,
   Line,
@@ -302,29 +303,14 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     ];
   }, [summary]);
 
-  // Render not connected state
+  // Render not connected state - use OAuth connect component
   if (!loading && connectionStatus && !connectionStatus.connected) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-16">
-          <div className="flex flex-col items-center text-center space-y-4">
-            <div className="p-4 rounded-full bg-muted">
-              <ShoppingBag className="h-12 w-12 text-muted-foreground" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-semibold">Connect Shopify to unlock analytics</h3>
-              <p className="text-muted-foreground max-w-md">
-                Connect your Shopify store to view sales, orders, customer insights, 
-                and top-performing products all in one place.
-              </p>
-            </div>
-            <Button size="lg" className="mt-4">
-              <ShoppingBag className="h-5 w-5 mr-2" />
-              Connect Shopify
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <ShopifyOAuthConnect 
+        clientId={clientId} 
+        clientName={clientName}
+        onConnected={() => fetchData()}
+      />
     );
   }
 
