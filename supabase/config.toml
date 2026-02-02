@@ -137,3 +137,21 @@ verify_jwt = false
 
 [functions.shopify-oauth-callback]
 verify_jwt = false
+
+[functions.metricool-x-kpis]
+verify_jwt = false
+
+[functions.metricool-x-posts]
+verify_jwt = false
+
+[functions.metricool-ads]
+verify_jwt = false
+
+[functions.metricool-youtube]
+verify_jwt = false
+
+[functions.bulk-sync-all]
+verify_jwt = false
+
+[functions.create-client-users]
+verify_jwt = false

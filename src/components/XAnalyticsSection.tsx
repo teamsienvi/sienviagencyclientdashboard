@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -11,354 +11,258 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, Users, TrendingUp, TrendingDown, MessageSquare, ExternalLink, Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus, Upload } from "lucide-react";
+import { 
+  RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, 
+  Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus,
+  Calendar, Link2, MousePointerClick, Play
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { DateRangeSelector } from "@/components/DateRangeSelector";
-import { subDays, format, startOfDay, endOfDay } from "date-fns";
-import { ANALYTICS_PERIOD } from "@/utils/analyticsPeriod";
-import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
+import { format } from "date-fns";
+import { getCurrentReportingWeek, getPreviousReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
+import { useAnalyticsCache, getWeekKey } from "@/hooks/useAnalyticsCache";
 
 interface XAnalyticsSectionProps {
   clientId: string;
   clientName: string;
 }
 
-interface XAccountMetrics {
-  id: string;
-  followers: number | null;
-  new_followers: number | null;
-  engagement_rate: number | null;
-  total_content: number | null;
-  period_start: string;
-  period_end: string;
-  collected_at: string;
+interface XKPIs {
+  current: {
+    followers: number | null;
+    newFollowers: number | null;
+    engagementRate: number | null;
+    totalPosts: number | null;
+  };
+  previous: {
+    followers: number | null;
+    newFollowers: number | null;
+    engagementRate: number | null;
+    totalPosts: number | null;
+  };
+  debug?: Record<string, unknown>;
 }
 
-interface XPrevMetrics {
-  followers: number | null;
-  new_followers: number | null;
-  engagement_rate: number | null;
-  total_content: number | null;
-}
-
-interface XContent {
-  id: string;
-  content_id: string;
-  title: string | null;
+interface XPost {
+  id: string | null;
+  text: string | null;
   url: string | null;
-  published_at: string;
-  content_type: string;
+  timestamp: string | null;
+  impressions: number;
+  likes: number;
+  reposts: number;
+  replies: number;
+  quotes: number;
+  engagements: number;
+  linkClicks: number;
+  profileClicks: number;
+  videoViews: number;
 }
 
-interface XContentMetrics {
-  social_content_id: string;
-  impressions: number | null;
-  engagements: number | null;
-  likes: number | null;
-  comments: number | null;
-  shares: number | null;
+interface CachedData {
+  kpis: XKPIs | null;
+  posts: XPost[];
+  lastSyncAt: string | null;
 }
-
-type DateRangePreset = "7d" | "30d" | "custom";
 
 const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => {
-  const [searchParams] = useSearchParams();
-  const didInitFromQuery = useRef(false);
-
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [syncingMetricool, setSyncingMetricool] = useState(false);
-  const [accountMetrics, setAccountMetrics] = useState<XAccountMetrics | null>(null);
-  const [prevMetrics, setPrevMetrics] = useState<XPrevMetrics | null>(null);
-  const [content, setContent] = useState<(XContent & { metrics?: XContentMetrics })[]>([]);
-  const [socialAccount, setSocialAccount] = useState<{ id: string; account_id: string } | null>(null);
-  const [metricoolConfig, setMetricoolConfig] = useState<{ user_id: string; blog_id: string | null } | null>(null);
+  const [kpis, setKpis] = useState<XKPIs | null>(null);
+  const [posts, setPosts] = useState<XPost[]>([]);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [hasMetricoolConfig, setHasMetricoolConfig] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
 
-  // Date range state
-  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
-  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+  // Get standardized reporting periods
+  const currentWeek = useMemo(() => getCurrentReportingWeek(), []);
+  const previousWeek = useMemo(() => getPreviousReportingWeek(), []);
+  
+  const weekKey = useMemo(
+    () => getWeekKey(currentWeek.start, currentWeek.end),
+    [currentWeek]
+  );
 
+  // Cache for persisting data across navigation
+  const { cachedData, updateCache, hasCachedData } = useAnalyticsCache<CachedData>(
+    clientId,
+    "x",
+    weekKey
+  );
+
+  // Format dates for API calls (YYYY-MM-DD)
+  const formatApiDate = (date: Date) => format(date, "yyyy-MM-dd");
+
+  // Check if Metricool config exists
   useEffect(() => {
-    if (didInitFromQuery.current) return;
-
-    const start = searchParams.get("start");
-    const end = searchParams.get("end");
-
-    if (start && end) {
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-      if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
-        setDateRangePreset("custom");
-        setCustomDateRange({ start: startDate, end: endDate });
-      }
-    }
-
-    didInitFromQuery.current = true;
-  }, [searchParams]);
-
-  const getDateRange = () => {
-    const today = new Date();
-    if (dateRangePreset === "custom" && customDateRange) {
-      return { start: customDateRange.start, end: customDateRange.end };
-    }
-    const days = dateRangePreset === "30d" ? 30 : 7;
-    return { start: subDays(today, days), end: today };
-  };
-
-  const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
-    setDateRangePreset(preset);
-    if (preset === "custom" && customRange) {
-      setCustomDateRange(customRange);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [clientId, dateRangePreset, customDateRange]);
-
-  // Helper to find metrics for a specific period range
-  const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
-    if (!metrics || metrics.length === 0) return null;
-    
-    // Sort by collected_at descending to get most recent first
-    const sorted = [...metrics].sort((a, b) => 
-      new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
-    );
-    
-    // First try to find exact period match
-    const exactMatch = sorted.find(m => 
-      m.period_start === targetStart && m.period_end === targetEnd
-    );
-    if (exactMatch) return exactMatch;
-    
-    // Then try to find overlapping period
-    const targetStartDate = new Date(targetStart);
-    const targetEndDate = new Date(targetEnd);
-    
-    const overlapping = sorted.find(m => {
-      if (!m.period_start || !m.period_end) return false;
-      const periodStart = new Date(m.period_start);
-      const periodEnd = new Date(m.period_end);
-      // Check if periods overlap
-      return periodStart <= targetEndDate && periodEnd >= targetStartDate;
-    });
-    if (overlapping) return overlapping;
-    
-    // Fallback to most recent metrics
-    return sorted[0];
-  };
-
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { start, end } = getDateRange();
-      const startDate = format(startOfDay(start), "yyyy-MM-dd");
-      const endDate = format(endOfDay(end), "yyyy-MM-dd");
-
-      // Calculate previous period for comparison
-      const periodDuration = end.getTime() - start.getTime();
-      const prevStart = new Date(start.getTime() - periodDuration);
-      const prevEnd = new Date(start.getTime() - 1); // Day before current period starts
-      const prevStartDate = format(startOfDay(prevStart), "yyyy-MM-dd");
-      const prevEndDate = format(endOfDay(prevEnd), "yyyy-MM-dd");
-
-      // Fetch social account for X
-      const { data: accountData } = await supabase
-        .from("social_accounts")
-        .select("id, account_id")
-        .eq("client_id", clientId)
-        .eq("platform", "x")
-        .eq("is_active", true)
-        .maybeSingle();
-
-      setSocialAccount(accountData);
-
-      // Fetch Metricool config for X
-      const { data: mcConfig } = await supabase
+    const checkConfig = async () => {
+      const { data } = await supabase
         .from("client_metricool_config")
-        .select("user_id, blog_id")
+        .select("id")
         .eq("client_id", clientId)
         .eq("platform", "x")
         .eq("is_active", true)
         .maybeSingle();
       
-      setMetricoolConfig(mcConfig);
+      setHasMetricoolConfig(!!data);
+    };
+    checkConfig();
+  }, [clientId]);
 
-      // Fetch latest account metrics - get most recent that overlaps with selected range
-      const { data: metricsData } = await supabase
-        .from("social_account_metrics")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("platform", "x")
-        .lte("period_start", endDate)
-        .gte("period_end", startDate)
-        .order("collected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  // Load cached data on mount
+  useEffect(() => {
+    if (hasCachedData && cachedData) {
+      setKpis(cachedData.kpis);
+      setPosts(cachedData.posts);
+      setLastSyncAt(cachedData.lastSyncAt);
+      setLoading(false);
+    }
+  }, [hasCachedData, cachedData]);
 
-      setAccountMetrics(metricsData);
+  // Fetch fresh data
+  const fetchData = useCallback(async (showToast = false) => {
+    if (!hasMetricoolConfig) {
+      setLoading(false);
+      return;
+    }
 
-      // Fetch previous period metrics for comparison
-      const { data: prevMetricsData } = await supabase
-        .from("social_account_metrics")
-        .select("*")
-        .eq("client_id", clientId)
-        .eq("platform", "x")
-        .lte("period_start", prevEndDate)
-        .gte("period_end", prevStartDate)
-        .order("collected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    setLoading(true);
+    try {
+      const currentStart = formatApiDate(currentWeek.start);
+      const currentEnd = formatApiDate(currentWeek.end);
+      const previousStart = formatApiDate(previousWeek.start);
+      const previousEnd = formatApiDate(previousWeek.end);
 
-      setPrevMetrics(prevMetricsData ? {
-        followers: prevMetricsData.followers,
-        new_followers: prevMetricsData.new_followers,
-        engagement_rate: prevMetricsData.engagement_rate,
-        total_content: prevMetricsData.total_content,
-      } : null);
+      // Fetch KPIs and posts in parallel
+      const [kpisResponse, postsResponse] = await Promise.all([
+        supabase.functions.invoke("metricool-x-kpis", {
+          body: { clientId, currentStart, currentEnd, previousStart, previousEnd },
+        }),
+        supabase.functions.invoke("metricool-x-posts", {
+          body: { clientId, periodStart: currentStart, periodEnd: currentEnd },
+        }),
+      ]);
 
-      // Fetch ALL content for this client/platform with their metrics
-      // Show recent posts even if no metrics exist for the selected period
-      const { data: contentData } = await supabase
-        .from("social_content")
-        .select(`
-          id, content_id, title, url, published_at, content_type,
-          social_content_metrics(social_content_id, impressions, engagements, likes, comments, shares, period_start, period_end, collected_at)
-        `)
-        .eq("client_id", clientId)
-        .eq("platform", "x")
-        .order("published_at", { ascending: false })
-        .limit(100);
+      if (kpisResponse.error) {
+        console.error("KPIs fetch error:", kpisResponse.error);
+        toast.error("Failed to fetch X KPIs");
+      } else if (kpisResponse.data?.success) {
+        setKpis({
+          current: kpisResponse.data.current,
+          previous: kpisResponse.data.previous,
+          debug: kpisResponse.data.debug,
+        });
+      }
 
-      if (contentData) {
-        // Process content - try to find metrics for selected period, fallback to most recent metrics
-        const contentWithMetrics = contentData
-          .map((item: any) => {
-            // First try to find metrics matching the selected period
-            const periodMetrics = findMetricsForPeriod(item.social_content_metrics, startDate, endDate);
-            // If no period match, use most recent metrics available
-            const latestMetrics = item.social_content_metrics?.length > 0
-              ? [...item.social_content_metrics].sort((a: any, b: any) => 
-                  new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
-                )[0]
-              : null;
-            return {
-              ...item,
-              metrics: periodMetrics || latestMetrics || null,
-            };
-          })
-          .slice(0, 50); // Limit to 50 items
-        
-        setContent(contentWithMetrics);
+      if (postsResponse.error) {
+        console.error("Posts fetch error:", postsResponse.error);
+        toast.error("Failed to fetch X posts");
+      } else if (postsResponse.data?.success) {
+        setPosts(postsResponse.data.posts || []);
+      }
+
+      const syncTime = new Date().toISOString();
+      setLastSyncAt(syncTime);
+
+      // Update cache
+      updateCache({
+        kpis: kpisResponse.data?.success ? {
+          current: kpisResponse.data.current,
+          previous: kpisResponse.data.previous,
+        } : null,
+        posts: postsResponse.data?.posts || [],
+        lastSyncAt: syncTime,
+      });
+
+      if (showToast) {
+        toast.success(`Synced ${postsResponse.data?.recordsSynced || 0} X posts`);
       }
     } catch (error) {
       console.error("Error fetching X analytics:", error);
+      toast.error("Failed to fetch X analytics");
     } finally {
       setLoading(false);
-    }
-  }, [clientId, dateRangePreset, customDateRange]);
-
-  // Callback for when CSV upload completes - auto-refresh data
-  const handleUploadComplete = useCallback(() => {
-    toast.success("CSV uploaded! Refreshing analytics...");
-    fetchData();
-  }, [fetchData]);
-
-  const handleSync = async () => {
-    if (!socialAccount) {
-      toast.error("No X account connected for this client");
-      return;
-    }
-
-    setSyncing(true);
-    try {
-      // Sync both current and previous periods for comparison
-      const periods = [
-        { start: ANALYTICS_PERIOD.start, end: ANALYTICS_PERIOD.end },
-        { start: ANALYTICS_PERIOD.prevStart, end: ANALYTICS_PERIOD.prevEnd },
-      ];
-
-      let totalSynced = 0;
-      for (const period of periods) {
-        const { data, error } = await supabase.functions.invoke("sync-x", {
-          body: {
-            clientId,
-            accountId: socialAccount.id,
-            accountExternalId: socialAccount.account_id,
-            periodStart: period.start,
-            periodEnd: period.end,
-          },
-        });
-
-        if (error) throw error;
-        if (data?.success) {
-          totalSynced += data.recordsSynced || 0;
-        } else if (data?.rateLimited) {
-          toast.error("X API rate limit exceeded. Try again in 15 mins or use CSV upload.");
-          return;
-        } else {
-          toast.error(data?.error || "Failed to sync X data");
-          return;
-        }
-      }
-
-      toast.success(`Synced ${totalSynced} posts from X (current + previous week)`);
-      fetchData();
-    } catch (error: any) {
-      console.error("Sync error:", error);
-      toast.error(error.message || "Failed to sync X analytics");
-    } finally {
       setSyncing(false);
     }
+  }, [clientId, currentWeek, previousWeek, hasMetricoolConfig, updateCache]);
+
+  // Initial fetch (only if no cache)
+  useEffect(() => {
+    if (!hasCachedData && hasMetricoolConfig) {
+      fetchData();
+    } else if (!hasMetricoolConfig) {
+      setLoading(false);
+    }
+  }, [hasCachedData, hasMetricoolConfig, fetchData]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    await fetchData(true);
   };
 
-  // Sync X via Metricool
-  const handleMetricoolSync = async () => {
-    if (!metricoolConfig) {
-      toast.error("No Metricool configuration found for X");
-      return;
-    }
-
-    setSyncingMetricool(true);
-    try {
-      const { start, end } = getDateRange();
-      const periodStart = format(startOfDay(start), "yyyy-MM-dd");
-      const periodEnd = format(endOfDay(end), "yyyy-MM-dd");
-
-      const { data, error } = await supabase.functions.invoke("sync-metricool-x", {
-        body: {
-          clientId,
-          periodStart,
-          periodEnd,
-        },
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "Unknown date";
+    
+    // Handle epoch ms
+    const asNum = Number(dateString);
+    if (!isNaN(asNum) && asNum > 1000000000000) {
+      return new Date(asNum).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
       });
-
-      if (error) throw error;
-
-      if (data?.success) {
-        toast.success(`Synced ${data.recordsSynced} posts from X via Metricool`);
-        await fetchData();
-      } else {
-        toast.error(data?.error || "Failed to sync X data from Metricool");
-      }
-    } catch (error: any) {
-      console.error("Metricool sync error:", error);
-      toast.error(error.message || "Failed to sync X via Metricool");
-    } finally {
-      setSyncingMetricool(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "Unknown date";
+    
+    return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
   };
 
-  if (loading) {
+  const renderTrendIndicator = (
+    current: number | null | undefined,
+    previous: number | null | undefined,
+    isPercentage = false,
+    isNumeric = false
+  ) => {
+    if (current == null || previous == null) return null;
+
+    const diff = current - previous;
+    const percentChange = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : "0";
+
+    if (diff > 0) {
+      return (
+        <div className="flex items-center text-xs text-emerald-600 dark:text-emerald-400 gap-0.5">
+          <ArrowUp className="h-3 w-3" />
+          <span>
+            {isPercentage ? `+${diff.toFixed(2)}%` : isNumeric ? `+${diff}` : `+${percentChange}%`}
+          </span>
+        </div>
+      );
+    } else if (diff < 0) {
+      return (
+        <div className="flex items-center text-xs text-destructive gap-0.5">
+          <ArrowDown className="h-3 w-3" />
+          <span>
+            {isPercentage ? `${diff.toFixed(2)}%` : isNumeric ? `${diff}` : `${percentChange}%`}
+          </span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center text-xs text-muted-foreground gap-0.5">
+        <Minus className="h-3 w-3" />
+        <span>{isNumeric ? "0" : "0%"}</span>
+      </div>
+    );
+  };
+
+  if (loading && !hasCachedData) {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -379,92 +283,54 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       </div>
     );
   }
-  const renderTrendIndicator = (current: number | null | undefined, previous: number | null | undefined, isPercentage = false, isNumeric = false) => {
-    if (current == null || previous == null) return null;
-    
-    const diff = current - previous;
-    const percentChange = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : "0";
-    
-    if (diff > 0) {
-      return (
-        <div className="flex items-center text-xs text-green-500 gap-0.5">
-          <ArrowUp className="h-3 w-3" />
-          <span>{isPercentage ? `+${diff.toFixed(2)}%` : isNumeric ? `+${diff}` : `+${percentChange}%`}</span>
-        </div>
-      );
-    } else if (diff < 0) {
-      return (
-        <div className="flex items-center text-xs text-red-500 gap-0.5">
-          <ArrowDown className="h-3 w-3" />
-          <span>{isPercentage ? `${diff.toFixed(2)}%` : isNumeric ? `${diff}` : `${percentChange}%`}</span>
-        </div>
-      );
-    }
-    
+
+  if (!hasMetricoolConfig) {
     return (
-      <div className="flex items-center text-xs text-muted-foreground gap-0.5">
-        <Minus className="h-3 w-3" />
-        <span>{isNumeric ? "0" : "0%"}</span>
+      <div className="text-center py-12">
+        <Twitter className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+        <h3 className="text-lg font-medium mb-2">X Analytics Not Configured</h3>
+        <p className="text-muted-foreground">
+          No Metricool configuration found for X. Please set up the integration first.
+        </p>
       </div>
     );
-  };
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header with date range and sync button */}
+      {/* Header with period and sync button */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Twitter className="h-5 w-5" />
-            <span className="text-sm text-muted-foreground">
-              {socialAccount ? "Account connected" : "No account connected"}
-            </span>
+            <Badge variant="secondary">Metricool</Badge>
           </div>
-          <DateRangeSelector
-            value={dateRangePreset}
-            onChange={handleDateRangeChange}
-            customRange={customDateRange}
-          />
+          <Badge variant="outline" className="text-sm">
+            <Calendar className="h-3 w-3 mr-1" />
+            {currentWeek.dateRange}
+          </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <XCSVUploadDialog
-            clientId={clientId}
-            clientName={clientName}
-            onUploadComplete={handleUploadComplete}
-            trigger={
-              <Button variant="outline" size="sm" className="gap-2">
-                <Upload className="h-4 w-4" />
-                Upload CSV
-              </Button>
-            }
-          />
-          {metricoolConfig && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleMetricoolSync}
-              disabled={syncingMetricool}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncingMetricool ? "animate-spin" : ""}`} />
-              {syncingMetricool ? "Syncing..." : "Sync via Metricool"}
-            </Button>
+          {lastSyncAt && (
+            <span className="text-xs text-muted-foreground">
+              Last sync: {formatDate(lastSyncAt)}
+            </span>
           )}
-          {socialAccount && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Syncing..." : "Sync from X API"}
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSync}
+            disabled={syncing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing..." : "Sync Data"}
+          </Button>
         </div>
       </div>
 
-      {/* Account Metrics Cards */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Followers */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -472,31 +338,25 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
               <span className="text-sm">Followers</span>
             </div>
             <p className="text-2xl font-bold">
-              {accountMetrics?.followers?.toLocaleString() || "—"}
+              {kpis?.current.followers?.toLocaleString() || "—"}
             </p>
-            {/* Show added followers if available, otherwise show comparison vs previous */}
-            {accountMetrics?.new_followers != null ? (
+            {kpis?.previous.followers != null && kpis?.current.followers != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  {accountMetrics.new_followers >= 0 ? '+' : ''}{accountMetrics.new_followers.toLocaleString()} this week
+                  vs {kpis.previous.followers.toLocaleString()} (prev week)
                 </span>
-                {accountMetrics.new_followers > 0 && (
-                  <ArrowUp className="h-3 w-3 text-green-500" />
-                )}
-                {accountMetrics.new_followers < 0 && (
-                  <ArrowDown className="h-3 w-3 text-red-500" />
-                )}
+                {renderTrendIndicator(kpis.current.followers, kpis.previous.followers, false, true)}
               </div>
-            ) : prevMetrics?.followers != null && accountMetrics?.followers != null ? (
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.followers.toLocaleString()} (prev week)
-                </span>
-                {renderTrendIndicator(accountMetrics.followers, prevMetrics.followers, false, true)}
+            )}
+            {kpis?.current.newFollowers != null && (
+              <div className="text-xs text-muted-foreground mt-1">
+                {kpis.current.newFollowers >= 0 ? "+" : ""}{kpis.current.newFollowers} new this week
               </div>
-            ) : null}
+            )}
           </CardContent>
         </Card>
+
+        {/* Engagement Rate */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -504,18 +364,20 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
               <span className="text-sm">Engagement Rate</span>
             </div>
             <p className="text-2xl font-bold">
-              {accountMetrics?.engagement_rate?.toFixed(2) || "0"}%
+              {kpis?.current.engagementRate?.toFixed(2) || "0"}%
             </p>
-            {prevMetrics?.engagement_rate != null && accountMetrics?.engagement_rate != null && (
+            {kpis?.previous.engagementRate != null && kpis?.current.engagementRate != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.engagement_rate.toFixed(2)}% (prev week)
+                  vs {kpis.previous.engagementRate.toFixed(2)}% (prev week)
                 </span>
-                {renderTrendIndicator(accountMetrics.engagement_rate, prevMetrics.engagement_rate, true)}
+                {renderTrendIndicator(kpis.current.engagementRate, kpis.previous.engagementRate, true)}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Total Posts */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -523,18 +385,25 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
               <span className="text-sm">Total Posts</span>
             </div>
             <p className="text-2xl font-bold">
-              {accountMetrics?.total_content || content.length || "—"}
+              {kpis?.current.totalPosts ?? posts.length ?? "—"}
             </p>
-            {prevMetrics?.total_content != null && (
+            {kpis?.previous.totalPosts != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.total_content} (prev week)
+                  vs {kpis.previous.totalPosts} (prev week)
                 </span>
-                {renderTrendIndicator(accountMetrics?.total_content || content.length, prevMetrics.total_content, false, true)}
+                {renderTrendIndicator(
+                  kpis?.current.totalPosts ?? posts.length,
+                  kpis.previous.totalPosts,
+                  false,
+                  true
+                )}
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Period Card */}
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -542,98 +411,127 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
               <span className="text-sm">Period</span>
             </div>
             <p className="text-sm font-medium">
-              {accountMetrics?.period_start && accountMetrics?.period_end
-                ? `${formatDate(accountMetrics.period_start)} - ${formatDate(accountMetrics.period_end)}`
-                : "—"}
+              {format(currentWeek.start, "MMM d")} – {format(currentWeek.end, "MMM d, yyyy")}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">vs previous period</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              vs {previousWeek.dateRange}
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Content Table */}
+      {/* Debug Panel (admin only) */}
+      {kpis?.debug && (
+        <div className="text-xs">
+          <button
+            onClick={() => setShowDebug(!showDebug)}
+            className="text-muted-foreground hover:text-foreground underline"
+          >
+            {showDebug ? "Hide" : "Show"} API Debug
+          </button>
+          {showDebug && (
+            <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-48">
+              {JSON.stringify(kpis.debug, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {/* Recent Posts Table */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Posts</CardTitle>
         </CardHeader>
         <CardContent>
-          {content.length === 0 ? (
+          {posts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Twitter className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No X posts synced yet</p>
-              <p className="text-sm mt-2">
-                {socialAccount
-                  ? "Click 'Sync from X' to fetch your latest posts"
-                  : "Connect an X account to see analytics"}
-              </p>
+              <p>No X posts found for this period</p>
+              <p className="text-sm mt-2">Click "Sync Data" to fetch your latest posts</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Post</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <Eye className="h-3 w-3" />
-                      Impressions
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <Heart className="h-3 w-3" />
-                      Likes
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <MessageSquare className="h-3 w-3" />
-                      Replies
-                    </div>
-                  </TableHead>
-                  <TableHead>
-                    <div className="flex items-center gap-1">
-                      <Repeat2 className="h-3 w-3" />
-                      Reposts
-                    </div>
-                  </TableHead>
-                  <TableHead>Engagements</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {content.map((post) => (
-                  <TableRow key={post.id}>
-                    <TableCell className="max-w-[300px]">
-                      {post.url ? (
-                        <a
-                          href={post.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1"
-                        >
-                          <span className="truncate">
-                            {post.title?.substring(0, 50) || "View Post"}
-                            {post.title && post.title.length > 50 ? "..." : ""}
-                          </span>
-                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                        </a>
-                      ) : (
-                        <span className="text-muted-foreground truncate">
-                          {post.title?.substring(0, 50) || "—"}
-                          {post.title && post.title.length > 50 ? "..." : ""}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{formatDate(post.published_at)}</TableCell>
-                    <TableCell>{post.metrics?.impressions?.toLocaleString() || "—"}</TableCell>
-                    <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
-                    <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
-                    <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
-                    <TableCell>{post.metrics?.engagements?.toLocaleString() || "—"}</TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[200px]">Post</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <Eye className="h-3 w-3" />
+                        Impressions
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <Heart className="h-3 w-3" />
+                        Likes
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <Repeat2 className="h-3 w-3" />
+                        Reposts
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        Replies
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <Link2 className="h-3 w-3" />
+                        Link Clicks
+                      </div>
+                    </TableHead>
+                    <TableHead>
+                      <div className="flex items-center gap-1">
+                        <Play className="h-3 w-3" />
+                        Video Views
+                      </div>
+                    </TableHead>
+                    <TableHead>Engagements</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {posts.map((post, idx) => (
+                    <TableRow key={post.id || idx}>
+                      <TableCell className="max-w-[300px]">
+                        {post.url ? (
+                          <a
+                            href={post.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            <span className="truncate">
+                              {post.text?.substring(0, 50) || "View Post"}
+                              {post.text && post.text.length > 50 ? "..." : ""}
+                            </span>
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground truncate">
+                            {post.text?.substring(0, 50) || "—"}
+                            {post.text && post.text.length > 50 ? "..." : ""}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(post.timestamp)}</TableCell>
+                      <TableCell>{post.impressions?.toLocaleString() || 0}</TableCell>
+                      <TableCell>{post.likes?.toLocaleString() || 0}</TableCell>
+                      <TableCell>{post.reposts?.toLocaleString() || 0}</TableCell>
+                      <TableCell>{post.replies?.toLocaleString() || 0}</TableCell>
+                      <TableCell>{post.linkClicks?.toLocaleString() || 0}</TableCell>
+                      <TableCell>{post.videoViews?.toLocaleString() || 0}</TableCell>
+                      <TableCell>{post.engagements?.toLocaleString() || 0}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
