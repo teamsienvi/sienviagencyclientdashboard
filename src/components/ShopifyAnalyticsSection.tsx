@@ -79,6 +79,12 @@ interface TopProduct {
   refunds: number;
 }
 
+interface OrderSource {
+  name: string;
+  orders: number;
+  revenue: number;
+}
+
 interface ConnectionStatus {
   connected: boolean;
   storeName: string | null;
@@ -115,6 +121,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const [salesTimeseries, setSalesTimeseries] = useState<TimeseriesPoint[]>([]);
   const [ordersTimeseries, setOrdersTimeseries] = useState<TimeseriesPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [orderSources, setOrderSources] = useState<OrderSource[]>([]);
   const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
   
   // Table sorting
@@ -164,7 +171,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
       }
 
       // Fetch all data in parallel
-      const [summaryRes, salesRes, ordersRes, productsRes] = await Promise.all([
+      const [summaryRes, salesRes, ordersRes, productsRes, sourcesRes] = await Promise.all([
         supabase.functions.invoke("shopify-analytics", {
           body: {
             clientId,
@@ -200,6 +207,14 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             sort: `${sortField}_${sortDirection}`,
           },
         }),
+        supabase.functions.invoke("shopify-analytics", {
+          body: {
+            clientId,
+            endpoint: "order-sources",
+            start: dateRange.start,
+            end: dateRange.end,
+          },
+        }),
       ]);
 
       if (summaryRes.data?.success) {
@@ -217,6 +232,10 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
       if (productsRes.data?.success) {
         setTopProducts(productsRes.data.data);
         setProductsPagination(productsRes.data.pagination);
+      }
+
+      if (sourcesRes.data?.success) {
+        setOrderSources(sourcesRes.data.data);
       }
     } catch (err) {
       console.error("Error fetching Shopify data:", err);
@@ -572,8 +591,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
         </Card>
       </div>
 
-      {/* Customer Breakdown & Top Products */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Customer Breakdown, Order Sources & Top Products */}
+      <div className="grid gap-6 lg:grid-cols-4">
         {/* Customer Donut Chart */}
         <Card>
           <CardHeader>
@@ -623,6 +642,74 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                 <p className="text-xs text-muted-foreground">Returning</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Order Sources Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Order Sources</CardTitle>
+            <CardDescription>Where orders are coming from</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {orderSources.length === 0 ? (
+              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+                No order data available
+              </div>
+            ) : (
+              <>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={orderSources}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={70}
+                        paddingAngle={2}
+                        dataKey="orders"
+                        nameKey="name"
+                      >
+                        {orderSources.map((_, index) => (
+                          <Cell 
+                            key={`source-${index}`} 
+                            fill={`hsl(var(--chart-${(index % 5) + 1}))`} 
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const data = payload[0].payload as OrderSource;
+                          return (
+                            <div className="bg-popover border rounded-lg shadow-lg p-3">
+                              <p className="font-medium">{data.name}</p>
+                              <p className="text-sm">{data.orders} orders</p>
+                              <p className="text-primary font-semibold">{formatCurrency(data.revenue)}</p>
+                            </div>
+                          );
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 space-y-1 max-h-24 overflow-y-auto">
+                  {orderSources.map((source, index) => (
+                    <div key={source.name} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-2.5 h-2.5 rounded-full" 
+                          style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }}
+                        />
+                        <span className="truncate max-w-[100px]">{source.name}</span>
+                      </div>
+                      <span className="font-medium">{source.orders}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
