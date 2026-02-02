@@ -5,7 +5,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Pagination, 
   PaginationContent, 
@@ -23,8 +22,9 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format, subDays, startOfDay, endOfDay } from "date-fns";
+import { format } from "date-fns";
 import { ShopifyOAuthConnect } from "./ShopifyOAuthConnect";
+import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
 import {
   LineChart,
   Line,
@@ -92,15 +92,8 @@ interface ConnectionStatus {
   syncStatus: "synced" | "syncing" | "error";
 }
 
-type DatePreset = "7d" | "30d" | "90d" | "custom";
 type SortField = "revenue" | "units" | "refunds";
 type SortDirection = "asc" | "desc";
-
-const DATE_PRESETS = [
-  { value: "7d", label: "Last 7 days", days: 7 },
-  { value: "30d", label: "Last 30 days", days: 30 },
-  { value: "90d", label: "Last 90 days", days: 90 },
-];
 
 const CHART_COLORS = {
   primary: "hsl(var(--primary))",
@@ -113,7 +106,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   // State
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [datePreset, setDatePreset] = useState<DatePreset>("7d");
   
   // Data state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
@@ -128,16 +120,12 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const [sortField, setSortField] = useState<SortField>("revenue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Calculate date range based on preset
-  const dateRange = useMemo(() => {
-    const preset = DATE_PRESETS.find(p => p.value === datePreset) || DATE_PRESETS[0];
-    const end = endOfDay(new Date());
-    const start = startOfDay(subDays(new Date(), preset.days - 1));
-    return {
-      start: format(start, "yyyy-MM-dd"),
-      end: format(end, "yyyy-MM-dd"),
-    };
-  }, [datePreset]);
+  // Use standardized reporting period (last completed Mon-Sun week)
+  const reportingWeek = useMemo(() => getCurrentReportingWeek(), []);
+  const dateRange = useMemo(() => ({
+    start: format(reportingWeek.start, "yyyy-MM-dd"),
+    end: format(reportingWeek.end, "yyyy-MM-dd"),
+  }), [reportingWeek]);
 
   // Fetch connection status
   const fetchConnectionStatus = async () => {
@@ -398,19 +386,10 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             )}
           </div>
 
-          {/* Date Range Selector */}
-          <Select value={datePreset} onValueChange={(v) => setDatePreset(v as DatePreset)}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DATE_PRESETS.map(preset => (
-                <SelectItem key={preset.value} value={preset.value}>
-                  {preset.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Reporting Period Badge */}
+          <Badge variant="outline" className="text-sm px-3 py-1">
+            {reportingWeek.dateRange}
+          </Badge>
 
 
           {/* Refresh Button */}
