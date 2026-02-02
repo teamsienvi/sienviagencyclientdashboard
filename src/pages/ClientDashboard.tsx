@@ -69,11 +69,11 @@ const ClientDashboard = () => {
       if (!clientId) return [];
       const { data, error } = await supabase
         .from("client_metricool_config")
-        .select("platform")
+        .select("platform, followers")
         .eq("client_id", clientId)
         .eq("is_active", true);
       if (error) throw error;
-      return data?.map(c => c.platform) || [];
+      return data || [];
     },
     enabled: !!clientId,
   });
@@ -82,7 +82,7 @@ const ClientDashboard = () => {
   const { data: connectedAccounts } = useQuery({
     queryKey: ["client-connected-accounts", clientId],
     queryFn: async () => {
-      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false };
+      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false, shopify: false };
       
       // Check X account connection
       const { data: xData } = await supabase
@@ -115,17 +115,25 @@ const ClientDashboard = () => {
         .eq("active", true)
         .limit(1);
 
+      const { data: shopifyData } = await supabase
+        .from("shopify_oauth_connections")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("is_active", true)
+        .limit(1);
+
       return {
         x: xData && xData.length > 0,
         xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
         meta: metaData && metaData.length > 0,
         youtube: youtubeData && youtubeData.length > 0,
+        shopify: shopifyData && shopifyData.length > 0,
       };
     },
     enabled: !!clientId,
   });
 
-  // Fetch latest social metrics
+  // Fetch latest social metrics (for all API-connected platforms)
   const { data: socialMetrics, isLoading: isLoadingMetrics } = useQuery({
     queryKey: ["client-social-metrics", clientId],
     queryFn: async () => {
@@ -153,11 +161,66 @@ const ClientDashboard = () => {
     enabled: !!clientId,
   });
 
+  // Fetch database reports for this client (for Jan 3+ dynamic reports)
+  const { data: dbReports } = useQuery({
+    queryKey: ["client-db-reports", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data, error } = await supabase
+        .from("reports")
+        .select("id, date_range, week_start, week_end")
+        .eq("client_id", clientId)
+        .gte("week_start", "2026-01-03")
+        .order("week_start", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!clientId,
+  });
+
   // Match client name with clientsData for reports
   const clientReports = useMemo(() => {
     if (!client?.name) return null;
-    return clientsData.find(c => c.name === client.name);
-  }, [client?.name]);
+    const staticClient = clientsData.find(c => c.name === client.name);
+    if (!staticClient) return null;
+
+    // Merge static reports with dynamic DB reports (Jan 3+)
+    const staticReports = [...staticClient.reports];
+    
+    // Add DB reports that aren't already in static list
+    if (dbReports && dbReports.length > 0) {
+      const existingDateRanges = new Set(staticReports.map(r => r.dateRange.toLowerCase().replace(/\s+/g, '')));
+      
+      for (const dbReport of dbReports) {
+        // Format date range for display (e.g., "Jan 5-11")
+        const start = new Date(dbReport.week_start);
+        const end = new Date(dbReport.week_end);
+        const startMonth = start.toLocaleDateString('en-US', { month: 'short' });
+        const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
+        const startDay = start.getDate();
+        const endDay = end.getDate();
+        
+        let dateRange: string;
+        if (startMonth === endMonth) {
+          dateRange = `${startMonth} ${startDay}-${endDay}`;
+        } else {
+          dateRange = `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
+        }
+        
+        const normalizedRange = dateRange.toLowerCase().replace(/\s+/g, '');
+        if (!existingDateRanges.has(normalizedRange)) {
+          staticReports.push({
+            dateRange,
+            link: `/dynamic-report/${dbReport.id}`,
+            isInternal: true,
+          });
+          existingDateRanges.add(normalizedRange);
+        }
+      }
+    }
+
+    return { ...staticClient, reports: staticReports };
+  }, [client?.name, dbReports]);
 
   // Group reports by month
   const reportsByMonth = useMemo(() => {
@@ -188,19 +251,75 @@ const ClientDashboard = () => {
     }
   };
 
+  // Aggregate total followers from ALL sources:
+  // 1. API-connected platforms (social_account_metrics)
+  // 2. Metricool-connected platforms (client_metricool_config.followers)
   const totalFollowers = useMemo(() => {
-    if (!socialMetrics) return 0;
-    return Object.values(socialMetrics).reduce((sum, m) => sum + (m?.followers || 0), 0);
-  }, [socialMetrics]);
+    let total = 0;
+    
+    // Add from API-connected platforms
+    if (socialMetrics) {
+      Object.values(socialMetrics).forEach(m => {
+        if (m?.followers) total += m.followers;
+      });
+    }
+    
+    // Add from Metricool platforms (if they have followers stored and not already counted)
+    if (metricoolPlatforms) {
+      const apiPlatforms = new Set(Object.keys(socialMetrics || {}));
+      metricoolPlatforms.forEach(config => {
+        // Only add if not already counted from social_account_metrics
+        // Metricool covers: instagram, facebook, tiktok, linkedin (not youtube, x)
+        const metricoolPlatform = config.platform;
+        if (config.followers && !apiPlatforms.has(metricoolPlatform)) {
+          total += config.followers;
+        }
+      });
+    }
+    
+    return total;
+  }, [socialMetrics, metricoolPlatforms]);
+
+  // Count connected platforms accurately
+  const connectedPlatformsCount = useMemo(() => {
+    let count = 0;
+    
+    // Metricool platforms (excluding meta_ads which is not a social platform)
+    const socialMetricoolPlatforms = metricoolPlatforms?.filter(p => p.platform !== 'meta_ads') || [];
+    count += socialMetricoolPlatforms.length;
+    
+    // Add YouTube if connected and not in Metricool
+    if (connectedAccounts?.youtube && !metricoolPlatforms?.some(p => p.platform === 'youtube')) {
+      count++;
+    }
+    
+    // Add Meta (OAuth) if connected and not in Metricool
+    if (connectedAccounts?.meta && !metricoolPlatforms?.some(p => p.platform === 'instagram' || p.platform === 'facebook')) {
+      count++;
+    }
+    
+    // Add X if has data and not in Metricool
+    if (connectedAccounts?.xHasData && !metricoolPlatforms?.some(p => p.platform === 'x')) {
+      count++;
+    }
+    
+    // Add Shopify if connected
+    if (connectedAccounts?.shopify) {
+      count++;
+    }
+    
+    return count;
+  }, [metricoolPlatforms, connectedAccounts]);
 
   // Check if client only has ads (meta_ads) and no other platforms
   const isAdsOnlyClient = useMemo(() => {
     if (!metricoolPlatforms) return false;
-    const nonAdsPlatforms = metricoolPlatforms.filter(p => p !== 'meta_ads');
+    const platforms = metricoolPlatforms.map(p => p.platform);
+    const nonAdsPlatforms = platforms.filter(p => p !== 'meta_ads');
     const hasMetaOAuth = connectedAccounts?.meta;
     const hasYouTube = connectedAccounts?.youtube;
     const hasX = connectedAccounts?.xHasData;
-    return metricoolPlatforms.includes('meta_ads') && 
+    return platforms.includes('meta_ads') && 
            nonAdsPlatforms.length === 0 && 
            !hasMetaOAuth && !hasYouTube && !hasX;
   }, [metricoolPlatforms, connectedAccounts]);
@@ -303,13 +422,10 @@ const ClientDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">
-                  {(metricoolPlatforms?.length || 0) + 
-                   (connectedAccounts?.youtube ? 1 : 0) + 
-                   (connectedAccounts?.meta ? 1 : 0) + 
-                   (connectedAccounts?.x ? 1 : 0)}
+                  {connectedPlatformsCount}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Connected accounts
+                  Live analytics connections
                 </p>
               </CardContent>
             </Card>
@@ -459,7 +575,7 @@ const ClientDashboard = () => {
                     )}
 
                     {/* TikTok */}
-                    {metricoolPlatforms?.includes('tiktok') && (
+                    {metricoolPlatforms?.some(p => p.platform === 'tiktok') && (
                       <Card 
                         className="hover:border-primary/30 transition-all cursor-pointer group"
                         onClick={() => navigate(`/tiktok-metricool/${clientId}`)}
@@ -490,7 +606,7 @@ const ClientDashboard = () => {
                     )}
 
                     {/* LinkedIn */}
-                    {metricoolPlatforms?.includes('linkedin') && (
+                    {metricoolPlatforms?.some(p => p.platform === 'linkedin') && (
                       <Card 
                         className="hover:border-primary/30 transition-all cursor-pointer group"
                         onClick={() => navigate(`/linkedin-metricool/${clientId}`)}
@@ -516,7 +632,7 @@ const ClientDashboard = () => {
                 )}
 
                 {/* Ads Analytics - Show for clients with meta_ads config */}
-                {metricoolPlatforms?.includes('meta_ads') && (
+                {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/ads-analytics/${clientId}`)}
