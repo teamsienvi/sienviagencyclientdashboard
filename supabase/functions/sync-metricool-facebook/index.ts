@@ -12,6 +12,7 @@ interface FacebookPost {
   type: string | null;
   reach: number;
   impressions: number;
+  views: number;
   likes: number;
   comments: number;
   shares: number;
@@ -75,12 +76,14 @@ function parseCSV(csvText: string): FacebookPost[] {
     }
 
     // Map Facebook CSV columns - Note: Metricool uses 'postlink' for the URL
+    // For reels/videos, "views" is the actual video view count; for posts, use impressions
     const post: FacebookPost = {
       title: row["content"] || row["title"] || row["message"] || null,
       date: row["timestamp"] || row["date"] || row["published"] || null,
       type: row["type"] || row["format"] || null,
       reach: parseInt(row["reach"] || row["reach (organic)"] || "0", 10) || 0,
-      impressions: parseInt(row["impressions"] || row["views"] || "0", 10) || 0,
+      impressions: parseInt(row["impressions"] || "0", 10) || 0,
+      views: parseInt(row["views"] || row["video views"] || row["videoviews"] || "0", 10) || 0,
       likes: parseInt(row["likes"] || "0", 10) || 0,
       comments: parseInt(row["comments"] || "0", 10) || 0,
       shares: parseInt(row["shares"] || row["shared"] || "0", 10) || 0,
@@ -277,6 +280,9 @@ serve(async (req) => {
           continue;
         }
 
+        // For reels/videos, use actual views; for posts, fall back to impressions
+        const viewCount = contentType === "reel" && post.views > 0 ? post.views : post.impressions;
+
         const { error: metricsError } = await supabase
           .from("social_content_metrics")
           .upsert({
@@ -286,7 +292,7 @@ serve(async (req) => {
             period_end: endDate,
             reach: post.reach,
             impressions: post.impressions,
-            views: post.impressions,
+            views: viewCount,
             likes: post.likes + post.reactions,
             comments: post.comments,
             shares: post.shares,
