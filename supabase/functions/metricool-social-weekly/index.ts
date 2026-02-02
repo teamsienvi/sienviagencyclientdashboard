@@ -241,22 +241,29 @@ serve(async (req) => {
       };
 
       // CRITICAL: Use platform-specific metric for followers
-      // Instagram: "followers" | Facebook: "pageFollows" | LinkedIn: "followers" | TikTok: "followers"
+      // Instagram: "followers" | Facebook: "pageFollows" | LinkedIn: "followers" | TikTok: "followers_count"
       const getFollowersMetric = (p: string) => {
         if (p === "facebook") return "pageFollows";
         if (p === "linkedin") return "followers";
-        return "followers"; // Instagram and TikTok use "followers"
+        if (p === "tiktok") return "followers_count";
+        return "followers"; // Instagram uses "followers"
       };
       const followersMetric = getFollowersMetric(platform);
 
       console.log(`Using followers metric "${followersMetric}" for platform "${platform}"`);
+
+      // Helper to get correct subject for engagement aggregation based on platform
+      const getEngagementSubject = (p: string, type: "posts" | "reels") => {
+        if (p === "tiktok") return "video"; // TikTok uses "video" instead of "posts"/"reels"
+        return type;
+      };
 
       // Fetch posts/reels engagement from aggregation endpoint (correct API for KPIs)
       const fetchPostsEngagement = async (): Promise<number | null> => {
         try {
           const data = await fetchMetricool("/api/v2/analytics/aggregation", buildParams(fromDate, toDate, {
             metric: "engagement",
-            subject: "posts",
+            subject: getEngagementSubject(platform, "posts"),
           }));
           return extractAggValue(data);
         } catch (e) {
@@ -266,10 +273,13 @@ serve(async (req) => {
       };
 
       const fetchReelsEngagement = async (): Promise<number | null> => {
+        // TikTok doesn't have separate reels - all videos are counted in the video subject
+        if (platform === "tiktok") return null;
+        
         try {
           const data = await fetchMetricool("/api/v2/analytics/aggregation", buildParams(fromDate, toDate, {
             metric: "engagement",
-            subject: "reels",
+            subject: getEngagementSubject(platform, "reels"),
           }));
           return extractAggValue(data);
         } catch (e) {
@@ -321,10 +331,10 @@ serve(async (req) => {
           metric: followersMetric,
           subject: "account",
         })),
-        // 2) Engagement timeline (for chart)
+        // 2) Engagement timeline (for chart) - TikTok uses "video" subject
         fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
           metric: "engagement",
-          subject: "posts",
+          subject: getEngagementSubject(platform, "posts"),
         })),
         // 3) Posts engagement aggregation (correct endpoint!)
         fetchPostsEngagement(),

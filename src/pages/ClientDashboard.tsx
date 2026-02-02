@@ -168,6 +168,8 @@ const ClientDashboard = () => {
       if (!clientId || !metricoolPlatforms || metricoolPlatforms.length === 0) return null;
       
       const followers: Record<string, number> = {};
+      // Include social platforms that support the followers metric via metricool-social-weekly
+      // YouTube has different metrics and is fetched via social_account_metrics instead
       const socialPlatforms = metricoolPlatforms
         .filter(p => ["instagram", "facebook", "tiktok", "linkedin"].includes(p.platform))
         .map(p => p.platform);
