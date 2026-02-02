@@ -362,13 +362,21 @@ export const MetricoolAnalyticsSection = ({
         .limit(1)
         .maybeSingle();
 
-      setPrevMetrics(prevData ? {
-        followers: prevData.followers,
-        engagement_rate: prevData.engagement_rate,
-        total_content: prevData.total_content,
-        total_views: null, // Will be computed from content
-        total_likes: null, // Will be computed from content
-      } : null);
+      // Set prevMetrics from database - this persists across page navigations
+      if (prevData) {
+        setPrevMetrics({
+          followers: prevData.followers,
+          engagement_rate: prevData.engagement_rate,
+          total_content: prevData.total_content,
+          total_views: null, // Will be computed from content
+          total_likes: null, // Will be computed from content
+        });
+      }
+      
+      // Also hydrate liveEngagement from current period DB data (persists across navigations)
+      if (data?.engagement_rate != null) {
+        setLiveEngagement(data.engagement_rate);
+      }
 
       return data as AccountMetric | null;
     },
@@ -909,58 +917,8 @@ export const MetricoolAnalyticsSection = ({
         }
       }
 
-      // Persist followers to social_account_metrics for current period
-      if (persistedFollowers !== null) {
-        const now = new Date();
-        const periodStartStr = format(startDate, "yyyy-MM-dd");
-        const periodEndStr = format(now, "yyyy-MM-dd");
-
-        const { error: upsertError } = await supabase
-          .from("social_account_metrics")
-          .upsert(
-            {
-              client_id: clientId,
-              platform: platform as "tiktok" | "linkedin",
-              followers: persistedFollowers,
-              period_start: periodStartStr,
-              period_end: periodEndStr,
-              collected_at: now.toISOString(),
-            },
-            { onConflict: "client_id,platform,period_start,period_end" }
-          );
-
-        if (upsertError) {
-          console.error("Failed to persist current followers:", upsertError);
-        } else {
-          console.log("Persisted current followers to database:", persistedFollowers);
-        }
-      }
-
-      // Also persist previous period followers to enable WoW comparison
-      if (persistedPrevFollowers !== null) {
-        const prevPeriodStartStr = format(prevPeriodStart, "yyyy-MM-dd");
-        const prevPeriodEndStr = format(prevPeriodEnd, "yyyy-MM-dd");
-
-        const { error: prevUpsertError } = await supabase
-          .from("social_account_metrics")
-          .upsert(
-            {
-              client_id: clientId,
-              platform: platform as "tiktok" | "linkedin",
-              followers: persistedPrevFollowers,
-              period_start: prevPeriodStartStr,
-              period_end: prevPeriodEndStr,
-              collected_at: new Date().toISOString(),
-            },
-            { onConflict: "client_id,platform,period_start,period_end" }
-          );
-
-        if (prevUpsertError) {
-          console.error("Failed to persist previous followers:", prevUpsertError);
-        } else {
-          console.log("Persisted previous followers to database:", persistedPrevFollowers);
-        }
-      }
+      // Get total posts count for current period
+      const currentTotalPosts = postsResult?.data?.rows?.length ?? 0;
 
       // Parse engagement rate from timelines API for both LinkedIn and TikTok
       let liveEngagementCurrent: number | null = null;
@@ -995,10 +953,68 @@ export const MetricoolAnalyticsSection = ({
       }
       console.log(`${platform} engagement prev parsed:`, liveEngagementPrev);
 
+      // Persist followers, engagement_rate, and total_content to social_account_metrics for current period
+      {
+        const now = new Date();
+        const periodStartStr = format(startDate, "yyyy-MM-dd");
+        const periodEndStr = format(endDate, "yyyy-MM-dd");
+
+        const { error: upsertError } = await supabase
+          .from("social_account_metrics")
+          .upsert(
+            {
+              client_id: clientId,
+              platform: platform as "tiktok" | "linkedin",
+              followers: persistedFollowers,
+              engagement_rate: liveEngagementCurrent,
+              total_content: currentTotalPosts,
+              period_start: periodStartStr,
+              period_end: periodEndStr,
+              collected_at: now.toISOString(),
+            },
+            { onConflict: "client_id,platform,period_start,period_end" }
+          );
+
+        if (upsertError) {
+          console.error("Failed to persist current period metrics:", upsertError);
+        } else {
+          console.log("Persisted current period metrics:", { followers: persistedFollowers, engagement_rate: liveEngagementCurrent, total_content: currentTotalPosts });
+        }
+      }
+
+      // Also persist previous period metrics to enable WoW comparison
+      {
+        const prevPeriodStartStr = format(prevPeriodStart, "yyyy-MM-dd");
+        const prevPeriodEndStr = format(prevPeriodEnd, "yyyy-MM-dd");
+
+        const { error: prevUpsertError } = await supabase
+          .from("social_account_metrics")
+          .upsert(
+            {
+              client_id: clientId,
+              platform: platform as "tiktok" | "linkedin",
+              followers: persistedPrevFollowers,
+              engagement_rate: liveEngagementPrev,
+              total_content: prevTotalPosts,
+              period_start: prevPeriodStartStr,
+              period_end: prevPeriodEndStr,
+              collected_at: new Date().toISOString(),
+            },
+            { onConflict: "client_id,platform,period_start,period_end" }
+          );
+
+        if (prevUpsertError) {
+          console.error("Failed to persist previous period metrics:", prevUpsertError);
+        } else {
+          console.log("Persisted previous period metrics:", { followers: persistedPrevFollowers, engagement_rate: liveEngagementPrev, total_content: prevTotalPosts });
+        }
+      }
+
       return { 
         posts: postsResult.data, 
         postsError: postsResult.error,
         prevTotalPosts,
+        currentTotalPosts,
         followers: followersResult.data,
         followersError: followersResult.error,
         persistedFollowers,
