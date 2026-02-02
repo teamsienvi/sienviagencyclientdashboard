@@ -198,9 +198,14 @@ serve(async (req) => {
           headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
         });
         
-        if (response.ok) {
-          const data = await response.json();
+        const body = await response.text();
+        console.log("Previous followers response status:", response.status, "body preview:", body.substring(0, 300));
+        (debug as any).prevFollowersTimeline = { status: response.status, body: body.substring(0, 500), dateRange: `${previousStart} to ${previousEnd}` };
+        
+        if (response.ok && body.trim()) {
+          const data = JSON.parse(body);
           const points = parseTimelineValues(data);
+          console.log("Previous followers parsed points:", points.length, "values:", points.map(p => p.value).join(","));
           result.previous.followers = getLastValue(points);
           const firstVal = getFirstValue(points);
           if (result.previous.followers !== null && firstVal !== null) {

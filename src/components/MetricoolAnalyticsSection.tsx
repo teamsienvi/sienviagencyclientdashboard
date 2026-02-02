@@ -777,12 +777,51 @@ export const MetricoolAnalyticsSection = ({
         },
       });
 
-      const [postsResult, followersResult, prevFollowersResult, genderResult, countryResult] = await Promise.all([
+      // Fetch engagement rate timeline for LinkedIn (current + previous week)
+      const engagementCurrentPromise = platform === "linkedin" 
+        ? supabase.functions.invoke("metricool-json", {
+            body: {
+              path: "/api/v2/analytics/timelines",
+              params: {
+                from: fromUTC,
+                to: toUTC,
+                metric: "engagement",
+                network: "linkedin",
+                metricType: "posts",
+                timezone: "America/Chicago",
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+              },
+            },
+          })
+        : Promise.resolve({ data: null });
+      
+      const engagementPrevPromise = platform === "linkedin"
+        ? supabase.functions.invoke("metricool-json", {
+            body: {
+              path: "/api/v2/analytics/timelines",
+              params: {
+                from: prevFromUTC,
+                to: prevToUTC,
+                metric: "engagement",
+                network: "linkedin",
+                metricType: "posts",
+                timezone: "America/Chicago",
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+              },
+            },
+          })
+        : Promise.resolve({ data: null });
+
+      const [postsResult, followersResult, prevFollowersResult, genderResult, countryResult, engagementCurrent, engagementPrev] = await Promise.all([
         postsPromise, 
         followersPromise,
         prevFollowersPromise,
         genderDemographicsPromise,
-        countryDemographicsPromise
+        countryDemographicsPromise,
+        engagementCurrentPromise,
+        engagementPrevPromise,
       ]);
 
       console.log("Posts result:", postsResult);
@@ -900,6 +939,41 @@ export const MetricoolAnalyticsSection = ({
         }
       }
 
+      // Parse LinkedIn engagement from timelines API
+      let linkedInEngagementCurrent: number | null = null;
+      let linkedInEngagementPrev: number | null = null;
+      
+      if (platform === "linkedin") {
+        // Parse current period engagement
+        const currentEngData = engagementCurrent?.data;
+        if (currentEngData?.success && currentEngData?.data) {
+          const values = currentEngData.data?.[0]?.values || currentEngData.data?.data?.[0]?.values || [];
+          if (Array.isArray(values) && values.length > 0) {
+            // Average of only returned values (don't fill missing days with 0)
+            const validValues = values.filter((v: any) => v?.value != null && !isNaN(v.value));
+            if (validValues.length > 0) {
+              const sum = validValues.reduce((acc: number, v: any) => acc + Number(v.value), 0);
+              linkedInEngagementCurrent = sum / validValues.length;
+            }
+          }
+        }
+        console.log("LinkedIn engagement current parsed:", linkedInEngagementCurrent);
+        
+        // Parse previous period engagement
+        const prevEngData = engagementPrev?.data;
+        if (prevEngData?.success && prevEngData?.data) {
+          const values = prevEngData.data?.[0]?.values || prevEngData.data?.data?.[0]?.values || [];
+          if (Array.isArray(values) && values.length > 0) {
+            const validValues = values.filter((v: any) => v?.value != null && !isNaN(v.value));
+            if (validValues.length > 0) {
+              const sum = validValues.reduce((acc: number, v: any) => acc + Number(v.value), 0);
+              linkedInEngagementPrev = sum / validValues.length;
+            }
+          }
+        }
+        console.log("LinkedIn engagement prev parsed:", linkedInEngagementPrev);
+      }
+
       return { 
         posts: postsResult.data, 
         postsError: postsResult.error,
@@ -911,6 +985,8 @@ export const MetricoolAnalyticsSection = ({
         genderError: genderResult.error,
         countryData: countryResult.data,
         countryError: countryResult.error,
+        linkedInEngagementCurrent,
+        linkedInEngagementPrev,
       };
     },
     onSuccess: async (result) => {
@@ -922,8 +998,23 @@ export const MetricoolAnalyticsSection = ({
       } else if (posts?.success && posts.rows) {
         setLivePosts(posts.rows);
         
-        // Calculate average engagement from posts
-        if (posts.rows.length > 0) {
+        // For LinkedIn, use engagement from timelines API (more accurate)
+        // For TikTok, calculate from posts
+        if (platform === "linkedin" && result.linkedInEngagementCurrent !== null) {
+          setLiveEngagement(result.linkedInEngagementCurrent);
+          // Also update prevMetrics with engagement from API
+          if (result.linkedInEngagementPrev !== null) {
+            setPrevMetrics(prev => ({
+              ...prev,
+              followers: prev?.followers ?? null,
+              engagement_rate: result.linkedInEngagementPrev,
+              total_content: prev?.total_content ?? null,
+              total_views: prev?.total_views ?? null,
+              total_likes: prev?.total_likes ?? null,
+            }));
+          }
+        } else if (posts.rows.length > 0) {
+          // Calculate average engagement from posts (TikTok or fallback)
           const avgEngagement = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length;
           setLiveEngagement(avgEngagement);
         }
@@ -940,9 +1031,12 @@ export const MetricoolAnalyticsSection = ({
           const totalReactions = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.likes || 0), 0);
           const totalComments = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.comments || 0), 0);
           const totalShares = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.shares || 0), 0);
-          const avgEngagementRate = posts.rows.length > 0 
-            ? posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length
-            : 0;
+          // Use engagement from timelines API (more accurate), fallback to posts calculation
+          const avgEngagementRate = result.linkedInEngagementCurrent !== null 
+            ? result.linkedInEngagementCurrent
+            : (posts.rows.length > 0 
+              ? posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length
+              : 0);
           
           // Upsert account metrics - use persistedFollowers from the mutation result
           const { error: metricsError } = await supabase

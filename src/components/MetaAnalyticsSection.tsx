@@ -1377,12 +1377,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     <span className="text-sm">Engagement (Posts)</span>
                   </div>
                   <p className="text-2xl font-bold">
-                    {currentPostsEngagement != null ? currentPostsEngagement.toLocaleString(undefined, { maximumFractionDigits: 0 }) : <span className="text-muted-foreground">N/A</span>}
+                    {currentPostsEngagement != null ? currentPostsEngagement.toFixed(2) : <span className="text-muted-foreground">N/A</span>}
                   </p>
                   {prevPostsEngagement != null && currentPostsEngagement != null && (
                     <>
                       <span className="text-xs text-muted-foreground">
-                        vs {prevPostsEngagement.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        vs {prevPostsEngagement.toFixed(2)}
                       </span>
                       {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, false, true)}
                     </>
@@ -1396,14 +1396,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     <span className="text-sm">Engagement (Reels)</span>
                   </div>
                   <p className="text-2xl font-bold">
-                    {currentReelsEngagement != null ? `${currentReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground">N/A</span>}
+                    {currentReelsEngagement != null ? currentReelsEngagement.toFixed(2) : <span className="text-muted-foreground">N/A</span>}
                   </p>
                   {prevReelsEngagement != null && currentReelsEngagement != null && (
                     <>
                       <span className="text-xs text-muted-foreground">
-                        vs {prevReelsEngagement.toFixed(2)}%
+                        vs {prevReelsEngagement.toFixed(2)}
                       </span>
-                      {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, true)}
+                      {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, false, true)}
                     </>
                   )}
                 </CardContent>
@@ -1423,11 +1423,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     <span className="text-xs text-muted-foreground">Posts:</span>
                     <div className="text-right">
                       <span className="text-lg font-bold">
-                        {currentPostsEngagement != null ? `${currentPostsEngagement.toFixed(2)}%` : <span className="text-muted-foreground text-sm">N/A</span>}
+                        {currentPostsEngagement != null ? currentPostsEngagement.toFixed(2) : <span className="text-muted-foreground text-sm">N/A</span>}
                       </span>
                       {prevPostsEngagement != null && currentPostsEngagement != null && (
                         <div className="flex items-center justify-end gap-1">
-                          {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, true)}
+                          {renderWoWTooltip(currentPostsEngagement, prevPostsEngagement, false, true)}
                         </div>
                       )}
                     </div>
@@ -1437,11 +1437,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     <span className="text-xs text-muted-foreground">Reels:</span>
                     <div className="text-right">
                       <span className="text-lg font-bold">
-                        {currentReelsEngagement != null ? `${currentReelsEngagement.toFixed(2)}%` : <span className="text-muted-foreground text-sm">N/A</span>}
+                        {currentReelsEngagement != null ? currentReelsEngagement.toFixed(2) : <span className="text-muted-foreground text-sm">N/A</span>}
                       </span>
                       {prevReelsEngagement != null && currentReelsEngagement != null && (
                         <div className="flex items-center justify-end gap-1">
-                          {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, true)}
+                          {renderWoWTooltip(currentReelsEngagement, prevReelsEngagement, false, true)}
                         </div>
                       )}
                     </div>
