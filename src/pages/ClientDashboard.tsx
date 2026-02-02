@@ -163,30 +163,67 @@ const ClientDashboard = () => {
 
   // Fetch live follower counts from Metricool for platforms that support it
   const { data: metricoolFollowers } = useQuery({
-    queryKey: ["client-metricool-followers", clientId],
+    queryKey: ["client-metricool-followers", clientId, metricoolPlatforms],
     queryFn: async () => {
-      if (!clientId) return null;
+      if (!clientId || !metricoolPlatforms || metricoolPlatforms.length === 0) return null;
       
-      // Fetch from metricool-social-weekly to get current followers
-      try {
-        const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
-          body: { clientId },
-        });
-        
-        if (error || !data?.success) return null;
-        
-        // Extract followers per platform
-        const followers: Record<string, number> = {};
-        if (data.data?.instagram?.followers) followers.instagram = data.data.instagram.followers;
-        if (data.data?.facebook?.followers) followers.facebook = data.data.facebook.followers;
-        if (data.data?.tiktok?.followers) followers.tiktok = data.data.tiktok.followers;
-        if (data.data?.linkedin?.followers) followers.linkedin = data.data.linkedin.followers;
-        
-        return followers;
-      } catch (e) {
-        console.error("Error fetching Metricool followers:", e);
-        return null;
-      }
+      const followers: Record<string, number> = {};
+      const socialPlatforms = metricoolPlatforms
+        .filter(p => ["instagram", "facebook", "tiktok", "linkedin"].includes(p.platform))
+        .map(p => p.platform);
+      
+      if (socialPlatforms.length === 0) return null;
+      
+      // Get date ranges for current period
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const thisMonday = new Date(today);
+      thisMonday.setDate(today.getDate() - daysToSubtract);
+      thisMonday.setHours(0, 0, 0, 0);
+      
+      const currentStart = new Date(thisMonday);
+      currentStart.setDate(thisMonday.getDate() - 7);
+      const currentEnd = new Date(thisMonday);
+      currentEnd.setDate(thisMonday.getDate() - 1);
+      const prevStart = new Date(currentStart);
+      prevStart.setDate(currentStart.getDate() - 7);
+      const prevEnd = new Date(currentStart);
+      prevEnd.setDate(currentStart.getDate() - 1);
+      
+      const formatDate = (d: Date) => d.toISOString().split("T")[0];
+      
+      // Fetch each platform in parallel
+      const results = await Promise.allSettled(
+        socialPlatforms.map(async (platform) => {
+          const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
+            body: {
+              clientId,
+              platform,
+              from: formatDate(currentStart),
+              to: formatDate(currentEnd),
+              prevFrom: formatDate(prevStart),
+              prevTo: formatDate(prevEnd),
+            },
+          });
+          
+          if (error || !data?.success) return { platform, followers: null };
+          
+          // Get followers from the last point in the current timeline
+          const timeline = data.data?.current?.followersTimeline || [];
+          const lastPoint = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+          
+          return { platform, followers: lastPoint?.value || null };
+        })
+      );
+      
+      results.forEach((result) => {
+        if (result.status === "fulfilled" && result.value.followers) {
+          followers[result.value.platform] = result.value.followers;
+        }
+      });
+      
+      return Object.keys(followers).length > 0 ? followers : null;
     },
     enabled: !!clientId && !!metricoolPlatforms && metricoolPlatforms.length > 0,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
