@@ -127,17 +127,22 @@ export const MetricoolAnalyticsSection = ({
   const [demographics, setDemographics] = useState<DemographicsData | null>(null);
   const [demographicsLoading, setDemographicsLoading] = useState(false);
 
-  // Date range state
+  // Date range state - default to "7d" which uses the standardized reporting week
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
 
   const getDateRange = () => {
-    const today = new Date();
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
     }
-    const days = dateRangePreset === "30d" ? 30 : 7;
-    return { start: subDays(today, days), end: today };
+    if (dateRangePreset === "30d") {
+      // For 30d, use the last 30 days from today
+      const today = new Date();
+      return { start: subDays(today, 30), end: today };
+    }
+    // For 7d (default), use the standardized reporting week (last completed Mon-Sun)
+    const { start, end } = getCurrentReportingWeek();
+    return { start, end };
   };
 
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
@@ -509,9 +514,10 @@ export const MetricoolAnalyticsSection = ({
       if (!config) throw new Error("No configuration found");
       if (!config.user_id) throw new Error("User ID not configured");
 
-      // Build ISO date strings with timezone offset
-      const now = new Date();
-      const startDate = subDays(now, 7);
+      // Use standardized reporting week for consistency across all analytics
+      const { start: weekStart, end: weekEnd } = getCurrentReportingWeek();
+      const startDate = weekStart;
+      const endDate = weekEnd;
       
       const formatWithOffset = (date: Date, isEnd: boolean, offsetMinutes: number) => {
         // Format date in a fixed-offset "local" time by shifting the timestamp
@@ -530,11 +536,11 @@ export const MetricoolAnalyticsSection = ({
       };
 
       const fromUTC = formatWithOffset(startDate, false, 0);
-      const toUTC = formatWithOffset(now, true, 0);
+      const toUTC = formatWithOffset(endDate, true, 0);
 
       // Use +08:00 for TikTok follower timelines (Metricool expects offset in from/to)
       const fromShanghai = formatWithOffset(startDate, false, 8 * 60);
-      const toShanghai = formatWithOffset(now, true, 8 * 60);
+      const toShanghai = formatWithOffset(endDate, true, 8 * 60);
 
       console.log("Syncing Metricool data:", { 
         clientId, 
