@@ -131,11 +131,11 @@ function parseMetricoolDate(dateStr: string | null): string {
 }
 
 function generateContentId(post: FacebookPost): string {
-  const urlPart = post.url || post.link || "";
+  // Use date + title for stable content ID (don't include URL as it may vary between syncs)
   const datePart = post.date || "";
-  const titlePart = post.title || "";
+  const titlePart = (post.title || "").substring(0, 100); // Truncate long titles
   
-  const combined = `${urlPart}-${datePart}-${titlePart}`;
+  const combined = `${datePart}-${titlePart}`;
   let hash = 0;
   for (let i = 0; i < combined.length; i++) {
     const char = combined.charCodeAt(i);
