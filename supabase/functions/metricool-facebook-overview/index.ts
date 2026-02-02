@@ -320,10 +320,10 @@ serve(async (req) => {
       results.errors.push(`reach: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // E) Followers timeline
+    // E) Followers timeline - Facebook uses "pageFollows" not "followers_count"
     try {
       const followersUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/timelines`);
-      Object.entries(buildParams({ metric: "followers_count", subject: "account" })).forEach(([k, v]) => 
+      Object.entries(buildParams({ metric: "pageFollows", subject: "account" })).forEach(([k, v]) => 
         followersUrl.searchParams.set(k, v)
       );
       
