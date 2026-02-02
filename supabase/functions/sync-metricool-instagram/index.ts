@@ -265,8 +265,21 @@ serve(async (req) => {
       rows = parseCSV(csvText);
       console.log("Parsed rows count:", rows.length);
 
+      // Filter to only posts within the reporting period
+      const periodStartDate = new Date(startDate);
+      const periodEndDate = new Date(endDate);
+      periodEndDate.setHours(23, 59, 59, 999);
+      
+      const postsInPeriod = rows.filter(post => {
+        if (!post.date) return false;
+        const postDate = new Date(post.date);
+        return postDate >= periodStartDate && postDate <= periodEndDate;
+      });
+      
+      console.log(`Posts in period (${startDate} to ${endDate}):`, postsInPeriod.length, "out of", rows.length);
+
       // Persist posts to database
-      for (const post of rows) {
+      for (const post of postsInPeriod) {
         const contentId = generateContentId(post);
         const publishedAt = parseMetricoolDate(post.date);
         const postUrl = post.url || post.link || null;
@@ -327,6 +340,8 @@ serve(async (req) => {
 
         savedCount++;
       }
+      
+      console.log(`Saved ${savedCount} posts within the reporting period`);
     } else {
       const errorText = await postsResponse.text();
       console.error("Posts fetch failed:", postsResponse.status, errorText);
