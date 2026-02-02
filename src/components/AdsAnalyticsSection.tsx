@@ -966,22 +966,43 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                                 <TableRow className="bg-muted/10">
                                   <TableCell colSpan={12} className="px-6 py-4">
                                     <div className="pl-8">
-                                      <p className="text-sm font-medium text-muted-foreground mb-3">Actions Breakdown</p>
+                                      <div className="flex items-center justify-between mb-3">
+                                        <p className="text-sm font-medium text-muted-foreground">Actions Breakdown</p>
+                                        <p className="text-xs text-muted-foreground italic bg-muted/50 px-2 py-1 rounded">
+                                          ⓘ Conversion events are tracked via Meta Pixel and may include non-purchase actions (e.g., add to cart, checkout initiated)
+                                        </p>
+                                      </div>
                                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
                                         {Object.entries(campaign.actions!)
                                           .filter(([_, value]) => (value as number) > 0)
                                           .sort((a, b) => (b[1] as number) - (a[1] as number))
-                                          .map(([key, value]) => (
-                                            <div 
-                                              key={key}
-                                              className="bg-background rounded-lg p-3 border border-border/50"
-                                            >
-                                              <p className="text-xs text-muted-foreground truncate capitalize" title={key}>
-                                                {key.replace(/_/g, " ").replace(/\./g, " ")}
-                                              </p>
-                                              <p className="text-lg font-bold">{formatNumber(value as number)}</p>
-                                            </div>
-                                          ))}
+                                          .map(([key, value]) => {
+                                            // Format the action name for better readability
+                                            const formattedName = key
+                                              .replace(/_/g, " ")
+                                              .replace(/\./g, " ")
+                                              .replace(/onsite conversion/gi, "Onsite Conv.")
+                                              .replace(/offsite conversion/gi, "Offsite Conv.")
+                                              .replace(/purchase/gi, "Purchase")
+                                              .split(" ")
+                                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                              .join(" ");
+                                            
+                                            return (
+                                              <div 
+                                                key={key}
+                                                className="bg-background rounded-lg p-3 border border-border/50 hover:border-primary/30 transition-colors"
+                                              >
+                                                <p 
+                                                  className="text-xs text-muted-foreground mb-1 line-clamp-2 min-h-[2rem]" 
+                                                  title={key.replace(/_/g, " ").replace(/\./g, " ")}
+                                                >
+                                                  {formattedName}
+                                                </p>
+                                                <p className="text-lg font-bold">{formatNumber(value as number)}</p>
+                                              </div>
+                                            );
+                                          })}
                                       </div>
                                     </div>
                                   </TableCell>

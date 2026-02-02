@@ -433,8 +433,8 @@ serve(async (req) => {
       }
     }
 
-    // Save account-level metrics
-    if (rows.length > 0 || followers !== null) {
+    // Save account-level metrics - use savedCount (actual content persisted) instead of rows.length
+    if (savedCount > 0 || followers !== null) {
       await supabase
         .from("social_account_metrics")
         .upsert({
@@ -445,7 +445,7 @@ serve(async (req) => {
           followers: followers,
           new_followers: newFollowers,
           engagement_rate: engagementRate,
-          total_content: rows.length,
+          total_content: savedCount,
           collected_at: new Date().toISOString(),
         }, { onConflict: "client_id,platform,period_start,period_end" });
     }
