@@ -248,6 +248,15 @@ serve(async (req) => {
         const contentId = generateContentId(post);
         const publishedAt = parseMetricoolDate(post.date);
         const postUrl = post.url || post.link || null;
+        
+        // Detect content type: check type field AND URL for reels
+        let contentType = "post";
+        const typeField = post.type?.toLowerCase() || "";
+        if (typeField === "video" || typeField === "reel") {
+          contentType = "reel";
+        } else if (postUrl && postUrl.includes("/reel/")) {
+          contentType = "reel";
+        }
 
         const { data: contentData, error: contentError } = await supabase
           .from("social_content")
@@ -255,7 +264,7 @@ serve(async (req) => {
             client_id: clientId,
             content_id: contentId,
             platform: "facebook",
-            content_type: post.type?.toLowerCase() === "video" || post.type?.toLowerCase() === "reel" ? "reel" : "post",
+            content_type: contentType,
             title: post.title,
             url: postUrl,
             published_at: publishedAt,
@@ -298,14 +307,14 @@ serve(async (req) => {
       console.error("Posts fetch failed:", postsResponse.status, errorText);
     }
 
-    // Fetch followers from timelines endpoint
+    // Fetch followers from timelines endpoint - Facebook uses "pageFollows" not "followers_count"
     let followers: number | null = null;
     let newFollowers: number | null = null;
     try {
       const timelinesUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/timelines`);
       timelinesUrl.searchParams.set("from", startDate);
       timelinesUrl.searchParams.set("to", endDate);
-      timelinesUrl.searchParams.set("metric", "followers_count");
+      timelinesUrl.searchParams.set("metric", "pageFollows");
       timelinesUrl.searchParams.set("network", "facebook");
       timelinesUrl.searchParams.set("subject", "account");
       timelinesUrl.searchParams.set("timezone", "UTC");

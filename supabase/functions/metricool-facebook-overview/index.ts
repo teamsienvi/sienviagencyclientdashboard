@@ -295,14 +295,14 @@ serve(async (req) => {
       results.errors.push(`unique_impressions: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // D) Reach aggregation (for avg reach per post)
+    // D) Reach aggregation (for avg reach per post) - Facebook uses "impressionsunique" for reach
     try {
       const reachUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/aggregation`);
-      Object.entries(buildParams({ metric: "reach", subject: "posts" })).forEach(([k, v]) => 
+      Object.entries(buildParams({ metric: "impressionsunique", subject: "posts" })).forEach(([k, v]) => 
         reachUrl.searchParams.set(k, v)
       );
       
-      console.log("Fetching reach:", reachUrl.toString());
+      console.log("Fetching reach (impressionsunique):", reachUrl.toString());
       const reachRes = await fetch(reachUrl.toString(), {
         headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
       });
