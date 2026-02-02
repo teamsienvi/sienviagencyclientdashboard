@@ -1,16 +1,15 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { RefreshCw, CalendarIcon, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format, subDays, startOfDay, endOfDay, parseISO, eachDayOfInterval } from "date-fns";
+import { format, subDays, parseISO, eachDayOfInterval } from "date-fns";
+import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
 import {
   AreaChart,
   Area,
@@ -132,14 +131,6 @@ interface DateRange {
   to: Date;
 }
 
-// Preset options
-const DATE_PRESETS = [
-  { label: "Last 7 days", days: 7 },
-  { label: "Last 14 days", days: 14 },
-  { label: "Last 30 days", days: 30 },
-  { label: "Last 90 days", days: 90 },
-];
-
 const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,28 +141,22 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   const [timelineDebug, setTimelineDebug] = useState<Record<string, unknown> | null>(null);
   const [googleTimelineDebug, setGoogleTimelineDebug] = useState<Record<string, unknown> | null>(null);
   const [upstreamDebug, setUpstreamDebug] = useState<Record<string, unknown> | null>(null);
-  const [calendarOpen, setCalendarOpen] = useState(false);
   const [expandedMetaCampaigns, setExpandedMetaCampaigns] = useState<Set<string>>(new Set());
   const [expandedGoogleCampaigns, setExpandedGoogleCampaigns] = useState<Set<string>>(new Set());
   
-  // Default to last 7 days
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    const today = new Date();
-    return {
-      from: subDays(startOfDay(today), 6),
-      to: endOfDay(today),
-    };
+  // Use standardized reporting period (last completed Mon-Sun week)
+  const reportingWeek = useMemo(() => getCurrentReportingWeek(), []);
+  const previousWeek = useMemo(() => getPreviousReportingWeek(), []);
+  
+  const dateRange = useMemo(() => ({
+    from: reportingWeek.start,
+    to: reportingWeek.end,
+  }), [reportingWeek]);
+
+  const getPreviousRange = (): { from: Date; to: Date } => ({
+    from: previousWeek.start,
+    to: previousWeek.end,
   });
-
-  const [selectedPreset, setSelectedPreset] = useState<string>("Last 7 days");
-
-  const getPreviousRange = (range: DateRange): DateRange => {
-    const daysDiff = Math.ceil((range.to.getTime() - range.from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    return {
-      from: subDays(range.from, daysDiff),
-      to: subDays(range.from, 1),
-    };
-  };
 
   // Parse Metricool timeline response: [["timestampMs","valueString"], ...] => [{ts, value}, ...]
   const parseTimelineResponse = (data: unknown): TimelineDataPoint[] => {
@@ -429,7 +414,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
 
   const fetchAdsData = async () => {
     try {
-      const prevRange = getPreviousRange(dateRange);
+      const prevRange = getPreviousRange();
 
       const { data, error } = await supabase.functions.invoke("metricool-ads", {
         body: {
@@ -516,17 +501,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   useEffect(() => {
     setLoading(true);
     fetchAdsData();
-  }, [clientId, dateRange]);
-
-  const handlePresetClick = (preset: { label: string; days: number }) => {
-    const today = new Date();
-    setDateRange({
-      from: subDays(startOfDay(today), preset.days - 1),
-      to: endOfDay(today),
-    });
-    setSelectedPreset(preset.label);
-    setCalendarOpen(false);
-  };
+  }, [clientId]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -589,7 +564,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     </div>
   );
 
-  const dateRangeLabel = `${format(dateRange.from, "MMM d")} - ${format(dateRange.to, "MMM d, yyyy")}`;
+  
 
   if (loading) {
     return (
@@ -674,51 +649,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         </div>
 
         <div className="flex items-center gap-2">
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="justify-start text-left font-normal min-w-[200px]">
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {dateRangeLabel}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="end">
-              <div className="flex">
-                {/* Presets */}
-                <div className="border-r p-3 space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Quick Select</p>
-                  {DATE_PRESETS.map((preset) => (
-                    <Button
-                      key={preset.label}
-                      variant={selectedPreset === preset.label ? "secondary" : "ghost"}
-                      size="sm"
-                      className="w-full justify-start text-sm"
-                      onClick={() => handlePresetClick(preset)}
-                    >
-                      {preset.label}
-                    </Button>
-                  ))}
-                </div>
-                {/* Calendar */}
-                <div className="p-3">
-                  <Calendar
-                    mode="range"
-                    selected={{ from: dateRange.from, to: dateRange.to }}
-                    onSelect={(range) => {
-                      if (range?.from && range?.to) {
-                        setDateRange({ from: range.from, to: range.to });
-                        setSelectedPreset("");
-                        setCalendarOpen(false);
-                      } else if (range?.from) {
-                        setDateRange({ from: range.from, to: range.from });
-                      }
-                    }}
-                    numberOfMonths={1}
-                    className={cn("pointer-events-auto")}
-                  />
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+          {/* Reporting Period Badge */}
+          <Badge variant="outline" className="text-sm px-3 py-1">
+            {reportingWeek.dateRange}
+          </Badge>
 
           <Button
             variant="outline"
