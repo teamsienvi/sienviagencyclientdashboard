@@ -161,6 +161,37 @@ const ClientDashboard = () => {
     enabled: !!clientId,
   });
 
+  // Fetch live follower counts from Metricool for platforms that support it
+  const { data: metricoolFollowers } = useQuery({
+    queryKey: ["client-metricool-followers", clientId],
+    queryFn: async () => {
+      if (!clientId) return null;
+      
+      // Fetch from metricool-social-weekly to get current followers
+      try {
+        const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
+          body: { clientId },
+        });
+        
+        if (error || !data?.success) return null;
+        
+        // Extract followers per platform
+        const followers: Record<string, number> = {};
+        if (data.data?.instagram?.followers) followers.instagram = data.data.instagram.followers;
+        if (data.data?.facebook?.followers) followers.facebook = data.data.facebook.followers;
+        if (data.data?.tiktok?.followers) followers.tiktok = data.data.tiktok.followers;
+        if (data.data?.linkedin?.followers) followers.linkedin = data.data.linkedin.followers;
+        
+        return followers;
+      } catch (e) {
+        console.error("Error fetching Metricool followers:", e);
+        return null;
+      }
+    },
+    enabled: !!clientId && !!metricoolPlatforms && metricoolPlatforms.length > 0,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   // Fetch database reports for this client (for Jan 3+ dynamic reports)
   const { data: dbReports } = useQuery({
     queryKey: ["client-db-reports", clientId],
@@ -252,33 +283,34 @@ const ClientDashboard = () => {
   };
 
   // Aggregate total followers from ALL sources:
-  // 1. API-connected platforms (social_account_metrics)
-  // 2. Metricool-connected platforms (client_metricool_config.followers)
+  // 1. Live Metricool API data (most accurate, real-time)
+  // 2. social_account_metrics (for platforms not in Metricool)
   const totalFollowers = useMemo(() => {
     let total = 0;
+    const countedPlatforms = new Set<string>();
     
-    // Add from API-connected platforms
-    if (socialMetrics) {
-      Object.values(socialMetrics).forEach(m => {
-        if (m?.followers) total += m.followers;
+    // First priority: Live Metricool followers (most accurate)
+    if (metricoolFollowers) {
+      Object.entries(metricoolFollowers).forEach(([platform, followers]) => {
+        if (followers && followers > 0) {
+          total += followers;
+          countedPlatforms.add(platform);
+        }
       });
     }
     
-    // Add from Metricool platforms (if they have followers stored and not already counted)
-    if (metricoolPlatforms) {
-      const apiPlatforms = new Set(Object.keys(socialMetrics || {}));
-      metricoolPlatforms.forEach(config => {
-        // Only add if not already counted from social_account_metrics
-        // Metricool covers: instagram, facebook, tiktok, linkedin (not youtube, x)
-        const metricoolPlatform = config.platform;
-        if (config.followers && !apiPlatforms.has(metricoolPlatform)) {
-          total += config.followers;
+    // Second: Add from social_account_metrics for platforms not already counted
+    if (socialMetrics) {
+      Object.entries(socialMetrics).forEach(([platform, m]) => {
+        if (m?.followers && !countedPlatforms.has(platform)) {
+          total += m.followers;
+          countedPlatforms.add(platform);
         }
       });
     }
     
     return total;
-  }, [socialMetrics, metricoolPlatforms]);
+  }, [socialMetrics, metricoolFollowers]);
 
   // Count connected platforms accurately
   const connectedPlatformsCount = useMemo(() => {
