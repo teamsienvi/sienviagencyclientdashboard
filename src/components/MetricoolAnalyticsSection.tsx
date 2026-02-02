@@ -694,6 +694,26 @@ export const MetricoolAnalyticsSection = ({
         });
       }
 
+      // Calculate previous period dates for posts WoW comparison
+      const prevPeriodEnd = subDays(startDate, 1);
+      const prevPeriodStart = subDays(prevPeriodEnd, 6); // 7 days total (inclusive)
+      const prevFromUTC = formatWithOffset(prevPeriodStart, false, 0);
+      const prevToUTC = formatWithOffset(prevPeriodEnd, true, 0);
+
+      // Fetch previous period posts for TikTok (to get total_content for WoW)
+      const prevPostsPromise = platform === "tiktok"
+        ? supabase.functions.invoke("metricool-tiktok-posts", {
+            body: {
+              from: prevFromUTC,
+              to: prevToUTC,
+              timezone: "UTC",
+              userId: config.user_id,
+              blogId: config.blog_id || undefined,
+              // Don't persist prev period posts, just fetch for comparison
+            },
+          })
+        : Promise.resolve({ data: null, error: null });
+
       // Fetch followers for current period
       const followersPromise =
         platform === "tiktok"
@@ -720,10 +740,8 @@ export const MetricoolAnalyticsSection = ({
             });
 
       // Fetch followers for previous period (for WoW comparison)
-      const prevPeriodEnd = subDays(startDate, 1);
-      const prevPeriodStart = subDays(prevPeriodEnd, 7);
-      const prevFromUTC = formatWithOffset(prevPeriodStart, false, 0);
-      const prevToUTC = formatWithOffset(prevPeriodEnd, true, 0);
+      // prevPeriodStart, prevPeriodEnd, prevFromUTC, prevToUTC already declared above
+      
       
       const prevFollowersPromise =
         platform === "tiktok"
@@ -810,8 +828,9 @@ export const MetricoolAnalyticsSection = ({
         },
       });
 
-      const [postsResult, followersResult, prevFollowersResult, genderResult, countryResult, engagementCurrent, engagementPrev] = await Promise.all([
-        postsPromise, 
+      const [postsResult, prevPostsResult, followersResult, prevFollowersResult, genderResult, countryResult, engagementCurrent, engagementPrev] = await Promise.all([
+        postsPromise,
+        prevPostsPromise,
         followersPromise,
         prevFollowersPromise,
         genderDemographicsPromise,
@@ -821,8 +840,16 @@ export const MetricoolAnalyticsSection = ({
       ]);
 
       console.log("Posts result:", postsResult);
+      console.log("Prev Posts result:", prevPostsResult);
       console.log("Followers result:", followersResult);
       console.log("Prev Followers result:", prevFollowersResult);
+      
+      // Extract previous period total posts count for WoW comparison
+      let prevTotalPosts: number | null = null;
+      if (platform === "tiktok" && prevPostsResult?.data?.success && prevPostsResult?.data?.rows) {
+        prevTotalPosts = prevPostsResult.data.rows.length;
+        console.log("TikTok prev period total posts:", prevTotalPosts);
+      }
 
       // Extract follower count - handle both TikTok timeline format and LinkedIn aggregation format
       let persistedFollowers: number | null = null;
@@ -971,6 +998,7 @@ export const MetricoolAnalyticsSection = ({
       return { 
         posts: postsResult.data, 
         postsError: postsResult.error,
+        prevTotalPosts,
         followers: followersResult.data,
         followersError: followersResult.error,
         persistedFollowers,
@@ -995,22 +1023,21 @@ export const MetricoolAnalyticsSection = ({
         // Use engagement from timelines API for both LinkedIn and TikTok (more accurate)
         if (result.liveEngagementCurrent !== null) {
           setLiveEngagement(result.liveEngagementCurrent);
-          // Also update prevMetrics with engagement from API
-          if (result.liveEngagementPrev !== null) {
-            setPrevMetrics(prev => ({
-              ...prev,
-              followers: prev?.followers ?? null,
-              engagement_rate: result.liveEngagementPrev,
-              total_content: prev?.total_content ?? null,
-              total_views: prev?.total_views ?? null,
-              total_likes: prev?.total_likes ?? null,
-            }));
-          }
         } else if (posts.rows.length > 0) {
           // Fallback: Calculate average engagement from posts
           const avgEngagement = posts.rows.reduce((sum: number, p: TikTokPost) => sum + (p.engagement || 0), 0) / posts.rows.length;
           setLiveEngagement(avgEngagement);
         }
+        
+        // Update prevMetrics with previous period engagement and total posts from API
+        setPrevMetrics(prev => ({
+          followers: prev?.followers ?? null,
+          engagement_rate: result.liveEngagementPrev ?? prev?.engagement_rate ?? null,
+          total_content: result.prevTotalPosts ?? prev?.total_content ?? null,
+          total_views: prev?.total_views ?? null,
+          total_likes: prev?.total_likes ?? null,
+        }));
+        console.log("Updated prevMetrics with prev engagement:", result.liveEngagementPrev, "prev total posts:", result.prevTotalPosts);
         
         // PERSIST POSTS TO DATABASE for LinkedIn
         if (platform === "linkedin" && posts.rows.length > 0) {
@@ -1139,14 +1166,14 @@ export const MetricoolAnalyticsSection = ({
         setLiveFollowers(result.persistedFollowers);
       }
 
-      // Update prevMetrics with fetched previous period followers
+      // Update prevMetrics with fetched previous period followers (preserve engagement and total_content)
       if (result.persistedPrevFollowers !== null) {
         setPrevMetrics(prev => ({
           followers: result.persistedPrevFollowers,
-          engagement_rate: prev?.engagement_rate || null,
-          total_content: prev?.total_content || null,
-          total_views: prev?.total_views || null,
-          total_likes: prev?.total_likes || null,
+          engagement_rate: prev?.engagement_rate ?? result.liveEngagementPrev ?? null,
+          total_content: prev?.total_content ?? result.prevTotalPosts ?? null,
+          total_views: prev?.total_views ?? null,
+          total_likes: prev?.total_likes ?? null,
         }));
       }
 
