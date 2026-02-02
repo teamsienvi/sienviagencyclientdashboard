@@ -74,7 +74,7 @@ function parseCSV(csvText: string): FacebookPost[] {
       console.log("First row fields:", JSON.stringify(row));
     }
 
-    // Map Facebook CSV columns
+    // Map Facebook CSV columns - Note: Metricool uses 'postlink' for the URL
     const post: FacebookPost = {
       title: row["content"] || row["title"] || row["message"] || null,
       date: row["timestamp"] || row["date"] || row["published"] || null,
@@ -83,11 +83,11 @@ function parseCSV(csvText: string): FacebookPost[] {
       impressions: parseInt(row["impressions"] || row["views"] || "0", 10) || 0,
       likes: parseInt(row["likes"] || "0", 10) || 0,
       comments: parseInt(row["comments"] || "0", 10) || 0,
-      shares: parseInt(row["shares"] || "0", 10) || 0,
-      clicks: parseInt(row["clicks"] || row["link clicks"] || "0", 10) || 0,
+      shares: parseInt(row["shares"] || row["shared"] || "0", 10) || 0,
+      clicks: parseInt(row["clicks"] || row["link clicks"] || row["linkclicks"] || "0", 10) || 0,
       reactions: parseInt(row["reactions"] || "0", 10) || 0,
       engagement: parseFloat(row["engagement"] || "0") || 0,
-      url: row["url"] || null,
+      url: row["postlink"] || row["url"] || null,
       link: row["link"] || null,
       image: row["image"] || null,
     };

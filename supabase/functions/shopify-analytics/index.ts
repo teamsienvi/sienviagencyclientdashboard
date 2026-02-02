@@ -39,6 +39,12 @@ interface TopProduct {
   refunds: number;
 }
 
+interface OrderSource {
+  name: string;
+  orders: number;
+  revenue: number;
+}
+
 // Make Shopify Admin API request using OAuth token
 async function shopifyRequest(shopDomain: string, accessToken: string, endpoint: string) {
   const url = `https://${shopDomain}/admin/api/2024-01/${endpoint}`;
@@ -376,8 +382,70 @@ serve(async (req) => {
               page,
               pageSize,
               total,
-              totalPages: Math.ceil(total / pageSize),
+            totalPages: Math.ceil(total / pageSize),
             },
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      case "order-sources": {
+        const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const end = body.end || new Date().toISOString().split("T")[0];
+
+        const orders = await fetchOrders(shopDomain, accessToken, start, end);
+        
+        // Aggregate orders by source
+        const sourceData: Record<string, { orders: number; revenue: number }> = {};
+        
+        for (const order of orders) {
+          if (order.financial_status === "refunded") continue;
+          
+          // Get order source from source_name, referring_site, or landing_site
+          let sourceName = order.source_name || "Unknown";
+          
+          // Map common source names to friendlier labels
+          if (sourceName === "web" || sourceName === "shopify_draft_order") {
+            sourceName = "Online Store";
+          } else if (sourceName === "pos") {
+            sourceName = "Point of Sale";
+          } else if (sourceName === "580111") {
+            // TikTok Shop app ID
+            sourceName = "TikTok Shop";
+          } else if (order.referring_site?.includes("tiktok")) {
+            sourceName = "TikTok";
+          } else if (order.referring_site?.includes("facebook") || order.referring_site?.includes("instagram")) {
+            sourceName = "Meta (FB/IG)";
+          } else if (order.referring_site?.includes("google")) {
+            sourceName = "Google";
+          } else if (order.referring_site?.includes("pinterest")) {
+            sourceName = "Pinterest";
+          } else if (sourceName === "iphone" || sourceName === "android") {
+            sourceName = "Mobile App";
+          }
+          
+          if (!sourceData[sourceName]) {
+            sourceData[sourceName] = { orders: 0, revenue: 0 };
+          }
+          
+          sourceData[sourceName].orders += 1;
+          sourceData[sourceName].revenue += parseFloat(order.subtotal_price || "0");
+        }
+        
+        // Convert to array and sort by revenue
+        const sources: OrderSource[] = Object.entries(sourceData)
+          .map(([name, stats]) => ({
+            name,
+            orders: stats.orders,
+            revenue: Math.round(stats.revenue * 100) / 100,
+          }))
+          .sort((a, b) => b.revenue - a.revenue);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: sources,
+            period: { start, end },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
