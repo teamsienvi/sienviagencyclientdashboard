@@ -453,29 +453,43 @@ serve(async (req) => {
         result.engagementAgg = result.reelsEngagement;
       }
 
-      // Use postsCount from timelines API as the TOTAL content count (accurate)
-      if (postsCountRes.status === 'fulfilled' && postsCountRes.value !== null) {
-        result.postsCount = postsCountRes.value;
+      // Prefer platform-appropriate source for TOTAL content count.
+      // IMPORTANT: For Instagram/Facebook, the timelines postsCount matches Metricool dashboard totals
+      // (and includes reels when CSV endpoints sometimes undercount).
+      const timelinesTotal = (postsCountRes.status === 'fulfilled') ? postsCountRes.value : null;
+      if (timelinesTotal !== null) {
+        result.postsCount = timelinesTotal;
         console.log(`Total content from timelines (${fromDate} to ${toDate}): ${result.postsCount}`);
       }
-      
-      // Process CSV breakdown - CSV count is the MOST RELIABLE source for total content
-      // It directly reflects what's shown in Metricool dashboard
+
+      // Process CSV breakdown for reelsCount (and an alternate totalCount fallback)
+      let csvTotal: number | null = null;
       if (postsCSVRes.status === 'fulfilled') {
-        const { totalCount, feedPostsCount, reelsCount } = postsCSVRes.value;
+        const { totalCount, reelsCount } = postsCSVRes.value;
+        csvTotal = totalCount;
         result.reelsCount = reelsCount;
-        
-        // PRIORITIZE CSV count as it's the most accurate match to Metricool dashboard
-        // Only use timelines API if CSV returns 0 (edge case)
-        if (totalCount > 0) {
-          result.postsCount = totalCount;
-          console.log(`Total content from CSV (${fromDate} to ${toDate}): ${result.postsCount}`);
-        } else if (result.postsCount === null) {
-          // Fallback to timelines API if CSV returned nothing
-          console.log(`CSV returned 0, keeping timelines count: ${result.postsCount}`);
-        }
+        console.log(`CSV breakdown (${fromDate} to ${toDate}): total=${totalCount}, reels=${reelsCount}`);
       } else {
         errors.push(`posts_csv ${fromDate}: ${postsCSVRes.reason}`);
+      }
+
+      // Finalize postsCount with platform-specific precedence.
+      if (platform === 'instagram' || platform === 'facebook') {
+        // Never let CSV undercount reels vs timelines.
+        const a = timelinesTotal ?? 0;
+        const b = csvTotal ?? 0;
+        const best = Math.max(a, b);
+        result.postsCount = best > 0 ? best : (timelinesTotal ?? csvTotal ?? result.postsCount);
+        console.log(`Total content finalized (${platform}, ${fromDate} to ${toDate}): ${result.postsCount}`);
+      } else {
+        // Keep existing behavior for other platforms (TikTok/LinkedIn/etc.):
+        // prefer CSV when it exists; fallback to timelines.
+        if ((csvTotal ?? 0) > 0) {
+          result.postsCount = csvTotal;
+          console.log(`Total content from CSV (${fromDate} to ${toDate}): ${result.postsCount}`);
+        } else if (result.postsCount !== null) {
+          console.log(`CSV returned 0, keeping timelines count: ${result.postsCount}`);
+        }
       }
 
       return result;
