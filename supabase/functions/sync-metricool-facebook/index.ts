@@ -296,9 +296,17 @@ serve(async (req) => {
         // For reels/videos, use actual views; for posts, fall back to impressions
         const viewCount = contentType === "reel" && post.views > 0 ? post.views : post.impressions;
 
+        // Delete any existing metrics for this content in this period to ensure fresh data
+        await supabase
+          .from("social_content_metrics")
+          .delete()
+          .eq("social_content_id", contentData.id)
+          .eq("period_start", startDate)
+          .eq("period_end", endDate);
+
         const { error: metricsError } = await supabase
           .from("social_content_metrics")
-          .upsert({
+          .insert({
             social_content_id: contentData.id,
             platform: "facebook",
             period_start: startDate,
@@ -312,10 +320,10 @@ serve(async (req) => {
             link_clicks: post.clicks,
             engagements: post.likes + post.reactions + post.comments + post.shares + post.clicks,
             collected_at: new Date().toISOString(),
-          }, { onConflict: "social_content_id,period_start,period_end" });
+          });
 
         if (metricsError) {
-          console.error("Error upserting metrics:", metricsError);
+          console.error("Error inserting metrics:", metricsError);
           continue;
         }
 
