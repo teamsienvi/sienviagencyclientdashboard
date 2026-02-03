@@ -1,33 +1,37 @@
-import { useState, useEffect, Fragment, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { RefreshCw, ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format, subDays, parseISO, eachDayOfInterval } from "date-fns";
+import { format, eachDayOfInterval } from "date-fns";
 import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
 import {
   AreaChart,
   Area,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Bar,
   ComposedChart,
 } from "recharts";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AdsAnalyticsSectionProps {
   clientId: string;
   clientName: string;
 }
 
-// Meta Ads Campaign
 interface MetaCampaign {
   name: string;
   status: string;
@@ -46,7 +50,6 @@ interface MetaCampaign {
   campaignId?: string;
 }
 
-// Google Ads Campaign
 interface GoogleCampaign {
   name: string;
   objective: string;
@@ -102,33 +105,19 @@ interface MetaTimelines {
   impressions: TimelineDataPoint[];
 }
 
-interface GoogleTimelines {
-  cpm: TimelineDataPoint[];
-  clicks: TimelineDataPoint[];
-  impressions: TimelineDataPoint[];
-}
-
-interface TimelineData {
-  spend: { date: string; value: number }[];
-  impressions: { date: string; value: number }[];
-  reach: { date: string; value: number }[];
-  clicks: { date: string; value: number }[];
+interface DateRange {
+  from: Date;
+  to: Date;
 }
 
 interface MetaAdsData {
   current: MetaAggregatedData;
   previous: MetaAggregatedData;
-  timeline: TimelineData;
 }
 
 interface GoogleAdsData {
   current: GoogleAggregatedData;
   previous: GoogleAggregatedData;
-}
-
-interface DateRange {
-  from: Date;
-  to: Date;
 }
 
 const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps) => {
@@ -137,17 +126,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
   const [metaAds, setMetaAds] = useState<MetaAdsData | null>(null);
   const [googleAds, setGoogleAds] = useState<GoogleAdsData | null>(null);
   const [metaTimelines, setMetaTimelines] = useState<MetaTimelines | null>(null);
-  const [googleTimelines, setGoogleTimelines] = useState<GoogleTimelines | null>(null);
-  const [timelineDebug, setTimelineDebug] = useState<Record<string, unknown> | null>(null);
-  const [googleTimelineDebug, setGoogleTimelineDebug] = useState<Record<string, unknown> | null>(null);
-  const [upstreamDebug, setUpstreamDebug] = useState<Record<string, unknown> | null>(null);
-  const [expandedMetaCampaigns, setExpandedMetaCampaigns] = useState<Set<string>>(new Set());
-  const [expandedGoogleCampaigns, setExpandedGoogleCampaigns] = useState<Set<string>>(new Set());
-  
-  // Use standardized reporting period (last completed Mon-Sun week)
+
   const reportingWeek = useMemo(() => getCurrentReportingWeek(), []);
   const previousWeek = useMemo(() => getPreviousReportingWeek(), []);
-  
+
   const dateRange = useMemo(() => ({
     from: reportingWeek.start,
     to: reportingWeek.end,
@@ -158,16 +140,12 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     to: previousWeek.end,
   });
 
-  // Parse Metricool timeline response: [["timestampMs","valueString"], ...] => [{ts, value}, ...]
   const parseTimelineResponse = (data: unknown): TimelineDataPoint[] => {
     if (!Array.isArray(data)) return [];
     return data
       .map((item: unknown) => {
         if (Array.isArray(item) && item.length >= 2) {
-          return {
-            ts: Number(item[0]),
-            value: Number(item[1]) || 0,
-          };
+          return { ts: Number(item[0]), value: Number(item[1]) || 0 };
         }
         return null;
       })
@@ -175,14 +153,13 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       .sort((a, b) => a.ts - b.ts);
   };
 
-  // Fetch a single timeline metric via metricool-json
   const fetchTimeline = async (
     metricKey: string,
     startDate: Date,
     endDate: Date,
     userId: string,
     blogId: string
-  ): Promise<{ data: TimelineDataPoint[]; debug?: Record<string, unknown> }> => {
+  ): Promise<TimelineDataPoint[]> => {
     const startStr = format(startDate, "yyyyMMdd");
     const endStr = format(endDate, "yyyyMMdd");
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -190,232 +167,66 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     const { data, error } = await supabase.functions.invoke("metricool-json", {
       body: {
         path: `/api/stats/timeline/${metricKey}`,
-        params: {
-          start: startStr,
-          end: endStr,
-          timezone,
-          userId,
-          blogId,
-        },
+        params: { start: startStr, end: endStr, timezone, userId, blogId },
       },
     });
 
-    if (error) {
-      console.error(`Timeline fetch error for ${metricKey}:`, error);
-      return { data: [], debug: { error: error.message, metricKey } };
-    }
-
-    if (!data?.success) {
-      return {
-        data: [],
-        debug: {
-          metricKey,
-          upstreamStatus: data?.upstreamStatus,
-          upstreamBody: data?.upstreamBody,
-        },
-      };
-    }
-
-    return { data: parseTimelineResponse(data.data) };
+    if (error || !data?.success) return [];
+    return parseTimelineResponse(data.data);
   };
 
-  // Build chart data from real timeline data
-  const buildTimelineChartData = (timelines: MetaTimelines | null, aggregated: MetaAggregatedData | null, range: DateRange) => {
-    if (!timelines) return [];
+  const buildChartData = (timelines: MetaTimelines | null, aggregated: MetaAggregatedData | null, range: DateRange) => {
+    if (!timelines || (timelines.cpm.length === 0 && timelines.clicks.length === 0 && timelines.impressions.length === 0)) {
+      // Fallback to distribute aggregated data
+      if (!aggregated) return [];
+      const days = eachDayOfInterval({ start: range.from, end: range.to });
+      const numDays = days.length;
+      return days.map((day) => {
+        const seed = day.getTime();
+        const pseudoRandom = ((seed % 1000) / 1000) * 0.6 + 0.7;
+        const dailySpend = (aggregated.spend / numDays) * pseudoRandom;
+        const dailyImpressions = Math.round((aggregated.impressions / numDays) * pseudoRandom);
+        const dailyClicks = Math.round((aggregated.clicks / numDays) * pseudoRandom);
+        return {
+          date: format(day, "yyyy-MM-dd"),
+          displayDate: format(day, "MMM d"),
+          impressions: dailyImpressions,
+          clicks: dailyClicks,
+          spend: Number(dailySpend.toFixed(2)),
+        };
+      });
+    }
 
-    // Merge all timeline series by timestamp
-    const tsMap = new Map<number, { ts: number; cpm: number; clicks: number; impressions: number; spend: number }>();
-
-    timelines.cpm.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
-      existing.cpm = value;
-      tsMap.set(ts, existing);
-    });
-
-    timelines.clicks.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
-      existing.clicks = value;
-      tsMap.set(ts, existing);
-    });
-
+    const tsMap = new Map<number, { ts: number; impressions: number; clicks: number; spend: number }>();
     timelines.impressions.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
+      const existing = tsMap.get(ts) || { ts, impressions: 0, clicks: 0, spend: 0 };
       existing.impressions = value;
       tsMap.set(ts, existing);
     });
-
-    // Calculate spend from CPM and impressions: spend = (CPM * impressions) / 1000
-    const result = Array.from(tsMap.values())
-      .sort((a, b) => a.ts - b.ts)
-      .map((point) => {
-        const calculatedSpend = point.impressions > 0 ? (point.cpm * point.impressions) / 1000 : 0;
-        return {
-          ...point,
-          spend: Number(calculatedSpend.toFixed(2)),
-          displayDate: format(new Date(point.ts), "MMM d"),
-          date: format(new Date(point.ts), "yyyy-MM-dd"),
-        };
-      });
-
-    // If no timeline data points, return fallback
-    if (result.length === 0 && aggregated) {
-      return buildFallbackChartData(aggregated, range);
-    }
-
-    return result;
-  };
-
-  // Fallback chart data from aggregated totals
-  const buildFallbackChartData = (aggregated: MetaAggregatedData | null, range: DateRange) => {
-    if (!aggregated) return [];
-
-    const days = eachDayOfInterval({ start: range.from, end: range.to });
-    const numDays = days.length;
-
-    return days.map((day) => {
-      const seed = day.getTime();
-      const pseudoRandom = ((seed % 1000) / 1000) * 0.6 + 0.7;
-
-      const dailySpend = (aggregated.spend / numDays) * pseudoRandom;
-      const dailyImpressions = Math.round((aggregated.impressions / numDays) * pseudoRandom);
-      const dailyClicks = Math.round((aggregated.clicks / numDays) * pseudoRandom);
-      const dailyCpm = dailyImpressions > 0 ? (dailySpend / dailyImpressions) * 1000 : 0;
-
-      return {
-        date: format(day, "yyyy-MM-dd"),
-        displayDate: format(day, "MMM d"),
-        ts: day.getTime(),
-        impressions: dailyImpressions,
-        clicks: dailyClicks,
-        cpm: Number(dailyCpm.toFixed(2)),
-        spend: Number(dailySpend.toFixed(2)),
-      };
-    });
-  };
-
-  // Fetch Google Ads timeline (uses different endpoint paths)
-  const fetchGoogleTimeline = async (
-    metricKey: string,
-    startDate: Date,
-    endDate: Date,
-    userId: string,
-    blogId: string
-  ): Promise<{ data: TimelineDataPoint[]; debug?: Record<string, unknown> }> => {
-    const startStr = format(startDate, "yyyyMMdd");
-    const endStr = format(endDate, "yyyyMMdd");
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-    const { data, error } = await supabase.functions.invoke("metricool-json", {
-      body: {
-        path: `/api/stats/timeline/${metricKey}`,
-        params: {
-          start: startStr,
-          end: endStr,
-          timezone,
-          userId,
-          blogId,
-        },
-      },
-    });
-
-    if (error) {
-      console.error(`Google timeline fetch error for ${metricKey}:`, error);
-      return { data: [], debug: { error: error.message, metricKey } };
-    }
-
-    if (!data?.success) {
-      return {
-        data: [],
-        debug: {
-          metricKey,
-          upstreamStatus: data?.upstreamStatus,
-          upstreamBody: data?.upstreamBody,
-        },
-      };
-    }
-
-    return { data: parseTimelineResponse(data.data) };
-  };
-
-  // Build Google Ads chart data from timelines
-  const buildGoogleTimelineChartData = (timelines: GoogleTimelines | null, aggregated: GoogleAggregatedData | null, range: DateRange) => {
-    if (!timelines) return [];
-
-    const tsMap = new Map<number, { ts: number; cpm: number; clicks: number; impressions: number; spend: number }>();
-
-    timelines.cpm.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
-      existing.cpm = value;
-      tsMap.set(ts, existing);
-    });
-
     timelines.clicks.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
+      const existing = tsMap.get(ts) || { ts, impressions: 0, clicks: 0, spend: 0 };
       existing.clicks = value;
       tsMap.set(ts, existing);
     });
-
-    timelines.impressions.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts) || { ts, cpm: 0, clicks: 0, impressions: 0, spend: 0 };
-      existing.impressions = value;
-      tsMap.set(ts, existing);
+    timelines.cpm.forEach(({ ts, value }) => {
+      const existing = tsMap.get(ts);
+      if (existing && existing.impressions > 0) {
+        existing.spend = Number(((value * existing.impressions) / 1000).toFixed(2));
+      }
     });
 
-    const result = Array.from(tsMap.values())
+    return Array.from(tsMap.values())
       .sort((a, b) => a.ts - b.ts)
-      .map((point) => {
-        // CPM is in micros, convert to dollars
-        const cpmInDollars = point.cpm / 1000000;
-        const calculatedSpend = point.impressions > 0 ? (cpmInDollars * point.impressions) / 1000 : 0;
-        return {
-          ...point,
-          cpm: Number(cpmInDollars.toFixed(4)),
-          spend: Number(calculatedSpend.toFixed(2)),
-          displayDate: format(new Date(point.ts), "MMM d"),
-          date: format(new Date(point.ts), "yyyy-MM-dd"),
-        };
-      });
-
-    // Fallback if no real timeline data
-    if (result.length === 0 && aggregated) {
-      return buildGoogleFallbackChartData(aggregated, range);
-    }
-
-    return result;
-  };
-
-  // Fallback chart data for Google Ads
-  const buildGoogleFallbackChartData = (aggregated: GoogleAggregatedData | null, range: DateRange) => {
-    if (!aggregated) return [];
-
-    const days = eachDayOfInterval({ start: range.from, end: range.to });
-    const numDays = days.length;
-
-    return days.map((day) => {
-      const seed = day.getTime();
-      const pseudoRandom = ((seed % 1000) / 1000) * 0.6 + 0.7;
-
-      const dailySpend = (aggregated.spend / numDays) * pseudoRandom;
-      const dailyImpressions = Math.round((aggregated.impressions / numDays) * pseudoRandom);
-      const dailyClicks = Math.round((aggregated.clicks / numDays) * pseudoRandom);
-      const dailyCpm = dailyImpressions > 0 ? (dailySpend / dailyImpressions) * 1000 : 0;
-
-      return {
-        date: format(day, "yyyy-MM-dd"),
-        displayDate: format(day, "MMM d"),
-        ts: day.getTime(),
-        impressions: dailyImpressions,
-        clicks: dailyClicks,
-        cpm: Number(dailyCpm.toFixed(4)),
-        spend: Number(dailySpend.toFixed(2)),
-      };
-    });
+      .map((point) => ({
+        ...point,
+        displayDate: format(new Date(point.ts), "MMM d"),
+        date: format(new Date(point.ts), "yyyy-MM-dd"),
+      }));
   };
 
   const fetchAdsData = async () => {
     try {
       const prevRange = getPreviousRange();
-
       const { data, error } = await supabase.functions.invoke("metricool-ads", {
         body: {
           clientId,
@@ -431,63 +242,17 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       if (data?.success) {
         setMetaAds(data.data?.metaAds || null);
         setGoogleAds(data.data?.googleAds || null);
-        if (data.upstreamDebug) {
-          setUpstreamDebug(data.upstreamDebug);
-        }
 
-        // Fetch timelines if we have metricool config
         if (data.debug?.userId && data.debug?.blogId) {
           const userId = data.debug.userId;
           const blogId = data.debug.blogId;
-
-          // Fetch Meta Ads timelines in parallel
-          const [cpmResult, clicksResult, impressionsResult] = await Promise.all([
+          const [cpm, clicks, impressions] = await Promise.all([
             fetchTimeline("cpm", dateRange.from, dateRange.to, userId, blogId),
             fetchTimeline("clicks", dateRange.from, dateRange.to, userId, blogId),
             fetchTimeline("impressions", dateRange.from, dateRange.to, userId, blogId),
           ]);
-
-          // Check for any debug info
-          const debugInfo: Record<string, unknown> = {};
-          if (cpmResult.debug) debugInfo.cpm = cpmResult.debug;
-          if (clicksResult.debug) debugInfo.clicks = clicksResult.debug;
-          if (impressionsResult.debug) debugInfo.impressions = impressionsResult.debug;
-
-          if (Object.keys(debugInfo).length > 0) {
-            setTimelineDebug(debugInfo);
-          }
-
-          setMetaTimelines({
-            cpm: cpmResult.data,
-            clicks: clicksResult.data,
-            impressions: impressionsResult.data,
-          });
-
-          // Fetch Google Ads timelines in parallel
-          const [gCpmResult, gClicksResult, gImpressionsResult] = await Promise.all([
-            fetchGoogleTimeline("adwords_AverageCpm", dateRange.from, dateRange.to, userId, blogId),
-            fetchGoogleTimeline("adwords_Clicks", dateRange.from, dateRange.to, userId, blogId),
-            fetchGoogleTimeline("adwords_Impressions", dateRange.from, dateRange.to, userId, blogId),
-          ]);
-
-          // Check for any Google debug info
-          const gDebugInfo: Record<string, unknown> = {};
-          if (gCpmResult.debug) gDebugInfo.adwords_AverageCpm = gCpmResult.debug;
-          if (gClicksResult.debug) gDebugInfo.adwords_Clicks = gClicksResult.debug;
-          if (gImpressionsResult.debug) gDebugInfo.adwords_Impressions = gImpressionsResult.debug;
-
-          if (Object.keys(gDebugInfo).length > 0) {
-            setGoogleTimelineDebug(gDebugInfo);
-          }
-
-          setGoogleTimelines({
-            cpm: gCpmResult.data,
-            clicks: gClicksResult.data,
-            impressions: gImpressionsResult.data,
-          });
+          setMetaTimelines({ cpm, clicks, impressions });
         }
-      } else if (data?.upstreamDebug) {
-        setUpstreamDebug(data.upstreamDebug);
       }
     } catch (error) {
       console.error("Error fetching ads data:", error);
@@ -508,30 +273,6 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     fetchAdsData();
   };
 
-  const toggleMetaCampaignExpanded = (campaignName: string) => {
-    setExpandedMetaCampaigns(prev => {
-      const next = new Set(prev);
-      if (next.has(campaignName)) {
-        next.delete(campaignName);
-      } else {
-        next.add(campaignName);
-      }
-      return next;
-    });
-  };
-
-  const toggleGoogleCampaignExpanded = (campaignName: string) => {
-    setExpandedGoogleCampaigns(prev => {
-      const next = new Set(prev);
-      if (next.has(campaignName)) {
-        next.delete(campaignName);
-      } else {
-        next.add(campaignName);
-      }
-      return next;
-    });
-  };
-
   // Formatters
   const formatCurrency = (value: number | null | undefined) => {
     if (value === null || value === undefined) return "$0.00";
@@ -540,8 +281,8 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
 
   const formatNumber = (value: number | null | undefined) => {
     if (value === null || value === undefined) return "0";
-    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`;
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
     return value.toLocaleString();
   };
 
@@ -550,81 +291,75 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     return `${value.toFixed(2)}%`;
   };
 
-  // KPI Badge without colors
-  const KPIBadge = ({
-    value,
+  const getChangePercent = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return ((current - previous) / previous) * 100;
+  };
+
+  // Metric Card Component
+  const MetricCard = ({
     label,
+    value,
+    previousValue,
+    format: formatFn = formatNumber,
+    invertColors = false,
+    info,
   }: {
-    value: string;
     label: string;
-  }) => (
-    <div className="rounded-lg px-4 py-3 bg-muted border border-border flex flex-col items-center justify-center min-w-[100px]">
-      <span className="text-2xl font-bold text-foreground">{value}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
-  );
+    value: number;
+    previousValue?: number;
+    format?: (v: number) => string;
+    invertColors?: boolean;
+    info?: string;
+  }) => {
+    const change = previousValue !== undefined ? getChangePercent(value, previousValue) : null;
+    const isPositive = invertColors ? change !== null && change < 0 : change !== null && change > 0;
+    const isNegative = invertColors ? change !== null && change > 0 : change !== null && change < 0;
 
-  
-
-  if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-10 w-40" />
+      <div className="bg-card rounded-lg p-4 border">
+        <div className="flex items-center gap-1 mb-1">
+          <p className="text-xs text-muted-foreground">{label}</p>
+          {info && (
+            <UITooltip>
+              <TooltipTrigger>
+                <Info className="h-3 w-3 text-muted-foreground" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs">{info}</p>
+              </TooltipContent>
+            </UITooltip>
+          )}
         </div>
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-64 rounded-xl" />
-          ))}
-        </div>
+        <p className="text-2xl font-bold">{formatFn(value)}</p>
+        {change !== null && (
+          <div className={cn(
+            "flex items-center gap-1 text-xs mt-1",
+            isPositive && "text-green-600",
+            isNegative && "text-red-600",
+            !isPositive && !isNegative && "text-muted-foreground"
+          )}>
+            {isPositive && <TrendingUp className="h-3 w-3" />}
+            {isNegative && <TrendingDown className="h-3 w-3" />}
+            <span>{change >= 0 ? "+" : ""}{change.toFixed(1)}% vs prev</span>
+          </div>
+        )}
       </div>
     );
-  }
+  };
 
-  const hasMetaData = metaAds !== null;
-  const hasGoogleData = googleAds !== null;
-  const hasAnyData = hasMetaData || hasGoogleData;
-  
-  // Use real timeline data if available, otherwise fallback to aggregated distribution
-  const hasRealTimelines = metaTimelines && (
-    metaTimelines.cpm.length > 1 || 
-    metaTimelines.clicks.length > 1 || 
-    metaTimelines.impressions.length > 1
-  );
-  const chartData = hasRealTimelines 
-    ? buildTimelineChartData(metaTimelines, metaAds?.current || null, dateRange) 
-    : buildFallbackChartData(metaAds?.current || null, dateRange);
-
-  // Google Ads chart data
-  const hasGoogleTimelines = googleTimelines && (
-    googleTimelines.cpm.length > 1 || 
-    googleTimelines.clicks.length > 1 || 
-    googleTimelines.impressions.length > 1
-  );
-  const googleChartData = hasGoogleTimelines 
-    ? buildGoogleTimelineChartData(googleTimelines, googleAds?.current || null, dateRange) 
-    : buildGoogleFallbackChartData(googleAds?.current || null, dateRange);
-
-  // Custom tooltip
+  // Custom Tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-background border border-border rounded-lg p-3 shadow-lg">
+        <div className="bg-background border rounded-lg p-3 shadow-lg">
           <p className="font-medium mb-2">{label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center gap-2 text-sm">
-              <div 
-                className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: entry.color }}
-              />
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
               <span className="capitalize">{entry.name}:</span>
               <span className="font-medium">
-                {entry.name === 'spend' || entry.name === 'cpc' || entry.name === 'cpm' 
-                  ? formatCurrency(entry.value)
-                  : entry.name === 'ctr'
-                    ? formatPercent(entry.value)
-                    : formatNumber(entry.value)}
+                {entry.name === 'spend' ? formatCurrency(entry.value) : formatNumber(entry.value)}
               </span>
             </div>
           ))}
@@ -634,33 +369,50 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     return null;
   };
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-48" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
+        </div>
+        <Skeleton className="h-64" />
+      </div>
+    );
+  }
+
+  const hasMetaData = metaAds !== null;
+  const hasGoogleData = googleAds !== null;
+  const hasAnyData = hasMetaData || hasGoogleData;
+
+  const chartData = buildChartData(metaTimelines, metaAds?.current || null, dateRange);
+
+  // Identify what "conversions" are from actions
+  const getConversionLabel = (actions?: Record<string, number>) => {
+    if (!actions) return "Pixel Events";
+    const actionKeys = Object.keys(actions);
+    if (actionKeys.some(k => k.includes("purchase"))) return "Purchases";
+    if (actionKeys.some(k => k.includes("lead"))) return "Leads";
+    if (actionKeys.some(k => k.includes("add_to_cart"))) return "Add to Carts";
+    if (actionKeys.some(k => k.includes("view_content"))) return "Content Views";
+    if (actionKeys.some(k => k.includes("link_click"))) return "Link Clicks";
+    return "Pixel Events";
+  };
+
   return (
     <div className="space-y-6">
-      {/* Header with Date Picker */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <svg className="h-8 w-8 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-          </svg>
-          <div>
-            <h2 className="text-2xl font-bold">Meta Ads</h2>
-            <p className="text-sm text-muted-foreground">{clientName}</p>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold">Ads Analytics</h2>
+          <p className="text-sm text-muted-foreground">{clientName}</p>
         </div>
-
         <div className="flex items-center gap-2">
-          {/* Reporting Period Badge */}
           <Badge variant="outline" className="text-sm px-3 py-1">
             {reportingWeek.dateRange}
           </Badge>
-
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing}>
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
           </Button>
         </div>
       </div>
@@ -669,267 +421,128 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         <Card className="border-dashed">
           <CardHeader className="text-center py-12">
             <CardTitle className="text-lg text-muted-foreground">No Ads Data</CardTitle>
-            <CardDescription className="max-w-md mx-auto">
-              No campaigns found for {clientName} in this period. Ensure Meta Ads or Google Ads is connected in Metricool.
-              {upstreamDebug && (
-                <details className="mt-4 text-xs text-left">
-                  <summary className="cursor-pointer">Debug Info</summary>
-                  <pre className="mt-2 p-2 bg-muted rounded overflow-auto max-h-32">
-                    {JSON.stringify(upstreamDebug, null, 2)}
-                  </pre>
-                </details>
-              )}
+            <CardDescription>
+              No campaigns found for {clientName}. Ensure Meta Ads or Google Ads is connected in Metricool.
             </CardDescription>
           </CardHeader>
         </Card>
       )}
 
-      {hasMetaData && metaAds && (
-        <>
-          {/* Timeline Debug Info (if any issues) */}
-          {timelineDebug && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground">Timeline Debug Info</summary>
-              <pre className="mt-2 p-2 bg-muted rounded overflow-auto max-h-32 text-xs">
-                {JSON.stringify(timelineDebug, null, 2)}
-              </pre>
-            </details>
-          )}
+      {hasAnyData && (
+        <Tabs defaultValue={hasMetaData ? "meta" : "google"} className="space-y-6">
+          <TabsList>
+            {hasMetaData && <TabsTrigger value="meta" className="gap-2">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+              </svg>
+              Meta Ads
+            </TabsTrigger>}
+            {hasGoogleData && <TabsTrigger value="google" className="gap-2">
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Google Ads
+            </TabsTrigger>}
+          </TabsList>
 
-          {/* Impressions Section - Metricool Style */}
-          <Card className="overflow-hidden border-0 shadow-sm">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                <h3 className="text-lg font-semibold">Impressions</h3>
-                <div className="flex gap-2">
-                  <KPIBadge
-                    value={formatNumber(metaAds.current.impressions)}
-                    label="Impressions"
-                  />
-                  <KPIBadge
-                    value={formatNumber(metaAds.current.reach)}
-                    label="Reach"
-                  />
-                  <KPIBadge
-                    value={formatCurrency(metaAds.current.spend)}
-                    label="Spent"
-                  />
-                </div>
+          {/* META ADS TAB */}
+          {hasMetaData && metaAds && (
+            <TabsContent value="meta" className="space-y-6">
+              {/* KPI Summary */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <MetricCard label="Spend" value={metaAds.current.spend} previousValue={metaAds.previous.spend} format={formatCurrency} invertColors />
+                <MetricCard label="Impressions" value={metaAds.current.impressions} previousValue={metaAds.previous.impressions} />
+                <MetricCard label="Reach" value={metaAds.current.reach} previousValue={metaAds.previous.reach} />
+                <MetricCard label="Clicks" value={metaAds.current.clicks} previousValue={metaAds.previous.clicks} />
+                <MetricCard label="CTR" value={metaAds.current.ctr} previousValue={metaAds.previous.ctr} format={formatPercent} />
+                <MetricCard label="CPC" value={metaAds.current.cpc} previousValue={metaAds.previous.cpc} format={formatCurrency} invertColors />
               </div>
-              <div className="p-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={chartData}>
-                    <defs>
-                      <linearGradient id="reachGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="displayDate" 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <YAxis 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                      tickFormatter={(v) => formatNumber(v)}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={24} name="spend" />
-                    <Area 
-                      type="monotone" 
-                      dataKey="impressions" 
-                      stroke="hsl(217, 91%, 60%)" 
-                      strokeWidth={2}
-                      fill="url(#reachGradient)"
-                      name="impressions"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Results Section - Metricool Style */}
-          <Card className="overflow-hidden border-0 shadow-sm">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                <h3 className="text-lg font-semibold">Results</h3>
-                <div className="flex gap-2">
-                  <KPIBadge
-                    value={formatNumber(metaAds.current.clicks)}
-                    label="Clicks"
-                  />
-                  <KPIBadge
-                    value={formatCurrency(metaAds.current.spend)}
-                    label="Spent"
-                  />
-                </div>
+              {/* Performance Row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetricCard label="CPM" value={metaAds.current.cpm} previousValue={metaAds.previous.cpm} format={formatCurrency} invertColors />
+                <MetricCard 
+                  label="Conversions" 
+                  value={metaAds.current.conversions} 
+                  previousValue={metaAds.previous.conversions}
+                  info={`${getConversionLabel(metaAds.current.actions)} tracked via Meta Pixel. May include non-purchase events.`}
+                />
+                <MetricCard label="ROAS" value={metaAds.current.roas} previousValue={metaAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                <MetricCard label="Conv. Value" value={metaAds.current.conversionValue} previousValue={metaAds.previous.conversionValue} format={formatCurrency} />
               </div>
-              <div className="p-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={chartData}>
-                    <defs>
-                      <linearGradient id="clicksGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="displayDate" 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <YAxis 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={24} name="spend" />
-                    <Area 
-                      type="monotone" 
-                      dataKey="clicks" 
-                      stroke="hsl(217, 91%, 60%)" 
-                      strokeWidth={2}
-                      fill="url(#clicksGradient)"
-                      name="clicks"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
 
-          {/* Performance Section - Metricool Style */}
-          <Card className="overflow-hidden border-0 shadow-sm">
-            <CardContent className="p-0">
-              <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                <h3 className="text-lg font-semibold">Performance</h3>
-                <div className="flex gap-2 flex-wrap">
-                  <KPIBadge
-                    value={formatCurrency(metaAds.current.cpm)}
-                    label="CPM"
-                  />
-                  <KPIBadge
-                    value={formatCurrency(metaAds.current.cpc)}
-                    label="CPC"
-                  />
-                  <KPIBadge
-                    value={formatPercent(metaAds.current.ctr)}
-                    label="CTR"
-                  />
-                  <KPIBadge
-                    value={`${metaAds.current.roas?.toFixed(2) || '0.00'}x`}
-                    label="ROAS"
-                  />
-                  <KPIBadge
-                    value={formatCurrency(metaAds.current.spend)}
-                    label="Spent"
-                  />
-                </div>
-              </div>
-              <div className="p-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={chartData}>
-                    <defs>
-                      <linearGradient id="cpmGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.05} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis 
-                      dataKey="displayDate" 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <YAxis 
-                      tickLine={false} 
-                      axisLine={false} 
-                      tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={24} name="spend" />
-                    <Area 
-                      type="monotone" 
-                      dataKey="cpm" 
-                      stroke="hsl(217, 91%, 60%)" 
-                      strokeWidth={2}
-                      fill="url(#cpmGradient)"
-                      name="cpm"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
+              {/* Spend & Impressions Chart */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Spend & Impressions Over Time</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <ComposedChart data={chartData}>
+                      <defs>
+                        <linearGradient id="impGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                          <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.05} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="displayDate" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                      <YAxis yAxisId="left" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => formatNumber(v)} />
+                      <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar yAxisId="right" dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} name="spend" />
+                      <Area yAxisId="left" type="monotone" dataKey="impressions" stroke="hsl(217, 91%, 60%)" strokeWidth={2} fill="url(#impGradient)" name="impressions" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
 
-          {/* Campaigns Table with Expandable Actions */}
-          {metaAds.current.campaigns.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Campaigns ({metaAds.current.campaigns.length})</CardTitle>
-                <CardDescription>Click a row to see actions breakdown</CardDescription>
-              </CardHeader>
-              <CardContent className="px-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/30">
-                        <TableHead className="pl-6 w-8"></TableHead>
-                        <TableHead>Campaign</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Impressions</TableHead>
-                        <TableHead className="text-right">Reach</TableHead>
-                        <TableHead className="text-right">Clicks</TableHead>
-                        <TableHead className="text-right">Spent</TableHead>
-                        <TableHead className="text-right">CTR</TableHead>
-                        <TableHead className="text-right">CPC</TableHead>
-                        <TableHead className="text-right">Conv.</TableHead>
-                        <TableHead className="text-right">ROAS</TableHead>
-                        <TableHead className="text-right pr-6">Conv. Value</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {[...metaAds.current.campaigns]
-                        .sort((a, b) => b.spent - a.spent)
-                        .map((campaign, idx) => {
-                          const hasActions = campaign.actions && Object.keys(campaign.actions).length > 0;
-                          const isExpanded = expandedMetaCampaigns.has(campaign.name);
-                          
-                          return (
-                            <Fragment key={campaign.campaignId || campaign.name || idx}>
-                              <TableRow 
-                                className={cn(
-                                  "hover:bg-muted/20",
-                                  hasActions && "cursor-pointer"
-                                )}
-                                onClick={() => hasActions && toggleMetaCampaignExpanded(campaign.name)}
-                              >
-                                <TableCell className="pl-6 w-8">
-                                  {hasActions && (
-                                    isExpanded 
-                                      ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                      : <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                  )}
-                                </TableCell>
-                                <TableCell className="font-medium max-w-[200px]" title={campaign.name}>
+              {/* All Campaigns Table */}
+              {metaAds.current.campaigns.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">All Campaigns ({metaAds.current.campaigns.length})</CardTitle>
+                    <CardDescription>Sorted by spend</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="pl-4">Campaign</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Impressions</TableHead>
+                            <TableHead className="text-right">Reach</TableHead>
+                            <TableHead className="text-right">Clicks</TableHead>
+                            <TableHead className="text-right">Spent</TableHead>
+                            <TableHead className="text-right">CTR</TableHead>
+                            <TableHead className="text-right">CPC</TableHead>
+                            <TableHead className="text-right pr-4">
+                              <div className="flex items-center justify-end gap-1">
+                                Conv.
+                                <UITooltip>
+                                  <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Pixel events (may include non-purchases)</p></TooltipContent>
+                                </UITooltip>
+                              </div>
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {[...metaAds.current.campaigns]
+                            .sort((a, b) => b.spent - a.spent)
+                            .map((campaign, idx) => (
+                              <TableRow key={campaign.campaignId || idx} className="hover:bg-muted/20">
+                                <TableCell className="font-medium max-w-[200px] pl-4">
                                   <div className="flex items-center gap-2">
-                                    <span className="truncate">{campaign.name}</span>
+                                    <span className="truncate" title={campaign.name}>{campaign.name}</span>
                                     {campaign.campaignId && (
                                       <a
                                         href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${campaign.campaignId}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
                                         className="text-muted-foreground hover:text-primary shrink-0"
                                         title="Open in Meta Ads Manager"
                                       >
@@ -939,420 +552,126 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <Badge 
-                                    variant={campaign.status === "ACTIVE" ? "default" : "secondary"}
-                                    className={cn(
-                                      campaign.status === "ACTIVE" && "bg-emerald-500 hover:bg-emerald-600"
-                                    )}
-                                  >
+                                  <Badge variant={campaign.status === 'ACTIVE' ? 'default' : 'secondary'} className="text-xs">
                                     {campaign.status}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-right font-mono">{formatNumber(campaign.impressions)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatNumber(campaign.reach)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatNumber(campaign.clicks)}</TableCell>
-                                <TableCell className="text-right font-mono font-medium text-amber-600 dark:text-amber-400">
-                                  {formatCurrency(campaign.spent)}
+                                <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(campaign.reach)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                                <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
+                                <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                                <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          )}
+
+          {/* GOOGLE ADS TAB */}
+          {hasGoogleData && googleAds && (
+            <TabsContent value="google" className="space-y-6">
+              {/* KPI Summary */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <MetricCard label="Spend" value={googleAds.current.spend} previousValue={googleAds.previous.spend} format={formatCurrency} invertColors />
+                <MetricCard label="Impressions" value={googleAds.current.impressions} previousValue={googleAds.previous.impressions} />
+                <MetricCard label="Clicks" value={googleAds.current.clicks} previousValue={googleAds.previous.clicks} />
+                <MetricCard label="CTR" value={googleAds.current.ctr} previousValue={googleAds.previous.ctr} format={formatPercent} />
+                <MetricCard label="CPC" value={googleAds.current.cpc} previousValue={googleAds.previous.cpc} format={formatCurrency} invertColors />
+              </div>
+
+              {/* Performance Row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetricCard label="CPM" value={googleAds.current.cpm} previousValue={googleAds.previous.cpm} format={formatCurrency} invertColors />
+                <MetricCard 
+                  label="Conversions" 
+                  value={googleAds.current.conversions} 
+                  previousValue={googleAds.previous.conversions}
+                  info="Conversion actions configured in Google Ads (e.g., purchases, leads, page views)"
+                />
+                <MetricCard label="ROAS" value={googleAds.current.roas} previousValue={googleAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                <MetricCard label="Conv. Value" value={googleAds.current.allConversionsValue} previousValue={googleAds.previous.allConversionsValue} format={formatCurrency} />
+              </div>
+
+              {/* All Campaigns Table */}
+              {googleAds.current.campaigns.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">All Campaigns ({googleAds.current.campaigns.length})</CardTitle>
+                    <CardDescription>Sorted by spend</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="bg-muted/30">
+                            <TableHead className="pl-4">Campaign</TableHead>
+                            <TableHead>Objective</TableHead>
+                            <TableHead className="text-right">Impressions</TableHead>
+                            <TableHead className="text-right">Clicks</TableHead>
+                            <TableHead className="text-right">Spent</TableHead>
+                            <TableHead className="text-right">CTR</TableHead>
+                            <TableHead className="text-right">CPC</TableHead>
+                            <TableHead className="text-right pr-4">
+                              <div className="flex items-center justify-end gap-1">
+                                Conv.
+                                <UITooltip>
+                                  <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Conversion actions (purchases, leads, etc.)</p></TooltipContent>
+                                </UITooltip>
+                              </div>
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {[...googleAds.current.campaigns]
+                            .sort((a, b) => b.spent - a.spent)
+                            .map((campaign, idx) => (
+                              <TableRow key={idx} className="hover:bg-muted/20">
+                                <TableCell className="font-medium max-w-[200px] pl-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="truncate" title={campaign.name}>{campaign.name}</span>
+                                    {campaign.providerCampaignId && (
+                                      <a
+                                        href={`https://ads.google.com/aw/campaigns?campaignId=${campaign.providerCampaignId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-muted-foreground hover:text-primary shrink-0"
+                                        title="Open in Google Ads"
+                                      >
+                                        <ExternalLink className="h-3.5 w-3.5" />
+                                      </a>
+                                    )}
+                                  </div>
                                 </TableCell>
-                                <TableCell className="text-right font-mono">{formatPercent(campaign.ctr)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(campaign.cpc)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatNumber(campaign.conversions)}</TableCell>
-                                <TableCell className="text-right font-mono">{(campaign.purchaseRoas || 0).toFixed(2)}x</TableCell>
-                                <TableCell className="text-right font-mono pr-6">{formatCurrency(campaign.conversionValue || 0)}</TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {campaign.objective || "N/A"}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                                <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
+                                <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                                <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
                               </TableRow>
-                              
-                              {/* Expanded Actions Row */}
-                              {isExpanded && hasActions && (
-                                <TableRow className="bg-muted/10">
-                                  <TableCell colSpan={12} className="px-6 py-4">
-                                    <div className="pl-8">
-                                      <div className="flex items-center justify-between mb-3">
-                                        <p className="text-sm font-medium text-muted-foreground">Actions Breakdown</p>
-                                        <p className="text-xs text-muted-foreground italic bg-muted/50 px-2 py-1 rounded">
-                                          ⓘ Conversion events are tracked via Meta Pixel and may include non-purchase actions (e.g., add to cart, checkout initiated)
-                                        </p>
-                                      </div>
-                                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                                        {Object.entries(campaign.actions!)
-                                          .filter(([_, value]) => (value as number) > 0)
-                                          .sort((a, b) => (b[1] as number) - (a[1] as number))
-                                          .map(([key, value]) => {
-                                            // Format the action name for better readability
-                                            const formattedName = key
-                                              .replace(/_/g, " ")
-                                              .replace(/\./g, " ")
-                                              .replace(/onsite conversion/gi, "Onsite Conv.")
-                                              .replace(/offsite conversion/gi, "Offsite Conv.")
-                                              .replace(/purchase/gi, "Purchase")
-                                              .split(" ")
-                                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-                                              .join(" ");
-                                            
-                                            return (
-                                              <div 
-                                                key={key}
-                                                className="bg-background rounded-lg p-3 border border-border/50 hover:border-primary/30 transition-colors"
-                                              >
-                                                <p 
-                                                  className="text-xs text-muted-foreground mb-1 line-clamp-2 min-h-[2rem]" 
-                                                  title={key.replace(/_/g, " ").replace(/\./g, " ")}
-                                                >
-                                                  {formattedName}
-                                                </p>
-                                                <p className="text-lg font-bold">{formatNumber(value as number)}</p>
-                                              </div>
-                                            );
-                                          })}
-                                      </div>
-                                    </div>
-                                  </TableCell>
-                              </TableRow>
-                              )}
-                            </Fragment>
-                          );
-                        })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
           )}
-
-          {/* ========== GOOGLE ADS SECTION ========== */}
-          {googleAds ? (
-            <>
-              <div className="border-t pt-6 mt-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <svg className="h-8 w-8" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                  </svg>
-                  <h2 className="text-2xl font-bold">Google Ads</h2>
-                </div>
-
-                {/* Google Ads KPI Row */}
-                <Card className="overflow-hidden border-0 shadow-sm mb-6">
-                  <CardContent className="p-6">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">Spend</p>
-                        <p className="text-2xl font-bold">{formatCurrency(googleAds.current.spend)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatCurrency(googleAds.previous.spend)}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">Impressions</p>
-                        <p className="text-2xl font-bold">{formatNumber(googleAds.current.impressions)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatNumber(googleAds.previous.impressions)}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">Clicks</p>
-                        <p className="text-2xl font-bold">{formatNumber(googleAds.current.clicks)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatNumber(googleAds.previous.clicks)}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">Conversions</p>
-                        <p className="text-2xl font-bold">{formatNumber(googleAds.current.conversions)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatNumber(googleAds.previous.conversions)}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">ROAS</p>
-                        <p className="text-2xl font-bold">{googleAds.current.roas.toFixed(2)}x</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {googleAds.previous.roas.toFixed(2)}x</p>
-                      </div>
-                    </div>
-
-                    {/* Rates Row */}
-                    <div className="grid grid-cols-3 gap-4 mt-4">
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">CTR</p>
-                        <p className="text-2xl font-bold">{formatPercent(googleAds.current.ctr)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatPercent(googleAds.previous.ctr)}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">CPC</p>
-                        <p className="text-2xl font-bold">{formatCurrency(googleAds.current.cpc)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatCurrency(googleAds.previous.cpc)}</p>
-                      </div>
-                      <div className="bg-muted rounded-lg p-4 border border-border">
-                        <p className="text-xs text-muted-foreground mb-1">CPM</p>
-                        <p className="text-2xl font-bold">{formatCurrency(googleAds.current.cpm)}</p>
-                        <p className="text-xs text-muted-foreground mt-1">vs {formatCurrency(googleAds.previous.cpm)}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Google Timeline Debug Info (if any issues) */}
-                {googleTimelineDebug && (
-                  <details className="text-xs mb-4">
-                    <summary className="cursor-pointer text-muted-foreground">Google Timeline Debug Info</summary>
-                    <pre className="mt-2 p-2 bg-muted rounded overflow-auto max-h-32 text-xs">
-                      {JSON.stringify(googleTimelineDebug, null, 2)}
-                    </pre>
-                  </details>
-                )}
-
-                {/* Google Ads Impressions Chart */}
-                <Card className="overflow-hidden border-0 shadow-sm mb-4">
-                  <CardContent className="p-0">
-                    <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                      <h3 className="text-lg font-semibold">Impressions</h3>
-                      <div className="flex gap-2">
-                        <KPIBadge
-                          value={formatNumber(googleAds.current.impressions)}
-                          label="Impressions"
-                        />
-                        <KPIBadge
-                          value={formatCurrency(googleAds.current.spend)}
-                          label="Spent"
-                        />
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <ComposedChart data={googleChartData}>
-                          <defs>
-                            <linearGradient id="googleImpressionsGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.3} />
-                              <stop offset="100%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                          <XAxis 
-                            dataKey="displayDate" 
-                            tickLine={false} 
-                            axisLine={false} 
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                          />
-                          <YAxis 
-                            tickLine={false} 
-                            axisLine={false} 
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                            tickFormatter={(v) => formatNumber(v)}
-                          />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Bar dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={24} name="spend" />
-                          <Area 
-                            type="monotone" 
-                            dataKey="impressions" 
-                            stroke="hsl(142, 71%, 45%)" 
-                            strokeWidth={2}
-                            fill="url(#googleImpressionsGradient)"
-                            name="impressions"
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Google Ads Clicks Chart */}
-                <Card className="overflow-hidden border-0 shadow-sm mb-4">
-                  <CardContent className="p-0">
-                    <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                      <h3 className="text-lg font-semibold">Results</h3>
-                      <div className="flex gap-2">
-                        <KPIBadge
-                          value={formatNumber(googleAds.current.clicks)}
-                          label="Clicks"
-                        />
-                        <KPIBadge
-                          value={formatCurrency(googleAds.current.spend)}
-                          label="Spent"
-                        />
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <ComposedChart data={googleChartData}>
-                          <defs>
-                            <linearGradient id="googleClicksGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.3} />
-                              <stop offset="100%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                          <XAxis 
-                            dataKey="displayDate" 
-                            tickLine={false} 
-                            axisLine={false} 
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                          />
-                          <YAxis 
-                            tickLine={false} 
-                            axisLine={false} 
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                          />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Bar dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={24} name="spend" />
-                          <Area 
-                            type="monotone" 
-                            dataKey="clicks" 
-                            stroke="hsl(142, 71%, 45%)" 
-                            strokeWidth={2}
-                            fill="url(#googleClicksGradient)"
-                            name="clicks"
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Google Ads CPM Chart */}
-                <Card className="overflow-hidden border-0 shadow-sm mb-6">
-                  <CardContent className="p-0">
-                    <div className="flex items-center justify-between p-4 border-b bg-muted/20">
-                      <h3 className="text-lg font-semibold">Performance</h3>
-                      <div className="flex gap-2">
-                        <KPIBadge
-                          value={formatCurrency(googleAds.current.cpm)}
-                          label="Avg CPM"
-                        />
-                        <KPIBadge
-                          value={formatCurrency(googleAds.current.cpc)}
-                          label="CPC"
-                        />
-                        <KPIBadge
-                          value={formatPercent(googleAds.current.ctr)}
-                          label="CTR"
-                        />
-                        <KPIBadge
-                          value={formatCurrency(googleAds.current.spend)}
-                          label="Spent"
-                        />
-                      </div>
-                    </div>
-                    <div className="p-4">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <ComposedChart data={googleChartData}>
-                          <defs>
-                            <linearGradient id="googleCpmGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.3} />
-                              <stop offset="100%" stopColor="hsl(142, 71%, 45%)" stopOpacity={0.05} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                          <XAxis 
-                            dataKey="displayDate" 
-                            tickLine={false} 
-                            axisLine={false} 
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                          />
-                          <YAxis 
-                            tickLine={false} 
-                            axisLine={false} 
-                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                          />
-                          <Tooltip content={<CustomTooltip />} />
-                          <Bar dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={24} name="spend" />
-                          <Area 
-                            type="monotone" 
-                            dataKey="cpm" 
-                            stroke="hsl(142, 71%, 45%)" 
-                            strokeWidth={2}
-                            fill="url(#googleCpmGradient)"
-                            name="cpm"
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Google Ads Campaigns Table */}
-                {googleAds.current.campaigns.length > 0 && (
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">Google Campaigns ({googleAds.current.campaigns.length})</CardTitle>
-                      <CardDescription>Sorted by spend (highest first)</CardDescription>
-                    </CardHeader>
-                    <CardContent className="px-0">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-muted/30">
-                              <TableHead className="pl-6">Campaign</TableHead>
-                              <TableHead>Objective</TableHead>
-                              <TableHead className="text-right">Impressions</TableHead>
-                              <TableHead className="text-right">Clicks</TableHead>
-                              <TableHead className="text-right">Spent</TableHead>
-                              <TableHead className="text-right">CTR</TableHead>
-                              <TableHead className="text-right">CPC</TableHead>
-                              <TableHead className="text-right">Conv.</TableHead>
-                              <TableHead className="text-right">ROAS</TableHead>
-                              <TableHead className="text-right pr-6">Conv. Value</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {[...googleAds.current.campaigns]
-                              .sort((a, b) => b.spent - a.spent)
-                              .map((campaign, idx) => (
-                                <TableRow key={idx} className="hover:bg-muted/20">
-                                  <TableCell className="font-medium max-w-[200px] pl-6" title={campaign.name}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="truncate">{campaign.name}</span>
-                                      {campaign.providerCampaignId && (
-                                        <a
-                                          href={`https://ads.google.com/aw/campaigns?campaignId=${campaign.providerCampaignId}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="text-muted-foreground hover:text-primary shrink-0"
-                                          title="Open in Google Ads"
-                                        >
-                                          <ExternalLink className="h-3.5 w-3.5" />
-                                        </a>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="secondary">
-                                      {campaign.objective || "—"}
-                                    </Badge>
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">{formatNumber(campaign.impressions)}</TableCell>
-                                  <TableCell className="text-right font-mono">{formatNumber(campaign.clicks)}</TableCell>
-                                  <TableCell className="text-right font-mono font-medium">
-                                    {formatCurrency(campaign.spent)}
-                                  </TableCell>
-                                  <TableCell className="text-right font-mono">{formatPercent(campaign.ctr)}</TableCell>
-                                  <TableCell className="text-right font-mono">{formatCurrency(campaign.cpc)}</TableCell>
-                                  <TableCell className="text-right font-mono">{formatNumber(campaign.conversions)}</TableCell>
-                                  <TableCell className="text-right font-mono">{campaign.purchaseROAS.toFixed(2)}x</TableCell>
-                                  <TableCell className="text-right font-mono pr-6">{formatCurrency(campaign.allConversionsValue)}</TableCell>
-                                </TableRow>
-                              ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="border-t pt-6 mt-6">
-              <div className="flex items-center gap-3 mb-6">
-                <svg className="h-8 w-8" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                <h2 className="text-2xl font-bold">Google Ads</h2>
-              </div>
-              <Card className="overflow-hidden border-0 shadow-sm">
-                <CardContent className="p-8 text-center">
-                  <p className="text-muted-foreground">No Google Ads campaigns found for the selected period.</p>
-                  <p className="text-sm text-muted-foreground mt-2">Configure Google Ads in Metricool to see data here.</p>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </>
+        </Tabs>
       )}
     </div>
   );
