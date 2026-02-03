@@ -436,6 +436,83 @@ export const MetricoolAnalyticsSection = ({
     enabled: !!config,
   });
 
+  // Auto-fetch live posts on load for TikTok using metricool-tiktok-posts
+  // This ensures the Recent Videos section always shows current data
+  const { data: autoFetchedPosts } = useQuery({
+    queryKey: ["metricool-auto-posts", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
+    queryFn: async () => {
+      if (!config) return null;
+      
+      const { start, end } = getDateRange();
+      const startDate = format(startOfDay(start), "yyyy-MM-dd");
+      const endDate = format(endOfDay(end), "yyyy-MM-dd");
+      
+      // Fetch posts directly from Metricool for TikTok
+      if (platform === "tiktok") {
+        const { data, error } = await supabase.functions.invoke("metricool-tiktok-posts", {
+          body: {
+            from: `${startDate}T00:00:00`,
+            to: `${endDate}T23:59:59`,
+            timezone: "UTC",
+            userId: config.user_id,
+            blogId: config.blog_id || undefined,
+            clientId, // Enable persistence
+          },
+        });
+        
+        if (!error && data?.success && data.rows) {
+          return data.rows as TikTokPost[];
+        }
+      }
+      
+      // For LinkedIn, use metricool-csv
+      if (platform === "linkedin") {
+        const { data, error } = await supabase.functions.invoke("metricool-csv", {
+          body: {
+            path: "/api/v2/analytics/posts/linkedin",
+            params: {
+              from: `${startDate}T00:00:00`,
+              to: `${endDate}T23:59:59`,
+              timezone: "UTC",
+              userId: config.user_id,
+              blogId: config.blog_id || undefined,
+            },
+          },
+        });
+        
+        if (!error && data?.success && data.rows) {
+          // Transform LinkedIn rows to match TikTokPost interface for display
+          return data.rows.map((row: any) => ({
+            title: row.title || row.Title || null,
+            date: row.date || row.Date || null,
+            type: row.type || row.Type || "post",
+            views: parseMetricoolNumber(row.impressions ?? row.Impressions),
+            likes: parseMetricoolNumber(row.reactions ?? row.Reactions ?? row.reactions_total),
+            comments: parseMetricoolNumber(row.comments ?? row.Comments),
+            shares: parseMetricoolNumber(row.shares ?? row.Shares),
+            reach: parseMetricoolNumber(row.unique_impressions ?? row["Unique Impressions"]),
+            duration: null,
+            engagement: parseMetricoolNumber(row.engagement ?? row.Engagement),
+            url: row.url || row.URL || null,
+            link: row.url || row.URL || null,
+            image: null,
+          })) as TikTokPost[];
+        }
+      }
+      
+      return null;
+    },
+    enabled: !!config,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Update livePosts when auto-fetched posts arrive
+  useEffect(() => {
+    if (autoFetchedPosts && autoFetchedPosts.length > 0 && livePosts.length === 0) {
+      setLivePosts(autoFetchedPosts);
+    }
+  }, [autoFetchedPosts, livePosts.length]);
+
   // Fetch persisted demographics from database (TikTok only)
   const { data: persistedDemographics } = useQuery({
     queryKey: ["persisted-demographics", clientId, platform],

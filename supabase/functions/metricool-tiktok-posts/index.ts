@@ -377,7 +377,8 @@ serve(async (req) => {
 
       console.log("Final followers count:", followers);
 
-      // Save account-level metrics - use savedCount (actual content persisted) instead of rows.length
+      // Save account-level metrics - use rows.length (actual CSV count) as total_content
+      // This accurately reflects the number of videos in the period from Metricool
       await supabase
         .from("social_account_metrics")
         .upsert({
@@ -387,7 +388,7 @@ serve(async (req) => {
           period_end: to.split("T")[0],
           followers: followers,
           engagement_rate: avgEngagement,
-          total_content: savedCount,
+          total_content: rows.length, // Use CSV row count, not savedCount
           collected_at: new Date().toISOString(),
         }, { onConflict: "client_id,platform,period_start,period_end" });
 

@@ -290,19 +290,26 @@ serve(async (req) => {
 
       // Fetch total posts count from timelines API (includes all content: posts, reels, stories)
       // This is the ACCURATE count that matches Metricool dashboard
+      // CRITICAL: TikTok uses "videos" metric with "video" subject, others use "postsCount" with "account"
       const fetchPostsCountFromTimelines = async (): Promise<number | null> => {
         try {
+          // TikTok requires different metric AND subject
+          const postsCountMetric = platform === "tiktok" ? "videos" : "postsCount";
+          const postsCountSubject = platform === "tiktok" ? "video" : "account";
+          
           const data = await fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
-            metric: "postsCount",
-            subject: "account",
+            metric: postsCountMetric,
+            subject: postsCountSubject,
           }));
+          
+          console.log(`${postsCountMetric} raw response (${platform}, subject=${postsCountSubject}):`, JSON.stringify(data).substring(0, 500));
           
           // Sum up daily values
           if (data?.data && Array.isArray(data.data)) {
             for (const series of data.data) {
-              if (series.metric === "postsCount" && Array.isArray(series.values)) {
+              if ((series.metric === postsCountMetric || series.metric === "postsCount") && Array.isArray(series.values)) {
                 const total = series.values.reduce((sum: number, v: any) => sum + (v.value || 0), 0);
-                console.log(`postsCount from timelines (${fromDate} to ${toDate}): ${total}`);
+                console.log(`${postsCountMetric} from timelines (${fromDate} to ${toDate}): ${total}`);
                 return total;
               }
             }
@@ -311,7 +318,7 @@ serve(async (req) => {
           // Handle direct array response
           if (Array.isArray(data)) {
             const total = data.reduce((sum: number, v: any) => sum + (v.value || 0), 0);
-            console.log(`postsCount from timelines (${fromDate} to ${toDate}): ${total}`);
+            console.log(`${postsCountMetric} from timelines (${fromDate} to ${toDate}): ${total}`);
             return total;
           }
           
@@ -322,8 +329,9 @@ serve(async (req) => {
         }
       };
 
-      // Fetch CSV for posts to get posts/reels breakdown (feed posts vs reels)
-      const fetchPostsCSV = async (): Promise<{ feedPostsCount: number; reelsCount: number }> => {
+      // Fetch CSV for posts - this is the MOST RELIABLE source for total content count
+      // The CSV contains ALL posts within the date range, matching Metricool dashboard
+      const fetchPostsCSV = async (): Promise<{ totalCount: number; feedPostsCount: number; reelsCount: number }> => {
         const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
         Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) => 
           postsUrl.searchParams.set(k, v)
@@ -336,16 +344,36 @@ serve(async (req) => {
         
         // Parse CSV to count posts and reels
         const lines = csv.split('\n').filter(l => l.trim());
-        if (lines.length < 2) return { feedPostsCount: 0, reelsCount: 0 };
+        if (lines.length < 2) return { totalCount: 0, feedPostsCount: 0, reelsCount: 0 };
         
         const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
         const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
+        const dateIdx = headers.findIndex(h => h === 'date' || h === 'published' || h === 'published_at');
+        
+        // Parse period dates for strict filtering
+        const periodStartDate = new Date(fromDate);
+        periodStartDate.setHours(0, 0, 0, 0);
+        const periodEndDate = new Date(toDate);
+        periodEndDate.setHours(23, 59, 59, 999);
         
         let feedPostsCount = 0;
         let reelsCount = 0;
+        let totalCount = 0;
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+          
+          // Verify the post falls within the exact date range
+          if (dateIdx >= 0) {
+            const dateStr = values[dateIdx];
+            const postDate = new Date(dateStr);
+            if (postDate < periodStartDate || postDate > periodEndDate) {
+              continue; // Skip posts outside the period
+            }
+          }
+          
+          totalCount++;
+          
           const type = values[typeIdx]?.toLowerCase() || 'post';
           
           // Categorize as reel or feed post based on type
@@ -358,8 +386,8 @@ serve(async (req) => {
           }
         }
         
-        console.log(`CSV breakdown (${fromDate} to ${toDate}): ${feedPostsCount} feed posts, ${reelsCount} reels from CSV`);
-        return { feedPostsCount, reelsCount };
+        console.log(`CSV breakdown (${fromDate} to ${toDate}): ${totalCount} total, ${feedPostsCount} feed posts, ${reelsCount} reels`);
+        return { totalCount, feedPostsCount, reelsCount };
       };
 
       const [followersRes, engagementTimelineRes, postsEngagementRes, reelsEngagementRes, postsCountRes, postsCSVRes] = await Promise.allSettled([
@@ -431,15 +459,20 @@ serve(async (req) => {
         console.log(`Total content from timelines (${fromDate} to ${toDate}): ${result.postsCount}`);
       }
       
-      // Process CSV breakdown for reels count (used for separate display if needed)
+      // Process CSV breakdown - CSV count is the MOST RELIABLE source for total content
+      // It directly reflects what's shown in Metricool dashboard
       if (postsCSVRes.status === 'fulfilled') {
-        const { feedPostsCount, reelsCount } = postsCSVRes.value;
+        const { totalCount, feedPostsCount, reelsCount } = postsCSVRes.value;
         result.reelsCount = reelsCount;
         
-        // If timelines API failed, fall back to CSV count (but this only includes feed posts!)
-        if (result.postsCount === null) {
-          result.postsCount = feedPostsCount + reelsCount;
-          console.log(`Total content from CSV fallback (${fromDate} to ${toDate}): ${result.postsCount} (${feedPostsCount} feed + ${reelsCount} reels)`);
+        // PRIORITIZE CSV count as it's the most accurate match to Metricool dashboard
+        // Only use timelines API if CSV returns 0 (edge case)
+        if (totalCount > 0) {
+          result.postsCount = totalCount;
+          console.log(`Total content from CSV (${fromDate} to ${toDate}): ${result.postsCount}`);
+        } else if (result.postsCount === null) {
+          // Fallback to timelines API if CSV returned nothing
+          console.log(`CSV returned 0, keeping timelines count: ${result.postsCount}`);
         }
       } else {
         errors.push(`posts_csv ${fromDate}: ${postsCSVRes.reason}`);
