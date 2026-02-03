@@ -130,6 +130,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       const previousEnd = formatApiDate(previousWeek.end);
 
       // Fetch current period account metrics
+      // Use overlap logic: period_start <= currentEnd AND period_end >= currentStart
       const { data: currentMetrics } = await supabase
         .from("social_account_metrics")
         .select("*")
@@ -140,6 +141,8 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         .order("collected_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      
+      console.log("X Analytics - current metrics query:", { clientId, currentStart, currentEnd, currentMetrics });
 
       // Fetch previous period account metrics
       const { data: previousMetrics } = await supabase
