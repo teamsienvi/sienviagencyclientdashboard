@@ -7,22 +7,35 @@ const corsHeaders = {
 };
 
 interface ShopifySummary {
-  netSales: number;
-  grossSales: number;
+  // Core sales metrics (Shopify definitions)
+  grossSales: number;        // Product subtotals + discounts (before discounts/returns)
+  discounts: number;         // Total discount amount
+  returns: number;           // Total refund amount
+  netSales: number;          // Gross - Discounts - Returns (product revenue)
+  shippingCharges: number;   // Total shipping collected
+  returnFees: number;        // Fees for returns (usually 0)
+  taxes: number;             // Total tax collected
+  totalSales: number;        // Net Sales + Shipping + Taxes (what customer pays)
+  
+  // Order metrics
   orders: number;
+  ordersFulfilled: number;
+  ordersUnfulfilled: number;
   averageOrderValue: number;
-  refunds: number;
-  discountAmount: number;
+  
+  // Customer metrics
   newCustomers: number;
   returningCustomers: number;
-  prevNetSales?: number;
+  returningCustomerRate: number;
+  
+  // Previous period for comparison
   prevGrossSales?: number;
+  prevNetSales?: number;
+  prevTotalSales?: number;
   prevOrders?: number;
+  prevOrdersFulfilled?: number;
   prevAverageOrderValue?: number;
-  prevRefunds?: number;
-  prevDiscountAmount?: number;
-  prevNewCustomers?: number;
-  prevReturningCustomers?: number;
+  prevReturningCustomerRate?: number;
 }
 
 interface TimeseriesPoint {
@@ -215,16 +228,15 @@ async function fetchCustomers(shopDomain: string, accessToken: string, startDate
   return json.customers || [];
 }
 
-// Calculate summary from orders
-// Uses Shopify's official definitions:
-// - Gross Sales = Product subtotals + discounts (before discounts/returns, excludes shipping/tax)
-// - Net Sales = Gross Sales - Discounts - Returns (product revenue only)
-// - Total Sales = what customer pays = Net Sales + Shipping + Taxes
+// Calculate summary from orders - matching Shopify's exact definitions
 function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
   let grossSales = 0;
-  let netSales = 0;
-  let refunds = 0;
-  let discountAmount = 0;
+  let discounts = 0;
+  let returns = 0;
+  let shippingCharges = 0;
+  let taxes = 0;
+  let ordersFulfilled = 0;
+  let ordersUnfulfilled = 0;
   
   console.log(`[shopify-analytics] Processing ${orders.length} orders for summary`);
   
@@ -232,58 +244,81 @@ function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
     // Subtotal = product line items total (after line discounts, before order discounts, excludes shipping/tax)
     const subtotal = parseFloat(order.subtotal_price || "0");
     const totalDiscount = parseFloat(order.total_discounts || "0");
+    const shipping = parseFloat(order.total_shipping_price_set?.shop_money?.amount || order.shipping_lines?.[0]?.price || "0");
+    const tax = parseFloat(order.total_tax || "0");
     
     // Calculate refund amounts
     const totalRefund = (order.refunds || []).reduce((sum: number, r: any) => {
       return sum + (r.transactions || []).reduce((tSum: number, t: any) => tSum + parseFloat(t.amount || "0"), 0);
     }, 0);
     
-    console.log(`[shopify-analytics] Order ${order.name}: subtotal=${subtotal}, discounts=${totalDiscount}, refunds=${totalRefund}, status=${order.financial_status}`);
-    
     // Gross sales = subtotal + discounts (what it would have been at full price)
     grossSales += subtotal + totalDiscount;
+    discounts += totalDiscount;
+    returns += totalRefund;
+    shippingCharges += shipping;
+    taxes += tax;
     
-    // Net sales = subtotal - refunds (actual product revenue)
-    netSales += subtotal - totalRefund;
+    // Track fulfillment status
+    if (order.fulfillment_status === "fulfilled") {
+      ordersFulfilled++;
+    } else if (order.financial_status !== "refunded") {
+      ordersUnfulfilled++;
+    }
     
-    refunds += totalRefund;
-    discountAmount += totalDiscount;
+    console.log(`[shopify-analytics] Order ${order.name}: subtotal=${subtotal}, discounts=${totalDiscount}, shipping=${shipping}, tax=${tax}, refunds=${totalRefund}`);
   }
   
+  // Net sales = Gross - Discounts - Returns (product revenue only)
+  const netSales = grossSales - discounts - returns;
+  
+  // Total sales = Net Sales + Shipping + Taxes (what customer actually pays)
+  const totalSales = netSales + shippingCharges + taxes;
+  
   const orderCount = orders.filter(o => o.financial_status !== "refunded").length;
-  // AOV based on net sales (product revenue only, excludes shipping)
-  const avgOrderValue = orderCount > 0 ? netSales / orderCount : 0;
+  // AOV based on total sales (what customers pay)
+  const avgOrderValue = orderCount > 0 ? totalSales / orderCount : 0;
   
   // Count new vs returning customers
   const newCustomers = customers.filter(c => c.orders_count === 1).length;
   const returningCustomers = customers.filter(c => c.orders_count > 1).length;
+  const totalCustomers = newCustomers + returningCustomers;
+  const returningCustomerRate = totalCustomers > 0 ? (returningCustomers / totalCustomers) * 100 : 0;
   
-  console.log(`[shopify-analytics] Summary: grossSales=${grossSales}, netSales=${netSales}, orders=${orderCount}`);
+  console.log(`[shopify-analytics] Summary: grossSales=${grossSales}, netSales=${netSales}, totalSales=${totalSales}, orders=${orderCount}, fulfilled=${ordersFulfilled}`);
   
   return {
-    netSales: Math.round(netSales * 100) / 100,
     grossSales: Math.round(grossSales * 100) / 100,
+    discounts: Math.round(discounts * 100) / 100,
+    returns: Math.round(returns * 100) / 100,
+    netSales: Math.round(netSales * 100) / 100,
+    shippingCharges: Math.round(shippingCharges * 100) / 100,
+    returnFees: 0, // Shopify doesn't expose this separately
+    taxes: Math.round(taxes * 100) / 100,
+    totalSales: Math.round(totalSales * 100) / 100,
     orders: orderCount,
+    ordersFulfilled,
+    ordersUnfulfilled,
     averageOrderValue: Math.round(avgOrderValue * 100) / 100,
-    refunds: Math.round(refunds * 100) / 100,
-    discountAmount: Math.round(discountAmount * 100) / 100,
     newCustomers,
     returningCustomers,
+    returningCustomerRate: Math.round(returningCustomerRate * 100) / 100,
   };
 }
 
 // Calculate timeseries from orders
-// Uses subtotal_price for net_sales to match Shopify's definition (excludes shipping)
 function calculateTimeseries(orders: any[], startDate: string, endDate: string, metric: string): TimeseriesPoint[] {
   const start = new Date(startDate);
   const end = new Date(endDate);
   const dailyData: Record<string, number> = {};
+  const dailyCounts: Record<string, number> = {};
   
   // Initialize all days
   const current = new Date(start);
   while (current <= end) {
     const dateStr = current.toISOString().split("T")[0];
     dailyData[dateStr] = 0;
+    dailyCounts[dateStr] = 0;
     current.setDate(current.getDate() + 1);
   }
   
@@ -293,10 +328,15 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
     
     const orderDate = new Date(order.created_at).toISOString().split("T")[0];
     if (dailyData[orderDate] !== undefined) {
-      // Use subtotal_price (product revenue only, excludes shipping/tax)
       const subtotal = parseFloat(order.subtotal_price || "0");
+      const shipping = parseFloat(order.total_shipping_price_set?.shop_money?.amount || "0");
+      const tax = parseFloat(order.total_tax || "0");
+      const totalPrice = subtotal + shipping + tax;
       
       switch (metric) {
+        case "total_sales":
+          dailyData[orderDate] += totalPrice;
+          break;
         case "net_sales":
           dailyData[orderDate] += subtotal;
           break;
@@ -304,8 +344,18 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
           dailyData[orderDate] += 1;
           break;
         case "average_order_value":
-          dailyData[orderDate] += subtotal;
+          dailyData[orderDate] += totalPrice;
+          dailyCounts[orderDate] += 1;
           break;
+      }
+    }
+  }
+  
+  // For AOV, calculate the average
+  if (metric === "average_order_value") {
+    for (const date of Object.keys(dailyData)) {
+      if (dailyCounts[date] > 0) {
+        dailyData[date] = dailyData[date] / dailyCounts[date];
       }
     }
   }
@@ -497,14 +547,13 @@ serve(async (req) => {
             success: true,
             data: {
               ...summary,
-              prevNetSales: prevSummary.netSales,
               prevGrossSales: prevSummary.grossSales,
+              prevNetSales: prevSummary.netSales,
+              prevTotalSales: prevSummary.totalSales,
               prevOrders: prevSummary.orders,
+              prevOrdersFulfilled: prevSummary.ordersFulfilled,
               prevAverageOrderValue: prevSummary.averageOrderValue,
-              prevRefunds: prevSummary.refunds,
-              prevDiscountAmount: prevSummary.discountAmount,
-              prevNewCustomers: prevSummary.newCustomers,
-              prevReturningCustomers: prevSummary.returningCustomers,
+              prevReturningCustomerRate: prevSummary.returningCustomerRate,
             },
             period: { start, end },
             lastSyncedAt: new Date().toISOString(),
@@ -514,7 +563,7 @@ serve(async (req) => {
       }
 
       case "timeseries": {
-        const metric = body.metric || "net_sales";
+        const metric = body.metric || "total_sales";
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
 
@@ -600,8 +649,8 @@ serve(async (req) => {
           }
           
           sourceData[sourceName].orders += 1;
-          // Use subtotal_price for product revenue (excludes shipping)
-          sourceData[sourceName].revenue += parseFloat(order.subtotal_price || "0");
+          // Use total_price for revenue (what customer pays)
+          sourceData[sourceName].revenue += parseFloat(order.total_price || "0");
         }
         
         // Convert to array and sort by revenue
@@ -623,7 +672,7 @@ serve(async (req) => {
         );
       }
 
-      // NEW: Orders list endpoint (similar to Shopify Admin)
+      // Orders list endpoint (similar to Shopify Admin)
       case "orders": {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];

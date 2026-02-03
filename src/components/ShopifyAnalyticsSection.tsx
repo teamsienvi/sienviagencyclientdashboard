@@ -3,21 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { 
   RefreshCw, ShoppingBag, DollarSign, Package, Users, 
-  TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
+  TrendingUp, ArrowUpRight, ArrowDownRight,
   AlertCircle, CheckCircle2, Loader2, ShoppingCart,
-  ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
-  Eye, ExternalLink
+  ChevronLeft, ChevronRight
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ShopifyOAuthConnect } from "./ShopifyOAuthConnect";
-import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
+import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import {
   LineChart,
   Line,
@@ -40,22 +38,28 @@ interface ShopifyAnalyticsSectionProps {
 }
 
 interface ShopifySummary {
-  netSales: number;
   grossSales: number;
+  discounts: number;
+  returns: number;
+  netSales: number;
+  shippingCharges: number;
+  returnFees: number;
+  taxes: number;
+  totalSales: number;
   orders: number;
+  ordersFulfilled: number;
+  ordersUnfulfilled: number;
   averageOrderValue: number;
-  refunds: number;
-  discountAmount: number;
   newCustomers: number;
   returningCustomers: number;
-  prevNetSales?: number;
+  returningCustomerRate: number;
   prevGrossSales?: number;
+  prevNetSales?: number;
+  prevTotalSales?: number;
   prevOrders?: number;
+  prevOrdersFulfilled?: number;
   prevAverageOrderValue?: number;
-  prevRefunds?: number;
-  prevDiscountAmount?: number;
-  prevNewCustomers?: number;
-  prevReturningCustomers?: number;
+  prevReturningCustomerRate?: number;
 }
 
 interface TimeseriesPoint {
@@ -111,14 +115,164 @@ interface ConnectionStatus {
   syncStatus: "synced" | "syncing" | "error";
 }
 
-type SortField = "revenue" | "units" | "refunds";
-type SortDirection = "asc" | "desc";
+const CHART_COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+];
 
-const CHART_COLORS = {
-  primary: "hsl(var(--primary))",
-  secondary: "hsl(var(--chart-2))",
-  success: "hsl(142 76% 36%)",
-  warning: "hsl(38 92% 50%)",
+// Mini sparkline component for KPI cards
+const MiniSparkline = ({ data, color = "hsl(var(--primary))" }: { data: TimeseriesPoint[]; color?: string }) => {
+  if (!data || data.length === 0) return null;
+  
+  return (
+    <div className="h-10 w-24">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={1.5}
+            dot={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+};
+
+// KPI Card with sparkline (like Shopify)
+const KPICardWithSparkline = ({
+  title,
+  value,
+  sparklineData,
+  trend,
+  trendValue,
+}: {
+  title: string;
+  value: string;
+  sparklineData?: TimeseriesPoint[];
+  trend?: "up" | "down" | "neutral";
+  trendValue?: string;
+}) => (
+  <Card className="relative overflow-hidden">
+    <CardContent className="p-4">
+      <div className="flex items-start justify-between">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="text-2xl font-bold">{value}</p>
+          {trendValue && (
+            <div className={cn(
+              "flex items-center text-xs",
+              trend === "up" && "text-green-600",
+              trend === "down" && "text-red-600",
+              trend === "neutral" && "text-muted-foreground"
+            )}>
+              {trend === "up" && <ArrowUpRight className="h-3 w-3 mr-0.5" />}
+              {trend === "down" && <ArrowDownRight className="h-3 w-3 mr-0.5" />}
+              <span>{trendValue}</span>
+            </div>
+          )}
+        </div>
+        {sparklineData && sparklineData.length > 0 && (
+          <MiniSparkline data={sparklineData} />
+        )}
+      </div>
+    </CardContent>
+  </Card>
+);
+
+// Total Sales Breakdown sidebar component
+const TotalSalesBreakdown = ({
+  summary,
+  formatCurrency,
+}: {
+  summary: ShopifySummary | null;
+  formatCurrency: (val: number) => string;
+}) => {
+  if (!summary) return null;
+
+  const rows = [
+    { label: "Gross sales", value: summary.grossSales, color: "text-primary", bold: false },
+    { label: "Discounts", value: summary.discounts, color: "text-primary", bold: false },
+    { label: "Returns", value: summary.returns, color: "text-primary", bold: false },
+    { label: "Net sales", value: summary.netSales, color: "text-primary", bold: true },
+    { label: "Shipping charges", value: summary.shippingCharges, color: "text-primary", bold: false },
+    { label: "Return fees", value: summary.returnFees, color: "text-primary", bold: false },
+    { label: "Taxes", value: summary.taxes, color: "text-primary", bold: false },
+    { label: "Total sales", value: summary.totalSales, color: "text-primary", bold: true },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Total sales breakdown</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.map((row, idx) => (
+          <div
+            key={row.label}
+            className={cn(
+              "flex items-center justify-between py-1",
+              idx === 3 && "border-t pt-2 mt-2",
+              idx === 7 && "border-t pt-2 mt-2"
+            )}
+          >
+            <span className={cn(
+              "text-sm",
+              row.bold ? "font-semibold" : "text-muted-foreground"
+            )}>
+              {row.label}
+            </span>
+            <span className={cn(
+              "text-sm",
+              row.bold && "font-semibold"
+            )}>
+              {formatCurrency(row.value)}
+            </span>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+};
+
+// Horizontal bar chart for products (like Shopify)
+const ProductBarChart = ({
+  products,
+  formatCurrency,
+}: {
+  products: TopProduct[];
+  formatCurrency: (val: number) => string;
+}) => {
+  const maxRevenue = Math.max(...products.map(p => p.revenue), 1);
+
+  return (
+    <div className="space-y-3">
+      {products.slice(0, 5).map((product, index) => (
+        <div key={product.id} className="space-y-1">
+          <div className="flex items-center justify-between text-sm">
+            <span className="truncate max-w-[200px] text-muted-foreground">
+              {product.title}
+            </span>
+            <span className="font-medium">{formatCurrency(product.revenue)}</span>
+          </div>
+          <div className="h-4 bg-muted rounded overflow-hidden">
+            <div
+              className="h-full rounded"
+              style={{
+                width: `${(product.revenue / maxRevenue) * 100}%`,
+                backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 };
 
 const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSectionProps) => {
@@ -129,11 +283,11 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   // Data state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
   const [summary, setSummary] = useState<ShopifySummary | null>(null);
-  const [salesTimeseries, setSalesTimeseries] = useState<TimeseriesPoint[]>([]);
+  const [totalSalesTimeseries, setTotalSalesTimeseries] = useState<TimeseriesPoint[]>([]);
+  const [aovTimeseries, setAovTimeseries] = useState<TimeseriesPoint[]>([]);
   const [ordersTimeseries, setOrdersTimeseries] = useState<TimeseriesPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [orderSources, setOrderSources] = useState<OrderSource[]>([]);
-  const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
   
   // Orders list state
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -145,10 +299,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     hasPrevPage: boolean;
   }>({ hasNextPage: false, hasPrevPage: false });
   const [ordersPageHistory, setOrdersPageHistory] = useState<string[]>([]);
-  
-  // Table sorting
-  const [sortField, setSortField] = useState<SortField>("revenue");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   // Use standardized reporting period (last completed Mon-Sun week)
   const reportingWeek = useMemo(() => getCurrentReportingWeek(), []);
@@ -216,7 +366,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
       }
 
       // Fetch all data in parallel
-      const [summaryRes, salesRes, ordersRes, productsRes, sourcesRes] = await Promise.all([
+      const [summaryRes, totalSalesRes, aovRes, ordersRes, productsRes, sourcesRes] = await Promise.all([
         supabase.functions.invoke("shopify-analytics", {
           body: {
             clientId,
@@ -229,7 +379,16 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           body: {
             clientId,
             endpoint: "timeseries",
-            metric: "net_sales",
+            metric: "total_sales",
+            start: dateRange.start,
+            end: dateRange.end,
+          },
+        }),
+        supabase.functions.invoke("shopify-analytics", {
+          body: {
+            clientId,
+            endpoint: "timeseries",
+            metric: "average_order_value",
             start: dateRange.start,
             end: dateRange.end,
           },
@@ -247,11 +406,10 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           body: {
             clientId,
             endpoint: "top-products",
-            page: productsPagination.page,
-            pageSize: productsPagination.pageSize,
+            page: 1,
+            pageSize: 10,
             start: dateRange.start,
             end: dateRange.end,
-            sort: `${sortField}_${sortDirection}`,
           },
         }),
         supabase.functions.invoke("shopify-analytics", {
@@ -268,8 +426,12 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
         setSummary(summaryRes.data.data);
       }
 
-      if (salesRes.data?.success) {
-        setSalesTimeseries(salesRes.data.data);
+      if (totalSalesRes.data?.success) {
+        setTotalSalesTimeseries(totalSalesRes.data.data);
+      }
+
+      if (aovRes.data?.success) {
+        setAovTimeseries(aovRes.data.data);
       }
 
       if (ordersRes.data?.success) {
@@ -278,7 +440,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
 
       if (productsRes.data?.success) {
         setTopProducts(productsRes.data.data);
-        setProductsPagination(productsRes.data.pagination);
       }
 
       if (sourcesRes.data?.success) {
@@ -296,58 +457,17 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     }
   };
 
-  // Fetch products with new pagination/sort
-  const fetchProducts = async (page: number) => {
-    try {
-      const { data, error } = await supabase.functions.invoke("shopify-analytics", {
-        body: {
-          clientId,
-          endpoint: "top-products",
-          page,
-          pageSize: productsPagination.pageSize,
-          start: dateRange.start,
-          end: dateRange.end,
-          sort: `${sortField}_${sortDirection}`,
-        },
-      });
-
-      if (error) throw error;
-      if (data?.success) {
-        setTopProducts(data.data);
-        setProductsPagination(data.pagination);
-      }
-    } catch (err) {
-      console.error("Error fetching products:", err);
-    }
-  };
-
   // Initial load
   useEffect(() => {
     fetchData();
   }, [clientId]);
 
-  // Refetch when date range or comparison changes
+  // Refetch when date range changes
   useEffect(() => {
     if (!loading) {
       fetchData(false);
     }
   }, [dateRange.start, dateRange.end]);
-
-  // Handle sort change
-  const handleSort = (field: SortField) => {
-    if (field === sortField) {
-      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
-    }
-  };
-
-  useEffect(() => {
-    if (!loading && connectionStatus?.connected) {
-      fetchProducts(productsPagination.page);
-    }
-  }, [sortField, sortDirection]);
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -357,15 +477,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
       minimumFractionDigits: 2,
     }).format(value);
   };
-
-  // Customer donut chart data
-  const customerChartData = useMemo(() => {
-    if (!summary) return [];
-    return [
-      { name: "New Customers", value: summary.newCustomers, color: CHART_COLORS.primary },
-      { name: "Returning Customers", value: summary.returningCustomers, color: CHART_COLORS.secondary },
-    ];
-  }, [summary]);
 
   // Financial status badge
   const getFinancialStatusBadge = (status: string) => {
@@ -432,17 +543,20 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           <Skeleton className="h-10 w-36" />
         </div>
         <div className="grid gap-4 md:grid-cols-4">
-          {[...Array(8)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-24" />
           ))}
         </div>
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Skeleton className="h-80" />
+        <div className="grid gap-6 lg:grid-cols-4">
+          <Skeleton className="lg:col-span-3 h-80" />
           <Skeleton className="h-80" />
         </div>
       </div>
     );
   }
+
+  // Calculate total sales from sources for donut chart center
+  const totalSalesFromSources = orderSources.reduce((sum, s) => sum + s.revenue, 0);
 
   return (
     <div className="space-y-6">
@@ -453,7 +567,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             <ShoppingBag className="h-6 w-6 text-green-600" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">Shopify Analytics</h2>
+            <h2 className="text-2xl font-bold">Analytics</h2>
             <p className="text-sm text-muted-foreground">
               {connectionStatus?.storeName || "Your Store"}
             </p>
@@ -481,18 +595,12 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                 <span>Sync Error</span>
               </>
             )}
-            {connectionStatus?.lastSyncedAt && (
-              <span className="text-xs">
-                Last: {format(new Date(connectionStatus.lastSyncedAt), "MMM d, h:mm a")}
-              </span>
-            )}
           </div>
 
           {/* Reporting Period Badge */}
           <Badge variant="outline" className="text-sm px-3 py-1">
             {reportingWeek.dateRange}
           </Badge>
-
 
           {/* Refresh Button */}
           <Button
@@ -506,82 +614,238 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Top KPI Row with Sparklines (like Shopify) */}
       <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-        {/* Net Sales */}
-        <KPICard
-          title="Net Sales"
-          value={formatCurrency(summary?.netSales || 0)}
-          icon={DollarSign}
-          iconBg="bg-green-500/10"
-          iconColor="text-green-600"
-        />
-
-        {/* Gross Sales */}
-        <KPICard
-          title="Gross Sales"
+        <KPICardWithSparkline
+          title="Gross sales"
           value={formatCurrency(summary?.grossSales || 0)}
-          icon={TrendingUp}
-          iconBg="bg-blue-500/10"
-          iconColor="text-blue-600"
+          sparklineData={totalSalesTimeseries}
+          trend={summary?.prevGrossSales !== undefined 
+            ? (summary.grossSales > summary.prevGrossSales ? "up" : summary.grossSales < summary.prevGrossSales ? "down" : "neutral")
+            : undefined}
         />
-
-        {/* Orders */}
-        <KPICard
+        <KPICardWithSparkline
+          title="Returning customer rate"
+          value={`${summary?.returningCustomerRate?.toFixed(0) || 0}%`}
+          trend={summary?.prevReturningCustomerRate !== undefined 
+            ? (summary.returningCustomerRate > summary.prevReturningCustomerRate ? "up" : summary.returningCustomerRate < summary.prevReturningCustomerRate ? "down" : "neutral")
+            : undefined}
+        />
+        <KPICardWithSparkline
+          title="Orders fulfilled"
+          value={String(summary?.ordersFulfilled || 0)}
+          sparklineData={ordersTimeseries}
+          trend={summary?.prevOrdersFulfilled !== undefined 
+            ? (summary.ordersFulfilled > summary.prevOrdersFulfilled ? "up" : summary.ordersFulfilled < summary.prevOrdersFulfilled ? "down" : "neutral")
+            : undefined}
+        />
+        <KPICardWithSparkline
           title="Orders"
-          value={summary?.orders?.toLocaleString() || "0"}
-          icon={ShoppingCart}
-          iconBg="bg-purple-500/10"
-          iconColor="text-purple-600"
-        />
-
-        {/* AOV */}
-        <KPICard
-          title="Avg Order Value"
-          value={formatCurrency(summary?.averageOrderValue || 0)}
-          icon={Package}
-          iconBg="bg-orange-500/10"
-          iconColor="text-orange-600"
-        />
-
-        {/* Refunds */}
-        <KPICard
-          title="Refunds"
-          value={formatCurrency(summary?.refunds || 0)}
-          icon={ArrowDownRight}
-          iconBg="bg-red-500/10"
-          iconColor="text-red-600"
-        />
-
-        {/* Discounts */}
-        <KPICard
-          title="Discounts"
-          value={formatCurrency(summary?.discountAmount || 0)}
-          icon={DollarSign}
-          iconBg="bg-amber-500/10"
-          iconColor="text-amber-600"
-        />
-
-        {/* New Customers */}
-        <KPICard
-          title="New Customers"
-          value={summary?.newCustomers?.toLocaleString() || "0"}
-          icon={Users}
-          iconBg="bg-teal-500/10"
-          iconColor="text-teal-600"
-        />
-
-        {/* Returning Customers */}
-        <KPICard
-          title="Returning Customers"
-          value={summary?.returningCustomers?.toLocaleString() || "0"}
-          icon={Users}
-          iconBg="bg-indigo-500/10"
-          iconColor="text-indigo-600"
+          value={String(summary?.orders || 0)}
+          sparklineData={ordersTimeseries}
+          trend={summary?.prevOrders !== undefined 
+            ? (summary.orders > summary.prevOrders ? "up" : summary.orders < summary.prevOrders ? "down" : "neutral")
+            : undefined}
         />
       </div>
 
-      {/* Orders Table - Similar to Shopify Admin */}
+      {/* Total Sales Chart + Breakdown Sidebar */}
+      <div className="grid gap-6 lg:grid-cols-4">
+        {/* Main Total Sales Chart */}
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-base">Total sales over time</CardTitle>
+            <p className="text-2xl font-bold">{formatCurrency(summary?.totalSales || 0)}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={totalSalesTimeseries}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(val) => format(new Date(val), "MMM d")}
+                    className="text-xs"
+                  />
+                  <YAxis
+                    tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
+                    className="text-xs"
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-3">
+                          <p className="text-sm text-muted-foreground">{format(new Date(label), "MMM d, yyyy")}</p>
+                          <p className="text-primary font-semibold">
+                            {formatCurrency(payload[0].value as number)}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center gap-4 mt-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-0.5 bg-primary rounded" />
+                <span>{reportingWeek.dateRange}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Sales Breakdown Sidebar */}
+        <TotalSalesBreakdown summary={summary} formatCurrency={formatCurrency} />
+      </div>
+
+      {/* Second Row: Sales by Channel, AOV, Products */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Total Sales by Channel Donut */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Total sales by sales channel</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {orderSources.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
+                No order data available
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={orderSources}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        dataKey="revenue"
+                        nameKey="name"
+                      >
+                        {orderSources.map((_, index) => (
+                          <Cell 
+                            key={`source-${index}`} 
+                            fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const data = payload[0].payload as OrderSource;
+                          return (
+                            <div className="bg-popover border rounded-lg shadow-lg p-3">
+                              <p className="font-medium">{data.name}</p>
+                              <p className="text-primary font-semibold">{formatCurrency(data.revenue)}</p>
+                            </div>
+                          );
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {/* Center text */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <p className="text-lg font-bold">{formatCurrency(totalSalesFromSources)}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {orderSources.slice(0, 4).map((source, index) => (
+                    <div key={source.name} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-2.5 h-2.5 rounded-full" 
+                          style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
+                        />
+                        <span className="text-muted-foreground truncate max-w-[120px]">{source.name}</span>
+                      </div>
+                      <span className="font-medium">{formatCurrency(source.revenue)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Average Order Value Over Time */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Average order value over time</CardTitle>
+            <p className="text-2xl font-bold">{formatCurrency(summary?.averageOrderValue || 0)}</p>
+          </CardHeader>
+          <CardContent>
+            <div className="h-40">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={aovTimeseries}>
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(val) => format(new Date(val), "MMM d")}
+                    className="text-xs"
+                    tick={{ fontSize: 10 }}
+                  />
+                  <YAxis
+                    tickFormatter={(val) => `$${val}`}
+                    className="text-xs"
+                    tick={{ fontSize: 10 }}
+                    width={40}
+                  />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      return (
+                        <div className="bg-popover border rounded-lg shadow-lg p-2 text-sm">
+                          <p className="text-muted-foreground">{format(new Date(label), "MMM d")}</p>
+                          <p className="font-semibold">{formatCurrency(payload[0].value as number)}</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Sales by Product */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Total sales by product</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topProducts.length === 0 ? (
+              <div className="h-40 flex items-center justify-center text-muted-foreground text-sm">
+                No product data available
+              </div>
+            ) : (
+              <ProductBarChart products={topProducts} formatCurrency={formatCurrency} />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Orders Table */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -642,11 +906,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">{order.customerName}</div>
-                          {order.customerEmail && (
-                            <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                              {order.customerEmail}
-                            </div>
-                          )}
                           {order.shippingAddress && (
                             <div className="text-xs text-muted-foreground">
                               {[order.shippingAddress.city, order.shippingAddress.province].filter(Boolean).join(", ")}
@@ -663,24 +922,9 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                           <div className="text-sm">
                             {order.itemCount} {order.itemCount === 1 ? "item" : "items"}
                           </div>
-                          {order.lineItems.slice(0, 2).map((item, idx) => (
-                            <div key={idx} className="text-xs text-muted-foreground truncate max-w-[120px]">
-                              {item.quantity}x {item.title}
-                            </div>
-                          ))}
-                          {order.lineItems.length > 2 && (
-                            <div className="text-xs text-muted-foreground">
-                              +{order.lineItems.length - 2} more
-                            </div>
-                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="font-semibold">{formatCurrency(order.totalPrice)}</div>
-                          {order.totalDiscounts > 0 && (
-                            <div className="text-xs text-green-600">
-                              -{formatCurrency(order.totalDiscounts)} discount
-                            </div>
-                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -718,332 +962,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           )}
         </CardContent>
       </Card>
-
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Net Sales Line Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Net Sales Over Time</CardTitle>
-            <CardDescription>Daily net sales for the selected period</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={salesTimeseries}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(val) => format(new Date(val), "MMM d")}
-                    className="text-xs"
-                  />
-                  <YAxis
-                    tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val}`}
-                    className="text-xs"
-                  />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload?.length) return null;
-                      return (
-                        <div className="bg-popover border rounded-lg shadow-lg p-3">
-                          <p className="font-medium">{format(new Date(label), "MMM d, yyyy")}</p>
-                          <p className="text-primary font-semibold">
-                            {formatCurrency(payload[0].value as number)}
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="value"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Orders Bar Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Orders Over Time</CardTitle>
-            <CardDescription>Daily order count for the selected period</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={ordersTimeseries}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    tickFormatter={(val) => format(new Date(val), "MMM d")}
-                    className="text-xs"
-                  />
-                  <YAxis className="text-xs" />
-                  <Tooltip
-                    content={({ active, payload, label }) => {
-                      if (!active || !payload?.length) return null;
-                      return (
-                        <div className="bg-popover border rounded-lg shadow-lg p-3">
-                          <p className="font-medium">{format(new Date(label), "MMM d, yyyy")}</p>
-                          <p className="text-primary font-semibold">
-                            {Math.round(payload[0].value as number)} orders
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar
-                    dataKey="value"
-                    fill="hsl(var(--primary))"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Customer Breakdown, Order Sources & Top Products */}
-      <div className="grid gap-6 lg:grid-cols-4">
-        {/* Customer Donut Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Customer Breakdown</CardTitle>
-            <CardDescription>New vs returning customers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={customerChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {customerChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-popover border rounded-lg shadow-lg p-3">
-                          <p className="font-medium">{data.name}</p>
-                          <p className="text-primary font-semibold">{data.value.toLocaleString()}</p>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex justify-center gap-6 mt-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold">{summary?.newCustomers || 0}</p>
-                <p className="text-xs text-muted-foreground">New</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold">{summary?.returningCustomers || 0}</p>
-                <p className="text-xs text-muted-foreground">Returning</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Order Sources Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Order Sources</CardTitle>
-            <CardDescription>Where orders are coming from</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {orderSources.length === 0 ? (
-              <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-                No order data available
-              </div>
-            ) : (
-              <>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={orderSources}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={40}
-                        outerRadius={70}
-                        paddingAngle={2}
-                        dataKey="orders"
-                        nameKey="name"
-                      >
-                        {orderSources.map((_, index) => (
-                          <Cell 
-                            key={`source-${index}`} 
-                            fill={`hsl(var(--chart-${(index % 5) + 1}))`} 
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const data = payload[0].payload as OrderSource;
-                          return (
-                            <div className="bg-popover border rounded-lg shadow-lg p-3">
-                              <p className="font-medium">{data.name}</p>
-                              <p className="text-sm">{data.orders} orders</p>
-                              <p className="text-primary font-semibold">{formatCurrency(data.revenue)}</p>
-                            </div>
-                          );
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="mt-2 space-y-1 max-h-24 overflow-y-auto">
-                  {orderSources.map((source, index) => (
-                    <div key={source.name} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-2.5 h-2.5 rounded-full" 
-                          style={{ backgroundColor: `hsl(var(--chart-${(index % 5) + 1}))` }}
-                        />
-                        <span className="truncate max-w-[100px]">{source.name}</span>
-                      </div>
-                      <span className="font-medium">{source.orders}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Top Products Table */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-lg">Top Products</CardTitle>
-            <CardDescription>Best performing products by revenue</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="border rounded-lg overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[40%]">Product</TableHead>
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => handleSort("units")}
-                    >
-                      <div className="flex items-center gap-1">
-                        Units Sold
-                        <SortIcon field="units" currentField={sortField} direction={sortDirection} />
-                      </div>
-                    </TableHead>
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => handleSort("revenue")}
-                    >
-                      <div className="flex items-center gap-1">
-                        Revenue
-                        <SortIcon field="revenue" currentField={sortField} direction={sortDirection} />
-                      </div>
-                    </TableHead>
-                    <TableHead 
-                      className="cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => handleSort("refunds")}
-                    >
-                      <div className="flex items-center gap-1">
-                        Refunds
-                        <SortIcon field="refunds" currentField={sortField} direction={sortDirection} />
-                      </div>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topProducts.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        No products found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    topProducts.map((product) => (
-                      <TableRow key={product.id}>
-                        <TableCell className="font-medium">
-                          <span className="line-clamp-2">{product.title}</span>
-                        </TableCell>
-                        <TableCell>{product.unitsSold.toLocaleString()}</TableCell>
-                        <TableCell>{formatCurrency(product.revenue)}</TableCell>
-                        <TableCell>
-                          {product.refunds > 0 ? (
-                            <span className="text-destructive">{product.refunds}</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </div>
-  );
-};
-
-// KPI Card Component
-interface KPICardProps {
-  title: string;
-  value: string;
-  icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
-}
-
-const KPICard = ({ title, value, icon: Icon, iconBg, iconColor }: KPICardProps) => {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className={cn("p-2 rounded-lg", iconBg)}>
-            <Icon className={cn("h-4 w-4", iconColor)} />
-          </div>
-        </div>
-        <div className="mt-3">
-          <p className="text-2xl font-bold">{value}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{title}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-// Sort Icon Component
-const SortIcon = ({ field, currentField, direction }: { field: SortField; currentField: SortField; direction: SortDirection }) => {
-  if (field !== currentField) {
-    return <ArrowUpDown className="h-3 w-3 text-muted-foreground" />;
-  }
-  return direction === "asc" ? (
-    <ChevronUp className="h-3 w-3" />
-  ) : (
-    <ChevronDown className="h-3 w-3" />
   );
 };
 
