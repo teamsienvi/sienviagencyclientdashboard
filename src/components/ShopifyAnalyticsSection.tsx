@@ -5,20 +5,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  Pagination, 
-  PaginationContent, 
-  PaginationItem, 
-  PaginationLink, 
-  PaginationNext, 
-  PaginationPrevious 
-} from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import { 
   RefreshCw, ShoppingBag, DollarSign, Package, Users, 
   TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
   AlertCircle, CheckCircle2, Loader2, ShoppingCart,
-  ArrowUpDown, ChevronUp, ChevronDown
+  ArrowUpDown, ChevronUp, ChevronDown, ChevronLeft, ChevronRight,
+  Eye, ExternalLink
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -85,6 +78,32 @@ interface OrderSource {
   revenue: number;
 }
 
+interface OrderItem {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  customerName: string;
+  customerEmail: string;
+  financialStatus: string;
+  fulfillmentStatus: string;
+  totalPrice: number;
+  subtotalPrice: number;
+  totalShipping: number;
+  totalTax: number;
+  totalDiscounts: number;
+  itemCount: number;
+  lineItems: {
+    title: string;
+    quantity: number;
+    price: number;
+  }[];
+  shippingAddress?: {
+    city: string;
+    province: string;
+    country: string;
+  };
+}
+
 interface ConnectionStatus {
   connected: boolean;
   storeName: string | null;
@@ -116,6 +135,17 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const [orderSources, setOrderSources] = useState<OrderSource[]>([]);
   const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 0 });
   
+  // Orders list state
+  const [orders, setOrders] = useState<OrderItem[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersPagination, setOrdersPagination] = useState<{
+    nextPageInfo?: string;
+    prevPageInfo?: string;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  }>({ hasNextPage: false, hasPrevPage: false });
+  const [ordersPageHistory, setOrdersPageHistory] = useState<string[]>([]);
+  
   // Table sorting
   const [sortField, setSortField] = useState<SortField>("revenue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -142,6 +172,33 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     } catch (err) {
       console.error("Error fetching Shopify status:", err);
       return false;
+    }
+  };
+
+  // Fetch orders list
+  const fetchOrders = async (pageInfo?: string) => {
+    setOrdersLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-analytics", {
+        body: {
+          clientId,
+          endpoint: "orders",
+          start: dateRange.start,
+          end: dateRange.end,
+          pageInfo,
+          limit: 10,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.success) {
+        setOrders(data.data);
+        setOrdersPagination(data.pagination);
+      }
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -227,6 +284,9 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
       if (sourcesRes.data?.success) {
         setOrderSources(sourcesRes.data.data);
       }
+
+      // Fetch orders list
+      await fetchOrders();
     } catch (err) {
       console.error("Error fetching Shopify data:", err);
       toast.error("Failed to load Shopify analytics");
@@ -289,13 +349,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     }
   }, [sortField, sortDirection]);
 
-  // Calculate percentage change
-  const calcChange = (current: number, previous?: number): { value: number; isPositive: boolean } | null => {
-    if (previous === undefined || previous === 0) return null;
-    const change = ((current - previous) / previous) * 100;
-    return { value: Math.abs(change), isPositive: change >= 0 };
-  };
-
   // Format currency
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -313,6 +366,51 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
       { name: "Returning Customers", value: summary.returningCustomers, color: CHART_COLORS.secondary },
     ];
   }, [summary]);
+
+  // Financial status badge
+  const getFinancialStatusBadge = (status: string) => {
+    const statusMap: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+      paid: { variant: "default", label: "Paid" },
+      pending: { variant: "outline", label: "Pending" },
+      refunded: { variant: "destructive", label: "Refunded" },
+      partially_refunded: { variant: "secondary", label: "Partial Refund" },
+      voided: { variant: "destructive", label: "Voided" },
+      authorized: { variant: "outline", label: "Authorized" },
+    };
+    const config = statusMap[status] || { variant: "outline" as const, label: status };
+    return <Badge variant={config.variant} className="text-xs">{config.label}</Badge>;
+  };
+
+  // Fulfillment status badge
+  const getFulfillmentStatusBadge = (status: string | null) => {
+    const statusMap: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+      fulfilled: { variant: "default", label: "Fulfilled" },
+      unfulfilled: { variant: "outline", label: "Unfulfilled" },
+      partial: { variant: "secondary", label: "Partial" },
+      restocked: { variant: "secondary", label: "Restocked" },
+    };
+    const config = statusMap[status || "unfulfilled"] || { variant: "outline" as const, label: status || "Unfulfilled" };
+    return <Badge variant={config.variant} className="text-xs">{config.label}</Badge>;
+  };
+
+  // Handle orders pagination
+  const handleOrdersNextPage = () => {
+    if (ordersPagination.nextPageInfo) {
+      setOrdersPageHistory(prev => [...prev, ordersPagination.prevPageInfo || ""]);
+      fetchOrders(ordersPagination.nextPageInfo);
+    }
+  };
+
+  const handleOrdersPrevPage = () => {
+    if (ordersPagination.hasPrevPage && ordersPageHistory.length > 0) {
+      const prevHistory = [...ordersPageHistory];
+      const prevPageInfo = prevHistory.pop();
+      setOrdersPageHistory(prevHistory);
+      fetchOrders(prevPageInfo || undefined);
+    } else if (ordersPagination.hasPrevPage) {
+      fetchOrders();
+    }
+  };
 
   // Render not connected state - use OAuth connect component
   if (!loading && connectionStatus && !connectionStatus.connected) {
@@ -482,6 +580,144 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           iconColor="text-indigo-600"
         />
       </div>
+
+      {/* Orders Table - Similar to Shopify Admin */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5" />
+                Orders
+              </CardTitle>
+              <CardDescription>All orders for the selected period</CardDescription>
+            </div>
+            <Badge variant="secondary" className="text-sm">
+              {summary?.orders || 0} total
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {ordersLoading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No orders found for this period</p>
+            </div>
+          ) : (
+            <>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold">Order</TableHead>
+                      <TableHead className="font-semibold">Date</TableHead>
+                      <TableHead className="font-semibold">Customer</TableHead>
+                      <TableHead className="font-semibold">Payment</TableHead>
+                      <TableHead className="font-semibold">Fulfillment</TableHead>
+                      <TableHead className="font-semibold">Items</TableHead>
+                      <TableHead className="font-semibold text-right">Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id} className="hover:bg-muted/30">
+                        <TableCell>
+                          <div className="font-medium text-primary">
+                            {order.orderNumber}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {format(new Date(order.createdAt), "MMM d, yyyy")}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {format(new Date(order.createdAt), "h:mm a")}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{order.customerName}</div>
+                          {order.customerEmail && (
+                            <div className="text-xs text-muted-foreground truncate max-w-[150px]">
+                              {order.customerEmail}
+                            </div>
+                          )}
+                          {order.shippingAddress && (
+                            <div className="text-xs text-muted-foreground">
+                              {[order.shippingAddress.city, order.shippingAddress.province].filter(Boolean).join(", ")}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {getFinancialStatusBadge(order.financialStatus)}
+                        </TableCell>
+                        <TableCell>
+                          {getFulfillmentStatusBadge(order.fulfillmentStatus)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {order.itemCount} {order.itemCount === 1 ? "item" : "items"}
+                          </div>
+                          {order.lineItems.slice(0, 2).map((item, idx) => (
+                            <div key={idx} className="text-xs text-muted-foreground truncate max-w-[120px]">
+                              {item.quantity}x {item.title}
+                            </div>
+                          ))}
+                          {order.lineItems.length > 2 && (
+                            <div className="text-xs text-muted-foreground">
+                              +{order.lineItems.length - 2} more
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="font-semibold">{formatCurrency(order.totalPrice)}</div>
+                          {order.totalDiscounts > 0 && (
+                            <div className="text-xs text-green-600">
+                              -{formatCurrency(order.totalDiscounts)} discount
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {orders.length} orders
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOrdersPrevPage}
+                    disabled={!ordersPagination.hasPrevPage}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOrdersNextPage}
+                    disabled={!ordersPagination.hasNextPage}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -754,7 +990,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                         <TableCell>{formatCurrency(product.revenue)}</TableCell>
                         <TableCell>
                           {product.refunds > 0 ? (
-                            <span className="text-destructive">{formatCurrency(product.refunds)}</span>
+                            <span className="text-destructive">{product.refunds}</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -765,38 +1001,6 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                 </TableBody>
               </Table>
             </div>
-
-            {/* Pagination */}
-            {productsPagination.totalPages > 1 && (
-              <div className="mt-4">
-                <Pagination>
-                  <PaginationContent>
-                    <PaginationItem>
-                      <PaginationPrevious 
-                        onClick={() => productsPagination.page > 1 && fetchProducts(productsPagination.page - 1)}
-                        className={cn(productsPagination.page <= 1 && "pointer-events-none opacity-50")}
-                      />
-                    </PaginationItem>
-                    {[...Array(productsPagination.totalPages)].map((_, i) => (
-                      <PaginationItem key={i}>
-                        <PaginationLink
-                          onClick={() => fetchProducts(i + 1)}
-                          isActive={productsPagination.page === i + 1}
-                        >
-                          {i + 1}
-                        </PaginationLink>
-                      </PaginationItem>
-                    ))}
-                    <PaginationItem>
-                      <PaginationNext 
-                        onClick={() => productsPagination.page < productsPagination.totalPages && fetchProducts(productsPagination.page + 1)}
-                        className={cn(productsPagination.page >= productsPagination.totalPages && "pointer-events-none opacity-50")}
-                      />
-                    </PaginationItem>
-                  </PaginationContent>
-                </Pagination>
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>

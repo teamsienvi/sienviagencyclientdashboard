@@ -45,9 +45,54 @@ interface OrderSource {
   revenue: number;
 }
 
+interface OrderItem {
+  id: string;
+  orderNumber: string;
+  createdAt: string;
+  customerName: string;
+  customerEmail: string;
+  financialStatus: string;
+  fulfillmentStatus: string;
+  totalPrice: number;
+  subtotalPrice: number;
+  totalShipping: number;
+  totalTax: number;
+  totalDiscounts: number;
+  itemCount: number;
+  lineItems: {
+    title: string;
+    quantity: number;
+    price: number;
+  }[];
+  shippingAddress?: {
+    city: string;
+    province: string;
+    country: string;
+  };
+}
+
+// Parse Link header for cursor-based pagination
+function parseLinkHeader(linkHeader: string | null): { next?: string; previous?: string } {
+  if (!linkHeader) return {};
+  const links: { next?: string; previous?: string } = {};
+  
+  const parts = linkHeader.split(",");
+  for (const part of parts) {
+    const match = part.match(/<([^>]+)>;\s*rel="([^"]+)"/);
+    if (match) {
+      const [, url, rel] = match;
+      if (rel === "next") links.next = url;
+      if (rel === "previous") links.previous = url;
+    }
+  }
+  return links;
+}
+
 // Make Shopify Admin API request using OAuth token
 async function shopifyRequest(shopDomain: string, accessToken: string, endpoint: string) {
-  const url = `https://${shopDomain}/admin/api/2024-01/${endpoint}`;
+  const url = endpoint.startsWith("http") 
+    ? endpoint 
+    : `https://${shopDomain}/admin/api/2024-01/${endpoint}`;
   console.log(`[shopify-analytics] Fetching: ${url}`);
   
   const response = await fetch(url, {
@@ -63,10 +108,43 @@ async function shopifyRequest(shopDomain: string, accessToken: string, endpoint:
     throw new Error(`Shopify API error: ${response.status}`);
   }
   
-  return response.json();
+  return {
+    json: await response.json(),
+    linkHeader: response.headers.get("Link"),
+  };
 }
 
-// Fetch orders within a date range
+// Fetch ALL orders with cursor-based pagination (handles > 250 orders)
+async function fetchAllOrders(shopDomain: string, accessToken: string, startDate: string, endDate: string) {
+  const allOrders: any[] = [];
+  let nextUrl: string | undefined;
+  
+  const initialParams = new URLSearchParams({
+    created_at_min: `${startDate}T00:00:00Z`,
+    created_at_max: `${endDate}T23:59:59Z`,
+    status: "any",
+    limit: "250",
+  });
+  
+  let endpoint = `orders.json?${initialParams}`;
+  
+  do {
+    const { json, linkHeader } = await shopifyRequest(shopDomain, accessToken, endpoint);
+    const orders = json.orders || [];
+    allOrders.push(...orders);
+    
+    const links = parseLinkHeader(linkHeader);
+    nextUrl = links.next;
+    if (nextUrl) {
+      endpoint = nextUrl;
+    }
+  } while (nextUrl);
+  
+  console.log(`[shopify-analytics] Fetched ${allOrders.length} total orders`);
+  return allOrders;
+}
+
+// Fetch orders within a date range (single page for speed)
 async function fetchOrders(shopDomain: string, accessToken: string, startDate: string, endDate: string) {
   const params = new URLSearchParams({
     created_at_min: `${startDate}T00:00:00Z`,
@@ -75,14 +153,54 @@ async function fetchOrders(shopDomain: string, accessToken: string, startDate: s
     limit: "250",
   });
   
-  const data = await shopifyRequest(shopDomain, accessToken, `orders.json?${params}`);
-  return data.orders || [];
+  const { json } = await shopifyRequest(shopDomain, accessToken, `orders.json?${params}`);
+  return json.orders || [];
+}
+
+// Fetch paginated orders for display (with full pagination info)
+async function fetchOrdersPage(
+  shopDomain: string, 
+  accessToken: string, 
+  startDate: string, 
+  endDate: string,
+  pageInfo?: string,
+  limit: number = 20
+) {
+  let endpoint: string;
+  
+  if (pageInfo) {
+    endpoint = `orders.json?limit=${limit}&page_info=${pageInfo}`;
+  } else {
+    const params = new URLSearchParams({
+      created_at_min: `${startDate}T00:00:00Z`,
+      created_at_max: `${endDate}T23:59:59Z`,
+      status: "any",
+      limit: String(limit),
+    });
+    endpoint = `orders.json?${params}`;
+  }
+  
+  const { json, linkHeader } = await shopifyRequest(shopDomain, accessToken, endpoint);
+  const links = parseLinkHeader(linkHeader);
+  
+  // Extract page_info from URLs
+  const getPageInfo = (url?: string) => {
+    if (!url) return undefined;
+    const parsed = new URL(url);
+    return parsed.searchParams.get("page_info") || undefined;
+  };
+  
+  return {
+    orders: json.orders || [],
+    nextPageInfo: getPageInfo(links.next),
+    prevPageInfo: getPageInfo(links.previous),
+  };
 }
 
 // Fetch products
 async function fetchProducts(shopDomain: string, accessToken: string, limit = 50) {
-  const data = await shopifyRequest(shopDomain, accessToken, `products.json?limit=${limit}`);
-  return data.products || [];
+  const { json } = await shopifyRequest(shopDomain, accessToken, `products.json?limit=${limit}`);
+  return json.products || [];
 }
 
 // Fetch customers
@@ -93,8 +211,8 @@ async function fetchCustomers(shopDomain: string, accessToken: string, startDate
     limit: "250",
   });
   
-  const data = await shopifyRequest(shopDomain, accessToken, `customers.json?${params}`);
-  return data.customers || [];
+  const { json } = await shopifyRequest(shopDomain, accessToken, `customers.json?${params}`);
+  return json.customers || [];
 }
 
 // Calculate summary from orders
@@ -240,6 +358,37 @@ function calculateTopProducts(orders: any[], products: any[]): { products: TopPr
     .slice(0, 10);
   
   return { products: topProducts, total: Object.keys(productSales).length };
+}
+
+// Transform Shopify orders to our OrderItem format
+function transformOrders(orders: any[]): OrderItem[] {
+  return orders.map((order) => ({
+    id: String(order.id),
+    orderNumber: order.name || `#${order.order_number}`,
+    createdAt: order.created_at,
+    customerName: order.customer 
+      ? `${order.customer.first_name || ""} ${order.customer.last_name || ""}`.trim() || "Guest"
+      : "Guest",
+    customerEmail: order.customer?.email || order.email || "",
+    financialStatus: order.financial_status || "pending",
+    fulfillmentStatus: order.fulfillment_status || "unfulfilled",
+    totalPrice: parseFloat(order.total_price || "0"),
+    subtotalPrice: parseFloat(order.subtotal_price || "0"),
+    totalShipping: parseFloat(order.total_shipping_price_set?.shop_money?.amount || "0"),
+    totalTax: parseFloat(order.total_tax || "0"),
+    totalDiscounts: parseFloat(order.total_discounts || "0"),
+    itemCount: (order.line_items || []).reduce((sum: number, item: any) => sum + item.quantity, 0),
+    lineItems: (order.line_items || []).map((item: any) => ({
+      title: item.title,
+      quantity: item.quantity,
+      price: parseFloat(item.price || "0"),
+    })),
+    shippingAddress: order.shipping_address ? {
+      city: order.shipping_address.city || "",
+      province: order.shipping_address.province || "",
+      country: order.shipping_address.country || "",
+    } : undefined,
+  }));
 }
 
 serve(async (req) => {
@@ -413,7 +562,7 @@ serve(async (req) => {
         for (const order of orders) {
           if (order.financial_status === "refunded") continue;
           
-          // Get order source from source_name, referring_site, or landing_site
+          // Get order source from source_name, referring_site, or app IDs
           let sourceName = order.source_name || "Unknown";
           
           // Map common source names to friendlier labels
@@ -441,7 +590,7 @@ serve(async (req) => {
           }
           
           sourceData[sourceName].orders += 1;
-          sourceData[sourceName].revenue += parseFloat(order.subtotal_price || "0");
+          sourceData[sourceName].revenue += parseFloat(order.total_price || "0");
         }
         
         // Convert to array and sort by revenue
@@ -457,6 +606,40 @@ serve(async (req) => {
           JSON.stringify({
             success: true,
             data: sources,
+            period: { start, end },
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // NEW: Orders list endpoint (similar to Shopify Admin)
+      case "orders": {
+        const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const end = body.end || new Date().toISOString().split("T")[0];
+        const pageInfo = body.pageInfo;
+        const limit = parseInt(body.limit) || 20;
+
+        const { orders, nextPageInfo, prevPageInfo } = await fetchOrdersPage(
+          shopDomain, 
+          accessToken, 
+          start, 
+          end, 
+          pageInfo, 
+          limit
+        );
+        
+        const transformedOrders = transformOrders(orders);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: transformedOrders,
+            pagination: {
+              nextPageInfo,
+              prevPageInfo,
+              hasNextPage: !!nextPageInfo,
+              hasPrevPage: !!prevPageInfo,
+            },
             period: { start, end },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
