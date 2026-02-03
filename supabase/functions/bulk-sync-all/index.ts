@@ -299,6 +299,41 @@ serve(async (req) => {
             }
           }
           
+          // IMPORTANT: For TikTok, fetch from timelines API with "videos" metric + "video" subject
+          // This matches metricool-social-weekly and accurately counts all TikTok content
+          if (platform === "tiktok") {
+            try {
+              const tiktokData = await fetchMetricool("/api/v2/analytics/timelines", {
+                ...params,
+                metric: "videos",
+                subject: "video",
+              });
+
+              let points: any[] = [];
+              if (Array.isArray(tiktokData) && tiktokData[0]?.values) {
+                points = tiktokData[0].values;
+              } else if (Array.isArray(tiktokData)) {
+                points = tiktokData;
+              } else if (tiktokData?.data && Array.isArray(tiktokData.data)) {
+                const series = tiktokData.data.find((s: any) => 
+                  (s.metric || "").toLowerCase() === "videos" || (s.metric || "").toLowerCase() === "postscount"
+                );
+                if (series?.values) points = series.values;
+              }
+
+              const timelineCount = points.reduce((sum: number, p: any) => sum + (p.value || 0), 0);
+              console.log(`  tiktok videos from timelines: ${timelineCount}, CSV count: ${totalContent}`);
+              
+              // Use whichever is higher - timelines or CSV
+              if (timelineCount > 0) {
+                totalContent = Math.max(totalContent ?? 0, timelineCount);
+              }
+              console.log(`  tiktok final totalContent: ${totalContent}`);
+            } catch (e: any) {
+              console.error(`  Error fetching tiktok videos timeline for ${clientName}:`, e.message);
+            }
+          }
+          
           // For TikTok, calculate engagement from CSV data
           if (platform === "tiktok" && lines.length > 1) {
             const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
