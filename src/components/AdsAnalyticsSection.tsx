@@ -332,18 +332,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
           )}
         </div>
         <p className="text-2xl font-bold">{formatFn(value)}</p>
-        {change !== null && (
-          <div className={cn(
-            "flex items-center gap-1 text-xs mt-1",
-            isPositive && "text-green-600",
-            isNegative && "text-red-600",
-            !isPositive && !isNegative && "text-muted-foreground"
-          )}>
-            {isPositive && <TrendingUp className="h-3 w-3" />}
-            {isNegative && <TrendingDown className="h-3 w-3" />}
-            <span>{change >= 0 ? "+" : ""}{change.toFixed(1)}% vs prev</span>
-          </div>
-        )}
+        {/* WoW comparison hidden for now */}
       </div>
     );
   };
