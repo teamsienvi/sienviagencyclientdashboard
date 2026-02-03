@@ -192,6 +192,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             endpoint: "top-products",
             page: productsPagination.page,
             pageSize: productsPagination.pageSize,
+            start: dateRange.start,
+            end: dateRange.end,
             sort: `${sortField}_${sortDirection}`,
           },
         }),
@@ -243,6 +245,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           endpoint: "top-products",
           page,
           pageSize: productsPagination.pageSize,
+          start: dateRange.start,
+          end: dateRange.end,
           sort: `${sortField}_${sortDirection}`,
         },
       });
