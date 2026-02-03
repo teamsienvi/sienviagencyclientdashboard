@@ -216,7 +216,10 @@ async function fetchCustomers(shopDomain: string, accessToken: string, startDate
 }
 
 // Calculate summary from orders
-// Uses total_price to match Shopify admin view (includes shipping)
+// Uses Shopify's official definitions:
+// - Gross Sales = Product subtotals + discounts (before discounts/returns, excludes shipping/tax)
+// - Net Sales = Gross Sales - Discounts - Returns (product revenue only)
+// - Total Sales = what customer pays = Net Sales + Shipping + Taxes
 function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
   let grossSales = 0;
   let netSales = 0;
@@ -226,32 +229,36 @@ function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
   console.log(`[shopify-analytics] Processing ${orders.length} orders for summary`);
   
   for (const order of orders) {
-    // Use total_price to match Shopify admin display (includes shipping)
-    const totalPrice = parseFloat(order.total_price || "0");
+    // Subtotal = product line items total (after line discounts, before order discounts, excludes shipping/tax)
     const subtotal = parseFloat(order.subtotal_price || "0");
     const totalDiscount = parseFloat(order.total_discounts || "0");
+    
+    // Calculate refund amounts
     const totalRefund = (order.refunds || []).reduce((sum: number, r: any) => {
       return sum + (r.transactions || []).reduce((tSum: number, t: any) => tSum + parseFloat(t.amount || "0"), 0);
     }, 0);
     
-    console.log(`[shopify-analytics] Order ${order.name}: total_price=${totalPrice}, subtotal=${subtotal}, status=${order.financial_status}`);
+    console.log(`[shopify-analytics] Order ${order.name}: subtotal=${subtotal}, discounts=${totalDiscount}, refunds=${totalRefund}, status=${order.financial_status}`);
     
-    // Gross sales = total before any refunds
-    grossSales += totalPrice + totalRefund;
-    // Net sales = total after refunds
-    netSales += totalPrice - totalRefund;
+    // Gross sales = subtotal + discounts (what it would have been at full price)
+    grossSales += subtotal + totalDiscount;
+    
+    // Net sales = subtotal - refunds (actual product revenue)
+    netSales += subtotal - totalRefund;
+    
     refunds += totalRefund;
     discountAmount += totalDiscount;
   }
   
   const orderCount = orders.filter(o => o.financial_status !== "refunded").length;
+  // AOV based on net sales (product revenue only, excludes shipping)
   const avgOrderValue = orderCount > 0 ? netSales / orderCount : 0;
   
   // Count new vs returning customers
   const newCustomers = customers.filter(c => c.orders_count === 1).length;
   const returningCustomers = customers.filter(c => c.orders_count > 1).length;
   
-  console.log(`[shopify-analytics] Summary: netSales=${netSales}, grossSales=${grossSales}, orders=${orderCount}`);
+  console.log(`[shopify-analytics] Summary: grossSales=${grossSales}, netSales=${netSales}, orders=${orderCount}`);
   
   return {
     netSales: Math.round(netSales * 100) / 100,
@@ -266,6 +273,7 @@ function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
 }
 
 // Calculate timeseries from orders
+// Uses subtotal_price for net_sales to match Shopify's definition (excludes shipping)
 function calculateTimeseries(orders: any[], startDate: string, endDate: string, metric: string): TimeseriesPoint[] {
   const start = new Date(startDate);
   const end = new Date(endDate);
@@ -285,16 +293,18 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
     
     const orderDate = new Date(order.created_at).toISOString().split("T")[0];
     if (dailyData[orderDate] !== undefined) {
+      // Use subtotal_price (product revenue only, excludes shipping/tax)
+      const subtotal = parseFloat(order.subtotal_price || "0");
+      
       switch (metric) {
         case "net_sales":
-          // Use total_price to match Shopify admin
-          dailyData[orderDate] += parseFloat(order.total_price || "0");
+          dailyData[orderDate] += subtotal;
           break;
         case "orders":
           dailyData[orderDate] += 1;
           break;
         case "average_order_value":
-          dailyData[orderDate] += parseFloat(order.total_price || "0");
+          dailyData[orderDate] += subtotal;
           break;
       }
     }
@@ -590,7 +600,8 @@ serve(async (req) => {
           }
           
           sourceData[sourceName].orders += 1;
-          sourceData[sourceName].revenue += parseFloat(order.total_price || "0");
+          // Use subtotal_price for product revenue (excludes shipping)
+          sourceData[sourceName].revenue += parseFloat(order.subtotal_price || "0");
         }
         
         // Convert to array and sort by revenue
