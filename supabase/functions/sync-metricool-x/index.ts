@@ -262,9 +262,17 @@ serve(async (req) => {
           continue;
         }
 
+        // Delete any existing metrics for this content in this period to ensure fresh data
+        await supabase
+          .from("social_content_metrics")
+          .delete()
+          .eq("social_content_id", contentData.id)
+          .eq("period_start", startDate)
+          .eq("period_end", endDate);
+
         const { error: metricsError } = await supabase
           .from("social_content_metrics")
-          .upsert({
+          .insert({
             social_content_id: contentData.id,
             platform: "x",
             period_start: startDate,
@@ -275,10 +283,10 @@ serve(async (req) => {
             comments: post.comments,
             shares: post.retweets,
             collected_at: new Date().toISOString(),
-          }, { onConflict: "social_content_id,period_start,period_end" });
+          });
 
         if (metricsError) {
-          console.error("Error upserting metrics:", metricsError);
+          console.error("Error inserting metrics:", metricsError);
           continue;
         }
 

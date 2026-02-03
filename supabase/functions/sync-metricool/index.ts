@@ -331,6 +331,14 @@ serve(async (req) => {
         continue;
       }
 
+      // Delete any existing metrics for this content in this period to ensure fresh data
+      await supabase
+        .from("social_content_metrics")
+        .delete()
+        .eq("social_content_id", contentRecord.id)
+        .eq("period_start", startDate)
+        .eq("period_end", endDate);
+
       // Insert content metrics
       const { error: metricsError } = await supabase
         .from("social_content_metrics")
