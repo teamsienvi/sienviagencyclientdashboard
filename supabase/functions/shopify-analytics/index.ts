@@ -98,21 +98,30 @@ async function fetchCustomers(shopDomain: string, accessToken: string, startDate
 }
 
 // Calculate summary from orders
+// Uses total_price to match Shopify admin view (includes shipping)
 function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
   let grossSales = 0;
   let netSales = 0;
   let refunds = 0;
   let discountAmount = 0;
   
+  console.log(`[shopify-analytics] Processing ${orders.length} orders for summary`);
+  
   for (const order of orders) {
+    // Use total_price to match Shopify admin display (includes shipping)
+    const totalPrice = parseFloat(order.total_price || "0");
     const subtotal = parseFloat(order.subtotal_price || "0");
     const totalDiscount = parseFloat(order.total_discounts || "0");
     const totalRefund = (order.refunds || []).reduce((sum: number, r: any) => {
       return sum + (r.transactions || []).reduce((tSum: number, t: any) => tSum + parseFloat(t.amount || "0"), 0);
     }, 0);
     
-    grossSales += subtotal + totalDiscount;
-    netSales += subtotal - totalRefund;
+    console.log(`[shopify-analytics] Order ${order.name}: total_price=${totalPrice}, subtotal=${subtotal}, status=${order.financial_status}`);
+    
+    // Gross sales = total before any refunds
+    grossSales += totalPrice + totalRefund;
+    // Net sales = total after refunds
+    netSales += totalPrice - totalRefund;
     refunds += totalRefund;
     discountAmount += totalDiscount;
   }
@@ -123,6 +132,8 @@ function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
   // Count new vs returning customers
   const newCustomers = customers.filter(c => c.orders_count === 1).length;
   const returningCustomers = customers.filter(c => c.orders_count > 1).length;
+  
+  console.log(`[shopify-analytics] Summary: netSales=${netSales}, grossSales=${grossSales}, orders=${orderCount}`);
   
   return {
     netSales: Math.round(netSales * 100) / 100,
@@ -158,13 +169,14 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
     if (dailyData[orderDate] !== undefined) {
       switch (metric) {
         case "net_sales":
-          dailyData[orderDate] += parseFloat(order.subtotal_price || "0");
+          // Use total_price to match Shopify admin
+          dailyData[orderDate] += parseFloat(order.total_price || "0");
           break;
         case "orders":
           dailyData[orderDate] += 1;
           break;
         case "average_order_value":
-          dailyData[orderDate] += parseFloat(order.subtotal_price || "0");
+          dailyData[orderDate] += parseFloat(order.total_price || "0");
           break;
       }
     }
