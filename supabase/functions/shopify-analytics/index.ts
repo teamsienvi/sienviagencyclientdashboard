@@ -101,30 +101,51 @@ function parseLinkHeader(linkHeader: string | null): { next?: string; previous?:
   return links;
 }
 
-// Make Shopify Admin API request using OAuth token
-async function shopifyRequest(shopDomain: string, accessToken: string, endpoint: string) {
+// Sleep helper for rate limiting
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Make Shopify Admin API request with retry logic for rate limiting
+async function shopifyRequest(shopDomain: string, accessToken: string, endpoint: string, retries = 3): Promise<{ json: any; linkHeader: string | null }> {
   const url = endpoint.startsWith("http") 
     ? endpoint 
     : `https://${shopDomain}/admin/api/2024-01/${endpoint}`;
   console.log(`[shopify-analytics] Fetching: ${url}`);
   
-  const response = await fetch(url, {
-    headers: {
-      "X-Shopify-Access-Token": accessToken,
-      "Content-Type": "application/json",
-    },
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[shopify-analytics] API error: ${response.status} - ${errorText}`);
-    throw new Error(`Shopify API error: ${response.status}`);
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(url, {
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+    
+    // Handle rate limiting (429)
+    if (response.status === 429) {
+      const retryAfter = response.headers.get("Retry-After");
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
+      console.log(`[shopify-analytics] Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}`);
+      
+      if (attempt < retries) {
+        await sleep(waitTime);
+        continue;
+      }
+    }
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[shopify-analytics] API error: ${response.status} - ${errorText}`);
+      throw new Error(`Shopify API error: ${response.status}`);
+    }
+    
+    return {
+      json: await response.json(),
+      linkHeader: response.headers.get("Link"),
+    };
   }
   
-  return {
-    json: await response.json(),
-    linkHeader: response.headers.get("Link"),
-  };
+  throw new Error("Shopify API error: 429 - Rate limited after retries");
 }
 
 // Fetch ALL orders with cursor-based pagination (handles > 250 orders)

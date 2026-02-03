@@ -344,7 +344,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     }
   };
 
-  // Fetch all data
+  // Fetch all data - batched to avoid rate limiting
   const fetchData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setRefreshing(true);
@@ -357,8 +357,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
         return;
       }
 
-      // Fetch all data in parallel
-      const [summaryRes, totalSalesRes, aovRes, ordersRes, productsRes, sourcesRes] = await Promise.all([
+      // Batch 1: Summary and main timeseries (these are the most important)
+      const [summaryRes, totalSalesRes] = await Promise.all([
         supabase.functions.invoke("shopify-analytics", {
           body: {
             clientId,
@@ -376,6 +376,19 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             end: dateRange.end,
           },
         }),
+      ]);
+
+      if (summaryRes.data?.success) {
+        setSummary(summaryRes.data.data);
+      }
+      if (totalSalesRes.data?.success) {
+        setTotalSalesTimeseries(totalSalesRes.data.data);
+      }
+
+      // Batch 2: Secondary data (with small delay to avoid rate limit)
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const [aovRes, ordersRes, productsRes] = await Promise.all([
         supabase.functions.invoke("shopify-analytics", {
           body: {
             clientId,
@@ -404,35 +417,29 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             end: dateRange.end,
           },
         }),
-        supabase.functions.invoke("shopify-analytics", {
-          body: {
-            clientId,
-            endpoint: "order-sources",
-            start: dateRange.start,
-            end: dateRange.end,
-          },
-        }),
       ]);
-
-      if (summaryRes.data?.success) {
-        setSummary(summaryRes.data.data);
-      }
-
-      if (totalSalesRes.data?.success) {
-        setTotalSalesTimeseries(totalSalesRes.data.data);
-      }
 
       if (aovRes.data?.success) {
         setAovTimeseries(aovRes.data.data);
       }
-
       if (ordersRes.data?.success) {
         setOrdersTimeseries(ordersRes.data.data);
       }
-
       if (productsRes.data?.success) {
         setTopProducts(productsRes.data.data);
       }
+
+      // Batch 3: Order sources and orders list
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      const sourcesRes = await supabase.functions.invoke("shopify-analytics", {
+        body: {
+          clientId,
+          endpoint: "order-sources",
+          start: dateRange.start,
+          end: dateRange.end,
+        },
+      });
 
       if (sourcesRes.data?.success) {
         setOrderSources(sourcesRes.data.data);
