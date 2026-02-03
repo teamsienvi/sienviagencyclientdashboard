@@ -288,8 +288,42 @@ serve(async (req) => {
         }
       };
 
-      // Fetch CSV for posts to get posts/reels breakdown counts only
-      const fetchPostsCSV = async (): Promise<{ postsCount: number; reelsCount: number }> => {
+      // Fetch total posts count from timelines API (includes all content: posts, reels, stories)
+      // This is the ACCURATE count that matches Metricool dashboard
+      const fetchPostsCountFromTimelines = async (): Promise<number | null> => {
+        try {
+          const data = await fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
+            metric: "postsCount",
+            subject: "account",
+          }));
+          
+          // Sum up daily values
+          if (data?.data && Array.isArray(data.data)) {
+            for (const series of data.data) {
+              if (series.metric === "postsCount" && Array.isArray(series.values)) {
+                const total = series.values.reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+                console.log(`postsCount from timelines (${fromDate} to ${toDate}): ${total}`);
+                return total;
+              }
+            }
+          }
+          
+          // Handle direct array response
+          if (Array.isArray(data)) {
+            const total = data.reduce((sum: number, v: any) => sum + (v.value || 0), 0);
+            console.log(`postsCount from timelines (${fromDate} to ${toDate}): ${total}`);
+            return total;
+          }
+          
+          return null;
+        } catch (e) {
+          errors.push(`postsCount_timelines ${fromDate}: ${e}`);
+          return null;
+        }
+      };
+
+      // Fetch CSV for posts to get posts/reels breakdown (feed posts vs reels)
+      const fetchPostsCSV = async (): Promise<{ feedPostsCount: number; reelsCount: number }> => {
         const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
         Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) => 
           postsUrl.searchParams.set(k, v)
@@ -302,30 +336,33 @@ serve(async (req) => {
         
         // Parse CSV to count posts and reels
         const lines = csv.split('\n').filter(l => l.trim());
-        if (lines.length < 2) return { postsCount: 0, reelsCount: 0 };
+        if (lines.length < 2) return { feedPostsCount: 0, reelsCount: 0 };
         
         const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
         const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
         
-        let postsCount = 0;
+        let feedPostsCount = 0;
         let reelsCount = 0;
         
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
           const type = values[typeIdx]?.toLowerCase() || 'post';
           
-          // Categorize as reel or post
+          // Categorize as reel or feed post based on type
+          // REEL types: reel, video, REEL, VIDEO
+          // Feed post types: FEED_IMAGE, CAROUSEL_ALBUM, IMAGE, PHOTO, post, etc.
           if (type === 'reel' || type === 'video') {
             reelsCount++;
           } else {
-            postsCount++;
+            feedPostsCount++;
           }
         }
         
-        return { postsCount, reelsCount };
+        console.log(`CSV breakdown (${fromDate} to ${toDate}): ${feedPostsCount} feed posts, ${reelsCount} reels from CSV`);
+        return { feedPostsCount, reelsCount };
       };
 
-      const [followersRes, engagementTimelineRes, postsEngagementRes, reelsEngagementRes, postsCSVRes] = await Promise.allSettled([
+      const [followersRes, engagementTimelineRes, postsEngagementRes, reelsEngagementRes, postsCountRes, postsCSVRes] = await Promise.allSettled([
         // 1) Followers timeline - PLATFORM SPECIFIC METRIC
         fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
           metric: followersMetric,
@@ -340,7 +377,9 @@ serve(async (req) => {
         fetchPostsEngagement(),
         // 4) Reels engagement aggregation (correct endpoint!)
         fetchReelsEngagement(),
-        // 5) Posts CSV for counts
+        // 5) Total posts count from timelines API (ACCURATE - includes all content)
+        fetchPostsCountFromTimelines(),
+        // 6) Posts CSV for feed posts vs reels breakdown
         fetchPostsCSV(),
       ]);
 
@@ -386,12 +425,22 @@ serve(async (req) => {
         result.engagementAgg = result.reelsEngagement;
       }
 
-      // Process posts CSV data - count TOTAL content (posts + reels)
+      // Use postsCount from timelines API as the TOTAL content count (accurate)
+      if (postsCountRes.status === 'fulfilled' && postsCountRes.value !== null) {
+        result.postsCount = postsCountRes.value;
+        console.log(`Total content from timelines (${fromDate} to ${toDate}): ${result.postsCount}`);
+      }
+      
+      // Process CSV breakdown for reels count (used for separate display if needed)
       if (postsCSVRes.status === 'fulfilled') {
-        const { postsCount, reelsCount } = postsCSVRes.value;
-        result.postsCount = postsCount + reelsCount; // Total content count
-        result.reelsCount = reelsCount; // Keep track of reels separately for reference
-        console.log(`Total content (${fromDate} to ${toDate}): ${postsCount + reelsCount} (${postsCount} posts + ${reelsCount} reels)`);
+        const { feedPostsCount, reelsCount } = postsCSVRes.value;
+        result.reelsCount = reelsCount;
+        
+        // If timelines API failed, fall back to CSV count (but this only includes feed posts!)
+        if (result.postsCount === null) {
+          result.postsCount = feedPostsCount + reelsCount;
+          console.log(`Total content from CSV fallback (${fromDate} to ${toDate}): ${result.postsCount} (${feedPostsCount} feed + ${reelsCount} reels)`);
+        }
       } else {
         errors.push(`posts_csv ${fromDate}: ${postsCSVRes.reason}`);
       }
