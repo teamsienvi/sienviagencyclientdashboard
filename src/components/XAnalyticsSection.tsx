@@ -287,12 +287,31 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
   if (!hasMetricoolConfig) {
     return (
-      <div className="text-center py-12">
-        <Twitter className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-        <h3 className="text-lg font-medium mb-2">X Analytics Not Configured</h3>
-        <p className="text-muted-foreground">
-          No Metricool configuration found for X. Please set up the integration first.
-        </p>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Twitter className="h-5 w-5" />
+            <Badge variant="secondary">Manual Upload</Badge>
+          </div>
+          <XCSVUploadDialog
+            clientId={clientId}
+            clientName={clientName}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload CSV
+              </Button>
+            }
+            onUploadComplete={() => fetchData(true)}
+          />
+        </div>
+        <div className="text-center py-12">
+          <Twitter className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+          <h3 className="text-lg font-medium mb-2">X Analytics Not Configured</h3>
+          <p className="text-muted-foreground mb-4">
+            No Metricool configuration found for X. Upload CSV data manually or set up the integration.
+          </p>
+        </div>
       </div>
     );
   }
