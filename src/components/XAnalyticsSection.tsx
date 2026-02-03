@@ -74,6 +74,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [hasMetricoolConfig, setHasMetricoolConfig] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
+  const [hasUploadedData, setHasUploadedData] = useState(false);
 
   // Get standardized reporting periods
   const currentWeek = useMemo(() => getCurrentReportingWeek(), []);
@@ -119,6 +120,125 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       setLoading(false);
     }
   }, [hasCachedData, cachedData]);
+
+  // Fetch uploaded CSV data from database (for clients without Metricool config)
+  const fetchUploadedData = useCallback(async () => {
+    try {
+      const currentStart = formatApiDate(currentWeek.start);
+      const currentEnd = formatApiDate(currentWeek.end);
+      const previousStart = formatApiDate(previousWeek.start);
+      const previousEnd = formatApiDate(previousWeek.end);
+
+      // Fetch current period account metrics
+      const { data: currentMetrics } = await supabase
+        .from("social_account_metrics")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .lte("period_start", currentEnd)
+        .gte("period_end", currentStart)
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Fetch previous period account metrics
+      const { data: previousMetrics } = await supabase
+        .from("social_account_metrics")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .lte("period_start", previousEnd)
+        .gte("period_end", previousStart)
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Fetch content for current period
+      const { data: content } = await supabase
+        .from("social_content")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("platform", "x")
+        .order("published_at", { ascending: false });
+
+      // Fetch content metrics
+      const postsData: XPost[] = [];
+      if (content && content.length > 0) {
+        setHasUploadedData(true);
+        
+        for (const c of content) {
+          const { data: metrics } = await supabase
+            .from("social_content_metrics")
+            .select("*")
+            .eq("social_content_id", c.id)
+            .order("collected_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          postsData.push({
+            id: c.content_id,
+            text: c.title,
+            url: c.url,
+            timestamp: c.published_at,
+            impressions: metrics?.impressions || 0,
+            likes: metrics?.likes || 0,
+            reposts: metrics?.shares || 0,
+            replies: metrics?.comments || 0,
+            quotes: 0,
+            engagements: metrics?.engagements || 0,
+            linkClicks: metrics?.link_clicks || 0,
+            profileClicks: metrics?.profile_visits || 0,
+            videoViews: metrics?.views || 0,
+          });
+        }
+      }
+
+      // Build KPIs from account metrics
+      if (currentMetrics || postsData.length > 0) {
+        setHasUploadedData(true);
+        setKpis({
+          current: {
+            followers: currentMetrics?.followers ?? null,
+            newFollowers: currentMetrics?.new_followers ?? null,
+            engagementRate: currentMetrics?.engagement_rate ?? null,
+            totalPosts: currentMetrics?.total_content ?? postsData.length,
+          },
+          previous: {
+            followers: previousMetrics?.followers ?? null,
+            newFollowers: previousMetrics?.new_followers ?? null,
+            engagementRate: previousMetrics?.engagement_rate ?? null,
+            totalPosts: previousMetrics?.total_content ?? null,
+          },
+        });
+        setPosts(postsData);
+        setLastSyncAt(currentMetrics?.collected_at || new Date().toISOString());
+
+        // Update cache
+        updateCache({
+          kpis: {
+            current: {
+              followers: currentMetrics?.followers ?? null,
+              newFollowers: currentMetrics?.new_followers ?? null,
+              engagementRate: currentMetrics?.engagement_rate ?? null,
+              totalPosts: currentMetrics?.total_content ?? postsData.length,
+            },
+            previous: {
+              followers: previousMetrics?.followers ?? null,
+              newFollowers: previousMetrics?.new_followers ?? null,
+              engagementRate: previousMetrics?.engagement_rate ?? null,
+              totalPosts: previousMetrics?.total_content ?? null,
+            },
+          },
+          posts: postsData,
+          lastSyncAt: currentMetrics?.collected_at || new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching uploaded data:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId, currentWeek, previousWeek, updateCache]);
 
   // Fetch fresh data
   const fetchData = useCallback(async (showToast = false) => {
@@ -191,10 +311,13 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
   useEffect(() => {
     if (!hasCachedData && hasMetricoolConfig) {
       fetchData();
+    } else if (!hasMetricoolConfig && !hasCachedData) {
+      // Fetch uploaded CSV data from database
+      fetchUploadedData();
     } else if (!hasMetricoolConfig) {
       setLoading(false);
     }
-  }, [hasCachedData, hasMetricoolConfig, fetchData]);
+  }, [hasCachedData, hasMetricoolConfig, fetchData, fetchUploadedData]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -285,7 +408,8 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     );
   }
 
-  if (!hasMetricoolConfig) {
+  // If no Metricool config but we have uploaded data, show the full dashboard
+  if (!hasMetricoolConfig && !hasUploadedData && posts.length === 0) {
     return (
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -302,7 +426,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
                 Upload CSV
               </Button>
             }
-            onUploadComplete={() => fetchData(true)}
+            onUploadComplete={() => fetchUploadedData()}
           />
         </div>
         <div className="text-center py-12">
@@ -316,6 +440,9 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     );
   }
 
+  // Determine if we're in manual upload mode (no Metricool config but have data)
+  const isManualMode = !hasMetricoolConfig && (hasUploadedData || posts.length > 0);
+
   return (
     <div className="space-y-6">
       {/* Header with period and sync button */}
@@ -323,7 +450,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Twitter className="h-5 w-5" />
-            <Badge variant="secondary">Metricool</Badge>
+            <Badge variant="secondary">{isManualMode ? "Manual Upload" : "Metricool"}</Badge>
           </div>
           <Badge variant="outline" className="text-sm">
             <Calendar className="h-3 w-3 mr-1" />
@@ -345,17 +472,19 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
                 Upload CSV
               </Button>
             }
-            onUploadComplete={() => fetchData(true)}
+            onUploadComplete={() => isManualMode ? fetchUploadedData() : fetchData(true)}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSync}
-            disabled={syncing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing..." : "Sync Data"}
-          </Button>
+          {!isManualMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSync}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+              {syncing ? "Syncing..." : "Sync Data"}
+            </Button>
+          )}
         </div>
       </div>
 
