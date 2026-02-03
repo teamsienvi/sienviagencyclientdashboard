@@ -95,8 +95,11 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           
           const latestMetric = sortedMetrics[0];
 
-          // Use views first, then impressions as fallback
-          const viewsValue = latestMetric?.views || latestMetric?.impressions || 0;
+          // Use the higher of views or impressions for proper cross-platform ranking
+          // FB/X use impressions, TikTok/YouTube use views
+          const viewsValue = latestMetric?.views || 0;
+          const impressionsValue = latestMetric?.impressions || 0;
+          const primaryMetric = Math.max(viewsValue, impressionsValue);
           const reachValue = latestMetric?.reach || 0;
 
           return {
@@ -104,8 +107,8 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
             post_url: c.url || "",
             platform: c.platform,
             published_at: c.published_at,
-            views: viewsValue,
-            reach: reachValue > 0 ? reachValue : viewsValue,
+            views: primaryMetric, // Use higher of views/impressions for ranking
+            reach: reachValue > 0 ? reachValue : primaryMetric,
             likes: latestMetric?.likes || 0,
             comments: latestMetric?.comments || 0,
             shares: latestMetric?.shares || 0,

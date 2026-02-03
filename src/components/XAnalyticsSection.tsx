@@ -14,13 +14,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { 
   RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, 
   Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus,
-  Calendar, Link2, MousePointerClick, Play
+  Calendar, Link2, MousePointerClick, Play, Upload
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { getCurrentReportingWeek, getPreviousReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 import { useAnalyticsCache, getWeekKey } from "@/hooks/useAnalyticsCache";
+import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 
 interface XAnalyticsSectionProps {
   clientId: string;
@@ -316,6 +317,17 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
               Last sync: {formatDate(lastSyncAt)}
             </span>
           )}
+          <XCSVUploadDialog
+            clientId={clientId}
+            clientName={clientName}
+            trigger={
+              <Button variant="outline" size="sm">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload CSV
+              </Button>
+            }
+            onUploadComplete={() => fetchData(true)}
+          />
           <Button
             variant="outline"
             size="sm"
