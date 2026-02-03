@@ -19,17 +19,13 @@ import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   PieChart,
   Pie,
   Cell,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 
 interface ShopifyAnalyticsSectionProps {
@@ -240,7 +236,7 @@ const TotalSalesBreakdown = ({
   );
 };
 
-// Horizontal bar chart for products (like Shopify)
+// Horizontal bar chart for products (like Shopify - clean style)
 const ProductBarChart = ({
   products,
   formatCurrency,
@@ -251,24 +247,20 @@ const ProductBarChart = ({
   const maxRevenue = Math.max(...products.map(p => p.revenue), 1);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {products.slice(0, 5).map((product, index) => (
-        <div key={product.id} className="space-y-1">
-          <div className="flex items-center justify-between text-sm">
-            <span className="truncate max-w-[200px] text-muted-foreground">
-              {product.title}
-            </span>
-            <span className="font-medium">{formatCurrency(product.revenue)}</span>
-          </div>
-          <div className="h-4 bg-muted rounded overflow-hidden">
-            <div
-              className="h-full rounded"
-              style={{
-                width: `${(product.revenue / maxRevenue) * 100}%`,
-                backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
-              }}
-            />
-          </div>
+        <div key={product.id} className="flex items-center gap-2">
+          <div 
+            className="h-5 rounded-sm flex-shrink-0"
+            style={{
+              width: `${Math.max((product.revenue / maxRevenue) * 60, 10)}%`,
+              backgroundColor: CHART_COLORS[index % CHART_COLORS.length],
+            }}
+          />
+          <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
+            {product.title}
+          </span>
+          <span className="text-xs font-medium flex-shrink-0">{formatCurrency(product.revenue)}</span>
         </div>
       ))}
     </div>
@@ -661,15 +653,18 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={totalSalesTimeseries}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="date"
                     tickFormatter={(val) => format(new Date(val), "MMM d")}
-                    className="text-xs"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis
                     tickFormatter={(val) => `$${val >= 1000 ? `${(val / 1000).toFixed(0)}k` : val}`}
-                    className="text-xs"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <Tooltip
                     content={({ active, payload, label }) => {
@@ -795,13 +790,15 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                   <XAxis
                     dataKey="date"
                     tickFormatter={(val) => format(new Date(val), "MMM d")}
-                    className="text-xs"
-                    tick={{ fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                   />
                   <YAxis
                     tickFormatter={(val) => `$${val}`}
-                    className="text-xs"
-                    tick={{ fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
                     width={40}
                   />
                   <Tooltip
