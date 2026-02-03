@@ -370,8 +370,8 @@ serve(async (req) => {
     
     console.log("Calculated engagement rate:", engagementRate, "from", rows.length, "posts");
 
-    // Save account-level metrics - use savedCount (actual content persisted) instead of rows.length
-    if (savedCount > 0 || followers !== null) {
+    // Save account-level metrics - use actual posts count from Metricool
+    if (rows.length > 0 || followers !== null) {
       await supabase
         .from("social_account_metrics")
         .upsert({
@@ -382,7 +382,7 @@ serve(async (req) => {
           followers: followers,
           new_followers: newFollowers,
           engagement_rate: engagementRate,
-          total_content: savedCount,
+          total_content: rows.length,
           collected_at: new Date().toISOString(),
         }, { onConflict: "client_id,platform,period_start,period_end" });
     }
