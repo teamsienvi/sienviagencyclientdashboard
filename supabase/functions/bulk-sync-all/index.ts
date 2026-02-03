@@ -268,6 +268,36 @@ serve(async (req) => {
           const csv = await fetchMetricoolCSV(`/api/v2/analytics/posts/${platform}`, params);
           const lines = csv.split('\n').filter(l => l.trim());
           totalContent = Math.max(0, lines.length - 1); // Subtract header
+
+          // IMPORTANT: For Instagram/Facebook, CSV endpoints can undercount reels.
+          // Prefer Metricool timelines postsCount (matches dashboard), but keep CSV as fallback.
+          if (platform === "instagram" || platform === "facebook") {
+            try {
+              const pcData = await fetchMetricool("/api/v2/analytics/timelines", {
+                ...params,
+                metric: "postsCount",
+                subject: "account",
+              });
+
+              let points: any[] = [];
+              if (Array.isArray(pcData) && pcData[0]?.values) {
+                points = pcData[0].values;
+              } else if (Array.isArray(pcData)) {
+                points = pcData;
+              } else if (pcData?.data && Array.isArray(pcData.data)) {
+                const series = pcData.data.find((s: any) => (s.metric || "").toLowerCase() === "postscount");
+                if (series?.values) points = series.values;
+              }
+
+              const timelineCount = points.reduce((sum: number, p: any) => sum + (p.value || 0), 0);
+              if (timelineCount > 0) {
+                totalContent = Math.max(totalContent ?? 0, timelineCount);
+                console.log(`  ${platform} postsCount from timelines: ${timelineCount} (final totalContent=${totalContent})`);
+              }
+            } catch (e: any) {
+              console.error(`  Error fetching postsCount timeline for ${clientName} ${platform}:`, e.message);
+            }
+          }
           
           // For TikTok, calculate engagement from CSV data
           if (platform === "tiktok" && lines.length > 1) {

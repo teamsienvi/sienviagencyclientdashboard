@@ -492,8 +492,56 @@ serve(async (req) => {
     
     console.log("Calculated engagement rate:", engagementRate, "from", rows.length, "posts");
 
-    // Save account-level metrics - use actual posts count from Metricool for the period
-    const totalContentInPeriod = rows.filter(post => {
+    // Save account-level metrics
+    // IMPORTANT: Metricool's timelines postsCount matches the dashboard total and includes reels.
+    let timelinePostsCount: number | null = null;
+    try {
+      const postsCountUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/timelines`);
+      postsCountUrl.searchParams.set("from", startDate);
+      postsCountUrl.searchParams.set("to", endDate);
+      postsCountUrl.searchParams.set("metric", "postsCount");
+      postsCountUrl.searchParams.set("network", "instagram");
+      postsCountUrl.searchParams.set("subject", "account");
+      postsCountUrl.searchParams.set("timezone", "UTC");
+      postsCountUrl.searchParams.set("userId", userId);
+      if (blogId) {
+        postsCountUrl.searchParams.set("blogId", blogId);
+      }
+
+      console.log("Fetching Instagram timelines (postsCount):", postsCountUrl.toString());
+      const postsCountRes = await fetch(postsCountUrl.toString(), {
+        method: "GET",
+        headers: {
+          "x-mc-auth": METRICOOL_AUTH,
+          "accept": "application/json",
+        },
+      });
+
+      if (postsCountRes.ok) {
+        const data = await postsCountRes.json();
+        let points: any[] = [];
+
+        if (Array.isArray(data) && data[0]?.values) {
+          points = data[0].values;
+        } else if (Array.isArray(data)) {
+          points = data;
+        } else if (data?.data && Array.isArray(data.data)) {
+          // Sometimes returned as { data: [{ metric, values: [...] }] }
+          const series = data.data.find((s: any) => (s.metric || "").toLowerCase() === "postscount");
+          if (series?.values) points = series.values;
+        }
+
+        if (points.length > 0) {
+          timelinePostsCount = points.reduce((sum: number, p: any) => sum + (p.value || 0), 0);
+        }
+      } else {
+        console.log("postsCount timelines response not ok:", postsCountRes.status);
+      }
+    } catch (e) {
+      console.error("Error fetching postsCount timeline:", e);
+    }
+
+    const rowsCountInPeriod = rows.filter(post => {
       if (!post.date) return false;
       const postDate = new Date(post.date);
       const periodStartDate = new Date(startDate);
@@ -501,6 +549,10 @@ serve(async (req) => {
       periodEndDate.setHours(23, 59, 59, 999);
       return postDate >= periodStartDate && postDate <= periodEndDate;
     }).length;
+
+    const totalContentInPeriod = (timelinePostsCount && timelinePostsCount > 0)
+      ? timelinePostsCount
+      : rowsCountInPeriod;
 
     if (totalContentInPeriod > 0 || followers !== null) {
       await supabase
