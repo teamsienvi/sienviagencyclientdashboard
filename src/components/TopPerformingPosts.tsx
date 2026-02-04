@@ -3,17 +3,99 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ExternalLink, TrendingUp } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ExternalLink, TrendingUp, Info } from "lucide-react";
 import { useTopPerformingPosts } from "@/hooks/useTopPerformingPosts";
 import { 
   getEngagementTierColor, 
   getReachTierColor, 
   getPerformanceTierColor,
-  formatPlatformName 
+  formatPlatformName,
+  REACH_TIER_DEFINITIONS,
+  ENGAGEMENT_TIER_DEFINITIONS,
+  PERFORMANCE_TIER_DEFINITIONS
 } from "@/utils/topPerformingInsights";
 import { format } from "date-fns";
 import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 
+// Tooltip content for each metric
+const MetricTooltip = ({ children, content }: { children: React.ReactNode; content: React.ReactNode }) => (
+  <Tooltip delayDuration={200}>
+    <TooltipTrigger asChild>
+      <span className="inline-flex items-center gap-1 cursor-help">
+        {children}
+        <Info className="h-3 w-3 text-muted-foreground/60" />
+      </span>
+    </TooltipTrigger>
+    <TooltipContent side="top" className="max-w-xs text-xs">
+      {content}
+    </TooltipContent>
+  </Tooltip>
+);
+
+const ReachTierTooltip = () => (
+  <div className="space-y-1">
+    <p className="font-semibold mb-1">Reach Tier (40% weight)</p>
+    <p className="text-muted-foreground mb-2">Based on total views/impressions</p>
+    {REACH_TIER_DEFINITIONS.map((t) => (
+      <div key={t.tier} className="flex justify-between gap-4">
+        <span>{t.tier.replace("Tier ", "T")}</span>
+        <span className="text-muted-foreground">{t.range}</span>
+      </div>
+    ))}
+  </div>
+);
+
+const EngageTierTooltip = () => (
+  <div className="space-y-1">
+    <p className="font-semibold mb-1">Engagement Tier (30% weight)</p>
+    <p className="text-muted-foreground mb-2">Based on engagement rate %</p>
+    {ENGAGEMENT_TIER_DEFINITIONS.map((t) => (
+      <div key={t.tier} className="flex justify-between gap-4">
+        <span>{t.tier.replace("Tier ", "T")}</span>
+        <span className="text-muted-foreground">{t.range}</span>
+      </div>
+    ))}
+  </div>
+);
+
+const ImpactTooltip = () => (
+  <div className="space-y-1">
+    <p className="font-semibold mb-1">Impact Score (20% weight)</p>
+    <p className="text-muted-foreground">Measures brand positioning based on:</p>
+    <ul className="list-disc list-inside text-muted-foreground mt-1">
+      <li>High reach score (60+)</li>
+      <li>High engagement score (60+)</li>
+      <li>Views vs platform median</li>
+      <li>Combined excellence (80+)</li>
+    </ul>
+    <p className="mt-1">Scale: 1/5 to 5/5</p>
+  </div>
+);
+
+const ScoreTooltip = () => (
+  <div className="space-y-1">
+    <p className="font-semibold mb-1">Performance Score</p>
+    <p className="text-muted-foreground">Weighted formula:</p>
+    <p className="font-mono text-xs mt-1">
+      (Reach×0.4) + (Engage×0.3) + (Impact×0.2) + (Conv×0.1)
+    </p>
+    <p className="text-muted-foreground mt-1">Range: 0-100</p>
+  </div>
+);
+
+const TierTooltip = () => (
+  <div className="space-y-1">
+    <p className="font-semibold mb-1">Performance Tier</p>
+    <p className="text-muted-foreground mb-2">Based on total score</p>
+    {PERFORMANCE_TIER_DEFINITIONS.map((t) => (
+      <div key={t.tier} className="flex justify-between gap-4">
+        <span>{t.tier}</span>
+        <span className="text-muted-foreground">{t.range}</span>
+      </div>
+    ))}
+  </div>
+);
 interface TopPerformingPostsProps {
   clientId: string;
 }
@@ -135,22 +217,33 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="pb-2 pr-4 font-medium text-muted-foreground">Post Link</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground">Date</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Views</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Engage %</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground">Platform</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Followers</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-center">Reach Tier</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-center">Engage Tier</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-center">Impact</th>
-                <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Score</th>
-                <th className="pb-2 pl-3 font-medium text-muted-foreground text-center">Tier</th>
-              </tr>
-            </thead>
+          <TooltipProvider>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="pb-2 pr-4 font-medium text-muted-foreground">Post Link</th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground">Date</th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Views</th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Engage %</th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground">Platform</th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-right">Followers</th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-center">
+                    <MetricTooltip content={<ReachTierTooltip />}>Reach Tier</MetricTooltip>
+                  </th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-center">
+                    <MetricTooltip content={<EngageTierTooltip />}>Engage Tier</MetricTooltip>
+                  </th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-center">
+                    <MetricTooltip content={<ImpactTooltip />}>Impact</MetricTooltip>
+                  </th>
+                  <th className="pb-2 px-3 font-medium text-muted-foreground text-right">
+                    <MetricTooltip content={<ScoreTooltip />}>Score</MetricTooltip>
+                  </th>
+                  <th className="pb-2 pl-3 font-medium text-muted-foreground text-center">
+                    <MetricTooltip content={<TierTooltip />}>Tier</MetricTooltip>
+                  </th>
+                </tr>
+              </thead>
             <tbody>
               {posts.map((post) => (
                 <tr
@@ -239,6 +332,7 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
               ))}
             </tbody>
           </table>
+          </TooltipProvider>
         </div>
       </CardContent>
     </Card>
