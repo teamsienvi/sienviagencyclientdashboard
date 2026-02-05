@@ -88,6 +88,7 @@ interface DailyData {
 interface CampaignRow {
   id: string;
   name: string;
+  breakdownValue: string | null;
   spend: number;
   impressions: number;
   reach: number;
@@ -100,7 +101,7 @@ interface CampaignRow {
   roas: number;
 }
 
-type SortField = 'name' | 'spend' | 'impressions' | 'reach' | 'linkClicks' | 'ctr' | 'cpc' | 'cpm' | 'purchases' | 'revenue' | 'roas';
+type SortField = 'name' | 'breakdownValue' | 'spend' | 'impressions' | 'reach' | 'linkClicks' | 'ctr' | 'cpc' | 'cpm' | 'purchases' | 'revenue' | 'roas';
 
 const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProps) => {
   const { isAdmin, isLoading: authLoading } = useAuth();
@@ -129,14 +130,25 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
     
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      
+      // Build query with breakdown filter
+      let query = supabase
         .from('meta_ads_daily')
         .select('*')
         .eq('client_id', clientId)
         .eq('level', level)
         .gte('date_start', format(dateRange.from, 'yyyy-MM-dd'))
-        .lte('date_start', format(dateRange.to, 'yyyy-MM-dd'))
-        .order('date_start', { ascending: false });
+        .lte('date_start', format(dateRange.to, 'yyyy-MM-dd'));
+      
+      // Filter by breakdown type
+      if (breakdown !== 'none') {
+        query = query.not('breakdowns', 'is', null);
+        query = query.filter('breakdowns->>type', 'eq', breakdown);
+      } else {
+        query = query.is('breakdowns', null);
+      }
+      
+      const { data, error } = await query.order('date_start', { ascending: false });
       
       if (error) throw error;
       
@@ -200,7 +212,7 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
   
   useEffect(() => {
     fetchCachedData();
-  }, [clientId, dateRange, level]);
+  }, [clientId, dateRange, level, breakdown]);
   
   // Calculate aggregated metrics
   const aggregatedData = useMemo((): AggregatedData => {
@@ -266,28 +278,45 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
     });
   }, [rawData, dateRange]);
   
-  // Build campaign/adset/ad table data
+  // Build campaign/adset/ad table data with breakdown support
   const tableData = useMemo((): CampaignRow[] => {
     const grouped = new Map<string, CampaignRow>();
     
+    // Helper to get breakdown value from row
+    const getBreakdownValue = (row: MetaAdsRow): string | null => {
+      if (!row.breakdowns || breakdown === 'none') return null;
+      const bd = row.breakdowns as Record<string, string | null>;
+      if (breakdown === 'publisher_platform') return bd.publisher_platform || null;
+      if (breakdown === 'platform_position') return bd.platform_position || null;
+      if (breakdown === 'device_platform') return bd.device_platform || null;
+      return null;
+    };
+    
     rawData.forEach(row => {
-      let id: string;
+      let baseId: string;
       let name: string;
       
       if (level === 'campaign') {
-        id = row.campaign_id || 'unknown';
+        baseId = row.campaign_id || 'unknown';
         name = row.campaign_name || 'Unknown Campaign';
       } else if (level === 'adset') {
-        id = row.adset_id || 'unknown';
+        baseId = row.adset_id || 'unknown';
         name = row.adset_name || 'Unknown Ad Set';
       } else {
-        id = row.ad_id || 'unknown';
+        baseId = row.ad_id || 'unknown';
         name = row.ad_name || 'Unknown Ad';
       }
+      
+      const breakdownValue = getBreakdownValue(row);
+      // When breakdown is active, group by baseId + breakdownValue
+      const id = breakdown !== 'none' && breakdownValue 
+        ? `${baseId}::${breakdownValue}` 
+        : baseId;
       
       const existing = grouped.get(id) || {
         id,
         name,
+        breakdownValue,
         spend: 0,
         impressions: 0,
         reach: 0,
@@ -302,6 +331,7 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
       
       grouped.set(id, {
         ...existing,
+        breakdownValue: breakdownValue || existing.breakdownValue,
         spend: existing.spend + (row.spend || 0),
         impressions: existing.impressions + (row.impressions || 0),
         reach: existing.reach + (row.reach || 0),
@@ -322,19 +352,25 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
     
     // Filter by search
     const filtered = searchQuery
-      ? rows.filter(row => row.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      ? rows.filter(row => 
+          row.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (row.breakdownValue && row.breakdownValue.toLowerCase().includes(searchQuery.toLowerCase()))
+        )
       : rows;
     
     // Sort
     return filtered.sort((a, b) => {
       const aVal = a[sortField];
       const bVal = b[sortField];
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return sortDesc ? 1 : -1;
+      if (bVal === null) return sortDesc ? -1 : 1;
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDesc ? bVal.localeCompare(aVal) : aVal.localeCompare(bVal);
       }
       return sortDesc ? (bVal as number) - (aVal as number) : (aVal as number) - (bVal as number);
     });
-  }, [rawData, level, searchQuery, sortField, sortDesc]);
+  }, [rawData, level, breakdown, searchQuery, sortField, sortDesc]);
   
   // Formatters
   const formatCurrency = (value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -581,6 +617,14 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
                       <TableHead className="min-w-[200px] cursor-pointer" onClick={() => handleSort('name')}>
                         Name <ArrowUpDown className="inline h-3 w-3 ml-1" />
                       </TableHead>
+                      {breakdown !== 'none' && (
+                        <TableHead className="min-w-[120px] cursor-pointer" onClick={() => handleSort('breakdownValue')}>
+                          {breakdown === 'publisher_platform' ? 'Platform' : 
+                           breakdown === 'platform_position' ? 'Placement' : 
+                           breakdown === 'device_platform' ? 'Device' : 'Breakdown'}
+                          <ArrowUpDown className="inline h-3 w-3 ml-1" />
+                        </TableHead>
+                      )}
                       <TableHead className="text-right cursor-pointer" onClick={() => handleSort('spend')}>
                         Spend <ArrowUpDown className="inline h-3 w-3 ml-1" />
                       </TableHead>
@@ -616,6 +660,13 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
                         <TableCell className="font-medium truncate max-w-[200px]" title={row.name}>
                           {row.name}
                         </TableCell>
+                        {breakdown !== 'none' && (
+                          <TableCell className="truncate max-w-[120px]" title={row.breakdownValue || '-'}>
+                            <Badge variant="outline" className="font-normal">
+                              {row.breakdownValue || '-'}
+                            </Badge>
+                          </TableCell>
+                        )}
                         <TableCell className="text-right">{formatCurrency(row.spend)}</TableCell>
                         <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
                         <TableCell className="text-right">{formatNumber(row.reach)}</TableCell>
@@ -629,8 +680,8 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
                     ))}
                     {tableData.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
-                          No {level}s found
+                        <TableCell colSpan={breakdown !== 'none' ? 11 : 10} className="text-center text-muted-foreground py-8">
+                          No {level}s found{breakdown !== 'none' ? ` with ${breakdown.replace('_', ' ')} breakdown` : ''}
                         </TableCell>
                       </TableRow>
                     )}
