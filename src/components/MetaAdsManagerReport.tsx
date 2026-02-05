@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Search, ArrowUpDown, Settings2, ChevronDown, ChevronUp } from "lucide-react";
+import { RefreshCw, Search, ChevronDown, ChevronRight, ChevronUp, Settings2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -23,11 +22,11 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Bar,
-  ComposedChart,
-  Line,
   AreaChart,
   Area,
+  ComposedChart,
+  Bar,
+  Line,
 } from "recharts";
 import {
   Tooltip as UITooltip,
@@ -35,11 +34,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Checkbox } from "@/components/ui/checkbox";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface MetaAdsManagerReportProps {
   clientId: string;
@@ -73,19 +72,37 @@ interface MetaAdsRow {
     publisher_platform?: string;
     platform_position?: string;
     device_platform?: string;
-    impression_device?: string;
   } | null;
 }
 
-interface TableRow {
+interface TableRowData {
   id: string;
+  entityId: string;
+  name: string;
   campaignId: string | null;
-  campaignName: string;
+  campaignName: string | null;
   adsetId: string | null;
   adsetName: string | null;
   adId: string | null;
   adName: string | null;
-  breakdownValue: string | null;
+  reach: number;
+  impressions: number;
+  frequency: number;
+  spend: number;
+  clicks: number;
+  linkClicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  purchases: number;
+  revenue: number;
+  roas: number;
+  children?: BreakdownChild[];
+}
+
+interface BreakdownChild {
+  breakdownKey: string;
+  breakdownValue: string;
   reach: number;
   impressions: number;
   frequency: number;
@@ -109,17 +126,24 @@ interface DailyData {
   impressions: number;
 }
 
-type SortField = keyof Omit<TableRow, 'id' | 'campaignId' | 'adsetId' | 'adId'>;
+type SortField = 'name' | 'reach' | 'impressions' | 'frequency' | 'spend' | 'clicks' | 'linkClicks' | 'ctr' | 'cpc' | 'cpm' | 'purchases' | 'revenue' | 'roas';
+
+const COLUMN_PRESETS = {
+  performance: ['clicks', 'linkClicks', 'ctr', 'cpc', 'cpm'],
+  delivery: ['reach', 'impressions', 'frequency'],
+  conversions: ['purchases', 'revenue', 'roas'],
+  all: ['clicks', 'linkClicks', 'ctr', 'cpc', 'cpm', 'purchases', 'revenue', 'roas'],
+} as const;
 
 const OPTIONAL_COLUMNS = [
-  { key: 'clicks', label: 'Clicks' },
-  { key: 'linkClicks', label: 'Link Clicks' },
-  { key: 'ctr', label: 'CTR' },
-  { key: 'cpc', label: 'CPC' },
-  { key: 'cpm', label: 'CPM' },
+  { key: 'clicks', label: 'Clicks (All)' },
+  { key: 'linkClicks', label: 'Link clicks' },
+  { key: 'ctr', label: 'CTR (link click-through rate)' },
+  { key: 'cpc', label: 'CPC (cost per link click)' },
+  { key: 'cpm', label: 'CPM (cost per 1,000 impressions)' },
   { key: 'purchases', label: 'Purchases' },
-  { key: 'revenue', label: 'Revenue' },
-  { key: 'roas', label: 'ROAS' },
+  { key: 'revenue', label: 'Purchase conversion value' },
+  { key: 'roas', label: 'Purchase ROAS' },
 ] as const;
 
 const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProps) => {
@@ -128,14 +152,20 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   
+  // Hierarchy navigation
+  const [level, setLevel] = useState<string>("campaign");
+  const [breadcrumbs, setBreadcrumbs] = useState<Array<{ level: string; id: string; name: string }>>([]);
+  const [filterCampaignId, setFilterCampaignId] = useState<string | null>(null);
+  const [filterAdsetId, setFilterAdsetId] = useState<string | null>(null);
+  
   // Filters
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 7),
     to: new Date(),
   });
-  const [level, setLevel] = useState<string>("campaign");
   const [breakdown, setBreakdown] = useState<string>("none");
   const [ungroupBreakdowns, setUngroupBreakdowns] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   
   // Data
   const [rawData, setRawData] = useState<MetaAdsRow[]>([]);
@@ -145,12 +175,11 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
   
   // Column visibility
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
-    new Set(['clicks', 'linkClicks', 'ctr', 'purchases', 'revenue', 'roas'])
+    new Set(['purchases', 'revenue', 'roas'])
   );
-  const [columnsOpen, setColumnsOpen] = useState(false);
 
   // Fetch cached data from database
-  const fetchCachedData = async () => {
+  const fetchCachedData = useCallback(async () => {
     if (!dateRange?.from || !dateRange?.to) return;
     
     try {
@@ -163,6 +192,14 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
         .eq('level', level)
         .gte('date_start', format(dateRange.from, 'yyyy-MM-dd'))
         .lte('date_start', format(dateRange.to, 'yyyy-MM-dd'));
+      
+      // Apply hierarchy filters
+      if (filterCampaignId && (level === 'adset' || level === 'ad')) {
+        query = query.eq('campaign_id', filterCampaignId);
+      }
+      if (filterAdsetId && level === 'ad') {
+        query = query.eq('adset_id', filterAdsetId);
+      }
       
       // Filter by breakdown type
       if (breakdown !== 'none') {
@@ -188,7 +225,7 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
     } finally {
       setLoading(false);
     }
-  };
+  }, [clientId, dateRange, level, breakdown, filterCampaignId, filterAdsetId]);
   
   // Sync data from Meta API
   const handleSync = async () => {
@@ -205,22 +242,27 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
     try {
       setSyncing(true);
 
-      const { data, error } = await supabase.functions.invoke("meta-ads-sync", {
-        body: {
-          since: format(dateRange.from, "yyyy-MM-dd"),
-          until: format(dateRange.to, "yyyy-MM-dd"),
-          level,
-          breakdowns: breakdown !== "none" ? breakdown : undefined,
-          clientId,
-        },
-      });
+      // Sync all levels
+      for (const syncLevel of ['campaign', 'adset', 'ad']) {
+        const { data, error } = await supabase.functions.invoke("meta-ads-sync", {
+          body: {
+            since: format(dateRange.from, "yyyy-MM-dd"),
+            until: format(dateRange.to, "yyyy-MM-dd"),
+            level: syncLevel,
+            breakdowns: breakdown !== "none" ? breakdown : undefined,
+            clientId,
+          },
+        });
 
-      if (error) throw error;
-      if (!data?.success) {
-        throw new Error(data?.error || "Sync failed");
+        if (error) throw error;
+        if (!data?.success) {
+          throw new Error(data?.error || "Sync failed");
+        }
+        
+        console.log(`Synced ${syncLevel}: ${data.inserted} rows`);
       }
 
-      toast.success(`Synced ${data.inserted ?? 0} rows`);
+      toast.success("Sync completed");
       await fetchCachedData();
     } catch (error) {
       console.error("Error syncing data:", error);
@@ -232,99 +274,184 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
   
   useEffect(() => {
     fetchCachedData();
-  }, [clientId, dateRange, level, breakdown]);
+  }, [fetchCachedData]);
 
-  // Build table data with grouping
-  const tableData = useMemo((): TableRow[] => {
-    const grouped = new Map<string, TableRow>();
+  // Build table data with grouping for breakdowns
+  const tableData = useMemo((): TableRowData[] => {
+    const grouped = new Map<string, TableRowData>();
     
-    const getBreakdownValue = (row: MetaAdsRow): string | null => {
+    const getBreakdownValue = (row: MetaAdsRow): { key: string; value: string } | null => {
       if (!row.breakdowns || breakdown === 'none') return null;
       const bd = row.breakdowns;
-      if (breakdown === 'publisher_platform') return bd.publisher_platform || null;
-      if (breakdown === 'platform_position') return bd.platform_position || null;
-      if (breakdown === 'device_platform') return bd.device_platform || null;
-      if (breakdown === 'impression_device') return bd.impression_device || null;
+      if (breakdown === 'publisher_platform' && bd.publisher_platform) {
+        return { key: 'Platform', value: bd.publisher_platform };
+      }
+      if (breakdown === 'platform_position' && bd.platform_position) {
+        return { key: 'Placement', value: bd.platform_position };
+      }
+      if (breakdown === 'device_platform' && bd.device_platform) {
+        return { key: 'Device', value: bd.device_platform };
+      }
       return null;
     };
     
     rawData.forEach(row => {
-      let baseId: string;
-      let campaignName = row.campaign_name || 'Unknown Campaign';
-      let adsetName = level !== 'campaign' ? (row.adset_name || 'Unknown Ad Set') : null;
-      let adName = level === 'ad' ? (row.ad_name || 'Unknown Ad') : null;
+      let entityId: string;
+      let name: string;
       
       if (level === 'campaign') {
-        baseId = row.campaign_id || 'unknown';
+        entityId = row.campaign_id || 'unknown';
+        name = row.campaign_name || 'Unknown Campaign';
       } else if (level === 'adset') {
-        baseId = row.adset_id || 'unknown';
+        entityId = row.adset_id || 'unknown';
+        name = row.adset_name || 'Unknown Ad Set';
       } else {
-        baseId = row.ad_id || 'unknown';
+        entityId = row.ad_id || 'unknown';
+        name = row.ad_name || 'Unknown Ad';
       }
       
-      const breakdownValue = getBreakdownValue(row);
+      const breakdownInfo = getBreakdownValue(row);
       
-      // If ungroupBreakdowns is false, aggregate all breakdown values together
-      // If true, keep them separate
-      const id = (breakdown !== 'none' && ungroupBreakdowns && breakdownValue)
-        ? `${baseId}::${breakdownValue}` 
-        : baseId;
-      
-      const existing = grouped.get(id) || {
-        id,
-        campaignId: row.campaign_id,
-        campaignName,
-        adsetId: row.adset_id,
-        adsetName,
-        adId: row.ad_id,
-        adName,
-        breakdownValue: ungroupBreakdowns ? breakdownValue : null,
-        reach: 0,
-        impressions: 0,
-        frequency: 0,
-        spend: 0,
-        clicks: 0,
-        linkClicks: 0,
-        ctr: 0,
-        cpc: 0,
-        cpm: 0,
-        purchases: 0,
-        revenue: 0,
-        roas: 0,
-      };
-      
-      grouped.set(id, {
-        ...existing,
-        breakdownValue: ungroupBreakdowns ? (breakdownValue || existing.breakdownValue) : null,
-        reach: existing.reach + (row.reach || 0),
-        impressions: existing.impressions + (row.impressions || 0),
-        spend: existing.spend + (row.spend || 0),
-        clicks: existing.clicks + (row.link_clicks || 0),
-        linkClicks: existing.linkClicks + (row.link_clicks || 0),
-        purchases: existing.purchases + (row.purchases || 0),
-        revenue: existing.revenue + (row.revenue || 0),
-      });
+      // If ungroupBreakdowns, treat each breakdown value as a separate row
+      if (breakdown !== 'none' && ungroupBreakdowns && breakdownInfo) {
+        const id = `${entityId}::${breakdownInfo.value}`;
+        const existing = grouped.get(id) || {
+          id,
+          entityId,
+          name: `${name} (${breakdownInfo.value})`,
+          campaignId: row.campaign_id,
+          campaignName: row.campaign_name,
+          adsetId: row.adset_id,
+          adsetName: row.adset_name,
+          adId: row.ad_id,
+          adName: row.ad_name,
+          reach: 0,
+          impressions: 0,
+          frequency: 0,
+          spend: 0,
+          clicks: 0,
+          linkClicks: 0,
+          ctr: 0,
+          cpc: 0,
+          cpm: 0,
+          purchases: 0,
+          revenue: 0,
+          roas: 0,
+        };
+        
+        grouped.set(id, {
+          ...existing,
+          reach: existing.reach + (row.reach || 0),
+          impressions: existing.impressions + (row.impressions || 0),
+          spend: existing.spend + (row.spend || 0),
+          clicks: existing.clicks + (row.link_clicks || 0),
+          linkClicks: existing.linkClicks + (row.link_clicks || 0),
+          purchases: existing.purchases + (row.purchases || 0),
+          revenue: existing.revenue + (row.revenue || 0),
+        });
+      } else {
+        // Group by entity, aggregate breakdowns as children
+        const existing = grouped.get(entityId) || {
+          id: entityId,
+          entityId,
+          name,
+          campaignId: row.campaign_id,
+          campaignName: row.campaign_name,
+          adsetId: row.adset_id,
+          adsetName: row.adset_name,
+          adId: row.ad_id,
+          adName: row.ad_name,
+          reach: 0,
+          impressions: 0,
+          frequency: 0,
+          spend: 0,
+          clicks: 0,
+          linkClicks: 0,
+          ctr: 0,
+          cpc: 0,
+          cpm: 0,
+          purchases: 0,
+          revenue: 0,
+          roas: 0,
+          children: breakdown !== 'none' ? [] : undefined,
+        };
+        
+        // Add to parent totals
+        existing.reach += row.reach || 0;
+        existing.impressions += row.impressions || 0;
+        existing.spend += row.spend || 0;
+        existing.clicks += row.link_clicks || 0;
+        existing.linkClicks += row.link_clicks || 0;
+        existing.purchases += row.purchases || 0;
+        existing.revenue += row.revenue || 0;
+        
+        // Add breakdown child if applicable
+        if (breakdown !== 'none' && breakdownInfo && existing.children) {
+          const existingChild = existing.children.find(c => c.breakdownValue === breakdownInfo.value);
+          if (existingChild) {
+            existingChild.reach += row.reach || 0;
+            existingChild.impressions += row.impressions || 0;
+            existingChild.spend += row.spend || 0;
+            existingChild.clicks += row.link_clicks || 0;
+            existingChild.linkClicks += row.link_clicks || 0;
+            existingChild.purchases += row.purchases || 0;
+            existingChild.revenue += row.revenue || 0;
+          } else {
+            existing.children.push({
+              breakdownKey: breakdownInfo.key,
+              breakdownValue: breakdownInfo.value,
+              reach: row.reach || 0,
+              impressions: row.impressions || 0,
+              frequency: 0,
+              spend: row.spend || 0,
+              clicks: row.link_clicks || 0,
+              linkClicks: row.link_clicks || 0,
+              ctr: 0,
+              cpc: 0,
+              cpm: 0,
+              purchases: row.purchases || 0,
+              revenue: row.revenue || 0,
+              roas: 0,
+            });
+          }
+        }
+        
+        grouped.set(entityId, existing);
+      }
     });
     
     // Calculate derived metrics
-    const rows = Array.from(grouped.values()).map(row => ({
-      ...row,
-      frequency: row.reach > 0 ? row.impressions / row.reach : 0,
-      ctr: row.impressions > 0 ? (row.linkClicks / row.impressions) * 100 : 0,
-      cpc: row.linkClicks > 0 ? row.spend / row.linkClicks : 0,
-      cpm: row.impressions > 0 ? (row.spend / row.impressions) * 1000 : 0,
-      roas: row.spend > 0 ? row.revenue / row.spend : 0,
-    }));
+    const rows = Array.from(grouped.values()).map(row => {
+      const result = {
+        ...row,
+        frequency: row.reach > 0 ? row.impressions / row.reach : 0,
+        ctr: row.impressions > 0 ? (row.linkClicks / row.impressions) * 100 : 0,
+        cpc: row.linkClicks > 0 ? row.spend / row.linkClicks : 0,
+        cpm: row.impressions > 0 ? (row.spend / row.impressions) * 1000 : 0,
+        roas: row.spend > 0 ? row.revenue / row.spend : 0,
+      };
+      
+      // Calculate children metrics
+      if (result.children) {
+        result.children = result.children.map(child => ({
+          ...child,
+          frequency: child.reach > 0 ? child.impressions / child.reach : 0,
+          ctr: child.impressions > 0 ? (child.linkClicks / child.impressions) * 100 : 0,
+          cpc: child.linkClicks > 0 ? child.spend / child.linkClicks : 0,
+          cpm: child.impressions > 0 ? (child.spend / child.impressions) * 1000 : 0,
+          roas: child.spend > 0 ? child.revenue / child.spend : 0,
+        }));
+      }
+      
+      return result;
+    });
     
     // Filter by search
     const filtered = searchQuery
-      ? rows.filter(row => {
-          const searchLower = searchQuery.toLowerCase();
-          return row.campaignName.toLowerCase().includes(searchLower) ||
-            (row.adsetName && row.adsetName.toLowerCase().includes(searchLower)) ||
-            (row.adName && row.adName.toLowerCase().includes(searchLower)) ||
-            (row.breakdownValue && row.breakdownValue.toLowerCase().includes(searchLower));
-        })
+      ? rows.filter(row => 
+          row.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          row.entityId.includes(searchQuery)
+        )
       : rows;
     
     // Sort
@@ -420,15 +547,64 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
     setVisibleColumns(next);
   };
 
+  const toggleRowExpand = (id: string) => {
+    const next = new Set(expandedRows);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setExpandedRows(next);
+  };
+
+  // Drilldown handler
+  const handleDrilldown = (row: TableRowData) => {
+    if (level === 'campaign') {
+      setBreadcrumbs([{ level: 'campaign', id: row.entityId, name: row.name }]);
+      setFilterCampaignId(row.entityId);
+      setLevel('adset');
+    } else if (level === 'adset') {
+      setBreadcrumbs(prev => [...prev, { level: 'adset', id: row.entityId, name: row.name }]);
+      setFilterAdsetId(row.entityId);
+      setLevel('ad');
+    }
+  };
+
+  // Navigate breadcrumb
+  const navigateToBreadcrumb = (index: number) => {
+    if (index === -1) {
+      // Go to root
+      setBreadcrumbs([]);
+      setFilterCampaignId(null);
+      setFilterAdsetId(null);
+      setLevel('campaign');
+    } else {
+      const crumb = breadcrumbs[index];
+      if (crumb.level === 'campaign') {
+        setBreadcrumbs([crumb]);
+        setFilterCampaignId(crumb.id);
+        setFilterAdsetId(null);
+        setLevel('adset');
+      }
+    }
+  };
+
+  const handleLevelChange = (newLevel: string) => {
+    setLevel(newLevel);
+    setBreadcrumbs([]);
+    setFilterCampaignId(null);
+    setFilterAdsetId(null);
+  };
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-background border rounded-lg p-3 shadow-lg">
+        <div className="bg-background border rounded-lg p-3 shadow-lg text-sm">
           <p className="font-medium mb-2">{label}</p>
           {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center gap-2 text-sm">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }} />
-              <span className="capitalize">{entry.name}:</span>
+            <div key={index} className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span className="text-muted-foreground">{entry.name}:</span>
               <span className="font-medium">
                 {entry.name === 'spend' || entry.name === 'revenue' ? formatCurrency(entry.value) : formatNumber(entry.value)}
               </span>
@@ -442,405 +618,412 @@ const MetaAdsManagerReport = ({ clientId, clientName }: MetaAdsManagerReportProp
   
   if (loading && rawData.length === 0) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-2 gap-4">
-          <Skeleton className="h-64" />
-          <Skeleton className="h-64" />
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-9 w-56" />
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-9 w-32" />
         </div>
-        <Skeleton className="h-96" />
+        <div className="grid grid-cols-2 gap-4">
+          <Skeleton className="h-48" />
+          <Skeleton className="h-48" />
+        </div>
+        <div className="space-y-1">
+          {[...Array(8)].map((_, i) => (
+            <Skeleton key={i} className="h-10" />
+          ))}
+        </div>
       </div>
     );
   }
   
   const hasData = rawData.length > 0;
-  const showBreakdownColumn = breakdown !== 'none' && ungroupBreakdowns;
+  const levelLabel = level === 'campaign' ? 'campaigns' : level === 'adset' ? 'ad sets' : 'ads';
+  const hasBreakdownChildren = breakdown !== 'none' && !ungroupBreakdowns;
+  
+  // Sort indicator
+  const SortCaret = ({ field }: { field: SortField }) => (
+    <span className={cn("ml-1 inline-flex", sortField === field ? "text-foreground" : "text-muted-foreground/50")}>
+      {sortField === field && sortDesc ? <ChevronDown className="h-3 w-3" /> : <ChevronUp className="h-3 w-3" />}
+    </span>
+  );
   
   return (
-    <div className="space-y-6">
-      {/* Header & Controls */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Ads Manager Report</h2>
-            <p className="text-sm text-muted-foreground">{clientName} • Meta Ads</p>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Date Range Picker */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" className="w-[240px] justify-start text-left font-normal">
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      <>
-                        {format(dateRange.from, "MMM d")} - {format(dateRange.to, "MMM d, yyyy")}
-                      </>
-                    ) : (
-                      format(dateRange.from, "MMM d, yyyy")
-                    )
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={dateRange?.from}
-                  selected={dateRange}
-                  onSelect={setDateRange}
-                  numberOfMonths={2}
-                />
-              </PopoverContent>
-            </Popover>
-            
-            {/* Level Selector */}
-            <Select value={level} onValueChange={setLevel}>
-              <SelectTrigger className="w-[130px]">
-                <SelectValue placeholder="Level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="campaign">Campaign</SelectItem>
-                <SelectItem value="adset">Ad Set</SelectItem>
-                <SelectItem value="ad">Ad</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            {/* Breakdown Selector */}
-            <Select value={breakdown} onValueChange={setBreakdown}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Breakdown" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Breakdown</SelectItem>
-                <SelectItem value="publisher_platform">Platform</SelectItem>
-                <SelectItem value="platform_position">Placement</SelectItem>
-                <SelectItem value="device_platform">Device</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            {/* Sync Button */}
-            {isAdmin ? (
-              <Button onClick={handleSync} disabled={syncing} variant="outline">
-                <RefreshCw className={cn("h-4 w-4 mr-2", syncing && "animate-spin")} />
-                {syncing ? "Syncing..." : "Sync"}
-              </Button>
-            ) : (
-              <UITooltip>
-                <TooltipTrigger asChild>
-                  <span>
-                    <Button variant="outline" disabled>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Sync
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">Admin only</p>
-                </TooltipContent>
-              </UITooltip>
-            )}
-          </div>
+    <div className="space-y-4">
+      {/* Top Bar */}
+      <div className="flex flex-wrap items-center gap-2 bg-background sticky top-0 z-20 py-2">
+        {/* Date Range */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 font-normal">
+              <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+              {dateRange?.from ? (
+                dateRange.to ? (
+                  <>{format(dateRange.from, "MMM d")} – {format(dateRange.to, "MMM d, yyyy")}</>
+                ) : (
+                  format(dateRange.from, "MMM d, yyyy")
+                )
+              ) : (
+                "Select dates"
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={2}
+            />
+          </PopoverContent>
+        </Popover>
+        
+        {/* Level Tabs */}
+        <div className="flex bg-muted rounded-md p-0.5">
+          {['campaign', 'adset', 'ad'].map((l) => (
+            <button
+              key={l}
+              onClick={() => handleLevelChange(l)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded transition-colors",
+                level === l ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {l === 'campaign' ? 'Campaigns' : l === 'adset' ? 'Ad sets' : 'Ads'}
+            </button>
+          ))}
         </div>
-
-        {/* Secondary controls */}
+        
+        {/* Breakdown */}
+        <Select value={breakdown} onValueChange={setBreakdown}>
+          <SelectTrigger className="h-8 w-[120px] text-xs">
+            <SelectValue placeholder="Breakdown" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No breakdown</SelectItem>
+            <SelectItem value="publisher_platform">Platform</SelectItem>
+            <SelectItem value="platform_position">Placement</SelectItem>
+            <SelectItem value="device_platform">Device</SelectItem>
+          </SelectContent>
+        </Select>
+        
+        {/* Ungroup toggle */}
         {breakdown !== 'none' && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="ungroup-breakdowns"
-                checked={ungroupBreakdowns}
-                onCheckedChange={setUngroupBreakdowns}
-              />
-              <Label htmlFor="ungroup-breakdowns" className="text-sm">
-                Ungroup breakdowns
-              </Label>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <Switch
+              id="ungroup"
+              checked={ungroupBreakdowns}
+              onCheckedChange={setUngroupBreakdowns}
+              className="scale-75"
+            />
+            <Label htmlFor="ungroup" className="text-xs text-muted-foreground cursor-pointer">
+              Ungroup
+            </Label>
           </div>
         )}
+        
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 w-48 pl-8 text-xs"
+          />
+        </div>
+        
+        {/* Columns */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8">
+              <Settings2 className="h-3.5 w-3.5 mr-1" />
+              <span className="text-xs">Columns</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {OPTIONAL_COLUMNS.map(col => (
+              <DropdownMenuCheckboxItem
+                key={col.key}
+                checked={visibleColumns.has(col.key)}
+                onCheckedChange={() => toggleColumn(col.key)}
+              >
+                {col.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        
+        {/* Sync */}
+        {isAdmin && (
+          <Button onClick={handleSync} disabled={syncing} size="sm" variant="outline" className="h-8 ml-auto">
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1", syncing && "animate-spin")} />
+            <span className="text-xs">{syncing ? "Syncing..." : "Sync"}</span>
+          </Button>
+        )}
       </div>
-      
-      {/* No Data State */}
+
+      {/* Breadcrumbs */}
+      {breadcrumbs.length > 0 && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <button onClick={() => navigateToBreadcrumb(-1)} className="hover:text-foreground">
+            All {level === 'adset' || level === 'ad' ? 'Campaigns' : 'Ad sets'}
+          </button>
+          {breadcrumbs.map((crumb, idx) => (
+            <span key={crumb.id} className="flex items-center gap-1">
+              <ChevronRight className="h-3 w-3" />
+              <button 
+                onClick={() => idx < breadcrumbs.length - 1 ? navigateToBreadcrumb(idx) : undefined}
+                className={cn(idx < breadcrumbs.length - 1 && "hover:text-foreground")}
+              >
+                {crumb.name}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Charts */}
+      {hasData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-card rounded-lg border p-4">
+            <p className="text-xs font-medium text-muted-foreground mb-3">Daily Spend</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <AreaChart data={dailyData}>
+                <defs>
+                  <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="spend" stroke="hsl(var(--primary))" fill="url(#spendGrad)" strokeWidth={1.5} name="spend" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card rounded-lg border p-4">
+            <p className="text-xs font-medium text-muted-foreground mb-3">Daily Purchases & Revenue</p>
+            <ResponsiveContainer width="100%" height={160}>
+              <ComposedChart data={dailyData}>
+                <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} />
+                <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} tickFormatter={(v) => `$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar yAxisId="left" dataKey="purchases" fill="hsl(var(--chart-3))" radius={[2, 2, 0, 0]} name="purchases" />
+                <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="hsl(var(--chart-2))" strokeWidth={1.5} dot={false} name="revenue" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
       {!hasData && !loading && (
-        <Card className="border-dashed">
-          <CardHeader className="text-center py-12">
-            <CardTitle className="text-lg text-muted-foreground">No Meta Ads Data</CardTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              Click "Sync" to fetch data from Meta Ads API for the selected date range.
-            </p>
-          </CardHeader>
-        </Card>
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <p className="text-sm text-muted-foreground">No results for the selected date range</p>
+          <p className="text-xs text-muted-foreground mt-1">Click "Sync" to fetch data from Meta Ads API</p>
+        </div>
       )}
       
+      {/* Table */}
       {hasData && (
-        <>
-          {/* Charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Daily Spend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={dailyData}>
-                    <defs>
-                      <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="spend" stroke="hsl(var(--primary))" fill="url(#spendGradient)" name="spend" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Daily Purchases & Revenue</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={200}>
-                  <ComposedChart data={dailyData}>
-                    <XAxis dataKey="displayDate" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v >= 1000 ? `${(v/1000).toFixed(0)}k` : v}`} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Bar yAxisId="left" dataKey="purchases" fill="hsl(var(--chart-3))" radius={[4, 4, 0, 0]} name="purchases" />
-                    <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} name="revenue" />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Data Table */}
-          <Card>
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <CardTitle className="text-base">
-                  {level === 'campaign' ? 'Campaigns' : level === 'adset' ? 'Ad Sets' : 'Ads'}
-                  <span className="text-muted-foreground font-normal ml-2">({tableData.length})</span>
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  <div className="relative w-full sm:w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                  
-                  {/* Column Visibility */}
-                  <Collapsible open={columnsOpen} onOpenChange={setColumnsOpen}>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Settings2 className="h-4 w-4 mr-1" />
-                        Columns
-                        {columnsOpen ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="absolute right-0 mt-2 z-50 bg-background border rounded-lg p-4 shadow-lg min-w-[200px]">
-                      <div className="space-y-2">
-                        {OPTIONAL_COLUMNS.map(col => (
-                          <div key={col.key} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={col.key}
-                              checked={visibleColumns.has(col.key)}
-                              onCheckedChange={() => toggleColumn(col.key)}
-                            />
-                            <label htmlFor={col.key} className="text-sm cursor-pointer">{col.label}</label>
-                          </div>
-                        ))}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="min-w-[180px] cursor-pointer sticky left-0 bg-background z-10" onClick={() => handleSort('campaignName')}>
-                        {level === 'campaign' ? 'Campaign' : level === 'adset' ? 'Ad Set' : 'Ad'}
-                        <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                      </TableHead>
-                      {level !== 'campaign' && (
-                        <TableHead className="min-w-[140px]">Campaign</TableHead>
-                      )}
-                      {showBreakdownColumn && (
-                        <TableHead className="min-w-[100px] cursor-pointer" onClick={() => handleSort('breakdownValue')}>
-                          {breakdown === 'publisher_platform' ? 'Platform' : 
-                           breakdown === 'platform_position' ? 'Placement' : 
-                           breakdown === 'device_platform' ? 'Device' : 'Breakdown'}
-                          <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
-                      )}
-                      <TableHead className="text-right cursor-pointer" onClick={() => handleSort('reach')}>
-                        Reach <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                      </TableHead>
-                      <TableHead className="text-right cursor-pointer" onClick={() => handleSort('impressions')}>
-                        Impressions <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                      </TableHead>
-                      <TableHead className="text-right cursor-pointer" onClick={() => handleSort('frequency')}>
-                        Frequency <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                      </TableHead>
-                      <TableHead className="text-right cursor-pointer" onClick={() => handleSort('spend')}>
-                        Amount Spent <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                      </TableHead>
+        <div className="rounded-lg border bg-background overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table className="text-xs">
+              <TableHeader className="bg-muted/30 sticky top-0">
+                <TableRow className="hover:bg-transparent border-b">
+                  <TableHead 
+                    className="font-medium text-muted-foreground h-9 px-3 min-w-[200px] sticky left-0 bg-muted/30 z-10 cursor-pointer"
+                    onClick={() => handleSort('name')}
+                  >
+                    {level === 'campaign' ? 'Campaign name' : level === 'adset' ? 'Ad set name' : 'Ad name'}
+                    <SortCaret field="name" />
+                  </TableHead>
+                  <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('reach')}>
+                    Reach<SortCaret field="reach" />
+                  </TableHead>
+                  <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('impressions')}>
+                    Impressions<SortCaret field="impressions" />
+                  </TableHead>
+                  <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('frequency')}>
+                    Frequency<SortCaret field="frequency" />
+                  </TableHead>
+                  <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('spend')}>
+                    Amount spent<SortCaret field="spend" />
+                  </TableHead>
+                  {visibleColumns.has('clicks') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('clicks')}>
+                      Clicks (All)<SortCaret field="clicks" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('linkClicks') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('linkClicks')}>
+                      Link clicks<SortCaret field="linkClicks" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('ctr') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('ctr')}>
+                      CTR<SortCaret field="ctr" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('cpc') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('cpc')}>
+                      CPC<SortCaret field="cpc" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('cpm') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('cpm')}>
+                      CPM<SortCaret field="cpm" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('purchases') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('purchases')}>
+                      Purchases<SortCaret field="purchases" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('revenue') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('revenue')}>
+                      Conv. value<SortCaret field="revenue" />
+                    </TableHead>
+                  )}
+                  {visibleColumns.has('roas') && (
+                    <TableHead className="font-medium text-muted-foreground h-9 px-3 text-right cursor-pointer" onClick={() => handleSort('roas')}>
+                      ROAS<SortCaret field="roas" />
+                    </TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {tableData.map((row) => (
+                  <>
+                    <TableRow key={row.id} className="hover:bg-muted/30 border-b border-border/50">
+                      <TableCell className="font-medium px-3 py-2 sticky left-0 bg-background z-10">
+                        <div className="flex items-center gap-1">
+                          {hasBreakdownChildren && row.children && row.children.length > 0 && (
+                            <button onClick={() => toggleRowExpand(row.id)} className="p-0.5 hover:bg-muted rounded">
+                              {expandedRows.has(row.id) ? (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => level !== 'ad' && handleDrilldown(row)}
+                            className={cn(
+                              "truncate max-w-[180px] text-left",
+                              level !== 'ad' && "hover:text-primary hover:underline cursor-pointer"
+                            )}
+                            title={row.name}
+                          >
+                            {row.name}
+                          </button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right px-3 py-2 tabular-nums">{formatNumber(row.reach)}</TableCell>
+                      <TableCell className="text-right px-3 py-2 tabular-nums">{formatNumber(row.impressions)}</TableCell>
+                      <TableCell className="text-right px-3 py-2 tabular-nums">{row.frequency.toFixed(2)}</TableCell>
+                      <TableCell className="text-right px-3 py-2 tabular-nums font-medium">{formatCurrency(row.spend)}</TableCell>
                       {visibleColumns.has('clicks') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('clicks')}>
-                          Clicks <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{formatNumber(row.clicks)}</TableCell>
                       )}
                       {visibleColumns.has('linkClicks') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('linkClicks')}>
-                          Link Clicks <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{formatNumber(row.linkClicks)}</TableCell>
                       )}
                       {visibleColumns.has('ctr') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('ctr')}>
-                          CTR <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{formatPercent(row.ctr)}</TableCell>
                       )}
                       {visibleColumns.has('cpc') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('cpc')}>
-                          CPC <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{formatCurrency(row.cpc)}</TableCell>
                       )}
                       {visibleColumns.has('cpm') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('cpm')}>
-                          CPM <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{formatCurrency(row.cpm)}</TableCell>
                       )}
                       {visibleColumns.has('purchases') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('purchases')}>
-                          Purchases <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{row.purchases}</TableCell>
                       )}
                       {visibleColumns.has('revenue') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('revenue')}>
-                          Revenue <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{formatCurrency(row.revenue)}</TableCell>
                       )}
                       {visibleColumns.has('roas') && (
-                        <TableHead className="text-right cursor-pointer" onClick={() => handleSort('roas')}>
-                          ROAS <ArrowUpDown className="inline h-3 w-3 ml-1" />
-                        </TableHead>
+                        <TableCell className="text-right px-3 py-2 tabular-nums">{row.roas.toFixed(2)}x</TableCell>
                       )}
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tableData.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium truncate max-w-[180px] sticky left-0 bg-background" title={level === 'campaign' ? row.campaignName : level === 'adset' ? row.adsetName || '' : row.adName || ''}>
-                          {level === 'campaign' ? row.campaignName : level === 'adset' ? row.adsetName : row.adName}
-                        </TableCell>
-                        {level !== 'campaign' && (
-                          <TableCell className="truncate max-w-[140px] text-muted-foreground" title={row.campaignName}>
-                            {row.campaignName}
-                          </TableCell>
-                        )}
-                        {showBreakdownColumn && (
-                          <TableCell>
-                            <Badge variant="outline" className="font-normal">
-                              {row.breakdownValue || '-'}
+                    
+                    {/* Breakdown children */}
+                    {hasBreakdownChildren && expandedRows.has(row.id) && row.children?.map((child) => (
+                      <TableRow key={`${row.id}-${child.breakdownValue}`} className="bg-muted/10 hover:bg-muted/20 border-b border-border/30">
+                        <TableCell className="px-3 py-1.5 sticky left-0 bg-muted/10 z-10">
+                          <span className="pl-6 text-muted-foreground flex items-center gap-1.5">
+                            <Badge variant="secondary" className="text-[10px] font-normal px-1.5 py-0">
+                              {child.breakdownValue}
                             </Badge>
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right">{formatNumber(row.reach)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                        <TableCell className="text-right">{row.frequency.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(row.spend)}</TableCell>
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatNumber(child.reach)}</TableCell>
+                        <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatNumber(child.impressions)}</TableCell>
+                        <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{child.frequency.toFixed(2)}</TableCell>
+                        <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatCurrency(child.spend)}</TableCell>
                         {visibleColumns.has('clicks') && (
-                          <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatNumber(child.clicks)}</TableCell>
                         )}
                         {visibleColumns.has('linkClicks') && (
-                          <TableCell className="text-right">{formatNumber(row.linkClicks)}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatNumber(child.linkClicks)}</TableCell>
                         )}
                         {visibleColumns.has('ctr') && (
-                          <TableCell className="text-right">{formatPercent(row.ctr)}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatPercent(child.ctr)}</TableCell>
                         )}
                         {visibleColumns.has('cpc') && (
-                          <TableCell className="text-right">{formatCurrency(row.cpc)}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatCurrency(child.cpc)}</TableCell>
                         )}
                         {visibleColumns.has('cpm') && (
-                          <TableCell className="text-right">{formatCurrency(row.cpm)}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatCurrency(child.cpm)}</TableCell>
                         )}
                         {visibleColumns.has('purchases') && (
-                          <TableCell className="text-right">{row.purchases}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{child.purchases}</TableCell>
                         )}
                         {visibleColumns.has('revenue') && (
-                          <TableCell className="text-right">{formatCurrency(row.revenue)}</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{formatCurrency(child.revenue)}</TableCell>
                         )}
                         {visibleColumns.has('roas') && (
-                          <TableCell className="text-right">{row.roas.toFixed(2)}x</TableCell>
+                          <TableCell className="text-right px-3 py-1.5 text-muted-foreground tabular-nums">{child.roas.toFixed(2)}x</TableCell>
                         )}
                       </TableRow>
                     ))}
-                    
-                    {/* Totals Row */}
-                    {tableData.length > 0 && (
-                      <TableRow className="bg-muted/50 font-semibold border-t-2">
-                        <TableCell className="sticky left-0 bg-muted/50">
-                          Total ({tableData.length} {level === 'campaign' ? 'campaigns' : level === 'adset' ? 'ad sets' : 'ads'})
-                        </TableCell>
-                        {level !== 'campaign' && <TableCell />}
-                        {showBreakdownColumn && <TableCell />}
-                        <TableCell className="text-right">{formatNumber(totals.reach)}</TableCell>
-                        <TableCell className="text-right">{formatNumber(totals.impressions)}</TableCell>
-                        <TableCell className="text-right">{totals.frequency.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(totals.spend)}</TableCell>
-                        {visibleColumns.has('clicks') && (
-                          <TableCell className="text-right">{formatNumber(totals.clicks)}</TableCell>
-                        )}
-                        {visibleColumns.has('linkClicks') && (
-                          <TableCell className="text-right">{formatNumber(totals.linkClicks)}</TableCell>
-                        )}
-                        {visibleColumns.has('ctr') && (
-                          <TableCell className="text-right">{formatPercent(totals.ctr)}</TableCell>
-                        )}
-                        {visibleColumns.has('cpc') && (
-                          <TableCell className="text-right">{formatCurrency(totals.cpc)}</TableCell>
-                        )}
-                        {visibleColumns.has('cpm') && (
-                          <TableCell className="text-right">{formatCurrency(totals.cpm)}</TableCell>
-                        )}
-                        {visibleColumns.has('purchases') && (
-                          <TableCell className="text-right">{totals.purchases}</TableCell>
-                        )}
-                        {visibleColumns.has('revenue') && (
-                          <TableCell className="text-right">{formatCurrency(totals.revenue)}</TableCell>
-                        )}
-                        {visibleColumns.has('roas') && (
-                          <TableCell className="text-right">{totals.roas.toFixed(2)}x</TableCell>
-                        )}
-                      </TableRow>
-                    )}
-                    
-                    {tableData.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={20} className="text-center text-muted-foreground py-8">
-                          No data found for the selected filters
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                  </>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          
+          {/* Totals Row */}
+          <div className="border-t-2 bg-muted/40 px-3 py-2">
+            <div className="flex items-center text-xs">
+              <span className="font-semibold min-w-[200px]">
+                Results from {tableData.length} {levelLabel}
+              </span>
+              <div className="flex-1 flex items-center justify-end gap-6 tabular-nums">
+                <span><span className="text-muted-foreground">Reach:</span> {formatNumber(totals.reach)}</span>
+                <span><span className="text-muted-foreground">Impr:</span> {formatNumber(totals.impressions)}</span>
+                <span><span className="text-muted-foreground">Freq:</span> {totals.frequency.toFixed(2)}</span>
+                <span className="font-semibold"><span className="text-muted-foreground">Spent:</span> {formatCurrency(totals.spend)}</span>
+                {visibleColumns.has('purchases') && (
+                  <span><span className="text-muted-foreground">Purch:</span> {totals.purchases}</span>
+                )}
+                {visibleColumns.has('revenue') && (
+                  <span><span className="text-muted-foreground">Value:</span> {formatCurrency(totals.revenue)}</span>
+                )}
+                {visibleColumns.has('roas') && (
+                  <span><span className="text-muted-foreground">ROAS:</span> {totals.roas.toFixed(2)}x</span>
+                )}
               </div>
-            </CardContent>
-          </Card>
-        </>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

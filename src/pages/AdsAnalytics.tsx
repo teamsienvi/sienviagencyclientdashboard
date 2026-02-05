@@ -1,11 +1,11 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import AdsAnalyticsSection from "@/components/AdsAnalyticsSection";
-import DirectMetaAdsSection from "@/components/DirectMetaAdsSection";
 import MetaAdsManagerReport from "@/components/MetaAdsManagerReport";
+import AdsAnalyticsSection from "@/components/AdsAnalyticsSection";
 import { AnalyticsPageLayout } from "@/components/AnalyticsPageLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const AdsAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -25,8 +25,24 @@ const AdsAnalytics = () => {
     enabled: !!clientId,
   });
 
-  // Check if this is BlingyBag (has direct Meta Ads access)
-  const isBlingyBag = client?.name?.toLowerCase().includes('blingybag');
+  // Check if client has Meta Ads configured
+  const { data: metaAdsConfig } = useQuery({
+    queryKey: ["client-meta-ads-config", clientId],
+    queryFn: async () => {
+      if (!clientId) return null;
+      const { data, error } = await supabase
+        .from("client_meta_ads_config")
+        .select("*")
+        .eq("client_id", clientId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (error) return null;
+      return data;
+    },
+    enabled: !!clientId,
+  });
+
+  const hasMetaAds = !!metaAdsConfig;
 
   return (
     <AnalyticsPageLayout
@@ -37,21 +53,27 @@ const AdsAnalytics = () => {
       pageDescription="Meta Ads & Google Ads Analytics"
       isLoading={isLoading}
     >
-      {isBlingyBag ? (
-        <Tabs defaultValue="ads-manager" className="space-y-6">
+      {hasMetaAds ? (
+        <Tabs defaultValue="meta-ads" className="space-y-4">
           <TabsList>
-            <TabsTrigger value="ads-manager">Ads Manager Report</TabsTrigger>
-            <TabsTrigger value="direct">Direct API</TabsTrigger>
-            <TabsTrigger value="metricool">Via Metricool</TabsTrigger>
+            <TabsTrigger value="meta-ads">Meta Ads</TabsTrigger>
+            <TabsTrigger value="google-ads" disabled>
+              Google Ads
+              <span className="ml-1.5 text-[10px] text-muted-foreground">(Coming soon)</span>
+            </TabsTrigger>
           </TabsList>
-          <TabsContent value="ads-manager">
+          <TabsContent value="meta-ads">
             <MetaAdsManagerReport clientId={clientId!} clientName={client?.name || ""} />
           </TabsContent>
-          <TabsContent value="direct">
-            <DirectMetaAdsSection clientId={clientId!} clientName={client?.name || ""} />
-          </TabsContent>
-          <TabsContent value="metricool">
-            <AdsAnalyticsSection clientId={clientId!} clientName={client?.name || ""} />
+          <TabsContent value="google-ads">
+            <Card className="border-dashed">
+              <CardHeader className="text-center py-12">
+                <CardTitle className="text-lg text-muted-foreground">Google Ads Coming Soon</CardTitle>
+                <CardDescription>
+                  Google Ads integration will be available in a future update.
+                </CardDescription>
+              </CardHeader>
+            </Card>
           </TabsContent>
         </Tabs>
       ) : (
