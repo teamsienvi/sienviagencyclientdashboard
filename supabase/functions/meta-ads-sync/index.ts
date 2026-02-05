@@ -38,6 +38,10 @@ interface MetaInsightRow {
   action_values?: MetaAction[];
   purchase_roas?: Array<{ action_type: string; value: string }>;
   website_purchase_roas?: Array<{ action_type: string; value: string }>;
+  // Breakdown dimension fields (added by Meta when breakdowns are requested)
+  publisher_platform?: string;
+  platform_position?: string;
+  device_platform?: string;
 }
 
 const safeDivide = (numerator: number, denominator: number, multiplier = 1): number => {
@@ -279,7 +283,12 @@ serve(async (req) => {
         purchases,
         revenue,
         roas,
-        breakdowns: breakdowns ? { type: breakdowns } : null,
+        breakdowns: breakdowns ? {
+          type: breakdowns,
+          publisher_platform: row.publisher_platform || null,
+          platform_position: row.platform_position || null,
+          device_platform: row.device_platform || null,
+        } : null,
         raw_actions: row.actions || [],
         updated_at: new Date().toISOString(),
       };
