@@ -82,7 +82,7 @@ const ClientDashboard = () => {
   const { data: connectedAccounts } = useQuery({
     queryKey: ["client-connected-accounts", clientId],
     queryFn: async () => {
-      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false, shopify: false };
+      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false, shopify: false, metaAds: false };
       
       // Check X account connection
       const { data: xData } = await supabase
@@ -122,12 +122,21 @@ const ClientDashboard = () => {
         .eq("is_active", true)
         .limit(1);
 
+      // Check Meta Ads config (direct API integration)
+      const { data: metaAdsData } = await supabase
+        .from("client_meta_ads_config")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("is_active", true)
+        .limit(1);
+
       return {
         x: xData && xData.length > 0,
         xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
         meta: metaData && metaData.length > 0,
         youtube: youtubeData && youtubeData.length > 0,
         shopify: shopifyData && shopifyData.length > 0,
+        metaAds: metaAdsData && metaAdsData.length > 0,
       };
     },
     enabled: !!clientId,
@@ -704,8 +713,8 @@ const ClientDashboard = () => {
                   </>
                 )}
 
-                {/* Ads Analytics - Show for clients with meta_ads config */}
-                {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
+                {/* Ads Analytics - Show for clients with meta_ads config (Metricool or direct API) */}
+                {(metricoolPlatforms?.some(p => p.platform === 'meta_ads') || connectedAccounts?.metaAds) && (
                   <Card 
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/ads-analytics/${clientId}`)}
