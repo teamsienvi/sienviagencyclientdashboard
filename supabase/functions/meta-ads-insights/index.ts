@@ -181,7 +181,7 @@ const fetchAllInsights = async (
   let nextUrl: string | null = url;
 
   while (nextUrl) {
-    console.log(`Fetching Meta Insights: ${nextUrl.substring(0, 100)}...`);
+    console.log(`Fetching Meta Insights page...`);
     
     const response = await fetch(nextUrl);
     const data = await response.json();
@@ -211,11 +211,27 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const since = url.searchParams.get('since');
-    const until = url.searchParams.get('until');
-    const level = url.searchParams.get('level') || 'campaign';
-    const breakdowns = url.searchParams.get('breakdowns') || undefined;
-    const clientId = url.searchParams.get('clientId') || undefined;
+
+    let since = url.searchParams.get('since') || undefined;
+    let until = url.searchParams.get('until') || undefined;
+    let level = url.searchParams.get('level') || undefined;
+    let breakdowns = url.searchParams.get('breakdowns') || undefined;
+    let clientId = url.searchParams.get('clientId') || undefined;
+
+    if (req.method !== 'GET') {
+      try {
+        const body = await req.json();
+        since = body?.since ?? since;
+        until = body?.until ?? until;
+        level = body?.level ?? level;
+        breakdowns = body?.breakdowns ?? breakdowns;
+        clientId = body?.clientId ?? clientId;
+      } catch {
+        // ignore invalid/missing body
+      }
+    }
+
+    const resolvedLevel = level || 'campaign';
 
     if (!since || !until) {
       return new Response(
@@ -225,7 +241,10 @@ serve(async (req) => {
     }
 
     const accessToken = Deno.env.get('META_ACCESS_TOKEN');
-    const adAccountId = Deno.env.get('META_AD_ACCOUNT_ID');
+    const rawAdAccountId = Deno.env.get('META_AD_ACCOUNT_ID');
+    const adAccountId = rawAdAccountId
+      ? (rawAdAccountId.trim().startsWith('act_') ? rawAdAccountId.trim() : `act_${rawAdAccountId.trim()}`)
+      : null;
     const apiVersion = Deno.env.get('META_API_VERSION') || 'v20.0';
 
     if (!accessToken) {
@@ -245,7 +264,7 @@ serve(async (req) => {
     const insights = await fetchAllInsights(accessToken, adAccountId, apiVersion, {
       since,
       until,
-      level,
+      level: resolvedLevel,
       breakdowns,
       clientId,
     });
@@ -258,7 +277,7 @@ serve(async (req) => {
           count: insights.length,
           since,
           until,
-          level,
+          level: resolvedLevel,
           breakdowns,
         },
       }),
