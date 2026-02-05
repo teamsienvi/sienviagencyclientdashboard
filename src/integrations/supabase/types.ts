@@ -223,6 +223,101 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_ads_daily: {
+        Row: {
+          ad_id: string | null
+          ad_name: string | null
+          adset_id: string | null
+          adset_name: string | null
+          breakdowns: Json | null
+          campaign_id: string | null
+          campaign_name: string | null
+          client_id: string
+          cpc: number | null
+          cpm: number | null
+          created_at: string
+          ctr: number | null
+          date_start: string
+          id: string
+          impressions: number
+          level: string
+          link_clicks: number
+          objective: string | null
+          purchases: number | null
+          raw_actions: Json | null
+          reach: number
+          revenue: number | null
+          roas: number | null
+          spend: number
+          unique_clicks: number | null
+          updated_at: string
+        }
+        Insert: {
+          ad_id?: string | null
+          ad_name?: string | null
+          adset_id?: string | null
+          adset_name?: string | null
+          breakdowns?: Json | null
+          campaign_id?: string | null
+          campaign_name?: string | null
+          client_id: string
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          date_start: string
+          id?: string
+          impressions?: number
+          level?: string
+          link_clicks?: number
+          objective?: string | null
+          purchases?: number | null
+          raw_actions?: Json | null
+          reach?: number
+          revenue?: number | null
+          roas?: number | null
+          spend?: number
+          unique_clicks?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ad_id?: string | null
+          ad_name?: string | null
+          adset_id?: string | null
+          adset_name?: string | null
+          breakdowns?: Json | null
+          campaign_id?: string | null
+          campaign_name?: string | null
+          client_id?: string
+          cpc?: number | null
+          cpm?: number | null
+          created_at?: string
+          ctr?: number | null
+          date_start?: string
+          id?: string
+          impressions?: number
+          level?: string
+          link_clicks?: number
+          objective?: string | null
+          purchases?: number | null
+          raw_actions?: Json | null
+          reach?: number
+          revenue?: number | null
+          roas?: number | null
+          spend?: number
+          unique_clicks?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ads_daily_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meta_agency_connection: {
         Row: {
           access_token: string
