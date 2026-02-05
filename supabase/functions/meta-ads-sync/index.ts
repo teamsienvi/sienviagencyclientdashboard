@@ -11,11 +11,6 @@ interface MetaAction {
   value: string;
 }
 
-interface CostPerAction {
-  action_type: string;
-  value: string;
-}
-
 interface MetaInsightRow {
   date_start: string;
   date_stop: string;
@@ -41,10 +36,9 @@ interface MetaInsightRow {
   cpm?: string;
   actions?: MetaAction[];
   action_values?: MetaAction[];
-  cost_per_action_type?: CostPerAction[];
+  cost_per_action_type?: Array<{ action_type: string; value: string }>;
   purchase_roas?: Array<{ action_type: string; value: string }>;
   website_purchase_roas?: Array<{ action_type: string; value: string }>;
-  // Breakdown dimension fields
   publisher_platform?: string;
   platform_position?: string;
   device_platform?: string;
@@ -106,7 +100,10 @@ const fetchAllInsights = async (
   since: string,
   until: string,
   level: string,
-  breakdowns?: string
+  breakdowns?: string,
+  campaignIds?: string[],
+  adsetIds?: string[],
+  adIds?: string[]
 ): Promise<MetaInsightRow[]> => {
   const fields = [
     'date_start', 'date_stop', 'account_id', 'account_name',
@@ -119,10 +116,19 @@ const fetchAllInsights = async (
     'purchase_roas', 'website_purchase_roas'
   ].join(',');
 
-  const timeRange = JSON.stringify({
-    since,
-    until,
-  });
+  const timeRange = JSON.stringify({ since, until });
+
+  // Build filtering array
+  const filtering: Array<{ field: string; operator: string; value: string[] }> = [];
+  if (campaignIds && campaignIds.length > 0) {
+    filtering.push({ field: 'campaign.id', operator: 'IN', value: campaignIds });
+  }
+  if (adsetIds && adsetIds.length > 0) {
+    filtering.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
+  }
+  if (adIds && adIds.length > 0) {
+    filtering.push({ field: 'ad.id', operator: 'IN', value: adIds });
+  }
 
   let url = `https://graph.facebook.com/${apiVersion}/${adAccountId}/insights?` +
     `access_token=${accessToken}` +
@@ -134,6 +140,10 @@ const fetchAllInsights = async (
 
   if (breakdowns) {
     url += `&breakdowns=${breakdowns}`;
+  }
+
+  if (filtering.length > 0) {
+    url += `&filtering=${encodeURIComponent(JSON.stringify(filtering))}`;
   }
 
   const allRows: MetaInsightRow[] = [];
@@ -174,6 +184,9 @@ serve(async (req) => {
     let level = url.searchParams.get('level') || undefined;
     let breakdowns = url.searchParams.get('breakdowns') || undefined;
     let clientId = url.searchParams.get('clientId') || undefined;
+    let campaignIds = url.searchParams.get('campaign_ids')?.split(',').filter(Boolean) || undefined;
+    let adsetIds = url.searchParams.get('adset_ids')?.split(',').filter(Boolean) || undefined;
+    let adIds = url.searchParams.get('ad_ids')?.split(',').filter(Boolean) || undefined;
 
     try {
       const body = await req.json();
@@ -182,6 +195,9 @@ serve(async (req) => {
       level = body?.level ?? level;
       breakdowns = body?.breakdowns ?? breakdowns;
       clientId = body?.clientId ?? clientId;
+      campaignIds = body?.campaign_ids ?? body?.campaignIds ?? campaignIds;
+      adsetIds = body?.adset_ids ?? body?.adsetIds ?? adsetIds;
+      adIds = body?.ad_ids ?? body?.adIds ?? adIds;
     } catch {
       // ignore invalid/missing body
     }
@@ -196,10 +212,6 @@ serve(async (req) => {
     }
 
     const accessToken = Deno.env.get('META_ACCESS_TOKEN');
-    const rawAdAccountId = Deno.env.get('META_AD_ACCOUNT_ID');
-    const adAccountId = rawAdAccountId
-      ? (rawAdAccountId.trim().startsWith('act_') ? rawAdAccountId.trim() : `act_${rawAdAccountId.trim()}`)
-      : null;
     const apiVersion = Deno.env.get('META_API_VERSION') || 'v20.0';
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -207,13 +219,6 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(
         JSON.stringify({ success: false, error: 'META_ACCESS_TOKEN not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!adAccountId) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'META_AD_ACCOUNT_ID not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -227,8 +232,52 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Get ad account ID from client config
+    const { data: configData, error: configError } = await supabase
+      .from('client_meta_ads_config')
+      .select('ad_account_id')
+      .eq('client_id', clientId)
+      .eq('is_active', true)
+      .single();
+
+    if (configError || !configData?.ad_account_id) {
+      console.log('No client config found, falling back to global META_AD_ACCOUNT_ID');
+      const fallbackId = Deno.env.get('META_AD_ACCOUNT_ID');
+      if (!fallbackId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'No Meta Ads account configured for this client' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    const adAccountId = configData?.ad_account_id || 
+      (Deno.env.get('META_AD_ACCOUNT_ID')?.trim().startsWith('act_') 
+        ? Deno.env.get('META_AD_ACCOUNT_ID')?.trim() 
+        : `act_${Deno.env.get('META_AD_ACCOUNT_ID')?.trim()}`);
+
+    if (!adAccountId) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'META_AD_ACCOUNT_ID not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Syncing Meta Ads for client ${clientId} with ad account ${adAccountId}`);
+
     // Fetch insights from Meta
-    const insights = await fetchAllInsights(accessToken, adAccountId, apiVersion, since, until, resolvedLevel, breakdowns);
+    const insights = await fetchAllInsights(
+      accessToken, 
+      adAccountId, 
+      apiVersion, 
+      since, 
+      until, 
+      resolvedLevel, 
+      breakdowns,
+      campaignIds,
+      adsetIds,
+      adIds
+    );
 
     if (insights.length === 0) {
       return new Response(
@@ -237,7 +286,7 @@ serve(async (req) => {
       );
     }
 
-    // Delete existing records for the date range to do a clean upsert
+    // Delete existing records for the date range
     const deleteQuery = supabase
       .from('meta_ads_daily')
       .delete()
@@ -246,7 +295,6 @@ serve(async (req) => {
       .gte('date_start', since)
       .lte('date_start', until);
 
-    // If breakdowns are active, only delete rows with matching breakdown type
     if (breakdowns) {
       deleteQuery.not('breakdowns', 'is', null);
     } else {
@@ -254,7 +302,6 @@ serve(async (req) => {
     }
 
     const { error: deleteError } = await deleteQuery;
-
     if (deleteError) {
       console.error('Delete error:', deleteError);
     }
@@ -280,7 +327,6 @@ serve(async (req) => {
       const cpc = parseNumber(row.cpc) || safeDivide(spend, linkClicks);
       const cpm = parseNumber(row.cpm) || safeDivide(spend, impressions, 1000);
 
-      // Build breakdowns object
       const hasBreakdowns = row.publisher_platform || row.platform_position || row.device_platform || row.impression_device;
       const breakdownsJson = hasBreakdowns ? {
         type: breakdowns || 'unknown',
@@ -347,6 +393,7 @@ serve(async (req) => {
           until,
           level: resolvedLevel,
           breakdowns,
+          adAccountId,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

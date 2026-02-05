@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      client_meta_ads_config: {
+        Row: {
+          ad_account_id: string
+          ad_account_name: string | null
+          client_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          updated_at: string
+        }
+        Insert: {
+          ad_account_id: string
+          ad_account_name?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Update: {
+          ad_account_id?: string
+          ad_account_name?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_meta_ads_config_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_meta_map: {
         Row: {
           active: boolean
