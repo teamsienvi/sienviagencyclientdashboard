@@ -1,15 +1,14 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Skeleton } from "@/components/ui/skeleton";
 import AdsAnalyticsSection from "@/components/AdsAnalyticsSection";
 import DirectMetaAdsSection from "@/components/DirectMetaAdsSection";
+import MetaAdsManagerReport from "@/components/MetaAdsManagerReport";
 import { AnalyticsPageLayout } from "@/components/AnalyticsPageLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const AdsAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
-  const navigate = useNavigate();
 
   const { data: client, isLoading } = useQuery({
     queryKey: ["client", clientId],
@@ -39,11 +38,15 @@ const AdsAnalytics = () => {
       isLoading={isLoading}
     >
       {isBlingyBag ? (
-        <Tabs defaultValue="direct" className="space-y-6">
+        <Tabs defaultValue="ads-manager" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="direct">Direct Meta API</TabsTrigger>
+            <TabsTrigger value="ads-manager">Ads Manager Report</TabsTrigger>
+            <TabsTrigger value="direct">Direct API</TabsTrigger>
             <TabsTrigger value="metricool">Via Metricool</TabsTrigger>
           </TabsList>
+          <TabsContent value="ads-manager">
+            <MetaAdsManagerReport clientId={clientId!} clientName={client?.name || ""} />
+          </TabsContent>
           <TabsContent value="direct">
             <DirectMetaAdsSection clientId={clientId!} clientName={client?.name || ""} />
           </TabsContent>

@@ -11,6 +11,11 @@ interface MetaAction {
   value: string;
 }
 
+interface CostPerAction {
+  action_type: string;
+  value: string;
+}
+
 interface MetaInsightRow {
   date_start: string;
   date_stop: string;
@@ -36,12 +41,14 @@ interface MetaInsightRow {
   cpm?: string;
   actions?: MetaAction[];
   action_values?: MetaAction[];
+  cost_per_action_type?: CostPerAction[];
   purchase_roas?: Array<{ action_type: string; value: string }>;
   website_purchase_roas?: Array<{ action_type: string; value: string }>;
-  // Breakdown dimension fields (added by Meta when breakdowns are requested)
+  // Breakdown dimension fields
   publisher_platform?: string;
   platform_position?: string;
   device_platform?: string;
+  impression_device?: string;
 }
 
 const safeDivide = (numerator: number, denominator: number, multiplier = 1): number => {
@@ -106,9 +113,10 @@ const fetchAllInsights = async (
     'campaign_id', 'campaign_name', 'adset_id', 'adset_name',
     'ad_id', 'ad_name', 'objective',
     'spend', 'impressions', 'reach', 'frequency',
-    'clicks', 'unique_clicks', 'inline_link_clicks',
+    'clicks', 'unique_clicks', 'inline_link_clicks', 'link_clicks',
     'ctr', 'cpc', 'cpm',
-    'actions', 'action_values', 'purchase_roas', 'website_purchase_roas'
+    'actions', 'action_values', 'cost_per_action_type',
+    'purchase_roas', 'website_purchase_roas'
   ].join(',');
 
   const timeRange = JSON.stringify({
@@ -132,7 +140,7 @@ const fetchAllInsights = async (
   let nextUrl: string | null = url;
 
   while (nextUrl) {
-    console.log(`Fetching Meta Insights sync page...`);
+    console.log(`Fetching Meta Insights sync page (level=${level})...`);
     
     const response = await fetch(nextUrl);
     const data = await response.json();
@@ -220,7 +228,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Fetch insights from Meta
-    const insights = await fetchAllInsights(accessToken, adAccountId, apiVersion, since, until, level, breakdowns);
+    const insights = await fetchAllInsights(accessToken, adAccountId, apiVersion, since, until, resolvedLevel, breakdowns);
 
     if (insights.length === 0) {
       return new Response(
@@ -230,13 +238,22 @@ serve(async (req) => {
     }
 
     // Delete existing records for the date range to do a clean upsert
-    const { error: deleteError } = await supabase
+    const deleteQuery = supabase
       .from('meta_ads_daily')
       .delete()
       .eq('client_id', clientId)
-      .eq('level', level)
+      .eq('level', resolvedLevel)
       .gte('date_start', since)
       .lte('date_start', until);
+
+    // If breakdowns are active, only delete rows with matching breakdown type
+    if (breakdowns) {
+      deleteQuery.not('breakdowns', 'is', null);
+    } else {
+      deleteQuery.is('breakdowns', null);
+    }
+
+    const { error: deleteError } = await deleteQuery;
 
     if (deleteError) {
       console.error('Delete error:', deleteError);
@@ -247,6 +264,8 @@ serve(async (req) => {
       const spend = parseNumber(row.spend);
       const impressions = parseNumber(row.impressions);
       const reach = parseNumber(row.reach);
+      const frequency = parseNumber(row.frequency) || safeDivide(impressions, reach);
+      const clicks = parseNumber(row.clicks);
       const linkClicks = parseNumber(row.link_clicks) || parseNumber(row.inline_link_clicks);
       const uniqueClicks = parseNumber(row.unique_clicks);
       
@@ -260,6 +279,16 @@ serve(async (req) => {
       const ctr = parseNumber(row.ctr) || safeDivide(linkClicks, impressions, 100);
       const cpc = parseNumber(row.cpc) || safeDivide(spend, linkClicks);
       const cpm = parseNumber(row.cpm) || safeDivide(spend, impressions, 1000);
+
+      // Build breakdowns object
+      const hasBreakdowns = row.publisher_platform || row.platform_position || row.device_platform || row.impression_device;
+      const breakdownsJson = hasBreakdowns ? {
+        type: breakdowns || 'unknown',
+        publisher_platform: row.publisher_platform || null,
+        platform_position: row.platform_position || null,
+        device_platform: row.device_platform || null,
+        impression_device: row.impression_device || null,
+      } : null;
 
       return {
         client_id: clientId,
@@ -283,12 +312,7 @@ serve(async (req) => {
         purchases,
         revenue,
         roas,
-        breakdowns: breakdowns ? {
-          type: breakdowns,
-          publisher_platform: row.publisher_platform || null,
-          platform_position: row.platform_position || null,
-          device_platform: row.device_platform || null,
-        } : null,
+        breakdowns: breakdownsJson,
         raw_actions: row.actions || [],
         updated_at: new Date().toISOString(),
       };
