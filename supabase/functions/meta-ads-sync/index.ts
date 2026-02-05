@@ -110,7 +110,7 @@ const fetchAllInsights = async (
     'campaign_id', 'campaign_name', 'adset_id', 'adset_name',
     'ad_id', 'ad_name', 'objective',
     'spend', 'impressions', 'reach', 'frequency',
-    'clicks', 'unique_clicks', 'inline_link_clicks', 'link_clicks',
+    'clicks', 'unique_clicks', 'inline_link_clicks',
     'ctr', 'cpc', 'cpm',
     'actions', 'action_values', 'cost_per_action_type',
     'purchase_roas', 'website_purchase_roas'
