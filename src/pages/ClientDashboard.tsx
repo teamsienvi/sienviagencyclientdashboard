@@ -593,8 +593,9 @@ const ClientDashboard = () => {
                       </CardContent>
                     </Card>
 
-                    {/* X (Twitter) - Show connected if has account OR has data */}
-                    {connectedAccounts?.xHasData ? (
+                    {/* X (Twitter) - Only show for Sienvi Agency and Father Figure Formula */}
+                    {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
+                      connectedAccounts?.xHasData ? (
                       <Card 
                         className="hover:border-primary/30 transition-all cursor-pointer group"
                         onClick={() => navigate(`/x-analytics/${clientId}`)}
@@ -617,7 +618,7 @@ const ClientDashboard = () => {
                           </Badge>
                         </CardContent>
                       </Card>
-                    ) : (
+                      ) : (
                       <Card className="hover:border-primary/30 transition-all group">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
                           <div className="flex items-center gap-3">
@@ -643,6 +644,7 @@ const ClientDashboard = () => {
                           />
                         </CardContent>
                       </Card>
+                      )
                     )}
 
                     {/* TikTok */}
