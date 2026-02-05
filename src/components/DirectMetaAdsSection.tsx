@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Search, TrendingUp, TrendingDown, Download, ArrowUpDown, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { format, subDays, eachDayOfInterval, parseISO } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -102,6 +103,8 @@ interface CampaignRow {
 type SortField = 'name' | 'spend' | 'impressions' | 'reach' | 'linkClicks' | 'ctr' | 'cpc' | 'cpm' | 'purchases' | 'revenue' | 'roas';
 
 const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProps) => {
+  const { isAdmin, isLoading: authLoading } = useAuth();
+
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -153,47 +156,43 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
     }
   };
   
-  // Sync data from Meta API
+  // Sync data from Meta API (admin only)
   const handleSync = async () => {
-    if (!dateRange?.from || !dateRange?.to) {
-      toast.error('Please select a date range');
+    if (authLoading) return;
+
+    if (!isAdmin) {
+      toast.error("Admin only: syncing is restricted");
       return;
     }
-    
+
+    if (!dateRange?.from || !dateRange?.to) {
+      toast.error("Please select a date range");
+      return;
+    }
+
     try {
       setSyncing(true);
-      const { data, error } = await supabase.functions.invoke('meta-ads-sync', {
-        body: null,
+
+      const { data, error } = await supabase.functions.invoke("meta-ads-sync", {
+        body: {
+          since: format(dateRange.from, "yyyy-MM-dd"),
+          until: format(dateRange.to, "yyyy-MM-dd"),
+          level,
+          breakdowns: breakdown !== "none" ? breakdown : undefined,
+          clientId,
+        },
       });
-      
-      // Use query params approach
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/meta-ads-sync?` +
-        `since=${format(dateRange.from, 'yyyy-MM-dd')}` +
-        `&until=${format(dateRange.to, 'yyyy-MM-dd')}` +
-        `&level=${level}` +
-        `&clientId=${clientId}` +
-        (breakdown !== 'none' ? `&breakdowns=${breakdown}` : ''),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-        }
-      );
-      
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Sync failed');
+
+      if (error) throw error;
+      if (!data?.success) {
+        throw new Error(data?.error || "Sync failed");
       }
-      
-      toast.success(`Synced ${result.inserted} rows`);
+
+      toast.success(`Synced ${data.inserted ?? 0} rows`);
       await fetchCachedData();
     } catch (error) {
-      console.error('Error syncing data:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to sync Meta Ads data');
+      console.error("Error syncing data:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to sync Meta Ads data");
     } finally {
       setSyncing(false);
     }
@@ -475,11 +474,27 @@ const DirectMetaAdsSection = ({ clientId, clientName }: DirectMetaAdsSectionProp
             </SelectContent>
           </Select>
           
-          {/* Sync Button */}
-          <Button onClick={handleSync} disabled={syncing} variant="outline">
-            <RefreshCw className={cn("h-4 w-4 mr-2", syncing && "animate-spin")} />
-            {syncing ? 'Syncing...' : 'Sync Now'}
-          </Button>
+          {/* Sync Button (admin only) */}
+          {isAdmin ? (
+            <Button onClick={handleSync} disabled={syncing} variant="outline">
+              <RefreshCw className={cn("h-4 w-4 mr-2", syncing && "animate-spin")} />
+              {syncing ? "Syncing..." : "Sync Now"}
+            </Button>
+          ) : (
+            <UITooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button variant="outline" disabled>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Sync Now
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Admin only</p>
+              </TooltipContent>
+            </UITooltip>
+          )}
         </div>
       </div>
       
