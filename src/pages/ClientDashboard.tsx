@@ -7,7 +7,7 @@ import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { 
   ArrowLeft, Calendar, TrendingUp, Users, Eye, 
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -759,6 +759,53 @@ const ClientDashboard = () => {
                       <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
                     </CardContent>
                   </Card>
+                )}
+
+                {/* Podcast Analytics - Father Figure Formula only */}
+                {client.name === "Father Figure Formula" && (
+                  <>
+                    <Card 
+                      className="hover:border-primary/30 transition-all cursor-pointer group"
+                      onClick={() => window.open('https://podcastsconnect.apple.com/analytics', '_blank')}
+                    >
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
+                            <Podcast className="h-5 w-5 text-purple-500" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">Apple Podcasts</CardTitle>
+                            <CardDescription>Podcast Analytics</CardDescription>
+                          </div>
+                        </div>
+                        <ExternalLink className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-all" />
+                      </CardHeader>
+                      <CardContent>
+                        <Badge variant="secondary" className="bg-purple-500/10 text-purple-600">External Link</Badge>
+                      </CardContent>
+                    </Card>
+
+                    <Card 
+                      className="hover:border-primary/30 transition-all cursor-pointer group"
+                      onClick={() => window.open('https://creators.spotify.com/pod/show/1hkGUz3tDpJFHzmapxtSGk/analytics', '_blank')}
+                    >
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                            <Headphones className="h-5 w-5 text-green-500" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">Spotify</CardTitle>
+                            <CardDescription>Podcast Analytics</CardDescription>
+                          </div>
+                        </div>
+                        <ExternalLink className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-all" />
+                      </CardHeader>
+                      <CardContent>
+                        <Badge variant="secondary" className="bg-green-500/10 text-green-600">External Link</Badge>
+                      </CardContent>
+                    </Card>
+                  </>
                 )}
 
                 {/* Website Analytics - hide for ads-only clients */}
