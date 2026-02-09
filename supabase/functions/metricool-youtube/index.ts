@@ -262,9 +262,19 @@ serve(async (req) => {
         }
 
         if (title || url) {
+          // Metricool returns thumbnail URLs like https://i.ytimg.com/vi/VIDEO_ID/default.jpg
+          // Convert to proper YouTube watch URLs
+          let videoUrl = url;
+          if (url && (url.includes('ytimg.com/vi/') || url.includes('i9.ytimg.com/vi/'))) {
+            const videoIdMatch = url.match(/\/vi\/([^/]+)\//);
+            if (videoIdMatch) {
+              videoUrl = `https://www.youtube.com/watch?v=${videoIdMatch[1]}`;
+            }
+          }
+          
           videos.push({
             title,
-            url,
+            url: videoUrl,
             publishedAt,
             views,
             likes,
