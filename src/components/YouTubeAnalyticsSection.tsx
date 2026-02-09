@@ -177,48 +177,138 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       const currentData = data.data.current;
       const prevData = data.data.previous;
 
-      // Calculate WoW changes
-      const subscribersDelta = currentData.subscribersGained;
-      const subscribersPercent = prevData.totalSubscribers > 0 
-        ? (subscribersDelta / prevData.totalSubscribers) * 100 
-        : 0;
+      // If Metricool returns 0 subscribers and no videos, supplement with DB data
+      let subscriberCount = currentData.totalSubscribers;
+      let prevSubscriberCount = prevData.totalSubscribers;
+      let subscribersDelta = currentData.subscribersGained;
+      let videoList: VideoData[] = [];
+      let totalViews = currentData.totalViews;
+      let totalLikes = currentData.totalLikes;
+      let totalComments = currentData.totalComments;
+      let totalShares = currentData.totalShares;
+      let videosCount = currentData.videosCount;
+      let engagementPct = currentData.engagementPct || 0;
+      let avgViewDuration = currentData.avgViewDuration;
+      let prevTotalViews = prevData.totalViews;
+      let prevTotalLikes = prevData.totalLikes;
+      let prevTotalComments = prevData.totalComments;
+      let prevTotalShares = prevData.totalShares;
+      let prevVideosCount = prevData.videosCount;
+      let prevEngagementPct = prevData.engagementPct || 0;
+      let prevAvgViewDuration = prevData.avgViewDuration;
 
-      // Transform videos to component format
-      const videoList: VideoData[] = currentData.videos.map((v: any, idx: number) => ({
-        id: `metricool-${idx}`,
-        title: v.title,
-        url: v.url,
-        content_type: "video",
-        published_at: v.publishedAt || new Date().toISOString(),
-        views: v.views,
-        likes: v.likes,
-        comments: v.comments,
-        shares: v.shares,
-        avg_view_duration: v.averageViewDuration,
-        watch_time_hours: v.watchTimeHours,
-        engagement_rate: v.views > 0 ? ((v.likes + v.comments + v.shares) / v.views) * 100 : 0,
-      }));
+      const metricoolHasNoData = subscriberCount === 0 && videosCount === 0;
+
+      if (metricoolHasNoData) {
+        // Fall back to DB for subscriber counts
+        const { data: latestMetrics } = await supabase
+          .from("social_account_metrics")
+          .select("*")
+          .eq("client_id", clientId)
+          .eq("platform", "youtube")
+          .order("collected_at", { ascending: false })
+          .limit(2);
+
+        if (latestMetrics && latestMetrics.length > 0) {
+          subscriberCount = latestMetrics[0]?.followers || 0;
+          prevSubscriberCount = latestMetrics[1]?.followers || latestMetrics[0]?.followers || 0;
+          subscribersDelta = subscriberCount - prevSubscriberCount;
+        }
+
+        // Fall back to DB for video content
+        const { data: contentData } = await supabase
+          .from("social_content")
+          .select(`
+            id, title, url, content_type, published_at,
+            social_content_metrics (views, likes, comments, shares, watch_time_hours, period_start, period_end, collected_at)
+          `)
+          .eq("client_id", clientId)
+          .eq("platform", "youtube")
+          .order("published_at", { ascending: false });
+
+        if (contentData && contentData.length > 0) {
+          let dbViews = 0, dbLikes = 0, dbComments = 0, dbShares = 0;
+
+          contentData.forEach((content: any) => {
+            const metrics = content.social_content_metrics;
+            if (!metrics || metrics.length === 0) return;
+            const sorted = [...metrics].sort((a: any, b: any) =>
+              new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+            );
+            const m = sorted[0];
+            const views = m?.views || 0;
+            const likes = m?.likes || 0;
+            const comments = m?.comments || 0;
+            const shares = m?.shares || 0;
+
+            if (views > 0 || likes > 0 || comments > 0 || shares > 0) {
+              dbViews += views;
+              dbLikes += likes;
+              dbComments += comments;
+              dbShares += shares;
+              videoList.push({
+                id: content.id,
+                title: content.title,
+                url: content.url,
+                content_type: content.content_type || "video",
+                published_at: content.published_at,
+                views, likes, comments, shares,
+                avg_view_duration: 0,
+                watch_time_hours: m?.watch_time_hours || 0,
+                engagement_rate: views > 0 ? ((likes + comments + shares) / views) * 100 : 0,
+              });
+            }
+          });
+
+          totalViews = dbViews;
+          totalLikes = dbLikes;
+          totalComments = dbComments;
+          totalShares = dbShares;
+          videosCount = videoList.length;
+          engagementPct = totalViews > 0 ? ((totalLikes + totalComments + totalShares) / totalViews) * 100 : 0;
+        }
+      } else {
+        // Transform Metricool videos to component format
+        videoList = currentData.videos.map((v: any, idx: number) => ({
+          id: `metricool-${idx}`,
+          title: v.title,
+          url: v.url,
+          content_type: "video",
+          published_at: v.publishedAt || new Date().toISOString(),
+          views: v.views,
+          likes: v.likes,
+          comments: v.comments,
+          shares: v.shares,
+          avg_view_duration: v.averageViewDuration,
+          watch_time_hours: v.watchTimeHours,
+          engagement_rate: v.views > 0 ? ((v.likes + v.comments + v.shares) / v.views) * 100 : 0,
+        }));
+      }
+
+      const subscribersPercent = prevSubscriberCount > 0
+        ? (subscribersDelta / prevSubscriberCount) * 100
+        : 0;
 
       setVideos(videoList);
       setStats({
-        followers: currentData.totalSubscribers,
+        followers: subscriberCount,
         newFollowers: subscribersDelta,
-        prevFollowers: prevData.totalSubscribers,
+        prevFollowers: prevSubscriberCount,
         followerChangePercent: subscribersPercent,
-        totalVideos: currentData.videosCount,
-        totalViews: currentData.totalViews,
-        totalLikes: currentData.totalLikes,
-        totalComments: currentData.totalComments,
-        totalShares: currentData.totalShares,
-        avgViewDuration: currentData.avgViewDuration,
-        engagementRate: currentData.engagementPct || 0,
-        prevTotalViews: prevData.totalViews,
-        prevTotalLikes: prevData.totalLikes,
-        prevTotalComments: prevData.totalComments,
-        prevTotalShares: prevData.totalShares,
-        prevTotalVideos: prevData.videosCount,
-        prevEngagementRate: prevData.engagementPct || 0,
-        prevAvgViewDuration: prevData.avgViewDuration,
+        totalVideos: videosCount,
+        totalViews: totalViews,
+        totalLikes: totalLikes,
+        totalComments: totalComments,
+        totalShares: totalShares,
+        avgViewDuration: avgViewDuration,
+        engagementRate: engagementPct,
+        prevTotalViews: prevTotalViews,
+        prevTotalLikes: prevTotalLikes,
+        prevTotalComments: prevTotalComments,
+        prevTotalShares: prevTotalShares,
+        prevTotalVideos: prevVideosCount,
+        prevEngagementRate: prevEngagementPct,
+        prevAvgViewDuration: prevAvgViewDuration,
       });
 
       return true;
