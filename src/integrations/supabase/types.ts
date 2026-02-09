@@ -1143,6 +1143,7 @@ export type Database = {
       web_analytics_page_views: {
         Row: {
           client_id: string
+          country: string | null
           created_at: string
           device_type: string | null
           id: string
@@ -1159,6 +1160,7 @@ export type Database = {
         }
         Insert: {
           client_id: string
+          country?: string | null
           created_at?: string
           device_type?: string | null
           id?: string
@@ -1175,6 +1177,7 @@ export type Database = {
         }
         Update: {
           client_id?: string
+          country?: string | null
           created_at?: string
           device_type?: string | null
           id?: string
@@ -1203,6 +1206,7 @@ export type Database = {
         Row: {
           bounce: boolean | null
           client_id: string
+          country: string | null
           created_at: string
           device_type: string | null
           ended_at: string | null
@@ -1219,6 +1223,7 @@ export type Database = {
         Insert: {
           bounce?: boolean | null
           client_id: string
+          country?: string | null
           created_at?: string
           device_type?: string | null
           ended_at?: string | null
@@ -1235,6 +1240,7 @@ export type Database = {
         Update: {
           bounce?: boolean | null
           client_id?: string
+          country?: string | null
           created_at?: string
           device_type?: string | null
           ended_at?: string | null

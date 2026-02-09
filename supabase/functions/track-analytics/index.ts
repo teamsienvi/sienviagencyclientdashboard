@@ -40,7 +40,13 @@ serve(async (req) => {
       utmSource,
       utmMedium,
       utmCampaign,
+      country,
     } = body;
+
+    // Normalize country: uppercase 2-letter code or 'XX' for unknown
+    const normalizedCountry = (typeof country === 'string' && country.trim().length >= 2)
+      ? country.trim().toUpperCase().slice(0, 2)
+      : 'XX';
 
     if (!clientId || !visitorId || !pageUrl) {
       return new Response(
@@ -100,6 +106,7 @@ serve(async (req) => {
         user_agent: userAgent,
         device_type: deviceType,
         viewed_at: viewedAt,
+        country: normalizedCountry,
       });
 
     if (pageViewError) {
@@ -141,7 +148,8 @@ serve(async (req) => {
           utm_medium: utmMedium || null,
           user_agent: userAgent,
           device_type: deviceType,
-          bounce: true, // Initially a bounce until they view another page
+          bounce: true,
+          country: normalizedCountry,
         });
 
       if (sessionError) {

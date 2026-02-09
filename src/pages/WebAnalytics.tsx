@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy, ExternalLink, ChevronRight, Building2, ChevronDown } from "lucide-react";
+import { TopCountriesWidget } from "@/components/TopCountriesWidget";
 import { format, subDays } from "date-fns";
 import { useClientAnalytics, AnalyticsErrorType, DateRangePreset } from "@/hooks/useClientAnalytics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar } from "recharts";
@@ -910,6 +911,9 @@ const WebAnalytics = () => {
                             )}
                           </CardContent>
                         </Card>
+
+                        {/* Top Countries */}
+                        <TopCountriesWidget clientId={clientId!} dateRange={dateRange} />
                       </div>
                     </>
                   )}
