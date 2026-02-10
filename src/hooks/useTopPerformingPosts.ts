@@ -5,11 +5,12 @@ import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-f
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 
 export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
+  const { start, end } = getCurrentReportingWeek();
+  const periodKey = `${format(start, "yyyy-MM-dd")}_${format(end, "yyyy-MM-dd")}`;
+
   return useQuery({
-    queryKey: ["top-performing-posts", clientId, limit],
+    queryKey: ["top-performing-posts", clientId, limit, periodKey],
     queryFn: async (): Promise<RankedTopInsight[]> => {
-      // Use the current reporting period (last completed Mon-Sun week)
-      const { start, end } = getCurrentReportingWeek();
       const periodStartDate = startOfDay(start);
       const periodEndDate = endOfDay(end);
       
