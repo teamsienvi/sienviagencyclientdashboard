@@ -75,21 +75,17 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           if (!c.published_at) return false;
           
-          // For YouTube, include content with metrics collected during the reporting period
-          // (YouTube videos accumulate views over time, not just when published)
-          if (c.platform === "youtube") {
-            const hasRecentMetrics = c.social_content_metrics.some((m: any) => {
-              if (!m.period_end) return false;
-              const metricEnd = parseISO(m.period_end);
-              // Include if metrics were collected within or after the reporting period start
-              return metricEnd >= periodStartDate;
-            });
-            return hasRecentMetrics;
-          }
+          // Include content that has metrics collected during the reporting period
+          // (content can accumulate views/engagement over time across all platforms)
+          const hasMetricsInPeriod = c.social_content_metrics.some((m: any) => {
+            if (!m.period_end) return false;
+            const metricEnd = parseISO(m.period_end);
+            return metricEnd >= periodStartDate;
+          });
+          if (hasMetricsInPeriod) return true;
           
-          // For other platforms, check if content was published within the reporting period
+          // Also include content published within the reporting period
           const publishedDate = parseISO(c.published_at);
-          
           return isWithinInterval(publishedDate, { 
             start: periodStartDate, 
             end: periodEndDate 
