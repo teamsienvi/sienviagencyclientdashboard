@@ -126,50 +126,44 @@ serve(async (req) => {
     const bounceRate = visitorIds.length > 0 ? (bounces / visitorIds.length) * 100 : 0;
     const pagesPerVisit = uniqueVisitors > 0 ? pageViews.length / uniqueVisitors : 0;
 
-    // Calculate traffic sources from referrer data
-    const trafficSourceCounts: Record<string, number> = {
-      direct: 0,
-      organic: 0,
-      social: 0,
-      referral: 0,
-      email: 0,
-      paid: 0,
+    // Calculate traffic sources - show actual referrer hostnames
+    const trafficSourceCounts: Record<string, number> = {};
+    
+    const getHostname = (url: string): string => {
+      try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
     };
 
-    const searchEngines = ['google', 'bing', 'yahoo', 'duckduckgo', 'baidu', 'yandex'];
-    const socialPlatforms = ['facebook', 'twitter', 'instagram', 'linkedin', 'pinterest', 'tiktok', 'youtube', 'reddit'];
-    
     // Analyze sessions or page views for referrer data
     const dataWithReferrer = sessions && sessions.length > 0 ? sessions : pageViews;
     
     for (const item of dataWithReferrer) {
-      const referrer = (item.referrer || item.referrer_url || item.utm_source || '').toLowerCase();
+      const referrer = item.referrer || item.referrer_url || '';
       const utmMedium = (item.utm_medium || '').toLowerCase();
       const utmSource = (item.utm_source || '').toLowerCase();
+      const hostname = referrer ? getHostname(referrer) : '';
       
-      if (!referrer && !utmSource) {
-        trafficSourceCounts.direct++;
-      } else if (utmMedium === 'cpc' || utmMedium === 'ppc' || utmMedium === 'paid') {
-        trafficSourceCounts.paid++;
-      } else if (utmMedium === 'email' || referrer.includes('mail')) {
-        trafficSourceCounts.email++;
-      } else if (searchEngines.some(se => referrer.includes(se) || utmSource.includes(se))) {
-        trafficSourceCounts.organic++;
-      } else if (socialPlatforms.some(sp => referrer.includes(sp) || utmSource.includes(sp))) {
-        trafficSourceCounts.social++;
-      } else if (referrer) {
-        trafficSourceCounts.referral++;
-      } else {
-        trafficSourceCounts.direct++;
+      let source = 'Direct';
+      if (['cpc', 'ppc', 'paid', 'paid_social', 'display'].includes(utmMedium)) {
+        source = 'Paid';
+      } else if (utmMedium === 'email' || utmSource.includes('mail') || hostname.includes('mail')) {
+        source = 'Email';
+      } else if (!hostname && !utmSource) {
+        source = 'Direct';
+      } else if (hostname) {
+        source = hostname;
+      } else if (utmSource) {
+        source = utmSource;
       }
+      
+      trafficSourceCounts[source] = (trafficSourceCounts[source] || 0) + 1;
     }
 
     const totalTrafficSources = Object.values(trafficSourceCounts).reduce((a, b) => a + b, 0);
     const trafficSources = Object.entries(trafficSourceCounts).map(([source, count]) => ({
-      source: source.charAt(0).toUpperCase() + source.slice(1),
-      visitors: count,
+      source,
+      count,
       percentage: totalTrafficSources > 0 ? Math.round((count / totalTrafficSources) * 100) : 0,
-    })).filter(ts => ts.visitors > 0).sort((a, b) => b.visitors - a.visitors);
+    })).filter(ts => ts.count > 0).sort((a, b) => b.count - a.count);
 
     // Calculate device breakdown from user agent data
     const deviceCounts: Record<string, number> = {
@@ -211,25 +205,31 @@ serve(async (req) => {
     const totalDevices = Object.values(deviceCounts).reduce((a, b) => a + b, 0);
     const deviceBreakdown = Object.entries(deviceCounts).map(([device, count]) => ({
       device: device.charAt(0).toUpperCase() + device.slice(1),
-      visitors: count,
+      count,
       percentage: totalDevices > 0 ? Math.round((count / totalDevices) * 100) : 0,
-    })).filter(db => db.visitors > 0).sort((a, b) => b.visitors - a.visitors);
+    })).filter(db => db.count > 0).sort((a, b) => b.count - a.count);
 
-    // Get daily breakdown for charts
-    const dailyData: Record<string, { visitors: Set<string>; pageViews: number }> = {};
+    // Get daily breakdown for charts - use sessions if pageviews are sparse
+    const dailyData: Record<string, { visitors: Set<string>; pageViews: number; sessions: number }> = {};
     
+    // Add session-based daily data
+    if (sessions && sessions.length > 0) {
+      for (const s of sessions) {
+        const date = (s.started_at || s.created_at || '').split('T')[0];
+        if (!date) continue;
+        if (!dailyData[date]) dailyData[date] = { visitors: new Set(), pageViews: 0, sessions: 0 };
+        dailyData[date].sessions++;
+        if (s.visitor_id) dailyData[date].visitors.add(s.visitor_id);
+      }
+    }
+
+    // Add pageview-based daily data
     for (const pv of pageViews) {
       const date = (pv.viewed_at || pv.created_at || '').split('T')[0];
       if (!date) continue;
-      
-      if (!dailyData[date]) {
-        dailyData[date] = { visitors: new Set(), pageViews: 0 };
-      }
-      
+      if (!dailyData[date]) dailyData[date] = { visitors: new Set(), pageViews: 0, sessions: 0 };
       const visitorId = pv.visitor_id || pv.session_id;
-      if (visitorId) {
-        dailyData[date].visitors.add(visitorId);
-      }
+      if (visitorId) dailyData[date].visitors.add(visitorId);
       dailyData[date].pageViews++;
     }
 
@@ -238,23 +238,79 @@ serve(async (req) => {
         date,
         visitors: data.visitors.size,
         pageViews: data.pageViews,
+        sessions: data.sessions,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    console.log(`Analytics calculated: ${uniqueVisitors} visitors, ${pageViews.length} pageviews, ${avgDuration.toFixed(1)}s avg duration, ${bounceRate.toFixed(1)}% bounce`);
+    // Top pages - extract from pageviews (page_url or path)
+    const dashboardPaths = ['/admin', '/client/', '/login', '/reset-password', '/web-analytics', '/youtube-analytics', '/tiktok-analytics', '/x-analytics', '/meta-analytics', '/linkedin-analytics', '/analytics/', '/report/'];
+    const pageCounts: Record<string, { count: number; title: string | null }> = {};
+    for (const pv of pageViews) {
+      let path = pv.page_url || pv.path || pv.url || '';
+      // Normalize to pathname only
+      try { path = new URL(path).pathname; } catch { path = path.split('?')[0]; }
+      if (!path) continue;
+      if (dashboardPaths.some(dp => path.startsWith(dp))) continue;
+      if (!pageCounts[path]) pageCounts[path] = { count: 0, title: pv.page_title || pv.title || null };
+      pageCounts[path].count++;
+    }
+    const topPages = Object.entries(pageCounts)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 10)
+      .map(([page_path, { count, title }]) => ({ page_path, count, display_name: title || page_path }));
+
+    // Country breakdown from sessions (preferred) or pageviews
+    const countryCounts: Record<string, number> = {};
+    const countrySource = sessions && sessions.length > 0 ? sessions : pageViews;
+    for (const item of countrySource) {
+      const c = (item.country || 'Unknown').trim();
+      const normalized = c.length === 2 ? c.toUpperCase() : (c === 'Unknown' || !c ? 'Unknown' : c);
+      countryCounts[normalized] = (countryCounts[normalized] || 0) + 1;
+    }
+    const countries = Object.entries(countryCounts)
+      .map(([country, count]) => ({ country, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Use sessions count as totalSessions when sessions table has data
+    const totalSessions = sessions && sessions.length > 0 ? sessions.length : visitorIds.length;
+    // Bounce rate from sessions table if available
+    const sessionBounceRate = sessions && sessions.length > 0
+      ? (sessions.filter((s: any) => s.bounce === true).length / sessions.length) * 100
+      : bounceRate;
+    // Avg duration from sessions if they have ended_at
+    let sessionAvgDuration = avgDuration;
+    if (sessions && sessions.length > 0) {
+      let durSum = 0, durCount = 0;
+      for (const s of sessions) {
+        if (s.started_at && s.ended_at) {
+          const dur = (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 1000;
+          if (dur > 0 && dur < 7200) { durSum += dur; durCount++; }
+        }
+      }
+      if (durCount > 0) sessionAvgDuration = durSum / durCount;
+    }
+
+    console.log(`Analytics calculated: ${uniqueVisitors} visitors, ${pageViews.length} pageviews, ${sessionAvgDuration.toFixed(1)}s avg duration, ${sessionBounceRate.toFixed(1)}% bounce`);
     console.log(`Traffic sources: ${JSON.stringify(trafficSources)}`);
     console.log(`Device breakdown: ${JSON.stringify(deviceBreakdown)}`);
+    console.log(`Top pages: ${topPages.length}, Countries: ${countries.length}`);
 
     const analytics = {
       visitors: uniqueVisitors,
       pageViews: pageViews.length,
-      avgDuration,
-      bounceRate,
+      avgDuration: sessionAvgDuration,
+      avgSessionDuration: sessionAvgDuration,
+      bounceRate: sessionBounceRate,
       pagesPerVisit,
-      totalSessions: visitorIds.length,
+      totalSessions,
+      totalPageViews: pageViews.length,
+      uniqueVisitors,
       trafficSources,
       deviceBreakdown,
       dailyBreakdown,
+      topPages: topPages.map(p => ({ path: p.page_path, views: p.count })),
+      top_pages: topPages,
+      countries,
     };
 
     return new Response(
