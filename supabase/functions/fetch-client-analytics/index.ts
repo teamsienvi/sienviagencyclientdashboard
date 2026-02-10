@@ -66,36 +66,66 @@ serve(async (req) => {
       );
     }
 
-    // Try LOCAL tables first — they have richer data (sources, devices, countries)
-    // Then fall back to external only if local has no data.
-    let localHasData = false;
-    {
-      const startISO = new Date(`${startDate}T00:00:00.000Z`).toISOString();
-      const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
-      endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
-      const endISO = endExclusive.toISOString();
+    // Helper: compute traffic sources & device breakdown from local tables
+    const computeLocalBreakdowns = async (cid: string, sDate: string, eDate: string) => {
+      const sISO = new Date(`${sDate}T00:00:00.000Z`).toISOString();
+      const eExcl = new Date(`${eDate}T00:00:00.000Z`);
+      eExcl.setUTCDate(eExcl.getUTCDate() + 1);
+      const eISO = eExcl.toISOString();
 
-      const { count: localSessionCount } = await supabase
+      const { data: localSessions } = await supabase
         .from('web_analytics_sessions')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId)
-        .gte('started_at', startISO)
-        .lt('started_at', endISO);
+        .select('referrer, utm_source, utm_medium, device_type, user_agent')
+        .eq('client_id', cid)
+        .gte('started_at', sISO)
+        .lt('started_at', eISO);
 
-      const { count: localPageViewCount } = await supabase
-        .from('web_analytics_page_views')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId)
-        .gte('viewed_at', startISO)
-        .lt('viewed_at', endISO);
+      if (!localSessions || localSessions.length === 0) return null;
 
-      localHasData = ((localSessionCount || 0) + (localPageViewCount || 0)) > 0;
-      console.log('Local data check:', { localSessionCount, localPageViewCount, localHasData });
-    }
+      const searchHostnames = ["google.com","bing.com","yahoo.com","duckduckgo.com","baidu.com","yandex.com"];
+      const socialHostnames = ["facebook.com","m.facebook.com","l.facebook.com","instagram.com","l.instagram.com","twitter.com","t.co","linkedin.com","tiktok.com","youtube.com","pinterest.com","reddit.com"];
+      const getHostname = (r: string) => { try { return new URL(r).hostname.replace(/^www\./, ""); } catch { return ""; } };
 
-    // If local has no data, try external analytics endpoint
-    if (!localHasData && client.supabase_url && client.api_key) {
-      console.log('No local data, fetching analytics from external source:', client.supabase_url);
+      const srcCounts: Record<string, number> = { Direct: 0, Organic: 0, Social: 0, Referral: 0, Email: 0, Paid: 0 };
+      const devCounts: Record<string, number> = { Desktop: 0, Mobile: 0, Tablet: 0 };
+
+      localSessions.forEach((item: any) => {
+        // Traffic source
+        const utmMedium = String(item.utm_medium || "").toLowerCase();
+        const utmSource = String(item.utm_source || "").toLowerCase();
+        const referrer = String(item.referrer || "");
+        const hostname = referrer ? getHostname(referrer) : "";
+        let src = "Direct";
+        if (["cpc","ppc","paid","paid_social","display"].includes(utmMedium)) src = "Paid";
+        else if (utmMedium === "email" || utmSource.includes("mail") || hostname.includes("mail")) src = "Email";
+        else if (!utmSource && !hostname) src = "Direct";
+        else if (searchHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "Organic";
+        else if (socialHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "Social";
+        else if (hostname) src = "Referral";
+        else src = "Referral";
+        srcCounts[src] = (srcCounts[src] || 0) + 1;
+
+        // Device
+        const explicit = String(item.device_type || "").toLowerCase();
+        const ua = String(item.user_agent || "").toLowerCase();
+        let dev = "Desktop";
+        if (explicit.includes("mobile") || explicit.includes("phone") || (!explicit && /mobile|android|iphone/i.test(ua))) dev = "Mobile";
+        else if (explicit.includes("tablet") || explicit.includes("ipad") || (!explicit && /tablet|ipad/i.test(ua))) dev = "Tablet";
+        devCounts[dev] = (devCounts[dev] || 0) + 1;
+      });
+
+      const total = localSessions.length;
+      const trafficSources = Object.entries(srcCounts).filter(([,c]) => c > 0).sort((a,b) => b[1]-a[1])
+        .map(([source, count]) => ({ source, sessions: count, percentage: Math.round((count/total)*1000)/10 }));
+      const deviceBreakdown = Object.entries(devCounts).filter(([,c]) => c > 0).sort((a,b) => b[1]-a[1])
+        .map(([device, count]) => ({ device, sessions: count, percentage: Math.round((count/total)*1000)/10 }));
+
+      return { trafficSources, deviceBreakdown };
+    };
+
+    // Try external analytics endpoint first (for clients with their own Supabase project)
+    if (client.supabase_url && client.api_key) {
+      console.log('Fetching analytics from external source:', client.supabase_url);
       const analyticsUrl = `${client.supabase_url}/functions/v1/get-analytics`;
       
       try {
@@ -131,16 +161,28 @@ serve(async (req) => {
           );
 
           if (hasRealData) {
-            // Try to fetch Airbnb outbound clicks from external project
+            // Supplement: if external lacks trafficSources or deviceBreakdown, compute from local
+            let enrichedData = { ...data };
+            const hasSources = data.trafficSources?.length > 0 || data.sources?.length > 0;
+            const hasDevices = data.deviceBreakdown?.length > 0 || data.devices?.length > 0;
+
+            if (!hasSources || !hasDevices) {
+              console.log('External data lacks sources/devices, supplementing from local tables...');
+              const localBreakdowns = await computeLocalBreakdowns(clientId, startDate, endDate);
+              if (localBreakdowns) {
+                if (!hasSources) enrichedData.trafficSources = localBreakdowns.trafficSources;
+                if (!hasDevices) enrichedData.deviceBreakdown = localBreakdowns.deviceBreakdown;
+                console.log('Supplemented with local breakdowns');
+              }
+            }
+
+            // Fetch Airbnb outbound clicks
             let airbnbClicks = data.airbnbClicks || 0;
-            if (!airbnbClicks && client.supabase_url && client.api_key) {
+            if (!airbnbClicks) {
               try {
                 const outboundUrl = `${client.supabase_url}/rest/v1/analytics_outbound_clicks?select=target_url&clicked_at=gte.${startDate}&clicked_at=lt.${endDate}`;
                 const outboundResponse = await fetch(outboundUrl, {
-                  headers: {
-                    'apikey': client.api_key,
-                    'Authorization': `Bearer ${client.api_key}`,
-                  },
+                  headers: { 'apikey': client.api_key, 'Authorization': `Bearer ${client.api_key}` },
                 });
                 if (outboundResponse.ok) {
                   const outboundData = await outboundResponse.json();
@@ -149,7 +191,7 @@ serve(async (req) => {
                   ).length;
                 }
               } catch (e) {
-                console.log('Could not fetch outbound clicks from external:', e);
+                console.log('Could not fetch outbound clicks:', e);
               }
             }
 
@@ -158,16 +200,18 @@ serve(async (req) => {
               JSON.stringify({ 
                 clientId: client.id,
                 clientName: client.name,
-                analytics: { ...data, airbnbClicks: airbnbClicks > 0 ? airbnbClicks : undefined },
+                analytics: { ...enrichedData, airbnbClicks: airbnbClicks > 0 ? airbnbClicks : undefined },
                 dateRange: { startDate, endDate },
                 source: 'external',
               }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
+          } else {
+            console.log('External returned no real data, falling through to local...');
           }
         }
       } catch (fetchError) {
-        console.log('External analytics fetch error, falling back:', fetchError);
+        console.log('External analytics fetch error, falling back to local:', fetchError);
       }
     }
 
