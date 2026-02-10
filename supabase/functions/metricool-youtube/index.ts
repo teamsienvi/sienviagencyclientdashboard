@@ -446,6 +446,75 @@ serve(async (req) => {
       }
     }
 
+    // Persist video content to social_content + social_content_metrics for Top Performing Posts
+    if (currentData.videos.length > 0) {
+      try {
+        for (const video of currentData.videos) {
+          if (!video.title && !video.url) continue;
+
+          // Generate stable content_id from URL or title
+          const videoIdMatch = video.url?.match(/[?&]v=([^&]+)/);
+          const contentId = videoIdMatch ? videoIdMatch[1] : `yt_${video.title.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+          // Parse published date
+          let publishedAt = new Date().toISOString();
+          if (video.publishedAt) {
+            const parsed = new Date(video.publishedAt.replace(' ', 'T'));
+            if (!isNaN(parsed.getTime())) {
+              publishedAt = parsed.toISOString();
+            }
+          }
+
+          // Upsert social_content
+          const { data: contentRow, error: contentErr } = await supabase
+            .from("social_content")
+            .upsert(
+              {
+                client_id: clientId,
+                platform: "youtube",
+                content_id: contentId,
+                content_type: "video",
+                title: video.title,
+                url: video.url || null,
+                published_at: publishedAt,
+              },
+              { onConflict: "client_id,platform,content_id" }
+            )
+            .select("id")
+            .single();
+
+          if (contentErr) {
+            console.error(`Error upserting content ${contentId}:`, contentErr.message);
+            continue;
+          }
+
+          // Upsert social_content_metrics
+          if (contentRow) {
+            await supabase
+              .from("social_content_metrics")
+              .upsert(
+                {
+                  social_content_id: contentRow.id,
+                  platform: "youtube",
+                  period_start: from,
+                  period_end: to,
+                  views: video.views,
+                  likes: video.likes,
+                  comments: video.comments,
+                  shares: video.shares,
+                  collected_at: new Date().toISOString(),
+                },
+                { onConflict: "social_content_id,period_start,period_end" }
+              );
+          }
+        }
+        console.log(`Persisted ${currentData.videos.length} YouTube videos to social_content`);
+      } catch (persistContentErr) {
+        console.error("Error persisting YouTube content:", persistContentErr);
+        errors.push(`persist content: ${persistContentErr}`);
+      }
+    }
+
     const response: YouTubeResponse = {
       current: currentData,
       previous: previousData,
