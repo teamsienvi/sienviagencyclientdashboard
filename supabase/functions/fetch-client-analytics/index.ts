@@ -176,6 +176,86 @@ serve(async (req) => {
               }
             }
 
+            // Helper to fetch from external REST API with timeout
+            const fetchExternal = async (url: string, timeoutMs = 5000): Promise<any[] | null> => {
+              try {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                const resp = await fetch(url, {
+                  headers: { 'apikey': client.api_key, 'Authorization': `Bearer ${client.api_key}` },
+                  signal: controller.signal,
+                });
+                clearTimeout(timer);
+                if (resp.ok) {
+                  const json = await resp.json();
+                  return Array.isArray(json) ? json : null;
+                }
+                console.log(`External REST ${resp.status} for ${url.split('?')[0].split('/').pop()}`);
+                return null;
+              } catch (e) {
+                console.log(`External REST error: ${e instanceof Error ? e.message : e}`);
+                return null;
+              }
+            };
+
+            // Supplement top pages from external project's REST API if missing or sparse
+            const hasTopPages = (data.topPages?.length > 0 || data.top_pages?.length > 0) && 
+              (data.topPages?.[0]?.views > 2 || data.top_pages?.[0]?.count > 2);
+            if (!hasTopPages) {
+              console.log('Trying to supplement top pages from external tables...');
+              const pvTables = ['analytics_page_views', 'analytics_pageviews', 'analytics_events'];
+              for (const table of pvTables) {
+                const dateCol = table === 'analytics_events' ? 'created_at' : 'viewed_at';
+                const pvUrl = `${client.supabase_url}/rest/v1/${table}?select=page_url,path,title,page_title&${dateCol}=gte.${startDate}&${dateCol}=lt.${endDate}&limit=1000`;
+                const pvData = await fetchExternal(pvUrl);
+                if (pvData && pvData.length > 0) {
+                  const dashPaths = ['/admin', '/client/', '/login', '/reset-password', '/web-analytics', '/analytics/', '/report/'];
+                  const pageCounts: Record<string, { count: number; title: string | null }> = {};
+                  for (const pv of pvData) {
+                    let path = pv.page_url || pv.path || '';
+                    try { path = new URL(path).pathname; } catch { path = path.split('?')[0]; }
+                    if (!path || dashPaths.some((dp: string) => path.startsWith(dp))) continue;
+                    if (!pageCounts[path]) pageCounts[path] = { count: 0, title: pv.page_title || pv.title || null };
+                    pageCounts[path].count++;
+                  }
+                  const topPages = Object.entries(pageCounts)
+                    .sort((a, b) => b[1].count - a[1].count)
+                    .slice(0, 10)
+                    .map(([page_path, { count, title }]) => ({ page_path, count, display_name: title || page_path }));
+                  if (topPages.length > 0) {
+                    enrichedData.top_pages = topPages;
+                    enrichedData.topPages = topPages.map(p => ({ path: p.page_path, views: p.count }));
+                    console.log(`Supplemented top pages from ${table}: ${topPages.length} pages`);
+                  }
+                  break;
+                }
+              }
+            }
+
+            // Supplement countries from external project's sessions table if missing/poor
+            const hasCountries = data.countries?.length > 0 && 
+              !(data.countries.length === 1 && data.countries[0].country === 'Unknown');
+            if (!hasCountries) {
+              console.log('Trying to supplement countries from external sessions...');
+              const sessData = await fetchExternal(
+                `${client.supabase_url}/rest/v1/analytics_sessions?select=country&started_at=gte.${startDate}&started_at=lt.${endDate}&limit=1000`
+              );
+              if (sessData && sessData.length > 0) {
+                const countryCounts: Record<string, number> = {};
+                for (const s of sessData) {
+                  const c = s.country && s.country !== 'Unknown' ? s.country.trim().toUpperCase().slice(0, 2) : 'XX';
+                  countryCounts[c] = (countryCounts[c] || 0) + 1;
+                }
+                const countries = Object.entries(countryCounts)
+                  .map(([country, count]) => ({ country, count }))
+                  .sort((a, b) => b.count - a.count);
+                if (countries.length > 0) {
+                  enrichedData.countries = countries;
+                  console.log(`Supplemented countries: ${countries.length} countries`);
+                }
+              }
+            }
+
             // Fetch Airbnb outbound clicks
             let airbnbClicks = data.airbnbClicks || 0;
             if (!airbnbClicks) {
