@@ -1001,11 +1001,16 @@ const WebAnalytics = () => {
                         <CardContent>
                           {normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 ? (
                             <div className="space-y-4">
-                              {normalizedAnalytics.topPages.slice(0, 10).map((page, index) => (
+                              {normalizedAnalytics.topPages.slice(0, 10).map((page: any, index: number) => (
                                 <div key={page.url} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                                   <div className="flex items-center gap-3">
                                     <span className="text-muted-foreground w-6">{index + 1}.</span>
-                                    <span className="font-medium truncate max-w-[300px]" title={page.url}>{page.url}</span>
+                                    <div className="flex flex-col">
+                                      {page.title && page.title !== page.url && (
+                                        <span className="font-medium truncate max-w-[300px]" title={page.title}>{page.title}</span>
+                                      )}
+                                      <span className={`truncate max-w-[300px] ${page.title && page.title !== page.url ? 'text-xs text-muted-foreground' : 'font-medium'}`} title={page.url}>{page.url}</span>
+                                    </div>
                                   </div>
                                   <div className="flex items-center gap-6 text-sm">
                                     <span className="font-medium">{page.views.toLocaleString()} views</span>
