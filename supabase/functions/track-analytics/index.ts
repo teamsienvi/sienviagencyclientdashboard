@@ -43,9 +43,18 @@ serve(async (req) => {
       country,
     } = body;
 
+    // Auto-detect country from Cloudflare/proxy headers if not provided by client
+    let detectedCountry = country;
+    if (!detectedCountry) {
+      detectedCountry = req.headers.get('cf-ipcountry') 
+        || req.headers.get('x-country') 
+        || req.headers.get('x-vercel-ip-country')
+        || null;
+    }
+
     // Normalize country: uppercase 2-letter code or 'XX' for unknown
-    const normalizedCountry = (typeof country === 'string' && country.trim().length >= 2)
-      ? country.trim().toUpperCase().slice(0, 2)
+    const normalizedCountry = (typeof detectedCountry === 'string' && detectedCountry.trim().length >= 2)
+      ? detectedCountry.trim().toUpperCase().slice(0, 2)
       : 'XX';
 
     if (!clientId || !visitorId || !pageUrl) {
