@@ -12,7 +12,7 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       const { start, end } = getCurrentReportingWeek();
       const periodStartDate = startOfDay(start);
       const periodEndDate = endOfDay(end);
-      const periodStartStr = format(periodStartDate, "yyyy-MM-dd");
+      
 
       // Fetch content with metrics for this client across all platforms
       // Only fetch content published on or after the reporting period start
@@ -38,9 +38,8 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           )
         `)
         .eq("client_id", clientId)
-        .gte("published_at", periodStartStr)
         .order("published_at", { ascending: false })
-        .limit(200);
+        .limit(500);
 
       if (contentError) throw contentError;
       if (!content || content.length === 0) return [];
@@ -78,12 +77,28 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           if (!c.published_at) return false;
           
-          // Content must be published within the reporting period (Feb 2-8 etc.)
+          // Content must be published within the reporting period
           const publishedDate = parseISO(c.published_at);
-          return isWithinInterval(publishedDate, { 
+          const publishedInPeriod = isWithinInterval(publishedDate, { 
             start: periodStartDate, 
             end: periodEndDate 
           });
+          if (publishedInPeriod) return true;
+          
+          // YouTube exception: include videos with metrics collected FOR the reporting period
+          // (YouTube videos accumulate views over time regardless of publish date)
+          if (c.platform === "youtube") {
+            const pStart = format(periodStartDate, "yyyy-MM-dd");
+            const pEnd = format(periodEndDate, "yyyy-MM-dd");
+            return c.social_content_metrics.some((m: any) => {
+              if (!m.period_end) return false;
+              // YouTube uses 30-day rolling windows, so check if period_end
+              // falls within or after the reporting period start
+              return m.period_end >= pStart && m.period_end <= pEnd || m.period_end >= pEnd;
+            });
+          }
+          
+          return false;
         })
         .map((c) => {
           // Get the most recent metric (by period_end, then collected_at)
