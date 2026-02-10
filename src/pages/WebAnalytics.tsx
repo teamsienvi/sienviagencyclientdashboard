@@ -919,8 +919,8 @@ const WebAnalytics = () => {
                           </CardContent>
                         </Card>
 
-                        {/* Top Countries */}
-                        <TopCountriesWidget clientId={clientId!} dateRange={dateRange} />
+                        {/* Top Countries - hidden until extra ingestion steps are added */}
+                        {/* <TopCountriesWidget clientId={clientId!} dateRange={dateRange} /> */}
                       </div>
                     </>
                   )}
