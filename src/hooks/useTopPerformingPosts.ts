@@ -75,12 +75,13 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           if (!c.published_at) return false;
           
-          // Include content that has metrics collected during the reporting period
-          // (content can accumulate views/engagement over time across all platforms)
+          // Include content with metrics that fall within the reporting period
           const hasMetricsInPeriod = c.social_content_metrics.some((m: any) => {
-            if (!m.period_end) return false;
+            if (!m.period_start || !m.period_end) return false;
+            const metricStart = parseISO(m.period_start);
             const metricEnd = parseISO(m.period_end);
-            return metricEnd >= periodStartDate;
+            // Metric period must overlap with reporting period
+            return metricStart <= periodEndDate && metricEnd >= periodStartDate;
           });
           if (hasMetricsInPeriod) return true;
           
