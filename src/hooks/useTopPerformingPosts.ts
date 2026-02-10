@@ -68,29 +68,34 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
       });
 
       // Transform to TopInsightContent format
-      // Filter content that was published within the reporting period
+      // Filter content strictly to the reporting period
       const topInsightContent: TopInsightContent[] = content
         .filter((c) => {
           // Must have metrics
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           if (!c.published_at) return false;
           
-          // Include content with metrics that fall within the reporting period
-          const hasMetricsInPeriod = c.social_content_metrics.some((m: any) => {
-            if (!m.period_start || !m.period_end) return false;
-            const metricStart = parseISO(m.period_start);
-            const metricEnd = parseISO(m.period_end);
-            // Metric period must overlap with reporting period
-            return metricStart <= periodEndDate && metricEnd >= periodStartDate;
-          });
-          if (hasMetricsInPeriod) return true;
-          
-          // Also include content published within the reporting period
           const publishedDate = parseISO(c.published_at);
-          return isWithinInterval(publishedDate, { 
+          
+          // Primary filter: content published within the reporting period
+          const publishedInPeriod = isWithinInterval(publishedDate, { 
             start: periodStartDate, 
             end: periodEndDate 
           });
+          if (publishedInPeriod) return true;
+          
+          // For YouTube only: include if metrics were collected for the reporting period
+          // (YouTube videos accumulate views over time)
+          if (c.platform === "youtube") {
+            return c.social_content_metrics.some((m: any) => {
+              if (!m.period_start || !m.period_end) return false;
+              const metricStart = parseISO(m.period_start);
+              const metricEnd = parseISO(m.period_end);
+              return metricStart <= periodEndDate && metricEnd >= periodStartDate;
+            });
+          }
+          
+          return false;
         })
         .map((c) => {
           // Get the most recent metric (by period_end, then collected_at)
