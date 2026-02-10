@@ -80,26 +80,10 @@ export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
           
           // Content must be published within the reporting period
           const publishedDate = parseISO(c.published_at);
-          const publishedInPeriod = isWithinInterval(publishedDate, { 
+          return isWithinInterval(publishedDate, { 
             start: periodStartDate, 
             end: periodEndDate 
           });
-          if (publishedInPeriod) return true;
-          
-          // YouTube exception: include videos with metrics collected FOR the reporting period
-          // (YouTube videos accumulate views over time regardless of publish date)
-          if (c.platform === "youtube") {
-            const pStart = format(periodStartDate, "yyyy-MM-dd");
-            const pEnd = format(periodEndDate, "yyyy-MM-dd");
-            return c.social_content_metrics.some((m: any) => {
-              if (!m.period_end) return false;
-              // YouTube uses 30-day rolling windows, so check if period_end
-              // falls within or after the reporting period start
-              return m.period_end >= pStart && m.period_end <= pEnd || m.period_end >= pEnd;
-            });
-          }
-          
-          return false;
         })
         .map((c) => {
           // Get the most recent metric (by period_end, then collected_at)
