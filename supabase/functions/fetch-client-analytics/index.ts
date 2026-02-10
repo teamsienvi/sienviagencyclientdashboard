@@ -66,10 +66,36 @@ serve(async (req) => {
       );
     }
 
-    // Check if client has external analytics configured
-    if (client.supabase_url && client.api_key) {
-      // Try external analytics endpoint
-      console.log('Fetching analytics from external source:', client.supabase_url);
+    // Try LOCAL tables first — they have richer data (sources, devices, countries)
+    // Then fall back to external only if local has no data.
+    let localHasData = false;
+    {
+      const startISO = new Date(`${startDate}T00:00:00.000Z`).toISOString();
+      const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
+      endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+      const endISO = endExclusive.toISOString();
+
+      const { count: localSessionCount } = await supabase
+        .from('web_analytics_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+        .gte('started_at', startISO)
+        .lt('started_at', endISO);
+
+      const { count: localPageViewCount } = await supabase
+        .from('web_analytics_page_views')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', clientId)
+        .gte('viewed_at', startISO)
+        .lt('viewed_at', endISO);
+
+      localHasData = ((localSessionCount || 0) + (localPageViewCount || 0)) > 0;
+      console.log('Local data check:', { localSessionCount, localPageViewCount, localHasData });
+    }
+
+    // If local has no data, try external analytics endpoint
+    if (!localHasData && client.supabase_url && client.api_key) {
+      console.log('No local data, fetching analytics from external source:', client.supabase_url);
       const analyticsUrl = `${client.supabase_url}/functions/v1/get-analytics`;
       
       try {
@@ -93,10 +119,6 @@ serve(async (req) => {
 
         if (analyticsResponse.ok) {
           const analyticsData = await analyticsResponse.json();
-          console.log('External analytics raw response:', JSON.stringify(analyticsData));
-          
-          // Check if external returned all zeros (no real data)
-          // Support both nested and flat response formats
           const data = analyticsData?.data || analyticsData?.analytics || analyticsData;
           const hasRealData = data && (
             (data.visitors && data.visitors > 0) ||
@@ -108,12 +130,7 @@ serve(async (req) => {
             (data.summary?.totalPageViews && data.summary.totalPageViews > 0)
           );
 
-          console.log('External has real data:', hasRealData, 'data keys:', data ? Object.keys(data) : 'null');
-
-          if (!hasRealData) {
-            // External returned zeros - fall through to local or show no_data
-            console.log('External source returned no data, checking local tables...');
-          } else {
+          if (hasRealData) {
             // Try to fetch Airbnb outbound clicks from external project
             let airbnbClicks = data.airbnbClicks || 0;
             if (!airbnbClicks && client.supabase_url && client.api_key) {
@@ -130,7 +147,6 @@ serve(async (req) => {
                   airbnbClicks = outboundData.filter((click: any) => 
                     String(click.target_url || '').toLowerCase().includes('airbnb.com')
                   ).length;
-                  console.log('Fetched Airbnb clicks from external:', airbnbClicks);
                 }
               } catch (e) {
                 console.log('Could not fetch outbound clicks from external:', e);
@@ -149,14 +165,9 @@ serve(async (req) => {
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
-        } else {
-          const errorText = await analyticsResponse.text();
-          console.log('External analytics failed, status:', analyticsResponse.status, 'response:', errorText);
-          // Fall through to local analytics
         }
       } catch (fetchError) {
-        console.log('External analytics fetch error, falling back to local:', fetchError);
-        // Fall through to local analytics
+        console.log('External analytics fetch error, falling back:', fetchError);
       }
     }
 
