@@ -178,38 +178,45 @@ const WebAnalytics = () => {
   const analytics = analyticsData?.analytics || null;
   
   // Convert external sources format to trafficSources format
-  const normalizedTrafficSources = analytics?.trafficSources || (analytics?.sources ? 
-    analytics.sources.map((s: { source: string; count: number }) => {
-      const totalCount = analytics.sources!.reduce((sum: number, item: { count: number }) => sum + item.count, 0);
+  const rawTrafficSources = analytics?.trafficSources || analytics?.sources;
+  const normalizedTrafficSources = rawTrafficSources ? 
+    rawTrafficSources.map((s: any) => {
+      const count = s.visitors ?? s.sessions ?? s.count ?? 0;
+      const totalCount = rawTrafficSources.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
       return {
         source: s.source,
-        visitors: s.count,
-        sessions: s.count,
-        percentage: totalCount > 0 ? Math.round((s.count / totalCount) * 100) : 0,
+        visitors: count,
+        sessions: count,
+        percentage: s.percentage ?? (totalCount > 0 ? Math.round((count / totalCount) * 100) : 0),
       };
-    }) : undefined);
+    }) : undefined;
 
   // Convert external devices format to deviceBreakdown format
-  const normalizedDeviceBreakdown = analytics?.deviceBreakdown || (analytics?.devices ?
-    analytics.devices.map((d: { device: string; count: number }) => {
-      const totalCount = analytics.devices!.reduce((sum: number, item: { count: number }) => sum + item.count, 0);
+  const rawDevices = analytics?.deviceBreakdown || analytics?.devices;
+  const normalizedDeviceBreakdown = rawDevices ?
+    rawDevices.map((d: any) => {
+      const count = d.visitors ?? d.sessions ?? d.count ?? 0;
+      const totalCount = rawDevices.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
       return {
-        device: d.device.charAt(0).toUpperCase() + d.device.slice(1),
-        visitors: d.count,
-        sessions: d.count,
-        percentage: totalCount > 0 ? Math.round((d.count / totalCount) * 100) : 0,
+        device: (d.device || "Unknown").charAt(0).toUpperCase() + (d.device || "Unknown").slice(1),
+        visitors: count,
+        sessions: count,
+        percentage: d.percentage ?? (totalCount > 0 ? Math.round((count / totalCount) * 100) : 0),
       };
-    }) : undefined);
+    }) : undefined;
 
   // Normalize topPages - handle both url and path formats, filter out dashboard/admin paths
   const dashboardPaths = ['/admin', '/client/', '/login', '/reset-password', '/web-analytics', '/youtube-analytics', '/tiktok-analytics', '/x-analytics', '/meta-analytics', '/linkedin-analytics', '/analytics/', '/report/'];
-  const normalizedTopPages = analytics?.topPages
-    ?.map((page: { url?: string; path?: string; views: number }) => ({
-      url: page.url || page.path || '/',
-      views: page.views,
+  // Merge topPages and top_pages formats
+  const rawTopPages = analytics?.topPages || (analytics as any)?.top_pages || [];
+  const normalizedTopPages = rawTopPages
+    ?.map((page: any) => ({
+      url: page.url || page.path || page.page_path || '/',
+      views: page.views ?? page.count ?? 0,
+      title: page.display_name || page.title || null,
     }))
-    .filter((page: { url: string; views: number }) => 
-      !dashboardPaths.some(dashPath => page.url.startsWith(dashPath))
+    .filter((page: any) => 
+      !dashboardPaths.some((dashPath: string) => page.url.startsWith(dashPath))
     );
   
   const normalizedAnalytics = analytics 
