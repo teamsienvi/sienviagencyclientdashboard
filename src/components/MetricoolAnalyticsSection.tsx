@@ -1585,19 +1585,25 @@ export const MetricoolAnalyticsSection = ({
                 <p className="text-2xl font-bold">
                   {formatNumber(liveFollowers ?? config?.followers ?? accountMetrics?.followers ?? null)}
                 </p>
-                {prevMetrics?.followers != null && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-muted-foreground">
-                      vs {formatNumber(prevMetrics.followers)} (prev week)
-                    </span>
-                    {renderTrendIndicator(
-                      liveFollowers ?? config?.followers ?? accountMetrics?.followers,
-                      prevMetrics.followers,
-                      false,
-                      true
-                    )}
-                  </div>
-                )}
+                {prevMetrics?.followers != null && (() => {
+                  const currentFollowerCount = liveFollowers ?? config?.followers ?? accountMetrics?.followers ?? 0;
+                  const followerDiff = (currentFollowerCount || 0) - (prevMetrics.followers || 0);
+                  // For TikTok, hide WoW when followers decrease
+                  if (platform === "tiktok" && followerDiff < 0) return null;
+                  return (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        vs {formatNumber(prevMetrics.followers)} (prev week)
+                      </span>
+                      {renderTrendIndicator(
+                        currentFollowerCount,
+                        prevMetrics.followers,
+                        false,
+                        true
+                      )}
+                    </div>
+                  );
+                })()}
               </>
             )}
           </CardContent>
