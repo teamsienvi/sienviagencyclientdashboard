@@ -21,6 +21,8 @@ export interface Client {
   reports: Report[];
 }
 
+// TODO: External *.lovable.app report links are legacy and may break if decommissioned.
+// Consider migrating them to internal /dynamic-report/ routes backed by database data.
 export const clientsData: Client[] = [
   {
     name: "Snarky Humans",

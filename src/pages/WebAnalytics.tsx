@@ -84,21 +84,21 @@ const WebAnalytics = () => {
 
   // Get the tracking endpoint URL - use client's supabase_url if available, otherwise use main project
   const getTrackingEndpoint = () => {
-    const baseUrl = client?.supabase_url || "https://ihbdwilzjxivmmmlkuyu.supabase.co";
+    const baseUrl = client?.supabase_url || import.meta.env.VITE_SUPABASE_URL;
     return `${baseUrl}/functions/v1/track-analytics`;
   };
 
   // Test tracking function
   const handleTestTracking = async () => {
     if (!clientId) return;
-    
+
     setIsTesting(true);
     setTestResult(null);
-    
+
     try {
       const endpoint = getTrackingEndpoint();
       const testVisitorId = `test_${Date.now()}`;
-      
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -119,9 +119,9 @@ const WebAnalytics = () => {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setTestResult({ 
-            success: true, 
-            message: "Test event recorded successfully! Refresh the page in a few seconds to see the data." 
+          setTestResult({
+            success: true,
+            message: "Test event recorded successfully! Refresh the page in a few seconds to see the data."
           });
           toast.success("Test tracking event sent successfully!");
           // Refetch analytics after a short delay
@@ -129,15 +129,15 @@ const WebAnalytics = () => {
             refetchAnalytics();
           }, 2000);
         } else {
-          setTestResult({ 
-            success: false, 
-            message: `Tracking failed: ${data.error || "Unknown error"}` 
+          setTestResult({
+            success: false,
+            message: `Tracking failed: ${data.error || "Unknown error"}`
           });
         }
       } else {
         const errorText = await response.text();
         let errorMessage = `HTTP ${response.status}`;
-        
+
         if (response.status === 400) {
           errorMessage = `Bad request - ${errorText}`;
         } else if (response.status === 401 || response.status === 403) {
@@ -147,7 +147,7 @@ const WebAnalytics = () => {
         } else if (response.status >= 500) {
           errorMessage = `Server error - ${errorText}`;
         }
-        
+
         setTestResult({ success: false, message: errorMessage });
         toast.error(`Test failed: ${errorMessage}`);
       }
@@ -176,10 +176,10 @@ const WebAnalytics = () => {
 
   // Normalize analytics data - handle both legacy external format and new local format
   const analytics = analyticsData?.analytics || null;
-  
+
   // Convert external sources format to trafficSources format
   const rawTrafficSources = analytics?.trafficSources || analytics?.sources;
-  const normalizedTrafficSources = rawTrafficSources ? 
+  const normalizedTrafficSources = rawTrafficSources ?
     rawTrafficSources.map((s: any) => {
       const count = s.visitors ?? s.sessions ?? s.count ?? 0;
       const totalCount = rawTrafficSources.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
@@ -215,26 +215,26 @@ const WebAnalytics = () => {
       views: page.views ?? page.count ?? 0,
       title: page.display_name || page.title || null,
     }))
-    .filter((page: any) => 
+    .filter((page: any) =>
       !dashboardPaths.some((dashPath: string) => page.url.startsWith(dashPath))
     );
-  
-  const normalizedAnalytics = analytics 
+
+  const normalizedAnalytics = analytics
     ? {
-        // Support all field name variations from different get-analytics implementations
-        visitors: analytics.visitors ?? analytics.uniqueVisitors ?? analytics.summary?.uniqueVisitors ?? 0,
-        pageViews: analytics.pageViews ?? analytics.totalPageViews ?? analytics.summary?.totalPageViews ?? 0,
-        totalSessions: analytics.totalSessions ?? analytics.summary?.totalSessions ?? 0,
-        avgDuration: analytics.avgDuration ?? analytics.avgSessionDuration ?? analytics.summary?.avgSessionDuration ?? 0,
-        bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
-        pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ?? 
-          (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
-        trafficSources: normalizedTrafficSources,
-        deviceBreakdown: normalizedDeviceBreakdown,
-        dailyBreakdown: analytics.dailyBreakdown,
-        topPages: normalizedTopPages,
-        airbnbClicks: analytics.airbnbClicks,
-      }
+      // Support all field name variations from different get-analytics implementations
+      visitors: analytics.visitors ?? analytics.uniqueVisitors ?? analytics.summary?.uniqueVisitors ?? 0,
+      pageViews: analytics.pageViews ?? analytics.totalPageViews ?? analytics.summary?.totalPageViews ?? 0,
+      totalSessions: analytics.totalSessions ?? analytics.summary?.totalSessions ?? 0,
+      avgDuration: analytics.avgDuration ?? analytics.avgSessionDuration ?? analytics.summary?.avgSessionDuration ?? 0,
+      bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
+      pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ??
+        (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
+      trafficSources: normalizedTrafficSources,
+      deviceBreakdown: normalizedDeviceBreakdown,
+      dailyBreakdown: analytics.dailyBreakdown,
+      topPages: normalizedTopPages,
+      airbnbClicks: analytics.airbnbClicks,
+    }
     : null;
 
   // Helper to get error message and icon based on error type
@@ -307,42 +307,42 @@ const WebAnalytics = () => {
         visitors: day.visitors ?? day.sessions ?? 0,
         sessions: day.sessions ?? day.visitors ?? 0,
         pageViews: day.pageViews,
-        bounceRate: Math.round((normalizedAnalytics.bounceRate || 45) + (Math.random() - 0.5) * 10),
+        bounceRate: Math.round(normalizedAnalytics.bounceRate || 45),
       }));
     }
 
-    // Fallback: Generate synthetic daily data from totals
+    // Fallback: Generate estimated daily data from totals (labeled as estimates in UI)
     // For "all" time range, show last 30 days of synthetic data
     const days = dateRange === "30d" ? 30 : dateRange === "all" ? 30 : 7;
     const totalVisitors = normalizedAnalytics?.visitors || 0;
     const totalPageViews = normalizedAnalytics?.pageViews || 0;
     const avgBounceRate = normalizedAnalytics?.bounceRate || 45;
-    
+
     // If no real data, return empty array
     if (totalVisitors === 0 && totalPageViews === 0) {
       return [];
     }
-    
+
     const weights = Array.from({ length: days }, (_, i) => {
       const date = subDays(new Date(), days - 1 - i);
       const dayOfWeek = date.getDay();
       return dayOfWeek === 0 || dayOfWeek === 6 ? 0.7 : 1.2;
     });
     const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-    
+
     return Array.from({ length: days }, (_, i) => {
       const date = subDays(new Date(), days - 1 - i);
       const weight = weights[i] / totalWeight;
       const visitors = Math.round(totalVisitors * weight);
       const pageViews = Math.round(totalPageViews * weight);
       const sessions = Math.round(visitors * 1.2);
-      
+
       return {
         date: format(date, "MMM d"),
         visitors,
         sessions,
         pageViews,
-        bounceRate: Math.round(avgBounceRate + (Math.random() - 0.5) * 10),
+        bounceRate: Math.round(avgBounceRate),
       };
     });
   }, [normalizedAnalytics, dateRange, hasRealDailyBreakdown]);
@@ -454,9 +454,9 @@ const WebAnalytics = () => {
                       className={`cursor-pointer flex items-center gap-2 ${clientId === c.id ? 'bg-accent' : ''}`}
                     >
                       {c.logo_url ? (
-                        <img 
-                          src={c.logo_url} 
-                          alt={c.name} 
+                        <img
+                          src={c.logo_url}
+                          alt={c.name}
                           className="h-6 w-6 rounded object-cover"
                         />
                       ) : (
@@ -558,7 +558,7 @@ const WebAnalytics = () => {
                               {errorType === 'no_data' && clientId && (
                                 <div className="mt-4 p-4 bg-muted rounded-lg text-left max-w-xl w-full">
                                   <div className="flex items-center justify-between mb-3">
-                                    <p className="text-sm font-medium">Manual Script (Non-Lovable Sites)</p>
+                                    <p className="text-sm font-medium">Manual Script (External Sites)</p>
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -573,9 +573,9 @@ const WebAnalytics = () => {
                                     {`<script src="${getTrackingEndpoint()}" data-client-id="${clientId}"></script>`}
                                   </code>
                                   <p className="text-xs text-muted-foreground mt-2">
-                                    For non-Lovable sites, add this script to your website's HTML header.
+                                    Add this script to your website's HTML header.
                                   </p>
-                                  
+
                                   {/* Test Tracking Button */}
                                   <div className="mt-4 pt-4 border-t border-border">
                                     <div className="flex items-center gap-3">
@@ -614,7 +614,7 @@ const WebAnalytics = () => {
                                   <div className="mt-4 text-xs text-muted-foreground space-y-1">
                                     <p className="font-medium text-foreground">Troubleshooting:</p>
                                     <ul className="list-disc list-inside space-y-1 ml-1">
-                                      <li>Use the "Copy Lovable Prompt" button for client Lovable sites</li>
+                                      <li>Use the "Copy Prompt" button for managed client sites</li>
                                       <li>Verify the client ID matches this client</li>
                                       <li>Disable ad blockers which may block tracking</li>
                                       <li>Check browser console for blocked requests</li>
@@ -648,7 +648,7 @@ const WebAnalytics = () => {
                             {normalizedAnalytics.visitors.toLocaleString()}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {Math.floor(normalizedAnalytics.visitors * 0.45)} returning visitors
+                            Total unique visitors this period
                           </p>
                         </CardContent>
                       </Card>
@@ -736,34 +736,34 @@ const WebAnalytics = () => {
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={dailyData}>
                             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                            <XAxis 
-                              dataKey="date" 
+                            <XAxis
+                              dataKey="date"
                               stroke="hsl(var(--muted-foreground))"
                               fontSize={12}
                             />
-                            <YAxis 
+                            <YAxis
                               stroke="hsl(var(--muted-foreground))"
                               fontSize={12}
                             />
-                            <Tooltip 
+                            <Tooltip
                               contentStyle={{
                                 backgroundColor: "hsl(var(--card))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "8px",
                               }}
                             />
-                            <Area 
-                              type="monotone" 
-                              dataKey="visitors" 
-                              stroke="hsl(var(--primary))" 
+                            <Area
+                              type="monotone"
+                              dataKey="visitors"
+                              stroke="hsl(var(--primary))"
                               fill="hsl(var(--primary) / 0.2)"
                               strokeWidth={2}
                               name="Visitors"
                             />
-                            <Area 
-                              type="monotone" 
-                              dataKey="pageViews" 
-                              stroke="hsl(var(--chart-2))" 
+                            <Area
+                              type="monotone"
+                              dataKey="pageViews"
+                              stroke="hsl(var(--chart-2))"
                               fill="hsl(var(--chart-2) / 0.1)"
                               strokeWidth={2}
                               name="Page Views"
@@ -807,24 +807,24 @@ const WebAnalytics = () => {
                             <ResponsiveContainer width="100%" height="100%">
                               <BarChart data={dailyData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis 
-                                  dataKey="date" 
+                                <XAxis
+                                  dataKey="date"
                                   stroke="hsl(var(--muted-foreground))"
                                   fontSize={12}
                                 />
-                                <YAxis 
+                                <YAxis
                                   stroke="hsl(var(--muted-foreground))"
                                   fontSize={12}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                   contentStyle={{
                                     backgroundColor: "hsl(var(--card))",
                                     border: "1px solid hsl(var(--border))",
                                     borderRadius: "8px",
                                   }}
                                 />
-                                <Bar 
-                                  dataKey="sessions" 
+                                <Bar
+                                  dataKey="sessions"
                                   fill="hsl(var(--primary))"
                                   radius={[4, 4, 0, 0]}
                                   name="Sessions"
@@ -856,7 +856,7 @@ const WebAnalytics = () => {
                                       </span>
                                     </div>
                                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                      <div 
+                                      <div
                                         className={`h-full ${item.color} rounded-full`}
                                         style={{ width: `${item.percentage}%` }}
                                       />
@@ -897,7 +897,7 @@ const WebAnalytics = () => {
                                       </span>
                                     </div>
                                     <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                      <div 
+                                      <div
                                         className={`h-full ${item.color} rounded-full`}
                                         style={{ width: `${item.percentage}%` }}
                                       />
@@ -958,17 +958,17 @@ const WebAnalytics = () => {
                             <ResponsiveContainer width="100%" height="100%">
                               <LineChart data={dailyData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                                <XAxis 
-                                  dataKey="date" 
+                                <XAxis
+                                  dataKey="date"
                                   stroke="hsl(var(--muted-foreground))"
                                   fontSize={12}
                                 />
-                                <YAxis 
+                                <YAxis
                                   stroke="hsl(var(--muted-foreground))"
                                   fontSize={12}
                                   domain={[0, 100]}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                   contentStyle={{
                                     backgroundColor: "hsl(var(--card))",
                                     border: "1px solid hsl(var(--border))",
@@ -976,10 +976,10 @@ const WebAnalytics = () => {
                                   }}
                                   formatter={(value: number) => [`${value}%`, "Bounce Rate"]}
                                 />
-                                <Line 
-                                  type="monotone" 
-                                  dataKey="bounceRate" 
-                                  stroke="hsl(var(--destructive))" 
+                                <Line
+                                  type="monotone"
+                                  dataKey="bounceRate"
+                                  stroke="hsl(var(--destructive))"
                                   strokeWidth={2}
                                   dot={{ fill: "hsl(var(--destructive))" }}
                                   name="Bounce Rate"

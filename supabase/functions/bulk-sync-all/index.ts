@@ -40,23 +40,23 @@ serve(async (req) => {
     const now = new Date();
     const pstOffset = -8 * 60;
     const nowPST = new Date(now.getTime() + (pstOffset - now.getTimezoneOffset()) * 60000);
-    
+
     const dayOfWeek = nowPST.getDay();
     const daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    
+
     const thisMonday = new Date(nowPST);
     thisMonday.setDate(nowPST.getDate() - daysToLastMonday);
     thisMonday.setHours(0, 0, 0, 0);
-    
+
     const prevWeekStart = new Date(thisMonday);
     prevWeekStart.setDate(thisMonday.getDate() - 7);
-    
+
     const prevWeekEnd = new Date(thisMonday);
     prevWeekEnd.setDate(thisMonday.getDate() - 1);
-    
+
     const prevPrevWeekStart = new Date(prevWeekStart);
     prevPrevWeekStart.setDate(prevWeekStart.getDate() - 7);
-    
+
     const prevPrevWeekEnd = new Date(prevWeekStart);
     prevPrevWeekEnd.setDate(prevWeekStart.getDate() - 1);
 
@@ -66,7 +66,7 @@ serve(async (req) => {
       const day = String(d.getDate()).padStart(2, '0');
       return `${year}-${month}-${day}`;
     };
-    
+
     const from = formatDate(prevWeekStart);
     const to = formatDate(prevWeekEnd);
     const prevFrom = formatDate(prevPrevWeekStart);
@@ -113,16 +113,16 @@ serve(async (req) => {
     const fetchMetricool = async (endpoint: string, params: Record<string, string>): Promise<any> => {
       const url = new URL(`${METRICOOL_BASE_URL}${endpoint}`);
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-      
+
       const res = await fetch(url.toString(), {
         headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
       });
-      
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`${res.status}: ${errorText.substring(0, 200)}`);
       }
-      
+
       return res.json();
     };
 
@@ -130,22 +130,22 @@ serve(async (req) => {
     const fetchMetricoolCSV = async (endpoint: string, params: Record<string, string>): Promise<string> => {
       const url = new URL(`${METRICOOL_BASE_URL}${endpoint}`);
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-      
+
       const res = await fetch(url.toString(), {
         headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "text/csv" },
       });
-      
+
       if (!res.ok) {
         throw new Error(`CSV ${res.status}`);
       }
-      
+
       return res.text();
     };
 
     // Helper to extract value from timeline
     const extractTimelineValue = (data: any): number | null => {
       if (!data) return null;
-      
+
       let points: any[] = [];
       if (Array.isArray(data)) {
         if (data[0]?.values) {
@@ -156,9 +156,9 @@ serve(async (req) => {
       } else if (data.data) {
         return extractTimelineValue(data.data);
       }
-      
+
       if (points.length === 0) return null;
-      
+
       // Sort by dateTime and get latest
       points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
       return points[points.length - 1]?.value ?? null;
@@ -227,7 +227,7 @@ serve(async (req) => {
             subject: "account",
           });
           followers = extractTimelineValue(data);
-          
+
           // Also calculate new followers from timeline
           if (data) {
             let points: any[] = [];
@@ -298,7 +298,7 @@ serve(async (req) => {
               console.error(`  Error fetching postsCount timeline for ${clientName} ${platform}:`, e.message);
             }
           }
-          
+
           // IMPORTANT: For TikTok, fetch from timelines API with "videos" metric + "video" subject
           // This matches metricool-social-weekly and accurately counts all TikTok content
           if (platform === "tiktok") {
@@ -315,7 +315,7 @@ serve(async (req) => {
               } else if (Array.isArray(tiktokData)) {
                 points = tiktokData;
               } else if (tiktokData?.data && Array.isArray(tiktokData.data)) {
-                const series = tiktokData.data.find((s: any) => 
+                const series = tiktokData.data.find((s: any) =>
                   (s.metric || "").toLowerCase() === "videos" || (s.metric || "").toLowerCase() === "postscount"
                 );
                 if (series?.values) points = series.values;
@@ -323,7 +323,7 @@ serve(async (req) => {
 
               const timelineCount = points.reduce((sum: number, p: any) => sum + (p.value || 0), 0);
               console.log(`  tiktok videos from timelines: ${timelineCount}, CSV count: ${totalContent}`);
-              
+
               // Use whichever is higher - timelines or CSV
               if (timelineCount > 0) {
                 totalContent = Math.max(totalContent ?? 0, timelineCount);
@@ -333,7 +333,7 @@ serve(async (req) => {
               console.error(`  Error fetching tiktok videos timeline for ${clientName}:`, e.message);
             }
           }
-          
+
           // For TikTok, calculate engagement from CSV data
           if (platform === "tiktok" && lines.length > 1) {
             const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
@@ -342,41 +342,41 @@ serve(async (req) => {
             const commentsIdx = headers.findIndex(h => h === 'comments');
             const sharesIdx = headers.findIndex(h => h === 'shares');
             const engIdx = headers.findIndex(h => h === 'engagement' || h === 'engageme');
-            
+
             let totalEngagement = 0;
             let postCount = 0;
-            
+
             for (let i = 1; i < lines.length; i++) {
               const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
               let postEngagement = 0;
-              
+
               // Try to get engagement directly first
               if (engIdx >= 0) {
                 postEngagement = parseFloat(values[engIdx]) || 0;
               }
-              
+
               // If no engagement value, calculate from views/likes/comments/shares
               if (postEngagement === 0 && viewsIdx >= 0) {
                 const views = parseInt(values[viewsIdx]) || 0;
                 const likes = likesIdx >= 0 ? (parseInt(values[likesIdx]) || 0) : 0;
                 const comments = commentsIdx >= 0 ? (parseInt(values[commentsIdx]) || 0) : 0;
                 const shares = sharesIdx >= 0 ? (parseInt(values[sharesIdx]) || 0) : 0;
-                
+
                 if (views > 0) {
                   postEngagement = ((likes + comments + shares) / views) * 100;
                 }
               }
-              
+
               totalEngagement += postEngagement;
               postCount++;
             }
-            
+
             if (postCount > 0) {
               engagementRate = totalEngagement / postCount;
               console.log(`  tiktok avg engagement (${postCount} posts): ${engagementRate.toFixed(2)}%`);
             }
           }
-          
+
           console.log(`  ${platform} content count: ${totalContent}`);
         } catch (e: any) {
           console.error(`  Error fetching posts for ${clientName} ${platform}:`, e.message);
@@ -390,7 +390,7 @@ serve(async (req) => {
               metric: followersMetric,
               subject: "account",
             });
-            
+
             let points: any[] = [];
             if (Array.isArray(timelineData) && timelineData[0]?.values) {
               // Format: [{metric: "...", values: [{dateTime, value}]}]
@@ -402,11 +402,11 @@ serve(async (req) => {
             } else if (Array.isArray(timelineData?.data)) {
               points = timelineData.data;
             }
-            
+
             // Persist each daily follower count
             let persistedCount = 0;
             console.log(`  ${platform} timeline raw points:`, JSON.stringify(points.slice(0, 2)));
-            
+
             const timelineRecords = points.map((point: any) => {
               const dateStr = point.dateTime || point.date || point.timestamp;
               if (!dateStr) return null;
@@ -420,15 +420,15 @@ serve(async (req) => {
                 collected_at: new Date().toISOString(),
               };
             }).filter(Boolean);
-            
+
             if (timelineRecords.length > 0) {
               const dates = timelineRecords.map((r: any) => r.date);
               await supabase.from("social_follower_timeline").delete()
                 .eq("client_id", clientId).eq("platform", platform).in("date", dates);
-              
+
               const { error: tlError, data: insertedData } = await supabase
                 .from("social_follower_timeline").insert(timelineRecords).select();
-              
+
               if (tlError) {
                 console.error(`  Timeline insert error:`, tlError.message);
               } else {
@@ -449,14 +449,14 @@ serve(async (req) => {
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
             const demoFrom = formatDate(thirtyDaysAgo);
             const demoTo = formatDate(new Date());
-            
+
             const demoParams = buildParams(userId, blogId, platform, demoFrom, demoTo);
-            
+
             let genderMale: number | null = null;
             let genderFemale: number | null = null;
             let genderUnknown: number | null = null;
             let countries: any[] = [];
-            
+
             // Fetch gender demographics
             try {
               const genderData = await fetchMetricool("/api/v2/analytics/aggregation", {
@@ -464,12 +464,12 @@ serve(async (req) => {
                 metric: "followers_gender",
                 subject: "account",
               });
-              
+
               if (genderData && Array.isArray(genderData.data)) {
                 for (const item of genderData.data) {
                   const label = (item.metric || item.label || item.gender || "").toLowerCase();
                   const value = item.value || item.percentage || 0;
-                  
+
                   if (label.includes("male") && !label.includes("female")) {
                     genderMale = value;
                   } else if (label.includes("female")) {
@@ -487,7 +487,7 @@ serve(async (req) => {
             } catch (e: any) {
               console.error(`  Error fetching gender for ${clientName}:`, e.message);
             }
-            
+
             // Fetch country demographics
             try {
               const countryData = await fetchMetricool("/api/v2/analytics/aggregation", {
@@ -495,7 +495,7 @@ serve(async (req) => {
                 metric: "followers_country",
                 subject: "account",
               });
-              
+
               if (countryData && Array.isArray(countryData.data)) {
                 countries = countryData.data
                   .map((item: any) => ({
@@ -519,7 +519,7 @@ serve(async (req) => {
             } catch (e: any) {
               console.error(`  Error fetching countries for ${clientName}:`, e.message);
             }
-            
+
             // Persist demographics (delete then insert approach)
             if (genderMale !== null || genderFemale !== null || countries.length > 0) {
               // Delete existing record for this period
@@ -530,7 +530,7 @@ serve(async (req) => {
                 .eq("platform", platform)
                 .eq("period_start", from)
                 .eq("period_end", to);
-              
+
               const { error: demoError } = await supabase.from("social_account_demographics").insert({
                 client_id: clientId,
                 platform,
@@ -542,7 +542,7 @@ serve(async (req) => {
                 countries: countries.length > 0 ? countries : null,
                 collected_at: new Date().toISOString(),
               });
-              
+
               if (demoError) {
                 console.error(`  Error persisting demographics:`, demoError);
               } else {
@@ -604,7 +604,7 @@ serve(async (req) => {
 
       } catch (err: any) {
         console.error(`✗ ${clientName} - ${platform}:`, err.message);
-        
+
         const validPlatforms = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'x'];
         if (validPlatforms.includes(platform)) {
           await supabase.from("social_sync_logs").insert({
@@ -630,10 +630,78 @@ serve(async (req) => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
+    // ===== PHASE 2: Sync individual content (posts/reels) for Top Performing Posts =====
+    console.log(`\n=== Phase 2: Syncing individual content (posts/reels) ===`);
+
+    const contentSyncResults: { platform: string; clientName: string; recordsSynced: number; success: boolean; error?: string }[] = [];
+
+    // Deduplicate Instagram configs by client_id
+    const igConfigs = activeConfigs.filter((c: any) => c.platform === "instagram");
+    const seenIgClients = new Set<string>();
+    for (const config of igConfigs) {
+      if (seenIgClients.has(config.client_id)) continue;
+      seenIgClients.add(config.client_id);
+
+      const clientName = (config.clients as any)?.name || "Unknown";
+      console.log(`  Syncing IG content for ${clientName}...`);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("sync-metricool-instagram", {
+          body: {
+            clientId: config.client_id,
+            periodStart: from,
+            periodEnd: to,
+          },
+        });
+        if (error) throw error;
+        const recordsSynced = data?.recordsSynced || 0;
+        console.log(`    ✓ IG ${clientName}: ${recordsSynced} posts/reels synced`);
+        contentSyncResults.push({ platform: "instagram", clientName, recordsSynced, success: true });
+      } catch (err: any) {
+        console.error(`    ✗ IG ${clientName}: ${err.message}`);
+        contentSyncResults.push({ platform: "instagram", clientName, recordsSynced: 0, success: false, error: err.message });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    // Deduplicate Facebook configs by client_id
+    const fbConfigs = activeConfigs.filter((c: any) => c.platform === "facebook");
+    const seenFbClients = new Set<string>();
+    for (const config of fbConfigs) {
+      if (seenFbClients.has(config.client_id)) continue;
+      seenFbClients.add(config.client_id);
+
+      const clientName = (config.clients as any)?.name || "Unknown";
+      console.log(`  Syncing FB content for ${clientName}...`);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("sync-metricool-facebook", {
+          body: {
+            clientId: config.client_id,
+            periodStart: from,
+            periodEnd: to,
+          },
+        });
+        if (error) throw error;
+        const recordsSynced = data?.recordsSynced || 0;
+        console.log(`    ✓ FB ${clientName}: ${recordsSynced} posts/reels synced`);
+        contentSyncResults.push({ platform: "facebook", clientName, recordsSynced, success: true });
+      } catch (err: any) {
+        console.error(`    ✗ FB ${clientName}: ${err.message}`);
+        contentSyncResults.push({ platform: "facebook", clientName, recordsSynced: 0, success: false, error: err.message });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    const contentSuccess = contentSyncResults.filter(r => r.success).length;
+    const contentFailed = contentSyncResults.filter(r => !r.success).length;
+    const totalContentSynced = contentSyncResults.reduce((sum, r) => sum + r.recordsSynced, 0);
+    console.log(`\nPhase 2 complete: ${contentSuccess} succeeded, ${contentFailed} failed, ${totalContentSynced} total posts/reels synced`);
+
     const successCount = results.filter((r) => r.success).length;
     const failCount = results.filter((r) => !r.success).length;
 
-    console.log(`\nBulk sync complete: ${successCount} succeeded, ${failCount} failed`);
+    console.log(`\nBulk sync complete: ${successCount} account syncs succeeded, ${failCount} failed`);
 
     return new Response(
       JSON.stringify({
@@ -643,6 +711,12 @@ serve(async (req) => {
         successCount,
         failCount,
         results,
+        contentSync: {
+          totalContentSynced,
+          contentSuccess,
+          contentFailed,
+          details: contentSyncResults,
+        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

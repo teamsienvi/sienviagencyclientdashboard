@@ -10,24 +10,24 @@ const corsHeaders = {
 function getAnalyticsPeriods() {
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0 = Sunday
-  
+
   // Current week: starts on Sunday
   const currentWeekStart = new Date(now);
   currentWeekStart.setDate(now.getDate() - dayOfWeek);
   currentWeekStart.setHours(0, 0, 0, 0);
-  
+
   const currentWeekEnd = new Date(currentWeekStart);
   currentWeekEnd.setDate(currentWeekStart.getDate() + 6);
-  
+
   // Previous week
   const previousWeekEnd = new Date(currentWeekStart);
   previousWeekEnd.setDate(currentWeekStart.getDate() - 1);
-  
+
   const previousWeekStart = new Date(previousWeekEnd);
   previousWeekStart.setDate(previousWeekEnd.getDate() - 6);
-  
+
   const formatDate = (d: Date) => d.toISOString().split('T')[0];
-  
+
   return {
     current: { start: formatDate(currentWeekStart), end: formatDate(currentWeekEnd) },
     previous: { start: formatDate(previousWeekStart), end: formatDate(previousWeekEnd) },
@@ -44,7 +44,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   const periods = getAnalyticsPeriods();
-  
+
   console.log("Starting scheduled sync for all platforms...");
   console.log(`Current Period: ${periods.current.start} to ${periods.current.end}`);
   console.log(`Previous Period: ${periods.previous.start} to ${periods.previous.end}`);
@@ -106,7 +106,7 @@ serve(async (req) => {
     for (const account of youtubeAccounts || []) {
       const accountName = account.account_name || account.account_id;
       console.log(`Syncing YouTube for client ${account.client_id}: ${accountName}`);
-      
+
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-youtube", {
@@ -138,7 +138,7 @@ serve(async (req) => {
     for (const account of xAccounts || []) {
       const accountName = account.account_name || account.account_id;
       console.log(`Syncing X for client ${account.client_id}: ${accountName}`);
-      
+
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-x", {
@@ -170,7 +170,7 @@ serve(async (req) => {
     for (const account of tiktokAccounts || []) {
       const accountName = account.account_name || account.account_id;
       console.log(`Syncing TikTok for client ${account.client_id}: ${accountName}`);
-      
+
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-tiktok", {
@@ -193,6 +193,65 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 500));
     }
 
+    // 3b. TIKTOK DEMOGRAPHICS SYNC VIA METRICOOL
+    console.log("\n=== Syncing TikTok Demographics (Metricool) ===");
+    const { data: tiktokMetricoolConfigs } = await supabase
+      .from("client_metricool_config")
+      .select(`client_id, user_id, blog_id, clients(name)`)
+      .eq("platform", "tiktok")
+      .eq("is_active", true);
+
+    for (const config of tiktokMetricoolConfigs || []) {
+      const clientName = (config.clients as any)?.name || config.client_id;
+      console.log(`Syncing TikTok demographics for ${clientName}`);
+
+      try {
+        // Sync gender demographics
+        const { error: genderError } = await supabase.functions.invoke("metricool-distribution", {
+          body: {
+            metric: "gender",
+            network: "tiktok",
+            subject: "account",
+            from: `${periods.current.start}T00:00:00`,
+            to: `${periods.current.end}T23:59:59`,
+            userId: config.user_id,
+            blogId: config.blog_id || undefined,
+            clientId: config.client_id, // enables persistence
+          },
+        });
+        if (genderError) {
+          console.error(`  ✗ Gender demographics failed: ${genderError.message}`);
+        } else {
+          console.log(`  ✓ Gender demographics synced`);
+        }
+
+        await new Promise(r => setTimeout(r, 300));
+
+        // Sync country demographics
+        const { error: countryError } = await supabase.functions.invoke("metricool-distribution", {
+          body: {
+            metric: "country",
+            network: "tiktok",
+            subject: "account",
+            from: `${periods.current.start}T00:00:00`,
+            to: `${periods.current.end}T23:59:59`,
+            userId: config.user_id,
+            blogId: config.blog_id || undefined,
+            clientId: config.client_id, // enables persistence
+          },
+        });
+        if (countryError) {
+          console.error(`  ✗ Country demographics failed: ${countryError.message}`);
+        } else {
+          console.log(`  ✓ Country demographics synced`);
+        }
+
+        await new Promise(r => setTimeout(r, 300));
+      } catch (err: any) {
+        console.error(`  ✗ Demographics sync failed for ${clientName}: ${err.message}`);
+      }
+    }
+
     // 4. LINKEDIN SYNC
     console.log("\n=== Syncing LinkedIn ===");
     const { data: linkedinAccounts } = await supabase
@@ -204,7 +263,7 @@ serve(async (req) => {
     for (const account of linkedinAccounts || []) {
       const accountName = account.account_name || account.account_id;
       console.log(`Syncing LinkedIn for client ${account.client_id}: ${accountName}`);
-      
+
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-linkedin", {
@@ -229,7 +288,7 @@ serve(async (req) => {
 
     // 5. META (INSTAGRAM & FACEBOOK) SYNC VIA METRICOOL
     console.log("\n=== Syncing Meta via Metricool (Instagram & Facebook) ===");
-    
+
     // Fetch all active Metricool configs for Instagram
     const { data: instagramConfigs } = await supabase
       .from("client_metricool_config")
@@ -245,7 +304,7 @@ serve(async (req) => {
     for (const config of instagramConfigs || []) {
       const clientName = (config.clients as any)?.name || config.client_id;
       console.log(`Syncing Instagram (Metricool) for ${clientName}`);
-      
+
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-metricool-instagram", {
@@ -279,7 +338,7 @@ serve(async (req) => {
     for (const config of facebookConfigs || []) {
       const clientName = (config.clients as any)?.name || config.client_id;
       console.log(`Syncing Facebook (Metricool) for ${clientName}`);
-      
+
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-metricool-facebook", {

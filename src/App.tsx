@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
@@ -13,6 +14,7 @@ import NotFound from "./pages/NotFound";
 import Admin from "./pages/Admin";
 
 import AdminYouTubeAssets from "./pages/AdminYouTubeAssets";
+import AdminMetaAssets from "./pages/AdminMetaAssets";
 import YouTubeAnalytics from "./pages/YouTubeAnalytics";
 import XAnalytics from "./pages/XAnalytics";
 import MetaAnalytics from "./pages/MetaAnalytics";
@@ -66,23 +68,24 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/client/:clientId" element={<ClientDashboard />} />
-          <Route path="/admin" element={<Admin />} />
-          
-          <Route path="/admin/youtube-assets" element={<AdminYouTubeAssets />} />
-          <Route path="/report/:clientId/:reportId" element={<Report />} />
-          <Route path="/dynamic-report/:reportId" element={<DynamicReport />} />
-          <Route path="/youtube-analytics/:clientId" element={<YouTubeAnalytics />} />
-          <Route path="/x-analytics/:clientId" element={<XAnalytics />} />
-          <Route path="/meta-analytics/:clientId" element={<MetaAnalytics />} />
-          <Route path="/tiktok-analytics/:clientId" element={<TikTokAnalytics />} />
-          <Route path="/linkedin-analytics/:clientId" element={<LinkedInAnalytics />} />
-          <Route path="/tiktok-metricool/:clientId" element={<TikTokMetricoolAnalytics />} />
-          <Route path="/linkedin-metricool/:clientId" element={<LinkedInMetricoolAnalytics />} />
-          <Route path="/web-analytics/:clientId" element={<WebAnalytics />} />
-          <Route path="/ads-analytics/:clientId" element={<AdsAnalytics />} />
-          <Route path="/shopify-analytics/:clientId" element={<ShopifyAnalytics />} />
-          <Route path="/analytics/:clientId" element={<UnifiedAnalytics />} />
+          <Route path="/client/:clientId" element={<ProtectedRoute><ClientDashboard /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute requireAdmin><Admin /></ProtectedRoute>} />
+
+          <Route path="/admin/youtube-assets" element={<ProtectedRoute requireAdmin><AdminYouTubeAssets /></ProtectedRoute>} />
+          <Route path="/admin/meta-assets" element={<ProtectedRoute requireAdmin><AdminMetaAssets /></ProtectedRoute>} />
+          <Route path="/report/:clientId/:reportId" element={<ProtectedRoute><Report /></ProtectedRoute>} />
+          <Route path="/dynamic-report/:reportId" element={<ProtectedRoute><DynamicReport /></ProtectedRoute>} />
+          <Route path="/youtube-analytics/:clientId" element={<ProtectedRoute><YouTubeAnalytics /></ProtectedRoute>} />
+          <Route path="/x-analytics/:clientId" element={<ProtectedRoute><XAnalytics /></ProtectedRoute>} />
+          <Route path="/meta-analytics/:clientId" element={<ProtectedRoute><MetaAnalytics /></ProtectedRoute>} />
+          <Route path="/tiktok-analytics/:clientId" element={<ProtectedRoute><TikTokAnalytics /></ProtectedRoute>} />
+          <Route path="/linkedin-analytics/:clientId" element={<ProtectedRoute><LinkedInAnalytics /></ProtectedRoute>} />
+          <Route path="/tiktok-metricool/:clientId" element={<ProtectedRoute><TikTokMetricoolAnalytics /></ProtectedRoute>} />
+          <Route path="/linkedin-metricool/:clientId" element={<ProtectedRoute><LinkedInMetricoolAnalytics /></ProtectedRoute>} />
+          <Route path="/web-analytics/:clientId" element={<ProtectedRoute><WebAnalytics /></ProtectedRoute>} />
+          <Route path="/ads-analytics/:clientId" element={<ProtectedRoute><AdsAnalytics /></ProtectedRoute>} />
+          <Route path="/shopify-analytics/:clientId" element={<ProtectedRoute><ShopifyAnalytics /></ProtectedRoute>} />
+          <Route path="/analytics/:clientId" element={<ProtectedRoute><UnifiedAnalytics /></ProtectedRoute>} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
           <Route path="/father-figure-formula-dec15-21" element={<FatherFigureFormulaDec15to21 />} />
