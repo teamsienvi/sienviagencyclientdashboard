@@ -93,7 +93,7 @@ serve(async (req) => {
     // Step 1: Get user's blogs/profiles to verify connection
     let targetBlogId = blogId;
     let platformConnected = false;
-    
+
     console.log("Fetching profiles for user...");
     const profilesResponse = await fetch(`${baseUrl}/admin/simpleProfiles?userId=${userId}`, {
       headers: metricoolHeaders,
@@ -136,20 +136,20 @@ serve(async (req) => {
 
     // Step 2: Fetch TikTok account stats using discovered endpoints
     // Based on network inspection: /api/v2/analytics/stats/tiktok and /api/stats/timeling/tiktokFollowers
-    
+
     if (platform.toLowerCase() === "tiktok") {
       // Endpoint 1: /api/v2/analytics/stats/tiktok - Main analytics stats (use blog_id with underscore)
       const analyticsStatsUrl = `${baseUrl}/v2/analytics/stats/tiktok?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok analytics stats:", analyticsStatsUrl);
-      
+
       try {
         const statsResponse = await fetch(analyticsStatsUrl, { headers: metricoolHeaders });
         console.log("Analytics stats response status:", statsResponse.status);
-        
+
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           console.log("TikTok analytics stats:", JSON.stringify(statsData).substring(0, 1000));
-          
+
           // Extract metrics from response
           if (statsData) {
             accountMetrics.followers = statsData.followers || statsData.totalFollowers;
@@ -167,15 +167,15 @@ serve(async (req) => {
       // Endpoint 2: /api/stats/timeling/tiktokFollowers - Follower timeline (use start/end params)
       const followersUrl = `${baseUrl}/stats/timeling/tiktokFollowers?userId=${userId}&blog_id=${targetBlogId}&start=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok followers timeline:", followersUrl);
-      
+
       try {
         const followersResponse = await fetch(followersUrl, { headers: metricoolHeaders });
         console.log("Followers timeline response status:", followersResponse.status);
-        
+
         if (followersResponse.ok) {
           const followersData = await followersResponse.json();
           console.log("TikTok followers data:", JSON.stringify(followersData).substring(0, 500));
-          
+
           // Get latest follower count from timeline
           if (Array.isArray(followersData) && followersData.length > 0) {
             const latestEntry = followersData[followersData.length - 1];
@@ -192,13 +192,13 @@ serve(async (req) => {
       // For other platforms, try generic endpoints
       const statsUrl = `${baseUrl}/v2/analytics/stats/${platform.toLowerCase()}?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching platform stats:", statsUrl);
-      
+
       try {
         const statsResponse = await fetch(statsUrl, { headers: metricoolHeaders });
         if (statsResponse.ok) {
           const statsData = await statsResponse.json();
           console.log("Platform stats:", JSON.stringify(statsData).substring(0, 500));
-          
+
           if (statsData) {
             accountMetrics.followers = statsData.followers || statsData.totalFollowers;
             accountMetrics.newFollowers = statsData.newFollowers;
@@ -213,10 +213,10 @@ serve(async (req) => {
     // Store account metrics if we have any
     if (accountMetrics.followers || accountMetrics.newFollowers || accountMetrics.engagementRate) {
       console.log("Storing account metrics:", accountMetrics);
-      
+
       const { error: metricsError } = await supabase
         .from("social_account_metrics")
-        .insert({
+        .upsert({
           client_id: clientId,
           platform: platform,
           period_start: startDate,
@@ -225,6 +225,9 @@ serve(async (req) => {
           new_followers: accountMetrics.newFollowers || null,
           engagement_rate: accountMetrics.engagementRate || null,
           total_content: accountMetrics.totalContent || null,
+          collected_at: new Date().toISOString(),
+        }, {
+          onConflict: "client_id,platform,period_start,period_end",
         });
 
       if (metricsError) {
@@ -237,20 +240,20 @@ serve(async (req) => {
     // Step 3: Fetch content/videos using discovered endpoints
     // For TikTok: /api/v2/analytics/videos/tiktok and /api/videos/tiktok
     let contentData: any[] = [];
-    
+
     if (platform.toLowerCase() === "tiktok") {
       // Try /api/v2/analytics/videos/tiktok first (more detailed)
       const analyticsVideosUrl = `${baseUrl}/v2/analytics/videos/tiktok?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok analytics videos:", analyticsVideosUrl);
-      
+
       try {
         const videosResponse = await fetch(analyticsVideosUrl, { headers: metricoolHeaders });
         console.log("Analytics videos response status:", videosResponse.status);
-        
+
         if (videosResponse.ok) {
           const videosData = await videosResponse.json();
           console.log("TikTok analytics videos:", JSON.stringify(videosData).substring(0, 1000));
-          
+
           if (Array.isArray(videosData)) {
             contentData = videosData;
           } else if (videosData.data && Array.isArray(videosData.data)) {
@@ -267,13 +270,13 @@ serve(async (req) => {
       if (contentData.length === 0) {
         const videosUrl = `${baseUrl}/videos/tiktok?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
         console.log("Fetching TikTok videos (fallback):", videosUrl);
-        
+
         try {
           const videosResponse = await fetch(videosUrl, { headers: metricoolHeaders });
           if (videosResponse.ok) {
             const videosData = await videosResponse.json();
             console.log("TikTok videos fallback:", JSON.stringify(videosData).substring(0, 500));
-            
+
             if (Array.isArray(videosData)) {
               contentData = videosData;
             } else if (videosData.data) {
@@ -288,7 +291,7 @@ serve(async (req) => {
       // For other platforms
       const postsUrl = `${baseUrl}/v2/analytics/posts/${platform.toLowerCase()}?userId=${userId}&blog_id=${targetBlogId}&init=${startDate}&end=${endDate}`;
       console.log("Fetching platform posts:", postsUrl);
-      
+
       try {
         const postsResponse = await fetch(postsUrl, { headers: metricoolHeaders });
         if (postsResponse.ok) {
@@ -310,7 +313,7 @@ serve(async (req) => {
     for (const item of contentData) {
       const contentId = item.id || item.videoId || item.postId || `${platform}-${Date.now()}-${Math.random()}`;
       const publishedAt = item.publishedAt || item.createdAt || item.date || new Date().toISOString();
-      
+
       // Upsert content
       const { data: contentRecord, error: contentError } = await supabase
         .from("social_content")

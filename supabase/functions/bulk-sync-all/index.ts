@@ -450,6 +450,8 @@ serve(async (req) => {
             const demoFrom = formatDate(thirtyDaysAgo);
             const demoTo = formatDate(new Date());
 
+            // Use /api/v2/analytics/distribution endpoint (not aggregation)
+            // This matches the working metricool-distribution edge function
             const demoParams = buildParams(userId, blogId, platform, demoFrom, demoTo);
 
             let genderMale: number | null = null;
@@ -457,24 +459,24 @@ serve(async (req) => {
             let genderUnknown: number | null = null;
             let countries: any[] = [];
 
-            // Fetch gender demographics
+            // Fetch gender demographics via distribution endpoint
             try {
-              const genderData = await fetchMetricool("/api/v2/analytics/aggregation", {
+              const genderData = await fetchMetricool("/api/v2/analytics/distribution", {
                 ...demoParams,
-                metric: "followers_gender",
+                metric: "gender",
                 subject: "account",
               });
 
               if (genderData && Array.isArray(genderData.data)) {
                 for (const item of genderData.data) {
-                  const label = (item.metric || item.label || item.gender || "").toLowerCase();
-                  const value = item.value || item.percentage || 0;
+                  const label = String(item.label ?? item.name ?? item.key ?? item.id ?? "").toLowerCase();
+                  const value = item.percentage ?? item.value ?? item.count ?? 0;
 
-                  if (label.includes("male") && !label.includes("female")) {
+                  if (label === "m" || (label.includes("male") && !label.includes("female"))) {
                     genderMale = value;
-                  } else if (label.includes("female")) {
+                  } else if (label === "f" || label.includes("female")) {
                     genderFemale = value;
-                  } else if (label.includes("unknown") || label.includes("other")) {
+                  } else if (label === "u" || label.includes("unknown") || label.includes("other")) {
                     genderUnknown = value;
                   }
                 }
@@ -488,18 +490,18 @@ serve(async (req) => {
               console.error(`  Error fetching gender for ${clientName}:`, e.message);
             }
 
-            // Fetch country demographics
+            // Fetch country demographics via distribution endpoint
             try {
-              const countryData = await fetchMetricool("/api/v2/analytics/aggregation", {
+              const countryData = await fetchMetricool("/api/v2/analytics/distribution", {
                 ...demoParams,
-                metric: "followers_country",
+                metric: "country",
                 subject: "account",
               });
 
               if (countryData && Array.isArray(countryData.data)) {
                 countries = countryData.data
                   .map((item: any) => ({
-                    country: item.country || item.label || item.name || item.metric || "Unknown",
+                    country: item.country || item.code || item.key || item.name || item.label || "Unknown",
                     percentage: item.percentage || item.value || 0,
                   }))
                   .filter((c: any) => c.percentage > 0)
@@ -508,7 +510,7 @@ serve(async (req) => {
               } else if (Array.isArray(countryData)) {
                 countries = countryData
                   .map((item: any) => ({
-                    country: item.country || item.label || item.name || item.metric || "Unknown",
+                    country: item.country || item.code || item.key || item.name || item.label || "Unknown",
                     percentage: item.percentage || item.value || 0,
                   }))
                   .filter((c: any) => c.percentage > 0)
@@ -520,9 +522,9 @@ serve(async (req) => {
               console.error(`  Error fetching countries for ${clientName}:`, e.message);
             }
 
-            // Persist demographics (delete then insert approach)
+            // Only persist if we actually got new data — otherwise leave existing demographics intact
             if (genderMale !== null || genderFemale !== null || countries.length > 0) {
-              // Delete existing record for this period
+              // Delete existing record for this period, then insert fresh
               await supabase
                 .from("social_account_demographics")
                 .delete()
@@ -548,6 +550,8 @@ serve(async (req) => {
               } else {
                 console.log(`  ✓ Demographics saved`);
               }
+            } else {
+              console.log(`  ⚠ No demographics data returned — keeping existing records`);
             }
           } catch (e: any) {
             console.error(`  Error in demographics sync for ${clientName}:`, e.message);
@@ -630,78 +634,10 @@ serve(async (req) => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
-    // ===== PHASE 2: Sync individual content (posts/reels) for Top Performing Posts =====
-    console.log(`\n=== Phase 2: Syncing individual content (posts/reels) ===`);
-
-    const contentSyncResults: { platform: string; clientName: string; recordsSynced: number; success: boolean; error?: string }[] = [];
-
-    // Deduplicate Instagram configs by client_id
-    const igConfigs = activeConfigs.filter((c: any) => c.platform === "instagram");
-    const seenIgClients = new Set<string>();
-    for (const config of igConfigs) {
-      if (seenIgClients.has(config.client_id)) continue;
-      seenIgClients.add(config.client_id);
-
-      const clientName = (config.clients as any)?.name || "Unknown";
-      console.log(`  Syncing IG content for ${clientName}...`);
-
-      try {
-        const { data, error } = await supabase.functions.invoke("sync-metricool-instagram", {
-          body: {
-            clientId: config.client_id,
-            periodStart: from,
-            periodEnd: to,
-          },
-        });
-        if (error) throw error;
-        const recordsSynced = data?.recordsSynced || 0;
-        console.log(`    ✓ IG ${clientName}: ${recordsSynced} posts/reels synced`);
-        contentSyncResults.push({ platform: "instagram", clientName, recordsSynced, success: true });
-      } catch (err: any) {
-        console.error(`    ✗ IG ${clientName}: ${err.message}`);
-        contentSyncResults.push({ platform: "instagram", clientName, recordsSynced: 0, success: false, error: err.message });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-
-    // Deduplicate Facebook configs by client_id
-    const fbConfigs = activeConfigs.filter((c: any) => c.platform === "facebook");
-    const seenFbClients = new Set<string>();
-    for (const config of fbConfigs) {
-      if (seenFbClients.has(config.client_id)) continue;
-      seenFbClients.add(config.client_id);
-
-      const clientName = (config.clients as any)?.name || "Unknown";
-      console.log(`  Syncing FB content for ${clientName}...`);
-
-      try {
-        const { data, error } = await supabase.functions.invoke("sync-metricool-facebook", {
-          body: {
-            clientId: config.client_id,
-            periodStart: from,
-            periodEnd: to,
-          },
-        });
-        if (error) throw error;
-        const recordsSynced = data?.recordsSynced || 0;
-        console.log(`    ✓ FB ${clientName}: ${recordsSynced} posts/reels synced`);
-        contentSyncResults.push({ platform: "facebook", clientName, recordsSynced, success: true });
-      } catch (err: any) {
-        console.error(`    ✗ FB ${clientName}: ${err.message}`);
-        contentSyncResults.push({ platform: "facebook", clientName, recordsSynced: 0, success: false, error: err.message });
-      }
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-
-    const contentSuccess = contentSyncResults.filter(r => r.success).length;
-    const contentFailed = contentSyncResults.filter(r => !r.success).length;
-    const totalContentSynced = contentSyncResults.reduce((sum, r) => sum + r.recordsSynced, 0);
-    console.log(`\nPhase 2 complete: ${contentSuccess} succeeded, ${contentFailed} failed, ${totalContentSynced} total posts/reels synced`);
-
     const successCount = results.filter((r) => r.success).length;
     const failCount = results.filter((r) => !r.success).length;
 
-    console.log(`\nBulk sync complete: ${successCount} account syncs succeeded, ${failCount} failed`);
+    console.log(`\nBulk sync complete: ${successCount} succeeded, ${failCount} failed`);
 
     return new Response(
       JSON.stringify({
@@ -711,12 +647,6 @@ serve(async (req) => {
         successCount,
         failCount,
         results,
-        contentSync: {
-          totalContentSynced,
-          contentSuccess,
-          contentFailed,
-          details: contentSyncResults,
-        },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

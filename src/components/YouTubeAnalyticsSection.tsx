@@ -96,6 +96,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     to: Date | undefined;
   }>({ from: undefined, to: undefined });
   const [useMetricool, setUseMetricool] = useState(false);
+  const [reportingPeriodLabel, setReportingPeriodLabel] = useState<string>("");
 
   const computeEngagementRate = (
     likes: number,
@@ -130,22 +131,24 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       // Use last completed week for 7d range (Monday-Sunday)
       const currentWeek = getCurrentReportingWeek();
       const previousWeek = getPreviousReportingWeek();
-      
+
       let startStr: string;
       let endStr: string;
       let prevStartStr: string;
       let prevEndStr: string;
-      
+
       if (dateRange === "7d") {
         startStr = formatDate(currentWeek.start, 'yyyy-MM-dd');
         endStr = formatDate(currentWeek.end, 'yyyy-MM-dd');
         prevStartStr = formatDate(previousWeek.start, 'yyyy-MM-dd');
         prevEndStr = formatDate(previousWeek.end, 'yyyy-MM-dd');
+        setReportingPeriodLabel(currentWeek.dateRange);
       } else {
         const { start, end } = getDateRangeFilter();
         startStr = format(start, 'yyyy-MM-dd');
         endStr = format(end, 'yyyy-MM-dd');
-        
+        setReportingPeriodLabel(`${format(start, 'MMM d')} - ${format(end, 'MMM d')}`);
+
         const periodDuration = end.getTime() - start.getTime();
         const prevStart = new Date(start.getTime() - periodDuration);
         const prevEnd = new Date(start.getTime() - 1);
@@ -165,7 +168,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       });
 
       if (error) throw error;
-      
+
       if (!data?.success) {
         if (data?.notConfigured) {
           // Fall back to database method
@@ -322,22 +325,24 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
   const fetchDatabaseData = async () => {
     const currentWeek = getCurrentReportingWeek();
     const previousWeek = getPreviousReportingWeek();
-    
+
     let startStr: string;
     let endStr: string;
     let prevStartStr: string;
     let prevEndStr: string;
-    
+
     if (dateRange === "7d") {
       startStr = formatDate(currentWeek.start, 'yyyy-MM-dd');
       endStr = formatDate(currentWeek.end, 'yyyy-MM-dd');
       prevStartStr = formatDate(previousWeek.start, 'yyyy-MM-dd');
       prevEndStr = formatDate(previousWeek.end, 'yyyy-MM-dd');
+      setReportingPeriodLabel(currentWeek.dateRange);
     } else {
       const { start, end } = getDateRangeFilter();
       startStr = format(start, 'yyyy-MM-dd');
       endStr = format(end, 'yyyy-MM-dd');
-      
+      setReportingPeriodLabel(`${format(start, 'MMM d')} - ${format(end, 'MMM d')}`);
+
       const periodDuration = end.getTime() - start.getTime();
       const prevStart = new Date(start.getTime() - periodDuration);
       const prevEnd = new Date(start.getTime() - 1);
@@ -359,8 +364,8 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     const currentFollowers = latestMetrics?.[0]?.followers || 0;
     const previousFollowers = latestMetrics?.[1]?.followers || latestMetrics?.[0]?.followers || 0;
     const newFollowers = currentFollowers - previousFollowers;
-    const followerChangePercent = previousFollowers > 0 
-      ? ((newFollowers / previousFollowers) * 100) 
+    const followerChangePercent = previousFollowers > 0
+      ? ((newFollowers / previousFollowers) * 100)
       : 0;
 
     // Fetch content with metrics
@@ -389,10 +394,10 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
     const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
       if (!metrics || metrics.length === 0) return null;
-      const sorted = [...metrics].sort((a, b) => 
+      const sorted = [...metrics].sort((a, b) =>
         new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
       );
-      const exactMatch = sorted.find(m => 
+      const exactMatch = sorted.find(m =>
         m.period_start === targetStart && m.period_end === targetEnd
       );
       if (exactMatch) return exactMatch;
@@ -405,7 +410,8 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         return periodStart <= targetEndDate && periodEnd >= targetStartDate;
       });
       if (overlapping) return overlapping;
-      return sorted[0];
+      // Do NOT fall back to sorted[0] — that returns all-time data
+      return null;
     };
 
     let totalViews = 0;
@@ -421,7 +427,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
     allContentData?.forEach((content: any) => {
       const metrics = findMetricsForPeriod(content.social_content_metrics, startStr, endStr);
-      
+
       // Only include videos that have metrics for this period (with any activity)
       const views = metrics?.views || 0;
       const likes = metrics?.likes || 0;
@@ -492,17 +498,17 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
   const fetchYouTubeData = async () => {
     if (!clientId) return;
-    
+
     try {
       setIsLoading(true);
-      
+
       // Try Metricool first
       const metricoolSuccess = await fetchMetricoolData();
       if (metricoolSuccess) {
         setUseMetricool(true);
         return;
       }
-      
+
       // Fall back to database
       setUseMetricool(false);
       await fetchDatabaseData();
@@ -663,12 +669,12 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               </CardContent>
             </Card>
 
-            {/* Total Views Card */}
+            {/* Views Card */}
             <Card className="bg-card">
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <Eye className="h-4 w-4" />
-                  <span className="text-xs">Total Views</span>
+                  <span className="text-xs">{dateRange === "7d" ? "Weekly Views" : "Views"}</span>
                 </div>
                 <p className="text-2xl font-bold">{stats.totalViews.toLocaleString()}</p>
                 {(() => {
@@ -694,6 +700,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                     vs {stats.prevTotalViews.toLocaleString()} prev week
                   </p>
                 )}
+                {reportingPeriodLabel && (
+                  <p className="text-xs text-muted-foreground mt-1">{reportingPeriodLabel}</p>
+                )}
               </CardContent>
             </Card>
 
@@ -702,7 +711,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <BarChart3 className="h-4 w-4" />
-                  <span className="text-xs">Engagement</span>
+                  <span className="text-xs">{dateRange === "7d" ? "Weekly Engagement" : "Engagement"}</span>
                 </div>
                 <p className="text-2xl font-bold">{stats.engagementRate.toFixed(2)}%</p>
                 {(() => {
@@ -726,6 +735,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   <p className="text-xs text-muted-foreground mt-1">
                     vs {stats.prevEngagementRate.toFixed(2)}% prev week
                   </p>
+                )}
+                {reportingPeriodLabel && (
+                  <p className="text-xs text-muted-foreground mt-1">{reportingPeriodLabel}</p>
                 )}
               </CardContent>
             </Card>
@@ -892,7 +904,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                       {video.shares.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      {video.avg_view_duration > 0 
+                      {video.avg_view_duration > 0
                         ? `${Math.floor(video.avg_view_duration / 60)}:${String(Math.floor(video.avg_view_duration % 60)).padStart(2, '0')}`
                         : "-"}
                     </TableCell>
@@ -903,8 +915,8 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                           video.engagement_rate >= 5
                             ? "bg-green-500/20 text-green-600"
                             : video.engagement_rate >= 2
-                            ? "bg-yellow-500/20 text-yellow-600"
-                            : "bg-muted text-muted-foreground"
+                              ? "bg-yellow-500/20 text-yellow-600"
+                              : "bg-muted text-muted-foreground"
                         )}
                       >
                         {video.engagement_rate.toFixed(2)}%
