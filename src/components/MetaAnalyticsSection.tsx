@@ -120,7 +120,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [reconnecting, setReconnecting] = useState(false);
   const [showingPageSelector, setShowingPageSelector] = useState(false);
   const [activePlatform, setActivePlatform] = useState<MetaPlatform>("instagram");
-  
+
   // OAuth account data
   const [oauthAccount, setOauthAccount] = useState<OAuthAccount | null>(null);
   const [instagramProfile, setInstagramProfile] = useState<InstagramProfile | null>(null);
@@ -130,27 +130,27 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   // Sync logs
   const [instagramSyncLog, setInstagramSyncLog] = useState<SyncLog | null>(null);
   const [facebookSyncLog, setFacebookSyncLog] = useState<SyncLog | null>(null);
-  
+
   // Instagram data
   const [instagramMetrics, setInstagramMetrics] = useState<MetaAccountMetrics | null>(null);
   const [instagramPrevMetrics, setInstagramPrevMetrics] = useState<MetaAccountMetrics | null>(null);
   const [instagramContent, setInstagramContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [instagramAccount, setInstagramAccount] = useState<{ id: string; account_id: string } | null>(null);
-  
+
   // Facebook data
   const [facebookMetrics, setFacebookMetrics] = useState<MetaAccountMetrics | null>(null);
   const [facebookPrevMetrics, setFacebookPrevMetrics] = useState<MetaAccountMetrics | null>(null);
   const [facebookContent, setFacebookContent] = useState<(MetaContent & { metrics?: MetaContentMetrics })[]>([]);
   const [facebookAccount, setFacebookAccount] = useState<{ id: string; account_id: string } | null>(null);
-  
+
   // Content type tab state for Posts/Reels
   const [instagramContentTab, setInstagramContentTab] = useState<"posts" | "reels">("posts");
   const [facebookContentTab, setFacebookContentTab] = useState<"posts" | "reels">("posts");
-  
+
   // Date range state - weekly reports reset every Tuesday
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
-  
+
   // Report-based comparison data (from CSV uploads)
   const [instagramReportData, setInstagramReportData] = useState<{
     engagement_rate: number | null;
@@ -197,13 +197,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     followers: number | null;
     engagementRate: number | null;
   }
-  
+
   // Weekly data with WoW comparison
   interface TimelineDataPoint {
     dateTime: string;
     value: number;
   }
-  
+
   interface FollowersDebugInfo {
     metricUsed: string;
     networkUsed: string;
@@ -213,7 +213,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     lastPoint: { dateTime: string; value: number } | null;
     pointsCount: number;
   }
-  
+
   interface WeeklyData {
     followersTimeline: TimelineDataPoint[];
     engagementTimeline: TimelineDataPoint[];
@@ -224,28 +224,28 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     reelsEngagement: number | null;
     followersDebug?: FollowersDebugInfo;
   }
-  
+
   interface WeeklyComparison {
     current: WeeklyData;
     previous: WeeklyData;
   }
-  
+
   const [instagramOverviewKPIs, setInstagramOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
   const [facebookOverviewKPIs, setFacebookOverviewKPIs] = useState<MetricoolOverviewKPIs | null>(null);
   const [loadingOverviewKPIs, setLoadingOverviewKPIs] = useState(false);
   const [overviewKPIsError, setOverviewKPIsError] = useState<string | null>(null);
-  
+
   // Weekly comparison data for WoW display
   const [instagramWeekly, setInstagramWeekly] = useState<WeeklyComparison | null>(null);
   const [facebookWeekly, setFacebookWeekly] = useState<WeeklyComparison | null>(null);
-  
+
   // isConnected is true if OAuth, agency mapping, OR Metricool config exists
-  const isConnected = (oauthAccount !== null && oauthAccount.is_active) || 
-                      (agencyMapping !== null) || 
-                      (metricoolConfig !== null) || 
-                      (facebookMetricoolConfig !== null);
+  const isConnected = (oauthAccount !== null && oauthAccount.is_active) ||
+    (agencyMapping !== null) ||
+    (metricoolConfig !== null) ||
+    (facebookMetricoolConfig !== null);
   const hasAgencyConnection = agencyMapping !== null;
-  
+
   // Metricool is the primary data source when config exists
   const hasInstagramMetricool = metricoolConfig !== null;
   const hasFacebookMetricool = facebookMetricoolConfig !== null;
@@ -362,7 +362,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .eq("client_id", clientId)
       .eq("is_active", true)
       .maybeSingle();
-    
+
     setOauthAccount(data);
     return data;
   };
@@ -397,11 +397,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .eq("platform", "instagram")
       .eq("is_active", true)
       .maybeSingle();
-    
+
     setMetricoolConfig(data);
     return data;
   };
-  
+
   // Fetch Metricool config for Facebook
   const fetchFacebookMetricoolConfig = async () => {
     const { data } = await supabase
@@ -411,7 +411,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .eq("platform", "facebook")
       .eq("is_active", true)
       .maybeSingle();
-    
+
     setFacebookMetricoolConfig(data);
     return data;
   };
@@ -487,7 +487,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    
+
     const { data: facebookLog } = await supabase
       .from("social_sync_logs")
       .select("*")
@@ -496,7 +496,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-    
+
     setInstagramSyncLog(instagramLog);
     setFacebookSyncLog(facebookLog);
   };
@@ -504,15 +504,15 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   // Helper to find metrics for a specific period range, preferring rows with valid reach
   const findMetricsForPeriod = (metrics: any[], targetStart: string, targetEnd: string) => {
     if (!metrics || metrics.length === 0) return null;
-    
+
     // Sort by collected_at descending to get most recent first
-    const sorted = [...metrics].sort((a, b) => 
+    const sorted = [...metrics].sort((a, b) =>
       new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
     );
-    
+
     const targetStartDate = new Date(targetStart);
     const targetEndDate = new Date(targetEnd);
-    
+
     // Helper to check if metrics have valid reach (not null/0 when there's engagement)
     const hasValidReach = (m: any) => {
       const reach = m.reach;
@@ -520,19 +520,19 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       // Valid if reach > 0, or if no engagement (0 reach is expected)
       return reach > 0 || !hasEngagement;
     };
-    
+
     // 1) Exact period match with valid reach (best)
-    const exactWithReach = sorted.find(m => 
+    const exactWithReach = sorted.find(m =>
       m.period_start === targetStart && m.period_end === targetEnd && hasValidReach(m)
     );
     if (exactWithReach) return exactWithReach;
-    
+
     // 2) Exact period match (any)
-    const exactMatch = sorted.find(m => 
+    const exactMatch = sorted.find(m =>
       m.period_start === targetStart && m.period_end === targetEnd
     );
     if (exactMatch) return exactMatch;
-    
+
     // 3) Overlapping period with valid reach
     const overlappingWithReach = sorted.find(m => {
       if (!m.period_start || !m.period_end) return false;
@@ -542,7 +542,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       return overlaps && hasValidReach(m);
     });
     if (overlappingWithReach) return overlappingWithReach;
-    
+
     // 4) Overlapping period (any)
     const overlapping = sorted.find(m => {
       if (!m.period_start || !m.period_end) return false;
@@ -551,7 +551,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       return periodStart <= targetEndDate && periodEnd >= targetStartDate;
     });
     if (overlapping) return overlapping;
-    
+
     // 5) Fallback to most recent metrics
     return sorted[0];
   };
@@ -613,12 +613,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         const titleHash = (item.title || "").substring(0, 40).trim().toLowerCase();
         const dateKey = item.published_at ? item.published_at.split("T")[0] : "";
         const compositeKey = `${item.content_id}::${titleHash}::${dateKey}`;
-        
+
         if (seenKeys.has(compositeKey)) {
           return false;
         }
         seenKeys.add(compositeKey);
-        
+
         // Also check for duplicate titles on the same day (different content_ids)
         const titleDateKey = `title::${titleHash}::${dateKey}`;
         if (titleHash && seenKeys.has(titleDateKey)) {
@@ -627,7 +627,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         if (titleHash) {
           seenKeys.add(titleDateKey);
         }
-        
+
         return true;
       })
       .map((item: any) => {
@@ -759,7 +759,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         fetchPlatformData("instagram", startDate, endDate, compStartDate, compEndDate),
         fetchPlatformData("facebook", startDate, endDate, compStartDate, compEndDate),
       ]);
-      
+
       // Fetch sync logs and report comparison data separately (non-blocking)
       fetchSyncLogs();
       fetchReportComparisonData();
@@ -798,7 +798,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               timezone: "America/Chicago",
             },
           });
-          
+
           if (error || !data?.success) {
             console.warn(`Weekly data fetch failed for ${platform}:`, error || data?.error);
             return null;
@@ -864,7 +864,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setConnecting(true);
     try {
       const redirectUri = `${window.location.origin}/oauth/meta/callback`;
-      
+
       const { data, error } = await supabase.functions.invoke("meta-oauth-init", {
         body: { clientId, platform: "instagram", redirectUri },
       });
@@ -886,16 +886,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   const handleDisconnect = async () => {
     if (!oauthAccount?.id) return;
-    
+
     setDisconnecting(true);
     try {
       const { error } = await supabase
         .from("social_oauth_accounts")
         .update({ is_active: false })
         .eq("id", oauthAccount.id);
-      
+
       if (error) throw error;
-      
+
       toast.success("Meta account disconnected successfully");
       setOauthAccount(null);
       setInstagramProfile(null);
@@ -962,8 +962,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       return;
     }
 
-    const externalId = platform === "instagram" 
-      ? oauthAccount.instagram_business_id 
+    const externalId = platform === "instagram"
+      ? oauthAccount.instagram_business_id
       : oauthAccount.page_id;
 
     if (!externalId) {
@@ -1140,7 +1140,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           }}
         />
       )}
-      
+
       {/* Fallback: Manual OAuth connection */}
       <Card className="border-dashed">
         <CardHeader className="text-center pb-2">
@@ -1159,8 +1159,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           </CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center pt-4">
-          <Button 
-            onClick={handleConnect} 
+          <Button
+            onClick={handleConnect}
             disabled={connecting}
             size="lg"
             variant="outline"
@@ -1178,10 +1178,10 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     if (current == null || previous == null) {
       return null;
     }
-    
+
     const diff = current - previous;
     const percentChange = previous !== 0 ? ((diff / previous) * 100).toFixed(1) : "0";
-    
+
     if (diff > 0) {
       return (
         <div className="flex items-center text-xs text-green-500 gap-0.5">
@@ -1197,7 +1197,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         </div>
       );
     }
-    
+
     return (
       <div className="flex items-center text-xs text-muted-foreground gap-0.5">
         <Minus className="h-3 w-3" />
@@ -1223,12 +1223,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
     // Use report data from CSV uploads for comparison (more accurate than API data)
     const reportData = platform === "instagram" ? instagramReportData : facebookReportData;
-    
+
     // ALWAYS use the debug.lastPoint from the edge function response for accurate followers
     // This ensures we get the exact last datapoint, matching Metricool UI
     const currentDebug = weeklyData?.current?.followersDebug;
     const prevDebug = weeklyData?.previous?.followersDebug;
-    
+
     // Log debug info for verification (dev mode)
     if (currentDebug) {
       console.log(`[${platform.toUpperCase()}] Followers Debug - Current:`, {
@@ -1247,20 +1247,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         pointsCount: prevDebug.pointsCount,
       });
     }
-    
+
     // Priority: Use debug.lastPoint (most accurate) > fallback to timeline parsing > other sources
     const currentFollowersFromDebug = currentDebug?.lastPoint?.value ?? null;
     const prevFollowersFromDebug = prevDebug?.lastPoint?.value ?? null;
-    
+
     const currentFollowers = currentFollowersFromDebug ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
-    const prevFollowers = prevFollowersFromDebug ?? (reportData?.new_followers != null && reportData?.followers != null 
-      ? reportData.followers - reportData.new_followers 
+    const prevFollowers = prevFollowersFromDebug ?? (reportData?.new_followers != null && reportData?.followers != null
+      ? reportData.followers - reportData.new_followers
       : prevMetrics?.followers);
 
     // Engagement from weekly aggregation (matches Metricool "Organic Summary" card)
     const currentEngagement = weeklyData?.current?.engagementAgg ?? overviewKPIs?.engagementRate ?? reportData?.engagement_rate ?? metrics?.engagement_rate;
     const prevEngagement = weeklyData?.previous?.engagementAgg ?? reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
-    
+
     // Posts count from weekly data
     const currentTotalPosts = weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
     const prevTotalPosts = weeklyData?.previous?.postsCount ?? reportData?.last_week_total_content ?? prevMetrics?.total_content;
@@ -1280,16 +1280,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     // isPercentage: for engagement rate, show % suffix on delta
     // hidePercentChange: for total posts, only show the numeric delta, no percentage
     const renderWoWTooltip = (
-      current: number | null | undefined, 
-      previous: number | null | undefined, 
+      current: number | null | undefined,
+      previous: number | null | undefined,
       isPercentage = false,
       hidePercentChange = false
     ) => {
       if (current == null || previous == null) return null;
-      
+
       const delta = current - previous;
       const pctChange = previous !== 0 ? ((delta / previous) * 100) : null;
-      
+
       // Format delta
       const formatDelta = (d: number, isPct: boolean) => {
         if (isPct) {
@@ -1298,22 +1298,21 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         }
         return d >= 0 ? `+${d.toLocaleString()}` : d.toLocaleString();
       };
-      
+
       // Format percentage change (for non-percentage metrics like followers)
       const formatPct = (p: number | null) => {
         if (p === null) return "";
         return ` (${p >= 0 ? "" : ""}${p.toFixed(1)}%)`;
       };
-      
+
       const isPositive = delta > 0;
       const isNegative = delta < 0;
       const isNeutral = delta === 0;
-      
+
       return (
         <div className="flex items-center gap-1.5 mt-1">
-          <div className={`flex items-center text-xs gap-0.5 ${
-            isPositive ? "text-green-500" : isNegative ? "text-red-500" : "text-muted-foreground"
-          }`}>
+          <div className={`flex items-center text-xs gap-0.5 ${isPositive ? "text-green-500" : isNegative ? "text-red-500" : "text-muted-foreground"
+            }`}>
             {isPositive && <ArrowUp className="h-3 w-3" />}
             {isNegative && <ArrowDown className="h-3 w-3" />}
             {isNeutral && <Minus className="h-3 w-3" />}
@@ -1336,7 +1335,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const prevPostsEngagement = weeklyData?.previous?.postsEngagement ?? null;
     const currentReelsEngagement = weeklyData?.current?.reelsEngagement ?? null;
     const prevReelsEngagement = weeklyData?.previous?.reelsEngagement ?? null;
-    
+
     // Get posts/reels counts from API, fallback to local content count
     const apiPostsCount = weeklyData?.current?.postsCount ?? postsContent.length;
     const apiReelsCount = weeklyData?.current?.reelsCount ?? reelsContent.length;
@@ -1366,7 +1365,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               )}
             </CardContent>
           </Card>
-          
+
           {/* Engagement (Posts) - Raw value for Instagram */}
           {platform === "instagram" ? (
             <>
@@ -1450,7 +1449,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               </CardContent>
             </Card>
           )}
-          
+
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -1507,16 +1506,16 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
     // Get followers timeline from weekly data
     const followersTimeline = weeklyData?.current?.followersTimeline ?? [];
-    
+
     // Get current followers from debug lastPoint (most accurate)
     const currentDebug = weeklyData?.current?.followersDebug;
     const prevDebug = weeklyData?.previous?.followersDebug;
     const currentFollowers = currentDebug?.lastPoint?.value ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers ?? null;
     const prevFollowers = prevDebug?.lastPoint?.value ?? null;
-    const newFollowers = currentFollowers != null && prevFollowers != null 
-      ? currentFollowers - prevFollowers 
+    const newFollowers = currentFollowers != null && prevFollowers != null
+      ? currentFollowers - prevFollowers
       : (reportData?.new_followers ?? null);
-    
+
     // Total content count
     const totalContent = weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? content.length;
 
@@ -1542,7 +1541,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     if (post.url && (post.url.startsWith("http://") || post.url.startsWith("https://"))) {
       return post.url;
     }
-    
+
     // Try to build URL from content_id
     if (post.content_id) {
       // Instagram URLs
@@ -1562,7 +1561,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         }
       }
     }
-    
+
     return null;
   };
 
@@ -1570,20 +1569,20 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     // Filter content by type
     const contentTab = platform === "instagram" ? instagramContentTab : facebookContentTab;
     const setContentTab = platform === "instagram" ? setInstagramContentTab : setFacebookContentTab;
-    
+
     // Determine what constitutes "posts" vs "reels" based on platform
     // IG: reel = reel, post = post/carousel
     // FB: reel = video, post = post
     const isReel = (type: string) => type === "reel" || type === "video";
     const isPost = (type: string) => type === "post" || type === "carousel";
-    
+
     const filteredContent = content.filter(item => {
       if (contentTab === "reels") {
         return isReel(item.content_type);
       }
       return isPost(item.content_type);
     });
-    
+
     const postsCount = content.filter(item => isPost(item.content_type)).length;
     const reelsCount = content.filter(item => isReel(item.content_type)).length;
 
@@ -1598,7 +1597,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       }
       return contentTab === "reels" ? "Video Views" : "Views";
     };
-    
+
     const getReachHeader = () => {
       if (platform === "instagram") {
         return contentTab === "posts" ? "Organic Reach" : "Reach";
@@ -1704,83 +1703,83 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   const postUrl = buildPostUrl(post, platform);
                   const displayTitle = post.title?.substring(0, 50) || "View Post";
                   const truncatedTitle = post.title && post.title.length > 50 ? displayTitle + "..." : displayTitle;
-                  
+
                   return (
-                  <TableRow key={post.id}>
-                    <TableCell className="max-w-[250px]">
-                      {postUrl ? (
-                        <a
-                          href={postUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline flex items-center gap-1"
-                        >
-                          <span className="truncate">{truncatedTitle}</span>
-                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                        </a>
-                      ) : (
-                        <span className="text-foreground truncate" title={post.title || undefined}>
-                          {truncatedTitle !== "View Post" ? truncatedTitle : "—"}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
-                    <TableCell>
-                      {(() => {
-                        // Views/Impressions based on platform and content type
-                        const views = post.metrics?.views || post.metrics?.impressions;
-                        return views ? views.toLocaleString() : "—";
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const reach = post.metrics?.reach;
-                        const impressions = post.metrics?.impressions;
-                        const likes = post.metrics?.likes || 0;
-                        const comments = post.metrics?.comments || 0;
-                        const shares = post.metrics?.shares || 0;
-                        const hasEngagement = likes > 0 || comments > 0 || shares > 0;
-                        
-                        // For Facebook, fallback to impressions if reach is 0/null
-                        if (platform === "facebook" && (reach === 0 || reach == null) && impressions && impressions > 0) {
-                          return impressions.toLocaleString();
-                        }
-                        
-                        if ((reach === 0 || reach == null) && hasEngagement) {
-                          return (
-                            <span className="text-muted-foreground cursor-help" title="Reach unavailable">
-                              N/A
-                            </span>
-                          );
-                        }
-                        return reach?.toLocaleString() || "—";
-                      })()}
-                    </TableCell>
-                    <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
-                    <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
-                    {platform === "instagram" ? (
+                    <TableRow key={post.id}>
+                      <TableCell className="max-w-[250px]">
+                        {postUrl ? (
+                          <a
+                            href={postUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            <span className="truncate">{truncatedTitle}</span>
+                            <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          </a>
+                        ) : (
+                          <span className="text-foreground truncate" title={post.title || undefined}>
+                            {truncatedTitle !== "View Post" ? truncatedTitle : "—"}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs">{formatDate(post.published_at)}</TableCell>
                       <TableCell>
-                        {/* Saved - calculate from engagements minus likes/comments/shares */}
                         {(() => {
-                          const engagements = post.metrics?.engagements || 0;
+                          // Views/Impressions based on platform and content type
+                          const views = post.metrics?.views || post.metrics?.impressions;
+                          return views ? views.toLocaleString() : "—";
+                        })()}
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const reach = post.metrics?.reach;
+                          const impressions = post.metrics?.impressions;
                           const likes = post.metrics?.likes || 0;
                           const comments = post.metrics?.comments || 0;
                           const shares = post.metrics?.shares || 0;
-                          // Saved = engagements - likes - comments - shares (approximate)
-                          const saved = Math.max(0, engagements - likes - comments - shares);
-                          return saved > 0 ? saved.toLocaleString() : "—";
+                          const hasEngagement = likes > 0 || comments > 0 || shares > 0;
+
+                          // For Facebook, fallback to impressions if reach is 0/null
+                          if (platform === "facebook" && (reach === 0 || reach == null) && impressions && impressions > 0) {
+                            return impressions.toLocaleString();
+                          }
+
+                          if ((reach === 0 || reach == null) && hasEngagement) {
+                            return (
+                              <span className="text-muted-foreground cursor-help" title="Reach unavailable">
+                                N/A
+                              </span>
+                            );
+                          }
+                          return reach?.toLocaleString() || "—";
                         })()}
                       </TableCell>
-                    ) : (
-                      <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
-                    )}
-                    <TableCell>
-                      {(() => {
-                        const interactions = post.metrics?.engagements || 0;
-                        return interactions > 0 ? interactions.toLocaleString() : "—";
-                      })()}
-                    </TableCell>
-                  </TableRow>
+                      <TableCell>{post.metrics?.likes?.toLocaleString() || "—"}</TableCell>
+                      <TableCell>{post.metrics?.comments?.toLocaleString() || "—"}</TableCell>
+                      {platform === "instagram" ? (
+                        <TableCell>
+                          {/* Saved - calculate from engagements minus likes/comments/shares */}
+                          {(() => {
+                            const engagements = post.metrics?.engagements || 0;
+                            const likes = post.metrics?.likes || 0;
+                            const comments = post.metrics?.comments || 0;
+                            const shares = post.metrics?.shares || 0;
+                            // Saved = engagements - likes - comments - shares (approximate)
+                            const saved = Math.max(0, engagements - likes - comments - shares);
+                            return saved > 0 ? saved.toLocaleString() : "—";
+                          })()}
+                        </TableCell>
+                      ) : (
+                        <TableCell>{post.metrics?.shares?.toLocaleString() || "—"}</TableCell>
+                      )}
+                      <TableCell>
+                        {(() => {
+                          const interactions = post.metrics?.engagements || 0;
+                          return interactions > 0 ? interactions.toLocaleString() : "—";
+                        })()}
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
               </TableBody>
@@ -1820,8 +1819,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 {isFailed && <XCircle className="h-3.5 w-3.5 text-destructive" />}
                 <span className={
                   isRunning ? "text-blue-500" :
-                  isCompleted ? "text-green-500" :
-                  isFailed ? "text-destructive" : ""
+                    isCompleted ? "text-green-500" :
+                      isFailed ? "text-destructive" : ""
                 }>
                   {currentLog.status}
                 </span>
@@ -1903,9 +1902,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               {instagramProfile.profile_picture_url ? (
-                <img 
-                  src={instagramProfile.profile_picture_url} 
-                  alt={instagramProfile.username || "Profile"} 
+                <img
+                  src={instagramProfile.profile_picture_url}
+                  alt={instagramProfile.username || "Profile"}
                   className="h-16 w-16 rounded-full object-cover ring-2 ring-pink-500/30"
                 />
               ) : (
@@ -1922,7 +1921,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   </Badge>
                 </div>
                 {instagramProfile.username && (
-                  <a 
+                  <a
                     href={`https://instagram.com/${instagramProfile.username}`}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -1956,13 +1955,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                   <AlertDialogHeader>
                     <AlertDialogTitle>Disconnect Meta Account?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will disconnect <strong>{instagramProfile.name || instagramProfile.username}</strong> from {clientName}. 
+                      This will disconnect <strong>{instagramProfile.name || instagramProfile.username}</strong> from {clientName}.
                       You can reconnect a different account afterwards.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
+                    <AlertDialogAction
                       onClick={handleDisconnect}
                       disabled={disconnecting}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -1983,9 +1982,9 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               {facebookPage.picture_url ? (
-                <img 
-                  src={facebookPage.picture_url} 
-                  alt={facebookPage.name || "Page"} 
+                <img
+                  src={facebookPage.picture_url}
+                  alt={facebookPage.name || "Page"}
                   className="h-16 w-16 rounded-full object-cover ring-2 ring-blue-500/30"
                 />
               ) : (
@@ -2001,7 +2000,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                     Connected
                   </Badge>
                 </div>
-                <a 
+                <a
                   href={`https://facebook.com/${facebookPage.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -2084,13 +2083,13 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 <AlertDialogHeader>
                   <AlertDialogTitle>Disconnect Meta Account?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This will disconnect the Meta account from {clientName}. 
+                    This will disconnect the Meta account from {clientName}.
                     You can reconnect a different account afterwards.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction 
+                  <AlertDialogAction
                     onClick={handleDisconnect}
                     disabled={disconnecting}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -2129,22 +2128,22 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       <Tabs value={activePlatform} onValueChange={(v) => setActivePlatform(v as MetaPlatform)}>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <TabsList>
-            <TabsTrigger 
-              value="instagram" 
-              className="flex items-center gap-2" 
+            <TabsTrigger
+              value="instagram"
+              className="flex items-center gap-2"
               disabled={!oauthAccount?.instagram_business_id && !agencyMapping?.ig_business_id && !metricoolConfig}
             >
               <Instagram className="h-4 w-4" /> Instagram
             </TabsTrigger>
-            <TabsTrigger 
-              value="facebook" 
-              className="flex items-center gap-2" 
-              disabled={!oauthAccount?.page_id && !agencyMapping?.page_id}
+            <TabsTrigger
+              value="facebook"
+              className="flex items-center gap-2"
+              disabled={!oauthAccount?.page_id && !agencyMapping?.page_id && !facebookMetricoolConfig}
             >
               <Facebook className="h-4 w-4" /> Facebook
             </TabsTrigger>
           </TabsList>
-          
+
           <div className="flex items-center gap-3">
             {/* Metricool sync button for Instagram */}
             {activePlatform === "instagram" && metricoolConfig && (
@@ -2159,7 +2158,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
                 {syncingMetricool ? "Syncing..." : "Sync via Metricool"}
               </Button>
             )}
-            
+
             {/* Metricool sync button for Facebook */}
             {activePlatform === "facebook" && facebookMetricoolConfig && (
               <Button
