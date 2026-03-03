@@ -1,0 +1,6 @@
+﻿Server:  UnKnown
+Address:  fe80::1
+
+Name:    db.mhuxrnxajtiwxauhlhlv.supabase.co
+Address:  2406:da18:243:7417:dd70:8bab:d1cf:7bb0
+

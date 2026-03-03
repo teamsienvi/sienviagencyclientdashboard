@@ -643,25 +643,21 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                   <span className="text-xs">Subscribers</span>
                 </div>
                 <p className="text-2xl font-bold">{stats.followers.toLocaleString()}</p>
-                {stats.newFollowers !== 0 && (
+                {stats.newFollowers > 0 && (
                   <div className={cn(
                     "text-xs font-medium flex items-center gap-1 mt-1",
-                    stats.newFollowers > 0 ? "text-green-500" : "text-red-500"
+                    "text-green-500"
                   )}>
-                    {stats.newFollowers > 0 ? (
-                      <TrendingUp className="h-3 w-3" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3" />
-                    )}
+                    <TrendingUp className="h-3 w-3" />
                     <span>
-                      {stats.newFollowers > 0 ? "+" : ""}{stats.newFollowers.toLocaleString()}
-                      {stats.followerChangePercent !== 0 && (
+                      +{stats.newFollowers.toLocaleString()}
+                      {stats.followerChangePercent > 0 && (
                         <> ({stats.followerChangePercent.toFixed(2)}%)</>
                       )}
                     </span>
                   </div>
                 )}
-                {stats.prevFollowers > 0 && (
+                {stats.prevFollowers > 0 && stats.newFollowers >= 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
                     vs {stats.prevFollowers.toLocaleString()} prev week
                   </p>

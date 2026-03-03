@@ -17,6 +17,7 @@ const STORE_DOMAINS: Record<string, string> = {
   "Snarky Pets": "fhfwar-jc.myshopify.com",
   "Snarky Humans": "bedd78-a1.myshopify.com",
   "BlingyBag": "3bc448-da.myshopify.com",
+  "OxiSure Tech": "oxisure-tech.myshopify.com",
 };
 
 export const ShopifyOAuthConnect = ({ clientId, clientName, onConnected }: ShopifyOAuthConnectProps) => {

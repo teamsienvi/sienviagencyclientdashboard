@@ -1,0 +1,9 @@
+shopify_oauth_connections: 3 rows
+user_roles: 1 rows
+social_oauth_accounts_youtube_x: 11 rows
+social_oauth_accounts_meta: 10 rows
+social_account_demographics: 28 rows
+reports: 398 rows
+social_account_metrics: 69 rows
+social_follower_timeline: 2090 rows
+social_content: 1014 rows

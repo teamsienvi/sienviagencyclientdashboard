@@ -11,8 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink, 
+import {
+  RefreshCw, Users, TrendingUp, MessageSquare, ExternalLink,
   Twitter, Heart, Repeat2, Eye, ArrowUp, ArrowDown, Minus,
   Calendar, Link2, MousePointerClick, Play, Upload
 } from "lucide-react";
@@ -79,7 +79,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
   // Get standardized reporting periods
   const currentWeek = useMemo(() => getCurrentReportingWeek(), []);
   const previousWeek = useMemo(() => getPreviousReportingWeek(), []);
-  
+
   const weekKey = useMemo(
     () => getWeekKey(currentWeek.start, currentWeek.end),
     [currentWeek]
@@ -105,7 +105,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         .eq("platform", "x")
         .eq("is_active", true)
         .maybeSingle();
-      
+
       setHasMetricoolConfig(!!data);
     };
     checkConfig();
@@ -141,7 +141,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         .order("collected_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       console.log("X Analytics - current metrics query:", { clientId, currentStart, currentEnd, currentMetrics });
 
       // Fetch previous period account metrics
@@ -168,7 +168,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
       const postsData: XPost[] = [];
       if (content && content.length > 0) {
         setHasUploadedData(true);
-        
+
         for (const c of content) {
           const { data: metrics } = await supabase
             .from("social_content_metrics")
@@ -329,7 +329,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Unknown date";
-    
+
     // Handle epoch ms
     const asNum = Number(dateString);
     if (!isNaN(asNum) && asNum > 1000000000000) {
@@ -339,10 +339,10 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         year: "numeric",
       });
     }
-    
+
     const date = new Date(dateString);
     if (isNaN(date.getTime())) return "Unknown date";
-    
+
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",

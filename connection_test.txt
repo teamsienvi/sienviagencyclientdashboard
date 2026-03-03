@@ -1,0 +1,6 @@
+﻿Testing Supabase database connections...
+
+  Γ£ù Pooler transaction mode (6543): Tenant or user not found
+  Γ£ù Pooler session mode (5432): Tenant or user not found
+  Γ£ù Direct IPv4 (pooler IP): Tenant or user not found
+  Γ£ù Direct IPv4 port 6543: Tenant or user not found

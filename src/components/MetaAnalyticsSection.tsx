@@ -1355,7 +1355,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               <p className="text-2xl font-bold">
                 {displayValue(currentFollowers)}
               </p>
-              {prevFollowers != null && currentFollowers != null && (
+              {prevFollowers != null && currentFollowers != null && currentFollowers >= prevFollowers && (
                 <>
                   <span className="text-xs text-muted-foreground">
                     vs {prevFollowers.toLocaleString()}
@@ -2179,13 +2179,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
         <TabsContent value="instagram" className="space-y-6 mt-4">
           {renderMetricsCards(instagramMetrics, instagramPrevMetrics, "instagram")}
-          {renderGrowthChart("instagram")}
           {renderContentTable(instagramContent, "instagram")}
         </TabsContent>
 
         <TabsContent value="facebook" className="space-y-6 mt-4">
           {renderMetricsCards(facebookMetrics, facebookPrevMetrics, "facebook")}
-          {renderGrowthChart("facebook")}
           {renderContentTable(facebookContent, "facebook")}
         </TabsContent>
       </Tabs>

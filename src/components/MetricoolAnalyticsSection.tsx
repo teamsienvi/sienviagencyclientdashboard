@@ -383,18 +383,21 @@ export const MetricoolAnalyticsSection = ({
     enabled: !!config,
   });
 
-  // Fetch content with metrics
+  // Fetch content with metrics (filtered to reporting period)
   const { data: contentData, isLoading: contentLoading } = useQuery({
-    queryKey: ["metricool-content", clientId, platform],
+    queryKey: ["metricool-content", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
-      // First get content
+      const { start, end } = getDateRange();
+      // First get content within the selected date range
       const { data: content, error: contentError } = await supabase
         .from("social_content")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", platform)
+        .gte("published_at", start.toISOString())
+        .lte("published_at", end.toISOString())
         .order("published_at", { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (contentError) throw contentError;
       if (!content || content.length === 0) return [];
@@ -1588,8 +1591,8 @@ export const MetricoolAnalyticsSection = ({
                 {prevMetrics?.followers != null && (() => {
                   const currentFollowerCount = liveFollowers ?? config?.followers ?? accountMetrics?.followers ?? 0;
                   const followerDiff = (currentFollowerCount || 0) - (prevMetrics.followers || 0);
-                  // For TikTok, hide WoW when followers decrease
-                  if (platform === "tiktok" && followerDiff < 0) return null;
+                  // Hide follower decrease for all platforms — only show increases
+                  if (followerDiff < 0) return null;
                   return (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
@@ -1758,58 +1761,7 @@ export const MetricoolAnalyticsSection = ({
         </Card>
       </div>
 
-      {/* Follower Timeline Chart - LinkedIn only */}
-      {platform !== "tiktok" && followerTimeline.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Follower Growth
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">7 Days</Badge>
-            </CardTitle>
-            <CardDescription>
-              Daily follower count over the past week
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={followerTimeline}>
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 12 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => formatNumber(value)}
-                    domain={['dataMin - 100', 'dataMax + 100']}
-                  />
-                  <Tooltip
-                    formatter={(value: number) => [value.toLocaleString(), "Followers"]}
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--background))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="followers"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={{ fill: 'hsl(var(--primary))', strokeWidth: 0, r: 4 }}
-                    activeDot={{ r: 6, fill: 'hsl(var(--primary))' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
       {/* Demographics Section - TikTok */}
       {platform === "tiktok" && (

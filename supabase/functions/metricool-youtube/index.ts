@@ -54,9 +54,9 @@ serve(async (req) => {
 
     if (!clientId || !from || !to || !prevFrom || !prevTo) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Missing required params: clientId, from, to, prevFrom, prevTo" 
+        JSON.stringify({
+          success: false,
+          error: "Missing required params: clientId, from, to, prevFrom, prevTo"
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -71,16 +71,16 @@ serve(async (req) => {
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      
+
       if (user && !authError) {
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id)
           .maybeSingle();
-        
+
         const isAdmin = roleData?.role === "admin";
-        
+
         if (!isAdmin) {
           const { data: accessData } = await supabase
             .from("client_users")
@@ -88,7 +88,7 @@ serve(async (req) => {
             .eq("user_id", user.id)
             .eq("client_id", clientId)
             .maybeSingle();
-          
+
           if (!accessData) {
             return new Response(
               JSON.stringify({ success: false, error: "Access denied" }),
@@ -110,8 +110,8 @@ serve(async (req) => {
 
     if (configError || !config) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: "No Metricool YouTube config found for this client",
           notConfigured: true
         }),
@@ -145,20 +145,20 @@ serve(async (req) => {
     const fetchMetricool = async (endpoint: string, params: Record<string, string>, acceptHeader = "application/json"): Promise<any> => {
       const url = new URL(`${METRICOOL_BASE_URL}${endpoint}`);
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-      
+
       console.log(`Fetching: ${url.toString()}`);
       const res = await fetch(url.toString(), {
-        headers: { 
-          "x-mc-auth": METRICOOL_AUTH, 
-          "accept": acceptHeader 
+        headers: {
+          "x-mc-auth": METRICOOL_AUTH,
+          "accept": acceptHeader
         },
       });
-      
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`${res.status}: ${errorText.substring(0, 200)}`);
       }
-      
+
       if (acceptHeader === "text/csv") {
         return res.text();
       }
@@ -194,7 +194,7 @@ serve(async (req) => {
       // Parse headers - handle quoted headers
       const headerLine = lines[0];
       const headers = headerLine.split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
-      
+
       // Find column indices
       const findColumn = (names: string[]): number => {
         for (const name of names) {
@@ -222,7 +222,7 @@ serve(async (req) => {
         const values: string[] = [];
         let current = '';
         let inQuotes = false;
-        
+
         for (const char of line) {
           if (char === '"') {
             inQuotes = !inQuotes;
@@ -253,7 +253,7 @@ serve(async (req) => {
         const comments = getNumVal(commentsIdx);
         const shares = getNumVal(sharesIdx);
         const averageViewDuration = getNumVal(avgViewDurIdx);
-        
+
         // Watch time might be in minutes, convert to hours
         let watchTimeHours = getNumVal(watchTimeIdx);
         if (watchTimeHours > 100) {
@@ -271,7 +271,7 @@ serve(async (req) => {
               videoUrl = `https://www.youtube.com/watch?v=${videoIdMatch[1]}`;
             }
           }
-          
+
           videos.push({
             title,
             url: videoUrl,
@@ -321,14 +321,30 @@ serve(async (req) => {
         postsType: 'publishedInRange',
       };
 
-      // Fetch all data in parallel
-      const [totalSubsRes, subsGainedRes, videosCSVRes] = await Promise.allSettled([
+      // Fetch all data in parallel — including timeline KPIs for period-specific totals
+      const [
+        totalSubsRes,
+        subsGainedRes,
+        videosCSVRes,
+        viewsTimelineRes,
+        likesTimelineRes,
+        commentsTimelineRes,
+        sharesTimelineRes,
+      ] = await Promise.allSettled([
         // 1) Total Subscribers timeline
         fetchMetricool("/api/stats/timeline/yttotalSubscribers", timelineParams),
         // 2) Subscribers Gained timeline
         fetchMetricool("/api/stats/timeline/ytsubscribersGained", timelineParams),
-        // 3) Videos CSV
+        // 3) Videos CSV (for video list / top posts)
         fetchMetricool("/api/v2/analytics/posts/youtube", csvParams, "text/csv"),
+        // 4) Views timeline (period-specific total)
+        fetchMetricool("/api/stats/timeline/ytviews", timelineParams),
+        // 5) Likes timeline (period-specific total)
+        fetchMetricool("/api/stats/timeline/ytlikes", timelineParams),
+        // 6) Comments timeline (period-specific total)
+        fetchMetricool("/api/stats/timeline/ytcomments", timelineParams),
+        // 7) Shares timeline (period-specific total)
+        fetchMetricool("/api/stats/timeline/ytshares", timelineParams),
       ]);
 
       // Process total subscribers
@@ -351,43 +367,110 @@ serve(async (req) => {
         console.error(`Subscribers gained error:`, subsGainedRes.reason);
       }
 
-      // Process videos CSV
+      // Process period-specific KPI totals from timeline APIs
+      let timelineViewsAvailable = false;
+      if (viewsTimelineRes.status === 'fulfilled') {
+        const points = parseTimelineData(viewsTimelineRes.value);
+        const sum = sumTimelineValues(points);
+        if (points.length > 0) {
+          result.totalViews = sum;
+          timelineViewsAvailable = true;
+          console.log(`Timeline views (${fromDate} to ${toDate}): ${sum}`);
+        }
+      } else {
+        errors.push(`ytviews timeline ${fromDate}: ${viewsTimelineRes.reason}`);
+        console.error(`Views timeline error:`, viewsTimelineRes.reason);
+      }
+
+      let timelineLikesAvailable = false;
+      if (likesTimelineRes.status === 'fulfilled') {
+        const points = parseTimelineData(likesTimelineRes.value);
+        const sum = sumTimelineValues(points);
+        if (points.length > 0) {
+          result.totalLikes = sum;
+          timelineLikesAvailable = true;
+          console.log(`Timeline likes (${fromDate} to ${toDate}): ${sum}`);
+        }
+      } else {
+        errors.push(`ytlikes timeline ${fromDate}: ${likesTimelineRes.reason}`);
+        console.error(`Likes timeline error:`, likesTimelineRes.reason);
+      }
+
+      let timelineCommentsAvailable = false;
+      if (commentsTimelineRes.status === 'fulfilled') {
+        const points = parseTimelineData(commentsTimelineRes.value);
+        const sum = sumTimelineValues(points);
+        if (points.length > 0) {
+          result.totalComments = sum;
+          timelineCommentsAvailable = true;
+          console.log(`Timeline comments (${fromDate} to ${toDate}): ${sum}`);
+        }
+      } else {
+        errors.push(`ytcomments timeline ${fromDate}: ${commentsTimelineRes.reason}`);
+        console.error(`Comments timeline error:`, commentsTimelineRes.reason);
+      }
+
+      let timelineSharesAvailable = false;
+      if (sharesTimelineRes.status === 'fulfilled') {
+        const points = parseTimelineData(sharesTimelineRes.value);
+        const sum = sumTimelineValues(points);
+        if (points.length > 0) {
+          result.totalShares = sum;
+          timelineSharesAvailable = true;
+          console.log(`Timeline shares (${fromDate} to ${toDate}): ${sum}`);
+        }
+      } else {
+        errors.push(`ytshares timeline ${fromDate}: ${sharesTimelineRes.reason}`);
+        console.error(`Shares timeline error:`, sharesTimelineRes.reason);
+      }
+
+      // Process videos CSV — used for video list and as fallback for KPI totals
       if (videosCSVRes.status === 'fulfilled') {
         const videos = parseVideosCSV(videosCSVRes.value);
         result.videos = videos;
         result.videosCount = videos.length;
 
-        // Aggregate metrics
+        // Aggregate from CSV only as fallback if timeline APIs didn't provide data
         let totalWatchTime = 0;
         let weightedDurationSum = 0;
+        let csvViews = 0, csvLikes = 0, csvComments = 0, csvShares = 0;
 
         for (const video of videos) {
-          result.totalViews += video.views;
-          result.totalLikes += video.likes;
-          result.totalComments += video.comments;
-          result.totalShares += video.shares;
+          csvViews += video.views;
+          csvLikes += video.likes;
+          csvComments += video.comments;
+          csvShares += video.shares;
           totalWatchTime += video.watchTimeHours;
           weightedDurationSum += video.averageViewDuration * video.views;
         }
 
-        // Weighted average view duration
-        if (result.totalViews > 0) {
-          result.avgViewDuration = weightedDurationSum / result.totalViews;
-        }
+        // Use CSV aggregation as fallback if timeline data was not available
+        if (!timelineViewsAvailable) result.totalViews = csvViews;
+        if (!timelineLikesAvailable) result.totalLikes = csvLikes;
+        if (!timelineCommentsAvailable) result.totalComments = csvComments;
+        if (!timelineSharesAvailable) result.totalShares = csvShares;
 
-        // Engagement percentage
-        if (result.totalViews > 0) {
-          result.engagementPct = ((result.totalLikes + result.totalComments + result.totalShares) / result.totalViews) * 100;
+        // Weighted average view duration (from CSV, timeline doesn't provide this)
+        const viewsForDuration = timelineViewsAvailable ? result.totalViews : csvViews;
+        if (viewsForDuration > 0) {
+          result.avgViewDuration = weightedDurationSum / viewsForDuration;
         }
 
         // Sort videos by views descending for "Top 3"
         result.videos.sort((a, b) => b.views - a.views);
 
-        console.log(`Videos (${fromDate} to ${toDate}): ${result.videosCount}, views: ${result.totalViews}, engagement: ${result.engagementPct?.toFixed(2)}%`);
+        console.log(`Videos (${fromDate} to ${toDate}): ${result.videosCount}, views: ${result.totalViews}, likes: ${result.totalLikes}`);
       } else {
         errors.push(`videosCSV ${fromDate}: ${videosCSVRes.reason}`);
         console.error(`Videos CSV error:`, videosCSVRes.reason);
       }
+
+      // Engagement percentage (based on final KPI totals)
+      if (result.totalViews > 0) {
+        result.engagementPct = ((result.totalLikes + result.totalComments + result.totalShares) / result.totalViews) * 100;
+      }
+
+      console.log(`Period ${fromDate} to ${toDate} final KPIs — views: ${result.totalViews}, likes: ${result.totalLikes}, comments: ${result.totalComments}, shares: ${result.totalShares}, engagement: ${result.engagementPct?.toFixed(2)}%`);
 
       return result;
     };
@@ -532,9 +615,9 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in metricool-youtube:", error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : String(error) 
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

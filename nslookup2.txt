@@ -1,0 +1,23 @@
+﻿nslookup : Non-authoritative answer:
+At line:1 char:1
++ nslookup 
+aws-0-ap-southeast-1.pooler.supabase.com 2>&1 
+| Out-File -Fi ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   Non-authoritative answer::String) [], Rem  
+  oteException
+    + FullyQualifiedErrorId : NativeCommandEr 
+   ror
+ 
+
+Server:  UnKnown
+Address:  fe80::1
+
+Name:    pool-tcp-ap-southeast-1-a29b758-70b9dc10be58bc58.elb.ap-southeast-1.amazonaws.com
+Addresses:  52.77.146.31
+	  52.74.252.201
+	  54.255.219.82
+Aliases:  aws-0-ap-southeast-1.pooler.supabase.com
+

@@ -41,6 +41,23 @@ interface GoogleCampaign {
   allConversionsValue: number;
 }
 
+// TikTok Ads Campaign
+interface TikTokAdsCampaign {
+  name: string;
+  status: string;
+  impressions: number;
+  clicks: number;
+  spent: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  conversions: number;
+  conversionValue: number;
+  reach: number;
+  videoViews: number;
+  campaignId?: string;
+}
+
 interface MetaAggregatedData {
   spend: number;
   impressions: number;
@@ -70,6 +87,21 @@ interface GoogleAggregatedData {
   campaigns: GoogleCampaign[];
 }
 
+interface TikTokAdsAggregatedData {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  conversionValue: number;
+  reach: number;
+  videoViews: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  roas: number;
+  campaigns: TikTokAdsCampaign[];
+}
+
 interface TimelineDataPoint {
   date: string;
   value: number;
@@ -92,6 +124,10 @@ interface AdsResponse {
     current: GoogleAggregatedData;
     previous: GoogleAggregatedData;
   } | null;
+  tiktokAds: {
+    current: TikTokAdsAggregatedData;
+    previous: TikTokAdsAggregatedData;
+  } | null;
   upstreamDebug?: {
     meta?: {
       currentWeek?: { status: number; body: string; url: string };
@@ -99,6 +135,10 @@ interface AdsResponse {
       timeline?: Record<string, { status: number; body: string; url: string }>;
     };
     google?: {
+      currentWeek?: { status: number; body: string; url: string };
+      prevWeek?: { status: number; body: string; url: string };
+    };
+    tiktok?: {
       currentWeek?: { status: number; body: string; url: string };
       prevWeek?: { status: number; body: string; url: string };
     };
@@ -115,9 +155,9 @@ serve(async (req) => {
 
     if (!clientId || !from || !to || !prevFrom || !prevTo) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Missing required params: clientId, from, to, prevFrom, prevTo" 
+        JSON.stringify({
+          success: false,
+          error: "Missing required params: clientId, from, to, prevFrom, prevTo"
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -132,16 +172,16 @@ serve(async (req) => {
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      
+
       if (user && !authError) {
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id)
           .maybeSingle();
-        
+
         const isAdmin = roleData?.role === "admin";
-        
+
         if (!isAdmin) {
           const { data: accessData } = await supabase
             .from("client_users")
@@ -149,7 +189,7 @@ serve(async (req) => {
             .eq("user_id", user.id)
             .eq("client_id", clientId)
             .maybeSingle();
-          
+
           if (!accessData) {
             return new Response(
               JSON.stringify({ success: false, error: "Access denied" }),
@@ -169,8 +209,8 @@ serve(async (req) => {
 
     if (!configList || configList.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           data: { metaAds: null, googleAds: null },
           message: "No Metricool config found for this client"
         }),
@@ -202,7 +242,7 @@ serve(async (req) => {
         userId: userId,
         blogId: blogId || "",
       });
-      
+
       const url = `https://app.metricool.com/api/stats/facebookads/campaigns?${params.toString()}`;
       console.log(`[metricool-ads] Fetching Meta campaigns: ${url}`);
 
@@ -246,31 +286,31 @@ serve(async (req) => {
         const campaigns: MetaCampaign[] = data.map((c: Record<string, unknown>) => {
           const spent = Number(c.spent) || 0;
           const actions = c.actions as Record<string, number> || {};
-          
+
           // Look for ROAS - Metricool uses purchaseROAS (capital ROAS)
           let purchaseRoas = Number(c.purchaseROAS) || Number(c.purchaseRoas) || Number(c.purchase_roas) || 0;
-          
+
           // Look for conversion value - Metricool uses conversionsValue
-          let conversionValue = Number(c.conversionsValue) || Number(c.conversionValue) || 
-                                Number(c.allConversionsValue) || 0;
-          
+          let conversionValue = Number(c.conversionsValue) || Number(c.conversionValue) ||
+            Number(c.allConversionsValue) || 0;
+
           // Check in actions object for ROAS and purchase values
           if (actions) {
             if (!purchaseRoas) {
-              purchaseRoas = Number(actions.purchase_roas) || Number(actions.omni_purchase_roas) || 
-                             Number(actions.website_purchase_roas) || 0;
+              purchaseRoas = Number(actions.purchase_roas) || Number(actions.omni_purchase_roas) ||
+                Number(actions.website_purchase_roas) || 0;
             }
             if (!conversionValue) {
-              conversionValue = Number(actions.omni_purchase) || Number(actions.purchase) || 
-                                Number(actions.website_purchases_value) || 0;
+              conversionValue = Number(actions.omni_purchase) || Number(actions.purchase) ||
+                Number(actions.website_purchases_value) || 0;
             }
           }
-          
+
           // Calculate ROAS if we have conversion value but no ROAS
           if (!purchaseRoas && conversionValue > 0 && spent > 0) {
             purchaseRoas = conversionValue / spent;
           }
-          
+
           return {
             name: String(c.name || "Unknown"),
             status: String(c.status || "unknown"),
@@ -305,7 +345,7 @@ serve(async (req) => {
         userId: userId,
         blogId: blogId || "",
       });
-      
+
       const url = `https://app.metricool.com/api/stats/adwords/campaigns?${params.toString()}`;
       console.log(`[metricool-ads] Fetching Google campaigns: ${url}`);
 
@@ -353,6 +393,68 @@ serve(async (req) => {
       }
     };
 
+    // ========== TIKTOK ADS ==========
+    const fetchTikTokAdsCampaigns = async (fromDate: string, toDate: string): Promise<{ campaigns: TikTokAdsCampaign[] | null; debug: { status: number; body: string; url: string } }> => {
+      const params = new URLSearchParams({
+        start: formatDate(fromDate),
+        end: formatDate(toDate),
+        userId: userId,
+        blogId: blogId || "",
+      });
+
+      const url = `https://app.metricool.com/api/stats/tiktokads/campaigns?${params.toString()}`;
+      console.log(`[metricool-ads] Fetching TikTok Ads campaigns: ${url}`);
+
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { "x-mc-auth": METRICOOL_AUTH, "Accept": "application/json" },
+        });
+
+        const responseText = await res.text();
+        console.log(`[metricool-ads] TikTok Ads campaigns response: ${res.status}`);
+
+        if (!res.ok) {
+          return { campaigns: null, debug: { status: res.status, body: responseText, url } };
+        }
+
+        let data;
+        try { data = JSON.parse(responseText); } catch {
+          return { campaigns: null, debug: { status: res.status, body: `Invalid JSON`, url } };
+        }
+
+        if (!Array.isArray(data) || data.length === 0) {
+          return { campaigns: [], debug: { status: res.status, body: responseText, url } };
+        }
+
+        const campaigns: TikTokAdsCampaign[] = data.map((c: Record<string, unknown>) => {
+          const spent = Number(c.spent) || 0;
+          let conversionValue = Number(c.conversionsValue) || Number(c.conversionValue) || Number(c.allConversionsValue) || 0;
+
+          return {
+            name: String(c.name || "Unknown"),
+            status: String(c.status || "unknown"),
+            impressions: Number(c.impressions) || 0,
+            reach: Number(c.reach) || 0,
+            clicks: Number(c.clicks) || 0,
+            spent,
+            ctr: Number(c.ctr) || 0,
+            cpc: Number(c.cpc) || 0,
+            cpm: Number(c.cpm) || 0,
+            conversions: Number(c.conversions) || 0,
+            conversionValue,
+            videoViews: Number(c.videoViews) || Number(c.video_views) || 0,
+            campaignId: c.id ? String(c.id) : (c.campaignId ? String(c.campaignId) : (c.providerCampaignId ? String(c.providerCampaignId) : undefined)),
+          };
+        });
+
+        return { campaigns, debug: { status: res.status, body: responseText.substring(0, 500), url } };
+      } catch (err) {
+        console.error(`[metricool-ads] TikTok Ads error:`, err);
+        return { campaigns: null, debug: { status: 0, body: String(err), url } };
+      }
+    };
+
     // Fetch timeline
     const fetchTimeline = async (metric: string, fromDate: string, toDate: string): Promise<{ data: TimelineDataPoint[]; debug: { status: number; body: string; url: string } }> => {
       const params = new URLSearchParams({
@@ -361,7 +463,7 @@ serve(async (req) => {
         userId: userId,
         blogId: blogId || "",
       });
-      
+
       const url = `https://app.metricool.com/api/stats/timeline/${metric}?${params.toString()}`;
 
       try {
@@ -464,16 +566,49 @@ serve(async (req) => {
       return result;
     };
 
+    // Aggregate TikTok Ads campaigns
+    const aggregateTikTokAdsCampaigns = (campaigns: TikTokAdsCampaign[]): TikTokAdsAggregatedData => {
+      const result: TikTokAdsAggregatedData = {
+        spend: 0, impressions: 0, clicks: 0, conversions: 0,
+        conversionValue: 0, reach: 0, videoViews: 0,
+        ctr: 0, cpc: 0, cpm: 0, roas: 0, campaigns,
+      };
+
+      for (const c of campaigns) {
+        result.spend += c.spent || 0;
+        result.impressions += c.impressions || 0;
+        result.clicks += c.clicks || 0;
+        result.conversions += c.conversions || 0;
+        result.conversionValue += c.conversionValue || 0;
+        result.reach += c.reach || 0;
+        result.videoViews += c.videoViews || 0;
+      }
+
+      if (result.impressions > 0) {
+        result.ctr = (result.clicks / result.impressions) * 100;
+        result.cpm = (result.spend / result.impressions) * 1000;
+      }
+      if (result.clicks > 0) result.cpc = result.spend / result.clicks;
+      if (result.spend > 0 && result.conversionValue > 0) {
+        result.roas = result.conversionValue / result.spend;
+      }
+
+      return result;
+    };
+
     // Fetch all data in parallel
     const [
       metaCurrentResult, metaPrevResult,
       googleCurrentResult, googlePrevResult,
+      tiktokCurrentResult, tiktokPrevResult,
       spendTimeline, impressionsTimeline, reachTimeline, clicksTimeline
     ] = await Promise.all([
       fetchMetaCampaigns(from, to),
       fetchMetaCampaigns(prevFrom, prevTo),
       fetchGoogleCampaigns(from, to),
       fetchGoogleCampaigns(prevFrom, prevTo),
+      fetchTikTokAdsCampaigns(from, to),
+      fetchTikTokAdsCampaigns(prevFrom, prevTo),
       fetchTimeline("adSpend", from, to),
       fetchTimeline("adImpressions", from, to),
       fetchTimeline("adReach", from, to),
@@ -482,7 +617,7 @@ serve(async (req) => {
 
     // Build debug info
     const upstreamDebug: AdsResponse["upstreamDebug"] = {};
-    
+
     // Meta debug
     const metaDebug: NonNullable<AdsResponse["upstreamDebug"]>["meta"] = {};
     if (metaCurrentResult.campaigns === null) metaDebug.currentWeek = metaCurrentResult.debug;
@@ -495,6 +630,12 @@ serve(async (req) => {
     if (googlePrevResult.campaigns === null) googleDebug.prevWeek = googlePrevResult.debug;
     if (Object.keys(googleDebug).length > 0) upstreamDebug.google = googleDebug;
 
+    // TikTok debug
+    const tiktokDebug: NonNullable<AdsResponse["upstreamDebug"]>["tiktok"] = {};
+    if (tiktokCurrentResult.campaigns === null) tiktokDebug.currentWeek = tiktokCurrentResult.debug;
+    if (tiktokPrevResult.campaigns === null) tiktokDebug.prevWeek = tiktokPrevResult.debug;
+    if (Object.keys(tiktokDebug).length > 0) upstreamDebug.tiktok = tiktokDebug;
+
     // Aggregate Meta
     const metaCurrentData = aggregateMetaCampaigns(metaCurrentResult.campaigns || []);
     const metaPreviousData = aggregateMetaCampaigns(metaPrevResult.campaigns || []);
@@ -502,6 +643,10 @@ serve(async (req) => {
     // Aggregate Google
     const googleCurrentData = aggregateGoogleCampaigns(googleCurrentResult.campaigns || []);
     const googlePreviousData = aggregateGoogleCampaigns(googlePrevResult.campaigns || []);
+
+    // Aggregate TikTok Ads
+    const tiktokCurrentData = aggregateTikTokAdsCampaigns(tiktokCurrentResult.campaigns || []);
+    const tiktokPreviousData = aggregateTikTokAdsCampaigns(tiktokPrevResult.campaigns || []);
 
     // Timeline
     const timeline: TimelineData = {
@@ -513,23 +658,27 @@ serve(async (req) => {
 
     console.log(`[metricool-ads] Meta aggregated:`, { spend: metaCurrentData.spend, campaigns: metaCurrentData.campaigns.length });
     console.log(`[metricool-ads] Google aggregated:`, { spend: googleCurrentData.spend, campaigns: googleCurrentData.campaigns.length });
+    console.log(`[metricool-ads] TikTok Ads aggregated:`, { spend: tiktokCurrentData.spend, campaigns: tiktokCurrentData.campaigns.length });
 
     // Check for meaningful data
-    const hasMetaData = metaCurrentData.spend > 0 || metaCurrentData.impressions > 0 || 
-                        metaPreviousData.spend > 0 || metaCurrentData.campaigns.length > 0;
-    const hasGoogleData = googleCurrentData.spend > 0 || googleCurrentData.impressions > 0 || 
-                          googlePreviousData.spend > 0 || googleCurrentData.campaigns.length > 0;
+    const hasMetaData = metaCurrentData.spend > 0 || metaCurrentData.impressions > 0 ||
+      metaPreviousData.spend > 0 || metaCurrentData.campaigns.length > 0;
+    const hasGoogleData = googleCurrentData.spend > 0 || googleCurrentData.impressions > 0 ||
+      googlePreviousData.spend > 0 || googleCurrentData.campaigns.length > 0;
+    const hasTikTokData = tiktokCurrentData.spend > 0 || tiktokCurrentData.impressions > 0 ||
+      tiktokPreviousData.spend > 0 || tiktokCurrentData.campaigns.length > 0;
 
     const response: AdsResponse = {
       metaAds: hasMetaData ? { current: metaCurrentData, previous: metaPreviousData, timeline } : null,
       googleAds: hasGoogleData ? { current: googleCurrentData, previous: googlePreviousData } : null,
+      tiktokAds: hasTikTokData ? { current: tiktokCurrentData, previous: tiktokPreviousData } : null,
     };
 
     if (Object.keys(upstreamDebug).length > 0) response.upstreamDebug = upstreamDebug;
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         data: response,
         debug: { userId, blogId }
       }),
@@ -539,8 +688,8 @@ serve(async (req) => {
   } catch (error) {
     console.error("[metricool-ads] Error:", error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
+      JSON.stringify({
+        success: false,
         error: error instanceof Error ? error.message : String(error),
         data: { metaAds: null, googleAds: null }
       }),

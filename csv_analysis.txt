@@ -1,0 +1,44 @@
+query-results-export-2026-02-25_05-09-27.csv
+  size: 1KB
+  header: json_agg
+  keys: access_token, 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, client_id, connected_at, id, is_active, scope, shop_domain, updated_at, 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, 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
+
+query-results-export-2026-02-25_05-11-10.csv
+  size: 0KB
+  header: json_agg
+  keys: created_at, id, role, admin, user_id
+
+query-results-export-2026-02-25_05-11-26.csv
+  size: 5KB
+  header: json_agg
+  keys: access_token_encrypted, account_id, account_name, client_id, connected_at, created_at, id, is_active, platform, youtube, refresh_token_encrypted, token_expires_at, updated_at, 1897309977775390721, x
+
+query-results-export-2026-02-25_05-11-48.csv
+  size: 9KB
+  header: json_agg
+  keys: access_token, EAARXADGOZAewBQeZBVr440eEO31NDhnZBG0nZCEOMZBmlM5Yi5MpADpLDtoLEbkhfWEUim1X25613XBGIQ36f0LY4Amy4ecBZCmvYyjEuJZCoA3vOJRaZCIWMhVlXKZCwN6n54O6RBjnTFIqLuJ6JRw0uuJArIW0qZBxJLnZC6HljfGpoJ8HAZCdboZBxOiw3C5FMEgO4IXNrmCAj, client_id, connected_at, created_at, id, instagram_business_id, 17841472003145717, is_active, meta_user_id, 122162242352798819, page_id, 845659691956341, platform, instagram
+
+query-results-export-2026-02-25_05-12-08.csv
+  size: 19KB
+  header: json_agg
+  keys: client_id, collected_at, countries, created_at, gender_female, gender_male, gender_unknown, id, period_end, period_start, platform, tiktok, country, PH, percentage
+
+query-results-export-2026-02-25_05-22-19.csv
+  size: 120KB
+  header: json_agg
+  keys: client_id, created_at, date_range, id, updated_at, week_end, week_start
+
+query-results-export-2026-02-25_05-22-36.csv
+  size: 22KB
+  header: json_agg
+  keys: created_at, engagement_rate, followers, id, last_week_engagement_rate, last_week_total_content, new_followers, platform, Instagram, report_id, total_content, Facebook, TikTok, X, LinkedIn
+
+query-results-export-2026-02-25_05-22-53.csv
+  size: 741KB
+  header: json_agg
+  keys: created_at, engagement_percent, engagement_tier, followers, id, influence, link, platform, reach_tier, report_id, views, YouTube, Instagram, TikTok, Facebook
+
+query-results-export-2026-02-25_05-23-09.csv
+  size: 524KB
+  header: json_agg
+  keys: click_through_rate, comments, content_type, Reel, created_at, duration, engagements, id, impressions, interactions, likes, link_clicks, platform_data_id, played_to_watch_percent, post_date

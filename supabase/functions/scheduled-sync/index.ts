@@ -57,6 +57,7 @@ serve(async (req) => {
     facebook: { success: 0, failed: 0, errors: [] as string[] },
     tiktok: { success: 0, failed: 0, errors: [] as string[] },
     linkedin: { success: 0, failed: 0, errors: [] as string[] },
+    shopify: { success: 0, failed: 0, errors: [] as string[] },
   };
 
   // Helper to sync a platform for both periods
@@ -354,6 +355,41 @@ serve(async (req) => {
         "facebook",
         clientName
       );
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 6. SHOPIFY SYNC
+    console.log("\n=== Syncing Shopify ===");
+    const { data: shopifyConnections } = await supabase
+      .from("shopify_oauth_connections")
+      .select("id, client_id, shop_domain")
+      .eq("is_active", true);
+
+    for (const conn of shopifyConnections || []) {
+      const shopName = conn.shop_domain || conn.client_id;
+      console.log(`Syncing Shopify for client ${conn.client_id}: ${shopName}`);
+
+      try {
+        const { data, error } = await supabase.functions.invoke("shopify-analytics", {
+          body: {
+            clientId: conn.client_id,
+            endpoint: "summary",
+            start: periods.current.start,
+            end: periods.current.end,
+          },
+        });
+        if (error) throw error;
+        if (data?.success) {
+          results.shopify.success++;
+          console.log(`  ✓ Shopify summary synced for ${shopName}`);
+        } else {
+          throw new Error(data?.error || "Unknown error");
+        }
+      } catch (err: any) {
+        results.shopify.failed++;
+        console.error(`  ✗ Shopify failed for ${shopName}: ${err.message}`);
+        results.shopify.errors.push(`${shopName}: ${err.message}`);
+      }
       await new Promise(r => setTimeout(r, 500));
     }
 

@@ -1,0 +1,12 @@
+﻿Connecting to Supabase database via pooler...
+node : Fatal error: Tenant or user not found
+At line:1 char:1
++ node run_imports.mjs 2>&1 | Out-File 
+-FilePath import_output.txt -Enc ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   Fatal error: Tenant or user not found:Str  
+  ing) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandEr 
+   ror
+ 
