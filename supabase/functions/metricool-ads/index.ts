@@ -222,7 +222,25 @@ serve(async (req) => {
     const userId = config.user_id;
     const blogId = config.blog_id;
 
-    console.log(`[metricool-ads] Fetching Ads for:`, { clientId, userId, blogId, from, to });
+    // Gather all distinct google_ads blog_ids for multi-account support
+    const googleAdsBlogIds = [...new Set(
+      configList
+        .filter(c => c.platform === 'google_ads')
+        .map(c => c.blog_id)
+    )];
+    // If no specific google_ads config, fall back to the primary blog_id
+    if (googleAdsBlogIds.length === 0) googleAdsBlogIds.push(blogId);
+    // Also check for extra Google Ads blog_ids (multi-account mapping)
+    const extraGoogleAdsBlogIds: Record<string, string[]> = {
+      // Snarky Humans: also fetch from Snarky Azz Humans account
+      'ef580ebf-439f-4305-826a-f1f8aa89fd03': ['5831273'],
+    };
+    const extras = extraGoogleAdsBlogIds[clientId] || [];
+    for (const eid of extras) {
+      if (!googleAdsBlogIds.includes(eid)) googleAdsBlogIds.push(eid);
+    }
+
+    console.log(`[metricool-ads] Fetching Ads for:`, { clientId, userId, blogId, googleAdsBlogIds, from, to });
 
     const METRICOOL_AUTH = Deno.env.get("METRICOOL_AUTH");
     if (!METRICOOL_AUTH) {
@@ -338,12 +356,12 @@ serve(async (req) => {
     };
 
     // ========== GOOGLE ADS ==========
-    const fetchGoogleCampaigns = async (fromDate: string, toDate: string): Promise<{ campaigns: GoogleCampaign[] | null; debug: { status: number; body: string; url: string } }> => {
+    const fetchGoogleCampaigns = async (fromDate: string, toDate: string, overrideBlogId?: string): Promise<{ campaigns: GoogleCampaign[] | null; debug: { status: number; body: string; url: string } }> => {
       const params = new URLSearchParams({
         start: formatDate(fromDate),
         end: formatDate(toDate),
         userId: userId,
-        blogId: blogId || "",
+        blogId: overrideBlogId || blogId || "",
       });
 
       const url = `https://app.metricool.com/api/stats/adwords/campaigns?${params.toString()}`;
@@ -596,6 +614,20 @@ serve(async (req) => {
       return result;
     };
 
+    // Fetch Google Ads from all blog_ids (multi-account)
+    const fetchAllGoogleCampaigns = async (fromDate: string, toDate: string) => {
+      const results = await Promise.all(
+        googleAdsBlogIds.map(bid => fetchGoogleCampaigns(fromDate, toDate, bid))
+      );
+      // Merge all campaigns from all accounts
+      const allCampaigns: GoogleCampaign[] = [];
+      let firstDebug = results[0]?.debug || { status: 0, body: '', url: '' };
+      for (const r of results) {
+        if (r.campaigns) allCampaigns.push(...r.campaigns);
+      }
+      return { campaigns: allCampaigns.length > 0 ? allCampaigns : null, debug: firstDebug };
+    };
+
     // Fetch all data in parallel
     const [
       metaCurrentResult, metaPrevResult,
@@ -605,8 +637,8 @@ serve(async (req) => {
     ] = await Promise.all([
       fetchMetaCampaigns(from, to),
       fetchMetaCampaigns(prevFrom, prevTo),
-      fetchGoogleCampaigns(from, to),
-      fetchGoogleCampaigns(prevFrom, prevTo),
+      fetchAllGoogleCampaigns(from, to),
+      fetchAllGoogleCampaigns(prevFrom, prevTo),
       fetchTikTokAdsCampaigns(from, to),
       fetchTikTokAdsCampaigns(prevFrom, prevTo),
       fetchTimeline("adSpend", from, to),
