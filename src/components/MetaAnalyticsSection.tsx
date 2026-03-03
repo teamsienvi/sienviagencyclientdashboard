@@ -1214,8 +1214,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const renderMetricsCards = (metrics: MetaAccountMetrics | null, prevMetrics: MetaAccountMetrics | null, platform: MetaPlatform) => {
     const { start: currentStart, end: currentEnd } = getDateRange();
     const { start: compStart, end: compEnd } = getComparisonDateRange();
-    const currentLabel = `${format(currentStart, "MMM d")}-${format(currentEnd, "d")}`;
-    const compLabel = `${format(compStart, "MMM d")}-${format(compEnd, "d")}`;
+    const sameMonth = currentStart.getMonth() === currentEnd.getMonth();
+    const currentLabel = sameMonth
+      ? `${format(currentStart, "MMM d")}-${format(currentEnd, "d")}`
+      : `${format(currentStart, "MMM d")} - ${format(currentEnd, "MMM d")}`;
+    const compSameMonth = compStart.getMonth() === compEnd.getMonth();
+    const compLabel = compSameMonth
+      ? `${format(compStart, "MMM d")}-${format(compEnd, "d")}`
+      : `${format(compStart, "MMM d")} - ${format(compEnd, "MMM d")}`;
 
     // Get Metricool Overview KPIs and Weekly comparison data for this platform
     const overviewKPIs = platform === "instagram" ? instagramOverviewKPIs : facebookOverviewKPIs;
