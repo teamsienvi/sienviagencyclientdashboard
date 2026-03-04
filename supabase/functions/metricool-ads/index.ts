@@ -230,15 +230,6 @@ serve(async (req) => {
     )];
     // If no specific google_ads config, fall back to the primary blog_id
     if (googleAdsBlogIds.length === 0) googleAdsBlogIds.push(blogId);
-    // Also check for extra Google Ads blog_ids (multi-account mapping)
-    const extraGoogleAdsBlogIds: Record<string, string[]> = {
-      // Snarky Humans: also fetch from Snarky Azz Humans account
-      'ef580ebf-439f-4305-826a-f1f8aa89fd03': ['5831273'],
-    };
-    const extras = extraGoogleAdsBlogIds[clientId] || [];
-    for (const eid of extras) {
-      if (!googleAdsBlogIds.includes(eid)) googleAdsBlogIds.push(eid);
-    }
 
     console.log(`[metricool-ads] Fetching Ads for:`, { clientId, userId, blogId, googleAdsBlogIds, from, to });
 

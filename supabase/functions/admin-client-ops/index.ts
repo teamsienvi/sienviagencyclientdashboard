@@ -18,7 +18,7 @@ serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false },
         });
 
-        const { action, clientName, clientId, userId } = await req.json();
+        const { action, clientName, clientId, userId, blogId, platform } = await req.json();
 
         if (action === "create_client") {
             const { data, error } = await supabaseAdmin
@@ -36,6 +36,16 @@ serve(async (req) => {
                 .insert({ user_id: userId, client_id: clientId });
             if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "insert_metricool_config") {
+            const { data, error } = await supabaseAdmin
+                .from("client_metricool_config")
+                .insert({ client_id: clientId, user_id: userId, blog_id: blogId, platform, is_active: true })
+                .select("id, client_id, platform, blog_id")
+                .single();
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return new Response(JSON.stringify({ config: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (action === "update_client_name") {
