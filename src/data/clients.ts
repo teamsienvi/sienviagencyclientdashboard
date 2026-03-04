@@ -163,4 +163,9 @@ export const clientsData: Client[] = [
     name: "BlingyBag",
     reports: [],
   },
+  {
+    name: "Snarky A$$ Humans",
+    logo: snarkyHumansLogo,
+    reports: [],
+  },
 ];
