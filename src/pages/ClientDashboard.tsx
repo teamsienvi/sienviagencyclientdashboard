@@ -4,8 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useMemo } from "react";
 import { format, subDays } from "date-fns";
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
-import { 
-  ArrowLeft, Calendar, TrendingUp, Users, Eye, 
+import {
+  ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
   BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast
 } from "lucide-react";
@@ -83,7 +83,7 @@ const ClientDashboard = () => {
     queryKey: ["client-connected-accounts", clientId],
     queryFn: async () => {
       if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false, shopify: false, metaAds: false };
-      
+
       // Check X account connection
       const { data: xData } = await supabase
         .from("social_accounts")
@@ -148,16 +148,16 @@ const ClientDashboard = () => {
     queryFn: async () => {
       if (!clientId) return null;
       const startDate = format(subDays(new Date(), 30), "yyyy-MM-dd");
-      
+
       const { data, error } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .gte("period_start", startDate)
         .order("collected_at", { ascending: false });
-      
+
       if (error) throw error;
-      
+
       // Get latest per platform
       const latestByPlatform: Record<string, typeof data[0]> = {};
       for (const metric of data || []) {
@@ -175,16 +175,16 @@ const ClientDashboard = () => {
     queryKey: ["client-metricool-followers", clientId, metricoolPlatforms],
     queryFn: async () => {
       if (!clientId || !metricoolPlatforms || metricoolPlatforms.length === 0) return null;
-      
+
       const followers: Record<string, number> = {};
       // Include social platforms that support the followers metric via metricool-social-weekly
       // YouTube has different metrics and is fetched via social_account_metrics instead
       const socialPlatforms = metricoolPlatforms
         .filter(p => ["instagram", "facebook", "tiktok", "linkedin"].includes(p.platform))
         .map(p => p.platform);
-      
+
       if (socialPlatforms.length === 0) return null;
-      
+
       // Get date ranges for current period
       const today = new Date();
       const dayOfWeek = today.getDay();
@@ -192,7 +192,7 @@ const ClientDashboard = () => {
       const thisMonday = new Date(today);
       thisMonday.setDate(today.getDate() - daysToSubtract);
       thisMonday.setHours(0, 0, 0, 0);
-      
+
       const currentStart = new Date(thisMonday);
       currentStart.setDate(thisMonday.getDate() - 7);
       const currentEnd = new Date(thisMonday);
@@ -201,9 +201,9 @@ const ClientDashboard = () => {
       prevStart.setDate(currentStart.getDate() - 7);
       const prevEnd = new Date(currentStart);
       prevEnd.setDate(currentStart.getDate() - 1);
-      
+
       const formatDate = (d: Date) => d.toISOString().split("T")[0];
-      
+
       // Fetch each platform in parallel
       const results = await Promise.allSettled(
         socialPlatforms.map(async (platform) => {
@@ -217,23 +217,23 @@ const ClientDashboard = () => {
               prevTo: formatDate(prevEnd),
             },
           });
-          
+
           if (error || !data?.success) return { platform, followers: null };
-          
+
           // Get followers from the last point in the current timeline
           const timeline = data.data?.current?.followersTimeline || [];
           const lastPoint = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-          
+
           return { platform, followers: lastPoint?.value || null };
         })
       );
-      
+
       results.forEach((result) => {
         if (result.status === "fulfilled" && result.value.followers) {
           followers[result.value.platform] = result.value.followers;
         }
       });
-      
+
       return Object.keys(followers).length > 0 ? followers : null;
     },
     enabled: !!clientId && !!metricoolPlatforms && metricoolPlatforms.length > 0,
@@ -265,11 +265,11 @@ const ClientDashboard = () => {
 
     // Merge static reports with dynamic DB reports (Jan 3+)
     const staticReports = [...staticClient.reports];
-    
+
     // Add DB reports that aren't already in static list
     if (dbReports && dbReports.length > 0) {
       const existingDateRanges = new Set(staticReports.map(r => r.dateRange.toLowerCase().replace(/\s+/g, '')));
-      
+
       for (const dbReport of dbReports) {
         // Format date range for display (e.g., "Jan 5-11")
         const start = new Date(dbReport.week_start);
@@ -278,14 +278,14 @@ const ClientDashboard = () => {
         const endMonth = end.toLocaleDateString('en-US', { month: 'short' });
         const startDay = start.getDate();
         const endDay = end.getDate();
-        
+
         let dateRange: string;
         if (startMonth === endMonth) {
           dateRange = `${startMonth} ${startDay}-${endDay}`;
         } else {
           dateRange = `${startMonth} ${startDay} - ${endMonth} ${endDay}`;
         }
-        
+
         const normalizedRange = dateRange.toLowerCase().replace(/\s+/g, '');
         if (!existingDateRanges.has(normalizedRange)) {
           staticReports.push({
@@ -336,7 +336,7 @@ const ClientDashboard = () => {
   const totalFollowers = useMemo(() => {
     let total = 0;
     const countedPlatforms = new Set<string>();
-    
+
     // First priority: Live Metricool followers (most accurate)
     if (metricoolFollowers) {
       Object.entries(metricoolFollowers).forEach(([platform, followers]) => {
@@ -346,7 +346,7 @@ const ClientDashboard = () => {
         }
       });
     }
-    
+
     // Second: Add from social_account_metrics for platforms not already counted
     if (socialMetrics) {
       Object.entries(socialMetrics).forEach(([platform, m]) => {
@@ -356,38 +356,38 @@ const ClientDashboard = () => {
         }
       });
     }
-    
+
     return total;
   }, [socialMetrics, metricoolFollowers]);
 
   // Count connected platforms accurately
   const connectedPlatformsCount = useMemo(() => {
     let count = 0;
-    
+
     // Metricool platforms (excluding meta_ads which is not a social platform)
     const socialMetricoolPlatforms = metricoolPlatforms?.filter(p => p.platform !== 'meta_ads') || [];
     count += socialMetricoolPlatforms.length;
-    
+
     // Add YouTube if connected and not in Metricool
     if (connectedAccounts?.youtube && !metricoolPlatforms?.some(p => p.platform === 'youtube')) {
       count++;
     }
-    
+
     // Add Meta (OAuth) if connected and not in Metricool
     if (connectedAccounts?.meta && !metricoolPlatforms?.some(p => p.platform === 'instagram' || p.platform === 'facebook')) {
       count++;
     }
-    
+
     // Add X if has data and not in Metricool
     if (connectedAccounts?.xHasData && !metricoolPlatforms?.some(p => p.platform === 'x')) {
       count++;
     }
-    
+
     // Add Shopify if connected
     if (connectedAccounts?.shopify) {
       count++;
     }
-    
+
     return count;
   }, [metricoolPlatforms, connectedAccounts]);
 
@@ -395,13 +395,15 @@ const ClientDashboard = () => {
   const isAdsOnlyClient = useMemo(() => {
     if (!metricoolPlatforms) return false;
     const platforms = metricoolPlatforms.map(p => p.platform);
-    const nonAdsPlatforms = platforms.filter(p => p !== 'meta_ads');
+    const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
+    const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
+    const nonAdsPlatforms = platforms.filter(p => !adsPlatforms.includes(p));
     const hasMetaOAuth = connectedAccounts?.meta;
     const hasYouTube = connectedAccounts?.youtube;
     const hasX = connectedAccounts?.xHasData;
-    return platforms.includes('meta_ads') && 
-           nonAdsPlatforms.length === 0 && 
-           !hasMetaOAuth && !hasYouTube && !hasX;
+    return hasAnyAdsPlatform &&
+      nonAdsPlatforms.length === 0 &&
+      !hasMetaOAuth && !hasYouTube && !hasX;
   }, [metricoolPlatforms, connectedAccounts]);
 
   const latestReport = clientReports?.reports[clientReports.reports.length - 1];
@@ -442,7 +444,7 @@ const ClientDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <ClientHeader clientName={client.name} clientLogo={client.logo_url} currentClientId={clientId} />
-      
+
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
           {/* Welcome Section */}
@@ -549,7 +551,7 @@ const ClientDashboard = () => {
                 {!isAdsOnlyClient && (
                   <>
                     {/* YouTube */}
-                    <Card 
+                    <Card
                       className="hover:border-primary/30 transition-all cursor-pointer group"
                       onClick={() => navigate(`/youtube-analytics/${clientId}`)}
                     >
@@ -577,7 +579,7 @@ const ClientDashboard = () => {
                     </Card>
 
                     {/* Meta */}
-                    <Card 
+                    <Card
                       className="hover:border-primary/30 transition-all cursor-pointer group"
                       onClick={() => navigate(`/meta-analytics/${clientId}`)}
                     >
@@ -605,60 +607,60 @@ const ClientDashboard = () => {
                     {/* X (Twitter) - Only show for Sienvi Agency and Father Figure Formula */}
                     {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
                       connectedAccounts?.xHasData ? (
-                      <Card 
-                        className="hover:border-primary/30 transition-all cursor-pointer group"
-                        onClick={() => navigate(`/x-analytics/${clientId}`)}
-                      >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
-                              <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                        <Card
+                          className="hover:border-primary/30 transition-all cursor-pointer group"
+                          onClick={() => navigate(`/x-analytics/${clientId}`)}
+                        >
+                          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
+                                <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                              </div>
+                              <div>
+                                <CardTitle className="text-base">X</CardTitle>
+                                <CardDescription>Twitter Analytics</CardDescription>
+                              </div>
                             </div>
-                            <div>
-                              <CardTitle className="text-base">X</CardTitle>
-                              <CardDescription>Twitter Analytics</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                        </CardHeader>
-                        <CardContent>
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600">
-                            {connectedAccounts?.x ? "Connected" : "Data Available"}
-                          </Badge>
-                        </CardContent>
-                      </Card>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                          </CardHeader>
+                          <CardContent>
+                            <Badge variant="secondary" className="bg-green-500/10 text-green-600">
+                              {connectedAccounts?.x ? "Connected" : "Data Available"}
+                            </Badge>
+                          </CardContent>
+                        </Card>
                       ) : (
-                      <Card className="hover:border-primary/30 transition-all group">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
-                              <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                        <Card className="hover:border-primary/30 transition-all group">
+                          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
+                                <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                              </div>
+                              <div>
+                                <CardTitle className="text-base">X</CardTitle>
+                                <CardDescription>Twitter Analytics</CardDescription>
+                              </div>
                             </div>
-                            <div>
-                              <CardTitle className="text-base">X</CardTitle>
-                              <CardDescription>Twitter Analytics</CardDescription>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          <XCSVUploadDialog
-                            clientId={clientId!}
-                            clientName={client.name}
-                            trigger={
-                              <Button variant="outline" size="sm" className="gap-2 w-full">
-                                <Upload className="h-4 w-4" />
-                                Upload CSV
-                              </Button>
-                            }
-                          />
-                        </CardContent>
-                      </Card>
+                          </CardHeader>
+                          <CardContent>
+                            <XCSVUploadDialog
+                              clientId={clientId!}
+                              clientName={client.name}
+                              trigger={
+                                <Button variant="outline" size="sm" className="gap-2 w-full">
+                                  <Upload className="h-4 w-4" />
+                                  Upload CSV
+                                </Button>
+                              }
+                            />
+                          </CardContent>
+                        </Card>
                       )
                     )}
 
                     {/* TikTok */}
                     {metricoolPlatforms?.some(p => p.platform === 'tiktok') && (
-                      <Card 
+                      <Card
                         className="hover:border-primary/30 transition-all cursor-pointer group"
                         onClick={() => navigate(`/tiktok-metricool/${clientId}`)}
                       >
@@ -689,7 +691,7 @@ const ClientDashboard = () => {
 
                     {/* LinkedIn */}
                     {metricoolPlatforms?.some(p => p.platform === 'linkedin') && (
-                      <Card 
+                      <Card
                         className="hover:border-primary/30 transition-all cursor-pointer group"
                         onClick={() => navigate(`/linkedin-metricool/${clientId}`)}
                       >
@@ -715,7 +717,7 @@ const ClientDashboard = () => {
 
                 {/* Ads Analytics - Show for clients with meta_ads config (Metricool or direct API) */}
                 {(metricoolPlatforms?.some(p => p.platform === 'meta_ads') || connectedAccounts?.metaAds) && (
-                  <Card 
+                  <Card
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/ads-analytics/${clientId}`)}
                   >
@@ -739,7 +741,7 @@ const ClientDashboard = () => {
 
                 {/* Shopify Analytics - Show for Snarky Pets, Snarky Humans, and BlingyBag */}
                 {(client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") && (
-                  <Card 
+                  <Card
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/shopify-analytics/${clientId}`)}
                   >
@@ -764,7 +766,7 @@ const ClientDashboard = () => {
                 {/* Podcast Analytics - Father Figure Formula only */}
                 {client.name === "Father Figure Formula" && (
                   <>
-                    <Card 
+                    <Card
                       className="hover:border-primary/30 transition-all cursor-pointer group"
                       onClick={() => window.open('https://podcastsconnect.apple.com/analytics', '_blank')}
                     >
@@ -785,7 +787,7 @@ const ClientDashboard = () => {
                       </CardContent>
                     </Card>
 
-                    <Card 
+                    <Card
                       className="hover:border-primary/30 transition-all cursor-pointer group"
                       onClick={() => window.open('https://creators.spotify.com/pod/show/1hkGUz3tDpJFHzmapxtSGk/analytics', '_blank')}
                     >
@@ -810,7 +812,7 @@ const ClientDashboard = () => {
 
                 {/* Website Analytics - hide for ads-only clients */}
                 {!isAdsOnlyClient && client.supabase_url && (
-                  <Card 
+                  <Card
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/web-analytics/${clientId}`)}
                   >
@@ -866,7 +868,7 @@ const ClientDashboard = () => {
                         <p className="font-medium">Latest Report</p>
                         <p className="text-sm text-muted-foreground">{latestReport.dateRange}</p>
                       </div>
-                      <Button 
+                      <Button
                         onClick={() => {
                           if (latestReport.isInternal) {
                             navigate(latestReport.link);
@@ -934,7 +936,7 @@ const ClientDashboard = () => {
                       <p className="text-sm font-medium text-muted-foreground mb-3">All Reports</p>
                       <div className="grid gap-2">
                         {[...clientReports.reports].reverse().slice(0, 5).map((report, idx) => (
-                          <div 
+                          <div
                             key={idx}
                             className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer"
                             onClick={() => {
@@ -1033,7 +1035,7 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
     // Non-admin users with single client - no back navigation
     // Non-admin users with multiple clients can use the switcher
   };
-  
+
   return (
     <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4">
@@ -1041,26 +1043,26 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
           <div className="flex items-center gap-4">
             {/* Only show back button for admins */}
             {isAdmin && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={handleBackClick}
                 className="shrink-0"
               >
                 <ArrowLeft className="h-5 w-5" />
               </Button>
             )}
-            
+
             {clientLogo && (
               <div className="h-10 w-10 rounded-lg overflow-hidden border">
-                <img 
-                  src={clientLogo} 
-                  alt={clientName || "Client"} 
+                <img
+                  src={clientLogo}
+                  alt={clientName || "Client"}
                   className="h-full w-full object-cover"
                 />
               </div>
             )}
-            
+
             <div>
               <h1 className="text-xl font-bold text-foreground">
                 {clientName || "Client Dashboard"}
@@ -1068,7 +1070,7 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
               <p className="text-sm text-muted-foreground">Analytics & Reports</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {/* Client Selector - for admins OR users with multiple assigned clients */}
             {showClientSwitcher && (
@@ -1090,9 +1092,9 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
                       className={`cursor-pointer flex items-center gap-2 ${currentClientId === client.id ? 'bg-accent' : ''}`}
                     >
                       {client.logo_url ? (
-                        <img 
-                          src={client.logo_url} 
-                          alt={client.name} 
+                        <img
+                          src={client.logo_url}
+                          alt={client.name}
                           className="h-6 w-6 rounded object-cover"
                         />
                       ) : (
@@ -1109,9 +1111,9 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
             <ThemeToggle />
             {/* Logout button for all authenticated users */}
             {isAuthenticated && (
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleSignOut}
                 className="gap-2 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive transition-all duration-300"
               >
