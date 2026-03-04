@@ -550,59 +550,63 @@ const ClientDashboard = () => {
                 {/* Only show social platform cards if not an ads-only client */}
                 {!isAdsOnlyClient && (
                   <>
-                    {/* YouTube */}
-                    <Card
-                      className="hover:border-primary/30 transition-all cursor-pointer group"
-                      onClick={() => navigate(`/youtube-analytics/${clientId}`)}
-                    >
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
-                            <Youtube className="h-5 w-5 text-red-500" />
+                    {/* YouTube - only show if client has YouTube configured */}
+                    {(metricoolPlatforms?.some(p => p.platform === 'youtube') || connectedAccounts?.youtube) && (
+                      <Card
+                        className="hover:border-primary/30 transition-all cursor-pointer group"
+                        onClick={() => navigate(`/youtube-analytics/${clientId}`)}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                              <Youtube className="h-5 w-5 text-red-500" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-base">YouTube</CardTitle>
+                              <CardDescription>Video Analytics</CardDescription>
+                            </div>
                           </div>
-                          <div>
-                            <CardTitle className="text-base">YouTube</CardTitle>
-                            <CardDescription>Video Analytics</CardDescription>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center gap-2">
+                            {connectedAccounts?.youtube ? (
+                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                            ) : (
+                              <Badge variant="outline">View Channel</Badge>
+                            )}
                           </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center gap-2">
-                          {connectedAccounts?.youtube ? (
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Meta - only show if client has Meta configured */}
+                    {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
+                      <Card
+                        className="hover:border-primary/30 transition-all cursor-pointer group"
+                        onClick={() => navigate(`/meta-analytics/${clientId}`)}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                              <TrendingUp className="h-5 w-5 text-blue-500" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-base">Meta</CardTitle>
+                              <CardDescription>Instagram & Facebook</CardDescription>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                        </CardHeader>
+                        <CardContent>
+                          {connectedAccounts?.meta ? (
                             <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
                           ) : (
-                            <Badge variant="outline">View Channel</Badge>
+                            <Badge variant="outline">Connect Account</Badge>
                           )}
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    {/* Meta */}
-                    <Card
-                      className="hover:border-primary/30 transition-all cursor-pointer group"
-                      onClick={() => navigate(`/meta-analytics/${clientId}`)}
-                    >
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                            <TrendingUp className="h-5 w-5 text-blue-500" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">Meta</CardTitle>
-                            <CardDescription>Instagram & Facebook</CardDescription>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                      </CardHeader>
-                      <CardContent>
-                        {connectedAccounts?.meta ? (
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                        ) : (
-                          <Badge variant="outline">Connect Account</Badge>
-                        )}
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {/* X (Twitter) - Only show for Sienvi Agency and Father Figure Formula */}
                     {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
