@@ -715,8 +715,8 @@ const ClientDashboard = () => {
                   </>
                 )}
 
-                {/* Ads Analytics - Show for clients with meta_ads config (Metricool or direct API) */}
-                {(metricoolPlatforms?.some(p => p.platform === 'meta_ads') || connectedAccounts?.metaAds) && (
+                {/* Ads Analytics - Show for clients with any ads config (meta_ads, google_ads, tiktok_ads) */}
+                {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
                   <Card
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/ads-analytics/${clientId}`)}
