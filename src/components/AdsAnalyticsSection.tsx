@@ -434,7 +434,9 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     ],
     "Snarky Humans": [
       { label: "Snarky Humans Ads", url: "https://ads.google.com/aw/campaigns?ocid=7957519164&euid=1602160212&__u=6242679988&uscid=7957519164&__c=5446790236&authuser=0&workspaceId=0" },
-      { label: "Snarky Azz Humans Ads", url: "https://ads.google.com/aw/campaigns?ocid=8013147548&euid=1602160212&__u=6242679988&uscid=8013147548&__c=3140408252&authuser=0&workspaceId=0" },
+    ],
+    "Snarky A$$ Humans": [
+      { label: "Google Ads", url: "https://ads.google.com/aw/campaigns?ocid=8013147548&euid=1602160212&__u=6242679988&uscid=8013147548&__c=3140408252&authuser=0&workspaceId=0" },
     ],
   };
 
