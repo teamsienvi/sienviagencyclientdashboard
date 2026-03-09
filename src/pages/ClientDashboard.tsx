@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useState, useMemo } from "react";
 import { format, subDays } from "date-fns";
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
+import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
@@ -443,7 +444,7 @@ const ClientDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <ClientHeader clientName={client.name} clientLogo={client.logo_url} currentClientId={clientId} />
+      <ClientHeader clientName={client.name} clientLogo={getClientLogo(client.name, client.logo_url)} currentClientId={clientId} />
 
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
@@ -1095,9 +1096,9 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
                       onClick={() => handleClientSelect(client.id)}
                       className={`cursor-pointer flex items-center gap-2 ${currentClientId === client.id ? 'bg-accent' : ''}`}
                     >
-                      {client.logo_url ? (
+                      {getClientLogo(client.name, client.logo_url) ? (
                         <img
-                          src={client.logo_url}
+                          src={getClientLogo(client.name, client.logo_url)!}
                           alt={client.name}
                           className="h-6 w-6 rounded object-cover"
                         />

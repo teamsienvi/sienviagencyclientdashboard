@@ -18,7 +18,7 @@ serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false },
         });
 
-        const { action, clientName, clientId, userId, blogId, platform } = await req.json();
+        const { action, clientName, clientId, userId, blogId, platform, logoUrl } = await req.json();
 
         if (action === "create_client") {
             const { data, error } = await supabaseAdmin
@@ -54,6 +54,39 @@ serve(async (req) => {
                 .update({ name: clientName })
                 .eq("id", clientId)
                 .select("id, name")
+                .single();
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return new Response(JSON.stringify({ client: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "create_storage_bucket") {
+            const { data, error } = await supabaseAdmin.storage.createBucket("client-logos", { public: true });
+            if (error && !error.message?.includes("already exists")) {
+                return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            return new Response(JSON.stringify({ success: true, bucket: "client-logos" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "upload_logo") {
+            const { fileName, fileBase64, contentType } = await req.json().catch(() => ({}));
+            if (!fileName || !fileBase64) {
+                return new Response(JSON.stringify({ error: "fileName and fileBase64 required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            const bytes = Uint8Array.from(atob(fileBase64), c => c.charCodeAt(0));
+            const { data, error } = await supabaseAdmin.storage
+                .from("client-logos")
+                .upload(fileName, bytes, { contentType: contentType || "image/jpeg", upsert: true });
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            const { data: urlData } = supabaseAdmin.storage.from("client-logos").getPublicUrl(fileName);
+            return new Response(JSON.stringify({ url: urlData.publicUrl }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "update_client_logo") {
+            const { data, error } = await supabaseAdmin
+                .from("clients")
+                .update({ logo_url: logoUrl })
+                .eq("id", clientId)
+                .select("id, name, logo_url")
                 .single();
             if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             return new Response(JSON.stringify({ client: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
