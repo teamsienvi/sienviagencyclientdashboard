@@ -213,6 +213,7 @@ const WebAnalytics = () => {
     ?.map((page: any) => ({
       url: page.url || page.path || page.page_path || '/',
       views: page.views ?? page.count ?? 0,
+      uniqueVisitors: page.uniqueVisitors ?? page.unique_visitors ?? undefined,
       title: page.display_name || page.title || null,
     }))
     .filter((page: any) =>
@@ -233,7 +234,9 @@ const WebAnalytics = () => {
       deviceBreakdown: normalizedDeviceBreakdown,
       dailyBreakdown: analytics.dailyBreakdown,
       topPages: normalizedTopPages,
+      browsers: analytics.browsers,
       airbnbClicks: analytics.airbnbClicks,
+      amazonClicks: analytics.amazonClicks,
     }
     : null;
 
@@ -715,6 +718,24 @@ const WebAnalytics = () => {
                     </Card>
                   )}
 
+                  {/* Amazon Clicks Card - shown only when data exists */}
+                  {normalizedAnalytics?.amazonClicks !== undefined && normalizedAnalytics.amazonClicks > 0 && (
+                    <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-transparent">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Amazon Clicks</CardTitle>
+                        <ExternalLink className="h-4 w-4 text-orange-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-orange-500">
+                          {normalizedAnalytics.amazonClicks.toLocaleString()}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Outbound clicks to Amazon
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {!normalizedAnalytics && !isLoadingAnalytics && !errorType && !analyticsError && (
                     <Card>
                       <CardContent className="py-8 text-center text-muted-foreground">
@@ -921,6 +942,41 @@ const WebAnalytics = () => {
 
                         {/* Top Countries */}
                         <TopCountriesWidget clientId={clientId!} dateRange={dateRange} />
+
+                        {/* Browser Breakdown */}
+                        {normalizedAnalytics?.browsers && normalizedAnalytics.browsers.length > 0 && (
+                          <Card>
+                            <CardHeader>
+                              <div>
+                                <CardTitle>Browser Breakdown</CardTitle>
+                                <CardDescription>Browsers used by visitors</CardDescription>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="space-y-4">
+                                {normalizedAnalytics.browsers.map((item: any, index: number) => {
+                                  const colors = ["bg-primary", "bg-green-500", "bg-blue-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
+                                  return (
+                                    <div key={item.browser} className="space-y-2">
+                                      <div className="flex justify-between text-sm">
+                                        <span>{item.browser}</span>
+                                        <span className="text-muted-foreground">
+                                          {(item.sessions || 0).toLocaleString()} ({item.percentage}%)
+                                        </span>
+                                      </div>
+                                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                        <div
+                                          className={`h-full ${colors[index % colors.length]} rounded-full`}
+                                          style={{ width: `${item.percentage}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
                     </>
                   )}
@@ -1013,6 +1069,9 @@ const WebAnalytics = () => {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-6 text-sm">
+                                    {page.uniqueVisitors !== undefined && (
+                                      <span className="text-muted-foreground">{page.uniqueVisitors.toLocaleString()} visitors</span>
+                                    )}
                                     <span className="font-medium">{page.views.toLocaleString()} views</span>
                                   </div>
                                 </div>

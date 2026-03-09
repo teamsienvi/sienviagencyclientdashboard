@@ -27,6 +27,13 @@ export interface TopPage {
   url?: string;
   path?: string;
   views: number;
+  uniqueVisitors?: number;
+}
+
+export interface BrowserBreakdown {
+  browser: string;
+  sessions?: number;
+  percentage: number;
 }
 
 export interface AnalyticsSummary {
@@ -56,19 +63,21 @@ export interface AnalyticsData {
   deviceBreakdown?: DeviceBreakdown[];
   dailyBreakdown?: DailyBreakdown[];
   topPages?: TopPage[];
+  browsers?: BrowserBreakdown[];
   // External API format (sources/devices arrays)
   sources?: { source: string; count: number }[];
   devices?: { device: string; count: number }[];
   // Outbound click tracking (client-specific)
   airbnbClicks?: number;
+  amazonClicks?: number;
 }
 
-export type AnalyticsErrorType = 
-  | 'not_configured' 
-  | 'inactive' 
-  | 'auth_failed' 
-  | 'no_endpoint' 
-  | 'server_error' 
+export type AnalyticsErrorType =
+  | 'not_configured'
+  | 'inactive'
+  | 'auth_failed'
+  | 'no_endpoint'
+  | 'server_error'
   | 'fetch_failed'
   | 'no_data';
 
@@ -164,7 +173,7 @@ export const useClientAnalytics = ({
 
       // Handle nested analytics structure from the edge function
       const analytics = data.analytics?.analytics || data.analytics;
-      
+
       return {
         clientId: data.clientId,
         clientName: data.clientName,
