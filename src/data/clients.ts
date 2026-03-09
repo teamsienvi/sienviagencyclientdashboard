@@ -8,6 +8,9 @@ import bsueBrowLashLogo from "@/assets/bsue-brow-lash-logo.png";
 import cissiePryorPresentsLogo from "@/assets/cissie-pryor-presents-logo.jpg";
 import sienviClientLogo from "@/assets/sienvi-agency-client-logo.jpg";
 import luxxeAutoLogo from "@/assets/luxxe-auto-logo.jpg";
+import playiqLogo from "@/assets/logos/playiq-logo.jpeg";
+import blingybagLogo from "@/assets/logos/blingybag-logo.jpeg";
+import snarkyassLogo from "@/assets/logos/snarkyass-logo.jpeg";
 
 export interface Report {
   dateRange: string;
@@ -161,11 +164,17 @@ export const clientsData: Client[] = [
   },
   {
     name: "BlingyBag",
+    logo: blingybagLogo,
     reports: [],
   },
   {
     name: "Snarky A$$ Humans",
-    logo: snarkyHumansLogo,
+    logo: snarkyassLogo,
+    reports: [],
+  },
+  {
+    name: "PlayIQ",
+    logo: playiqLogo,
     reports: [],
   },
 ];
