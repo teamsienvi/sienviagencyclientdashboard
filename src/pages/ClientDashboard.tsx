@@ -836,7 +836,7 @@ const ClientDashboard = () => {
                           </div>
                           <div>
                             <CardTitle className="text-base">Beta Testers</CardTitle>
-                            <CardDescription>Servant App</CardDescription>
+                            <CardDescription>FFF LMS Course</CardDescription>
                           </div>
                         </div>
                       </CardHeader>
