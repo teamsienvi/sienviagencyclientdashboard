@@ -50,9 +50,9 @@ serve(async (req) => {
 
     if (!clientId || !platform || !from || !to || !prevFrom || !prevTo) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: "Missing required params: clientId, platform, from, to, prevFrom, prevTo" 
+        JSON.stringify({
+          success: false,
+          error: "Missing required params: clientId, platform, from, to, prevFrom, prevTo"
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -67,16 +67,16 @@ serve(async (req) => {
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
       const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      
+
       if (user && !authError) {
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id)
           .maybeSingle();
-        
+
         const isAdmin = roleData?.role === "admin";
-        
+
         if (!isAdmin) {
           const { data: accessData } = await supabase
             .from("client_users")
@@ -84,7 +84,7 @@ serve(async (req) => {
             .eq("user_id", user.id)
             .eq("client_id", clientId)
             .maybeSingle();
-          
+
           if (!accessData) {
             return new Response(
               JSON.stringify({ success: false, error: "Access denied" }),
@@ -106,8 +106,8 @@ serve(async (req) => {
 
     if (configError || !config) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: `No Metricool ${platform} config found for this client`,
           notConfigured: true
         }),
@@ -132,6 +132,26 @@ serve(async (req) => {
 
     const errors: string[] = [];
 
+    // Helper to parse CSV lines respecting quoted fields
+    const parseCSVLine = (line: string): string[] => {
+      const values: string[] = [];
+      let current = "";
+      let inQuotes = false;
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim());
+      return values;
+    };
+
     // Helper to build params
     const buildParams = (fromDate: string, toDate: string, extra: Record<string, string> = {}) => {
       const params: Record<string, string> = {
@@ -150,26 +170,26 @@ serve(async (req) => {
     const fetchMetricool = async (endpoint: string, params: Record<string, string>): Promise<any> => {
       const url = new URL(`${METRICOOL_BASE_URL}${endpoint}`);
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-      
+
       console.log(`Fetching: ${url.toString()}`);
       const res = await fetch(url.toString(), {
         headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "application/json" },
       });
-      
+
       if (!res.ok) {
         const errorText = await res.text();
         throw new Error(`${res.status}: ${errorText.substring(0, 200)}`);
       }
-      
+
       return res.json();
     };
 
     // Helper to extract timeline data points and sort by dateTime ascending
     const extractTimelinePoints = (data: any): TimelineDataPoint[] => {
       if (!data) return [];
-      
+
       let points: TimelineDataPoint[] = [];
-      
+
       // Handle different response formats
       if (Array.isArray(data)) {
         // Direct array of datapoints
@@ -191,10 +211,10 @@ serve(async (req) => {
       else if (data.data) {
         points = extractTimelinePoints(data.data);
       }
-      
+
       // Sort by dateTime ascending to ensure last() is always the most recent
       points.sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime());
-      
+
       return points;
     };
 
@@ -216,7 +236,7 @@ serve(async (req) => {
     const buildFollowersDebug = (timeline: TimelineDataPoint[], metric: string): DebugInfo => {
       const firstPoint = timeline.length > 0 ? timeline[0] : null;
       const lastPoint = timeline.length > 0 ? timeline[timeline.length - 1] : null;
-      
+
       return {
         metricUsed: metric,
         networkUsed: platform,
@@ -275,7 +295,7 @@ serve(async (req) => {
       const fetchReelsEngagement = async (): Promise<number | null> => {
         // TikTok doesn't have separate reels - all videos are counted in the video subject
         if (platform === "tiktok") return null;
-        
+
         try {
           const data = await fetchMetricool("/api/v2/analytics/aggregation", buildParams(fromDate, toDate, {
             metric: "engagement",
@@ -296,14 +316,14 @@ serve(async (req) => {
           // TikTok requires different metric AND subject
           const postsCountMetric = platform === "tiktok" ? "videos" : "postsCount";
           const postsCountSubject = platform === "tiktok" ? "video" : "account";
-          
+
           const data = await fetchMetricool("/api/v2/analytics/timelines", buildParams(fromDate, toDate, {
             metric: postsCountMetric,
             subject: postsCountSubject,
           }));
-          
+
           console.log(`${postsCountMetric} raw response (${platform}, subject=${postsCountSubject}):`, JSON.stringify(data).substring(0, 500));
-          
+
           // Sum up daily values
           if (data?.data && Array.isArray(data.data)) {
             for (const series of data.data) {
@@ -314,14 +334,14 @@ serve(async (req) => {
               }
             }
           }
-          
+
           // Handle direct array response
           if (Array.isArray(data)) {
             const total = data.reduce((sum: number, v: any) => sum + (v.value || 0), 0);
             console.log(`${postsCountMetric} from timelines (${fromDate} to ${toDate}): ${total}`);
             return total;
           }
-          
+
           return null;
         } catch (e) {
           errors.push(`postsCount_timelines ${fromDate}: ${e}`);
@@ -333,7 +353,7 @@ serve(async (req) => {
       // The CSV contains ALL posts within the date range, matching Metricool dashboard
       const fetchPostsCSV = async (): Promise<{ totalCount: number; feedPostsCount: number; reelsCount: number }> => {
         const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
-        Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) => 
+        Object.entries(buildParams(fromDate, toDate, {})).forEach(([k, v]) =>
           postsUrl.searchParams.set(k, v)
         );
         const res = await fetch(postsUrl.toString(), {
@@ -341,28 +361,28 @@ serve(async (req) => {
         });
         if (!res.ok) throw new Error(`Posts CSV: ${res.status}`);
         const csv = await res.text();
-        
+
         // Parse CSV to count posts and reels
         const lines = csv.split('\n').filter(l => l.trim());
         if (lines.length < 2) return { totalCount: 0, feedPostsCount: 0, reelsCount: 0 };
-        
-        const headers = lines[0].toLowerCase().split(',').map(h => h.trim().replace(/"/g, ''));
+
+        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
         const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
         const dateIdx = headers.findIndex(h => h === 'date' || h === 'published' || h === 'published_at');
-        
+
         // Parse period dates for strict filtering
         const periodStartDate = new Date(fromDate);
         periodStartDate.setHours(0, 0, 0, 0);
         const periodEndDate = new Date(toDate);
         periodEndDate.setHours(23, 59, 59, 999);
-        
+
         let feedPostsCount = 0;
         let reelsCount = 0;
         let totalCount = 0;
-        
+
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-          
+          const values = parseCSVLine(lines[i]);
+
           // Verify the post falls within the exact date range
           if (dateIdx >= 0) {
             const dateStr = values[dateIdx];
@@ -371,11 +391,11 @@ serve(async (req) => {
               continue; // Skip posts outside the period
             }
           }
-          
+
           totalCount++;
-          
+
           const type = values[typeIdx]?.toLowerCase() || 'post';
-          
+
           // Categorize as reel or feed post based on type
           // REEL types: reel, video, REEL, VIDEO
           // Feed post types: FEED_IMAGE, CAROUSEL_ALBUM, IMAGE, PHOTO, post, etc.
@@ -385,7 +405,7 @@ serve(async (req) => {
             feedPostsCount++;
           }
         }
-        
+
         console.log(`CSV breakdown (${fromDate} to ${toDate}): ${totalCount} total, ${feedPostsCount} feed posts, ${reelsCount} reels`);
         return { totalCount, feedPostsCount, reelsCount };
       };
@@ -518,9 +538,9 @@ serve(async (req) => {
   } catch (error) {
     console.error("Error in metricool-social-weekly:", error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : String(error) 
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
       }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

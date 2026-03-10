@@ -637,7 +637,19 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           metrics: metrics || null,
         };
       })
-      .filter((item: any) => item.metrics !== null) // Only show content with metrics in the period
+      .filter((item: any) => {
+        // Show content that either has metrics for this period OR was published within the period
+        if (item.metrics !== null) return true;
+        // Fallback: include content published within the reporting period even without metrics
+        if (item.published_at) {
+          const publishedDate = new Date(item.published_at);
+          const periodStart = new Date(startDate);
+          const periodEnd = new Date(endDate);
+          periodEnd.setHours(23, 59, 59, 999);
+          return publishedDate >= periodStart && publishedDate <= periodEnd;
+        }
+        return false;
+      })
       // Sort by date DESC (most recent first) as per requirement
       .sort((a: any, b: any) => {
         return new Date(b.published_at).getTime() - new Date(a.published_at).getTime();
