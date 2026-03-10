@@ -8,7 +8,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -256,6 +256,21 @@ const ClientDashboard = () => {
       return data || [];
     },
     enabled: !!clientId,
+  });
+
+  // Fetch beta testers count for Father Figure Formula
+  const { data: betaCount, isLoading: isLoadingBeta } = useQuery({
+    queryKey: ["fff-beta-count"],
+    queryFn: async () => {
+      const res = await fetch("https://qnquitqllwpeivinvhzk.supabase.co/functions/v1/beta-count", {
+        headers: { "x-api-key": "Iydknyk1@#$%" },
+      });
+      if (!res.ok) throw new Error("Failed to fetch beta count");
+      const data = await res.json();
+      return data as { count: number; timestamp: string };
+    },
+    enabled: client?.name === "Father Figure Formula",
+    staleTime: 5 * 60 * 1000,
   });
 
   // Match client name with clientsData for reports
@@ -810,6 +825,32 @@ const ClientDashboard = () => {
                       </CardHeader>
                       <CardContent>
                         <Badge variant="secondary" className="bg-green-500/10 text-green-600">External Link</Badge>
+                      </CardContent>
+                    </Card>
+                    {/* Beta Testers */}
+                    <Card className="bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-200/50 dark:border-amber-800/50">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2.5 rounded-xl bg-amber-500/10">
+                            <FlaskConical className="h-5 w-5 text-amber-500" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">Beta Testers</CardTitle>
+                            <CardDescription>Servant App</CardDescription>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center justify-between">
+                          <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+                            {isLoadingBeta ? (
+                              <Loader2 className="h-6 w-6 animate-spin" />
+                            ) : (
+                              betaCount?.count ?? "—"
+                            )}
+                          </div>
+                          <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">Live</Badge>
+                        </div>
                       </CardContent>
                     </Card>
                   </>
