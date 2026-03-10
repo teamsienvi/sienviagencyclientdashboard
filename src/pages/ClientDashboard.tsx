@@ -267,7 +267,7 @@ const ClientDashboard = () => {
       });
       if (!res.ok) throw new Error("Failed to fetch beta count");
       const data = await res.json();
-      return data as { count: number; timestamp: string };
+      return data as { summary: { beta_testers_count: number }; timestamp: string };
     },
     enabled: client?.name === "Father Figure Formula",
     staleTime: 5 * 60 * 1000,
@@ -827,26 +827,30 @@ const ClientDashboard = () => {
                         <Badge variant="secondary" className="bg-green-500/10 text-green-600">External Link</Badge>
                       </CardContent>
                     </Card>
-                    {/* Beta Testers */}
-                    <Card className="bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-200/50 dark:border-amber-800/50">
+                    {/* FFF LMS Course Analytics */}
+                    <Card
+                      className="hover:border-primary/30 transition-all cursor-pointer group bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-200/50 dark:border-amber-800/50"
+                      onClick={() => navigate(`/lms-analytics/${clientId}`)}
+                    >
                       <CardHeader className="flex flex-row items-center justify-between space-y-0">
                         <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-amber-500/10">
+                          <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
                             <FlaskConical className="h-5 w-5 text-amber-500" />
                           </div>
                           <div>
-                            <CardTitle className="text-base">Beta Testers</CardTitle>
-                            <CardDescription>FFF LMS Course</CardDescription>
+                            <CardTitle className="text-base">LMS Course</CardTitle>
+                            <CardDescription>FFF Beta Analytics</CardDescription>
                           </div>
                         </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center justify-between">
-                          <div className="text-3xl font-bold text-amber-600 dark:text-amber-400">
+                          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
                             {isLoadingBeta ? (
-                              <Loader2 className="h-6 w-6 animate-spin" />
+                              <Loader2 className="h-5 w-5 animate-spin" />
                             ) : (
-                              betaCount?.count ?? "—"
+                              <>{betaCount?.summary?.beta_testers_count ?? "—"} <span className="text-sm font-normal text-muted-foreground">testers</span></>
                             )}
                           </div>
                           <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">Live</Badge>

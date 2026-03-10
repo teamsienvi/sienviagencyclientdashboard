@@ -25,6 +25,7 @@ import LinkedInMetricoolAnalytics from "./pages/LinkedInMetricoolAnalytics";
 import AdsAnalytics from "./pages/AdsAnalytics";
 import ShopifyAnalytics from "./pages/ShopifyAnalytics";
 import WebAnalytics from "./pages/WebAnalytics";
+import LmsAnalytics from "./pages/LmsAnalytics";
 import UnifiedAnalytics from "./pages/UnifiedAnalytics";
 import FatherFigureFormulaNov24to30 from "./pages/FatherFigureFormulaNov24to30";
 import FatherFigureFormulaDec1to7 from "./pages/FatherFigureFormulaDec1to7";
@@ -85,6 +86,7 @@ const App = () => (
           <Route path="/web-analytics/:clientId" element={<ProtectedRoute><WebAnalytics /></ProtectedRoute>} />
           <Route path="/ads-analytics/:clientId" element={<ProtectedRoute><AdsAnalytics /></ProtectedRoute>} />
           <Route path="/shopify-analytics/:clientId" element={<ProtectedRoute><ShopifyAnalytics /></ProtectedRoute>} />
+          <Route path="/lms-analytics/:clientId" element={<ProtectedRoute><LmsAnalytics /></ProtectedRoute>} />
           <Route path="/analytics/:clientId" element={<ProtectedRoute><UnifiedAnalytics /></ProtectedRoute>} />
           <Route path="/father-figure-formula-nov24-30" element={<FatherFigureFormulaNov24to30 />} />
           <Route path="/father-figure-formula-dec1-7" element={<FatherFigureFormulaDec1to7 />} />
