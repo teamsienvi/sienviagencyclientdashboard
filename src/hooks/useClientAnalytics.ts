@@ -70,6 +70,17 @@ export interface AnalyticsData {
   // Outbound click tracking (client-specific)
   airbnbClicks?: number;
   amazonClicks?: number;
+  // Extended metrics from external analytics APIs
+  avgScrollDepth?: number;
+  dailyTimeSeries?: { date: string; visitors: number; pageViews: number; sessions?: number }[];
+  breakdowns?: {
+    countries?: { key: string; value: number }[];
+    devices?: { key: string; value: number }[];
+    os?: { key: string; value: number }[];
+    browsers?: { key: string; value: number }[];
+    sources?: { key: string; value: number }[];
+    top_pages?: { key: string; value: number }[];
+  };
 }
 
 export type AnalyticsErrorType =
@@ -93,7 +104,7 @@ export interface ClientAnalyticsResponse {
   errorDetails?: string;
 }
 
-export type DateRangePreset = "7d" | "30d" | "all" | "custom";
+export type DateRangePreset = "7d" | "30d" | "90d" | "365d" | "all" | "custom";
 
 interface UseClientAnalyticsOptions {
   clientId: string;
@@ -117,6 +128,12 @@ const getDateRange = (
       break;
     case "30d":
       start = subDays(end, 30);
+      break;
+    case "90d":
+      start = subDays(end, 90);
+      break;
+    case "365d":
+      start = subDays(end, 365);
       break;
     case "all":
       // Use a very old start date to capture all data

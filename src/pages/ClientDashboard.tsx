@@ -860,8 +860,8 @@ const ClientDashboard = () => {
                   </>
                 )}
 
-                {/* Website Analytics - hide for ads-only clients */}
-                {!isAdsOnlyClient && client.supabase_url && (
+                {/* Website Analytics - show for all non-ads-only clients */}
+                {!isAdsOnlyClient && (
                   <Card
                     className="hover:border-primary/30 transition-all cursor-pointer group"
                     onClick={() => navigate(`/web-analytics/${clientId}`)}

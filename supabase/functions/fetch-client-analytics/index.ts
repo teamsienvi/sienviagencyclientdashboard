@@ -32,7 +32,7 @@ serve(async (req) => {
     console.log('Fetching client:', clientId);
     const { data: client, error: clientError } = await supabase
       .from('clients')
-      .select('id, name, supabase_url, api_key, is_active')
+      .select('id, name, supabase_url, api_key, analytics_api_key, is_active')
       .eq('id', clientId)
       .maybeSingle();
 
@@ -55,7 +55,7 @@ serve(async (req) => {
     if (!client.is_active) {
       console.error('Client is not active:', clientId);
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           ok: false,
           error: 'Client is not active',
           errorType: 'inactive',
@@ -82,8 +82,8 @@ serve(async (req) => {
 
       if (!localSessions || localSessions.length === 0) return null;
 
-      const searchHostnames = ["google.com","bing.com","yahoo.com","duckduckgo.com","baidu.com","yandex.com"];
-      const socialHostnames = ["facebook.com","m.facebook.com","l.facebook.com","instagram.com","l.instagram.com","twitter.com","t.co","linkedin.com","tiktok.com","youtube.com","pinterest.com","reddit.com"];
+      const searchHostnames = ["google.com", "bing.com", "yahoo.com", "duckduckgo.com", "baidu.com", "yandex.com"];
+      const socialHostnames = ["facebook.com", "m.facebook.com", "l.facebook.com", "instagram.com", "l.instagram.com", "twitter.com", "t.co", "linkedin.com", "tiktok.com", "youtube.com", "pinterest.com", "reddit.com"];
       const getHostname = (r: string) => { try { return new URL(r).hostname.replace(/^www\./, ""); } catch { return ""; } };
 
       const srcCounts: Record<string, number> = { Direct: 0, Organic: 0, Social: 0, Referral: 0, Email: 0, Paid: 0 };
@@ -96,7 +96,7 @@ serve(async (req) => {
         const referrer = String(item.referrer || "");
         const hostname = referrer ? getHostname(referrer) : "";
         let src = "Direct";
-        if (["cpc","ppc","paid","paid_social","display"].includes(utmMedium)) src = "Paid";
+        if (["cpc", "ppc", "paid", "paid_social", "display"].includes(utmMedium)) src = "Paid";
         else if (utmMedium === "email" || utmSource.includes("mail") || hostname.includes("mail")) src = "Email";
         else if (!utmSource && !hostname) src = "Direct";
         else if (searchHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "Organic";
@@ -115,10 +115,10 @@ serve(async (req) => {
       });
 
       const total = localSessions.length;
-      const trafficSources = Object.entries(srcCounts).filter(([,c]) => c > 0).sort((a,b) => b[1]-a[1])
-        .map(([source, count]) => ({ source, sessions: count, percentage: Math.round((count/total)*1000)/10 }));
-      const deviceBreakdown = Object.entries(devCounts).filter(([,c]) => c > 0).sort((a,b) => b[1]-a[1])
-        .map(([device, count]) => ({ device, sessions: count, percentage: Math.round((count/total)*1000)/10 }));
+      const trafficSources = Object.entries(srcCounts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
+        .map(([source, count]) => ({ source, sessions: count, percentage: Math.round((count / total) * 1000) / 10 }));
+      const deviceBreakdown = Object.entries(devCounts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
+        .map(([device, count]) => ({ device, sessions: count, percentage: Math.round((count / total) * 1000) / 10 }));
 
       return { trafficSources, deviceBreakdown };
     };
@@ -127,21 +127,23 @@ serve(async (req) => {
     if (client.supabase_url && client.api_key) {
       console.log('Fetching analytics from external source:', client.supabase_url);
       const analyticsUrl = `${client.supabase_url}/functions/v1/get-analytics`;
-      
+
       try {
+        // Use analytics_api_key for x-api-key header when present (for projects with separate auth keys)
+        const analyticsApiKey = client.analytics_api_key || client.api_key;
         const analyticsResponse = await fetch(analyticsUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'x-api-key': client.api_key,
+            'x-api-key': analyticsApiKey,
             'apikey': client.api_key,
             Authorization: `Bearer ${client.api_key}`,
           },
           body: JSON.stringify({
             startDate,
             endDate,
-            apiKey: client.api_key,
-            api_key: client.api_key,
+            apiKey: analyticsApiKey,
+            api_key: analyticsApiKey,
           }),
         });
 
@@ -161,10 +163,57 @@ serve(async (req) => {
           );
 
           if (hasRealData) {
-            // Supplement: if external lacks trafficSources or deviceBreakdown, compute from local
+            // Normalize breakdowns-style responses (key/value format from some external projects)
             let enrichedData = { ...data };
-            const hasSources = data.trafficSources?.length > 0 || data.sources?.length > 0;
-            const hasDevices = data.deviceBreakdown?.length > 0 || data.devices?.length > 0;
+
+            if (data.breakdowns) {
+              const bd = data.breakdowns;
+              if (bd.sources && !data.trafficSources && !data.sources) {
+                enrichedData.trafficSources = bd.sources.map((s: any) => {
+                  const total = bd.sources.reduce((sum: number, x: any) => sum + (x.value || 0), 0);
+                  return { source: s.key, sessions: s.value, percentage: total > 0 ? Math.round((s.value / total) * 1000) / 10 : 0 };
+                });
+              }
+              if (bd.devices && !data.deviceBreakdown && !data.devices) {
+                enrichedData.deviceBreakdown = bd.devices.map((d: any) => {
+                  const total = bd.devices.reduce((sum: number, x: any) => sum + (x.value || 0), 0);
+                  return { device: d.key.charAt(0).toUpperCase() + d.key.slice(1), sessions: d.value, percentage: total > 0 ? Math.round((d.value / total) * 1000) / 10 : 0 };
+                });
+              }
+              if (bd.top_pages && !data.topPages && !data.top_pages) {
+                enrichedData.topPages = bd.top_pages.map((p: any) => ({ path: p.key, views: p.value }));
+                enrichedData.top_pages = bd.top_pages.map((p: any) => ({ page_path: p.key, count: p.value, display_name: p.key }));
+              }
+              if (bd.countries && !data.countries) {
+                enrichedData.countries = bd.countries.map((c: any) => ({ country: c.key, count: c.value }));
+              }
+              if (bd.browsers) {
+                enrichedData.browsers = bd.browsers.map((b: any) => {
+                  const total = bd.browsers.reduce((sum: number, x: any) => sum + (x.value || 0), 0);
+                  return { browser: b.key, sessions: b.value, percentage: total > 0 ? Math.round((b.value / total) * 1000) / 10 : 0 };
+                });
+              }
+              if (bd.os) {
+                enrichedData.os = bd.os.map((o: any) => {
+                  const total = bd.os.reduce((sum: number, x: any) => sum + (x.value || 0), 0);
+                  return { os: o.key, sessions: o.value, percentage: total > 0 ? Math.round((o.value / total) * 1000) / 10 : 0 };
+                });
+              }
+            }
+
+            // Normalize dailyTimeSeries → dailyBreakdown
+            if (data.dailyTimeSeries && !data.dailyBreakdown) {
+              enrichedData.dailyBreakdown = data.dailyTimeSeries.map((d: any) => ({
+                date: d.date,
+                visitors: d.visitors || 0,
+                sessions: d.sessions || d.visitors || 0,
+                pageViews: d.pageViews || 0,
+              }));
+            }
+
+            // Supplement: if external lacks trafficSources or deviceBreakdown, compute from local
+            const hasSources = enrichedData.trafficSources?.length > 0 || enrichedData.sources?.length > 0;
+            const hasDevices = enrichedData.deviceBreakdown?.length > 0 || enrichedData.devices?.length > 0;
 
             if (!hasSources || !hasDevices) {
               console.log('External data lacks sources/devices, supplementing from local tables...');
@@ -199,7 +248,7 @@ serve(async (req) => {
             };
 
             // Supplement top pages from external project's REST API if missing or sparse
-            const hasTopPages = (data.topPages?.length > 0 || data.top_pages?.length > 0) && 
+            const hasTopPages = (data.topPages?.length > 0 || data.top_pages?.length > 0) &&
               (data.topPages?.[0]?.views > 2 || data.top_pages?.[0]?.count > 2);
             if (!hasTopPages) {
               console.log('Trying to supplement top pages from external tables...');
@@ -233,7 +282,7 @@ serve(async (req) => {
             }
 
             // Supplement countries from external project's sessions table if missing/poor
-            const hasCountries = data.countries?.length > 0 && 
+            const hasCountries = data.countries?.length > 0 &&
               !(data.countries.length === 1 && data.countries[0].country === 'Unknown');
             if (!hasCountries) {
               console.log('Trying to supplement countries from external sessions...');
@@ -266,7 +315,7 @@ serve(async (req) => {
                 });
                 if (outboundResponse.ok) {
                   const outboundData = await outboundResponse.json();
-                  airbnbClicks = outboundData.filter((click: any) => 
+                  airbnbClicks = outboundData.filter((click: any) =>
                     String(click.target_url || '').toLowerCase().includes('airbnb.com')
                   ).length;
                 }
@@ -277,7 +326,7 @@ serve(async (req) => {
 
             console.log('Analytics fetched successfully from external source for client:', client.name);
             return new Response(
-              JSON.stringify({ 
+              JSON.stringify({
                 clientId: client.id,
                 clientName: client.name,
                 analytics: { ...enrichedData, airbnbClicks: airbnbClicks > 0 ? airbnbClicks : undefined },
@@ -338,7 +387,7 @@ serve(async (req) => {
         .select('*')
         .gte('clicked_at', startISO)
         .lt('clicked_at', endISO);
-      
+
       if (!outboundError && outboundClicks) {
         // Filter for Airbnb links
         airbnbClicks = outboundClicks.filter((click: any) => {
@@ -358,7 +407,7 @@ serve(async (req) => {
     // Check if there's any data
     if (sessionList.length === 0 && pageViewList.length === 0) {
       console.log('No local analytics data for client:', client.name);
-      
+
       // Check for last event timestamp (any time, not just date range)
       const { data: lastPageView } = await supabase
         .from('web_analytics_page_views')
@@ -367,7 +416,7 @@ serve(async (req) => {
         .order('viewed_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       const { data: lastSession } = await supabase
         .from('web_analytics_sessions')
         .select('started_at')
@@ -375,17 +424,17 @@ serve(async (req) => {
         .order('started_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       const lastEventTime = lastPageView?.viewed_at || lastSession?.started_at || null;
-      
+
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           ok: false,
           error: 'No analytics data recorded for this period',
           errorType: 'no_data',
           clientId: client.id,
           clientName: client.name,
-          details: lastEventTime 
+          details: lastEventTime
             ? `Last event recorded: ${lastEventTime}. No data in the selected date range.`
             : 'Install the tracking script on your website to start collecting analytics data.',
           lastEventTime,
@@ -602,7 +651,7 @@ serve(async (req) => {
     console.log('Analytics fetched successfully from local tables for client:', client.name);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         clientId: client.id,
         clientName: client.name,
         analytics: analyticsData,

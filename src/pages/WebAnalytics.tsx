@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy, ExternalLink, ChevronRight, Building2, ChevronDown } from "lucide-react";
+import { Loader2, Globe, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ArrowLeft, AlertCircle, Settings, Play, CheckCircle, XCircle, Copy, ExternalLink, ChevronRight, Building2, ChevronDown, Percent, Layers } from "lucide-react";
 import { TopCountriesWidget } from "@/components/TopCountriesWidget";
 import { format, subDays } from "date-fns";
 import { useClientAnalytics, AnalyticsErrorType, DateRangePreset } from "@/hooks/useClientAnalytics";
@@ -36,7 +36,7 @@ const WebAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const { isAdmin, isAuthenticated } = useAuth();
-  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -230,9 +230,15 @@ const WebAnalytics = () => {
       bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
       pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ??
         (analytics.pageViews && analytics.visitors ? analytics.pageViews / analytics.visitors : 0),
+      avgScrollDepth: analytics.avgScrollDepth ?? undefined,
       trafficSources: normalizedTrafficSources,
       deviceBreakdown: normalizedDeviceBreakdown,
-      dailyBreakdown: analytics.dailyBreakdown,
+      dailyBreakdown: analytics.dailyBreakdown || (analytics.dailyTimeSeries ? analytics.dailyTimeSeries.map((d: any) => ({
+        date: d.date,
+        visitors: d.visitors || 0,
+        sessions: d.sessions || d.visitors || 0,
+        pageViews: d.pageViews || 0,
+      })) : undefined),
       topPages: normalizedTopPages,
       browsers: analytics.browsers,
       airbnbClicks: analytics.airbnbClicks,
@@ -316,7 +322,7 @@ const WebAnalytics = () => {
 
     // Fallback: Generate estimated daily data from totals (labeled as estimates in UI)
     // For "all" time range, show last 30 days of synthetic data
-    const days = dateRange === "30d" ? 30 : dateRange === "all" ? 30 : 7;
+    const days = dateRange === "365d" ? 365 : dateRange === "90d" ? 90 : dateRange === "30d" ? 30 : dateRange === "all" ? 30 : 7;
     const totalVisitors = normalizedAnalytics?.visitors || 0;
     const totalPageViews = normalizedAnalytics?.pageViews || 0;
     const avgBounceRate = normalizedAnalytics?.bounceRate || 45;
@@ -493,9 +499,11 @@ const WebAnalytics = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
                 <SelectItem value="7d">Last 7 days</SelectItem>
                 <SelectItem value="30d">Last 30 days</SelectItem>
+                <SelectItem value="90d">Last 90 days</SelectItem>
+                <SelectItem value="365d">Last 365 days</SelectItem>
+                <SelectItem value="all">All Time</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -699,6 +707,42 @@ const WebAnalytics = () => {
                       </Card>
                     </div>
                   ) : null}
+
+                  {/* Additional KPIs row */}
+                  {normalizedAnalytics && (
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Card className="border-primary/20">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                          <CardTitle className="text-sm font-medium">Pages Per Visit</CardTitle>
+                          <Layers className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">
+                            {normalizedAnalytics.pagesPerVisit.toFixed(1)}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Avg pages viewed per session
+                          </p>
+                        </CardContent>
+                      </Card>
+                      {normalizedAnalytics.avgScrollDepth !== undefined && (
+                        <Card className="border-primary/20">
+                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Avg Scroll Depth</CardTitle>
+                            <Percent className="h-4 w-4 text-muted-foreground" />
+                          </CardHeader>
+                          <CardContent>
+                            <div className="text-3xl font-bold">
+                              {normalizedAnalytics.avgScrollDepth.toFixed(0)}%
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              How far visitors scroll on average
+                            </p>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  )}
 
                   {/* Airbnb Clicks Card - shown only when data exists */}
                   {normalizedAnalytics?.airbnbClicks !== undefined && normalizedAnalytics.airbnbClicks > 0 && (
