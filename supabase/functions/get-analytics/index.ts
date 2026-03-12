@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     const { startDate, endDate, apiKey } = await req.json();
-    
+
     // Validate API key
     const expectedApiKey = Deno.env.get("ANALYTICS_API_KEY");
     if (apiKey !== expectedApiKey) {
@@ -30,20 +30,20 @@ serve(async (req) => {
 
     console.log(`Fetching analytics from ${startDate} to ${endDate}`);
 
-    // Try analytics_sessions first, fall back to analytics_events
+    // Try web_analytics_sessions first, fall back to analytics_events
     const { data: sessions, error: sessionsError } = await supabase
-      .from("analytics_sessions")
-      .select("*")
-      .gte("started_at", startDate)
-      .lte("started_at", endDate);
+      .from('web_analytics_sessions')
+      .select('*')
+      .gte('started_at', startDate)
+      .lte('started_at', endDate);
 
-    // Get page views - try analytics_page_views first, then analytics_events
+    // Get page views - try web_analytics_page_views first, then analytics_events
     let pageViews: any[] = [];
     const { data: pageViewData, error: pvError } = await supabase
-      .from("analytics_page_views")
-      .select("*")
-      .gte("viewed_at", startDate)
-      .lte("viewed_at", endDate);
+      .from('web_analytics_page_views')
+      .select('*')
+      .gte('viewed_at', startDate)
+      .lte('viewed_at', endDate);
 
     if (!pvError && pageViewData && pageViewData.length > 0) {
       pageViews = pageViewData;
@@ -55,7 +55,7 @@ serve(async (req) => {
         .eq("event_type", "page_view")
         .gte("created_at", startDate)
         .lte("created_at", endDate);
-      
+
       if (!eventsError && eventsData) {
         pageViews = eventsData;
       }
@@ -91,7 +91,7 @@ serve(async (req) => {
 
     for (const visitorId of visitorIds) {
       const events = visitorEvents[visitorId];
-      
+
       // Bounce: visitor with only 1 page view
       if (events.length === 1) {
         bounces++;
@@ -108,7 +108,7 @@ serve(async (req) => {
           })
           .filter((t): t is number => t !== null)
           .sort((a, b) => a - b);
-        
+
         if (timestamps.length >= 2) {
           const duration = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
           // Only count reasonable durations (less than 2 hours)
@@ -128,44 +128,48 @@ serve(async (req) => {
 
     // Calculate traffic sources - show actual referrer hostnames
     const trafficSourceCounts: Record<string, number> = {};
-    
+
     const getHostname = (url: string): string => {
       try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
     };
 
     // Analyze sessions or page views for referrer data
     const dataWithReferrer = sessions && sessions.length > 0 ? sessions : pageViews;
-    
-    for (const item of dataWithReferrer) {
-      const referrer = item.referrer || item.referrer_url || '';
-      const utmMedium = (item.utm_medium || '').toLowerCase();
-      const utmSource = (item.utm_source || '').toLowerCase();
-      const hostname = referrer ? getHostname(referrer) : '';
-      
-      let source = 'Direct';
-      if (['cpc', 'ppc', 'paid', 'paid_social', 'display'].includes(utmMedium)) {
-        source = 'Paid';
-      } else if (utmMedium === 'email' || utmSource.includes('mail') || hostname.includes('mail')) {
-        source = 'Email';
-      } else if (!hostname && !utmSource) {
-        source = 'Direct';
-      } else if (hostname) {
-        source = hostname;
-      } else if (utmSource) {
-        source = utmSource;
-      }
-      
-      trafficSourceCounts[source] = (trafficSourceCounts[source] || 0) + 1;
-    }
 
-    const totalTrafficSources = Object.values(trafficSourceCounts).reduce((a, b) => a + b, 0);
-    const trafficSources = Object.entries(trafficSourceCounts).map(([source, count]) => ({
+    // Traffic sources - derive from referrer URL
+    const sourceMap: Record<string, number> = {};
+    sessions?.forEach(session => {
+      let source = 'direct';
+      const referrer = (session as any).referrer || (session as any).referrer_url || '';
+      if (referrer) {
+        try {
+          const hostname = new URL(referrer).hostname.replace(/^www\./, '');
+          if (['google.com', 'bing.com', 'yahoo.com', 'duckduckgo.com', 'baidu.com'].some(se => hostname.includes(se))) source = 'organic';
+          else if (['facebook.com', 'instagram.com', 'twitter.com', 'tiktok.com', 'linkedin.com', 'pinterest.com', 't.co', 'x.com'].some(sn => hostname.includes(sn))) source = 'social';
+          else source = 'referral';
+        } catch { source = 'referral'; }
+      }
+      const utmMedium = ((session as any).utm_medium || '').toLowerCase();
+      if (['cpc', 'ppc', 'paid', 'paid_social', 'display'].includes(utmMedium)) source = 'paid';
+      else if (utmMedium === 'email') source = 'email';
+      sourceMap[source] = (sourceMap[source] || 0) + 1;
+    });
+
+    const totalTrafficSources = Object.values(sourceMap).reduce((a, b) => a + b, 0);
+    const trafficSources = Object.entries(sourceMap).map(([source, count]) => ({
       source,
       count,
       percentage: totalTrafficSources > 0 ? Math.round((count / totalTrafficSources) * 100) : 0,
     })).filter(ts => ts.count > 0).sort((a, b) => b.count - a.count);
 
     // Calculate device breakdown from user agent data
+    const pageMap: Record<string, number> = {};
+    pageViews?.forEach(pv => {
+      let p = (pv as any).page_url || (pv as any).path || (pv as any).url || '(not set)';
+      try { p = new URL(p).pathname; } catch { p = p.split('?')[0]; }
+      pageMap[p] = (pageMap[p] || 0) + 1;
+    });
+
     const deviceCounts: Record<string, number> = {
       desktop: 0,
       mobile: 0,
@@ -175,7 +179,7 @@ serve(async (req) => {
     for (const item of dataWithReferrer) {
       const userAgent = (item.user_agent || item.ua || '').toLowerCase();
       const deviceType = (item.device_type || item.device || '').toLowerCase();
-      
+
       if (deviceType) {
         if (deviceType.includes('mobile') || deviceType.includes('phone')) {
           deviceCounts.mobile++;
@@ -211,7 +215,7 @@ serve(async (req) => {
 
     // Get daily breakdown for charts - use sessions if pageviews are sparse
     const dailyData: Record<string, { visitors: Set<string>; pageViews: number; sessions: number }> = {};
-    
+
     // Add session-based daily data
     if (sessions && sessions.length > 0) {
       for (const s of sessions) {
