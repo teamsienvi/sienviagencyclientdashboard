@@ -410,6 +410,8 @@ const ClientDashboard = () => {
   // Check if client only has ads (meta_ads) and no other platforms
   const isAdsOnlyClient = useMemo(() => {
     if (!metricoolPlatforms) return false;
+    // If client has website analytics configured, it's not ads-only
+    if (client?.supabase_url) return false;
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
@@ -420,7 +422,7 @@ const ClientDashboard = () => {
     return hasAnyAdsPlatform &&
       nonAdsPlatforms.length === 0 &&
       !hasMetaOAuth && !hasYouTube && !hasX;
-  }, [metricoolPlatforms, connectedAccounts]);
+  }, [metricoolPlatforms, connectedAccounts, client]);
 
   const latestReport = clientReports?.reports[clientReports.reports.length - 1];
 
