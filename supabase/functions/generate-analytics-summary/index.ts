@@ -14,7 +14,7 @@ serve(async (req) => {
     try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY') || Deno.env.get('YOUTUBE_API_KEY');
+        const geminiKey = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
         const supabase = createClient(supabaseUrl, supabaseKey);
 
         const { clientId, type } = await req.json();
@@ -372,7 +372,7 @@ ${dataContext}`;
 
 async function callGemini(apiKey: string, prompt: string): Promise<any> {
     // Try multiple model names in case some are unavailable
-    const models = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-pro'];
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest'];
 
     let lastError = '';
     for (const model of models) {
