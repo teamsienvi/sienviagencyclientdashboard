@@ -1,10 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// Dynamic CORS: reflect the request origin to support credentials: 'include'
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('origin') || '*';
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Credentials': 'true',
+  };
+}
 
 // Generate a simple session ID based on visitor + timestamp window
 function generateSessionId(visitorId: string, timestamp: number): string {
@@ -26,7 +31,7 @@ function getDeviceType(userAgent: string): string {
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: getCorsHeaders(req) });
   }
 
   try {
@@ -46,8 +51,8 @@ serve(async (req) => {
     // Auto-detect country from Cloudflare/proxy headers if not provided by client
     let detectedCountry = country;
     if (!detectedCountry) {
-      detectedCountry = req.headers.get('cf-ipcountry') 
-        || req.headers.get('x-country') 
+      detectedCountry = req.headers.get('cf-ipcountry')
+        || req.headers.get('x-country')
         || req.headers.get('x-vercel-ip-country')
         || null;
     }
@@ -60,7 +65,7 @@ serve(async (req) => {
     if (!clientId || !visitorId || !pageUrl) {
       return new Response(
         JSON.stringify({ error: 'Missing required parameters: clientId, visitorId, pageUrl' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -84,14 +89,14 @@ serve(async (req) => {
       console.error('Client not found:', clientId);
       return new Response(
         JSON.stringify({ error: 'Invalid client' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
     if (!client.is_active) {
       return new Response(
         JSON.stringify({ error: 'Client is not active' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -122,7 +127,7 @@ serve(async (req) => {
       console.error('Error inserting page view:', pageViewError);
       return new Response(
         JSON.stringify({ error: 'Failed to track page view' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -171,13 +176,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error in track-analytics function:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
   }
 });
