@@ -371,9 +371,15 @@ ${dataContext}`;
 }
 
 async function callGemini(apiKey: string, prompt: string): Promise<any> {
-    const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-        {
+    // Try multiple model names in case some are unavailable
+    const models = ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-pro'];
+
+    let lastError = '';
+    for (const model of models) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        console.log(`Trying model: ${model}`);
+
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -384,30 +390,31 @@ async function callGemini(apiKey: string, prompt: string): Promise<any> {
                     responseMimeType: 'application/json',
                 },
             }),
-        }
-    );
+        });
 
-    if (!response.ok) {
+        if (response.ok) {
+            const result = await response.json();
+            const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) {
+                console.error(`Model ${model} returned empty response`);
+                lastError = `${model}: empty response`;
+                continue;
+            }
+            try {
+                return JSON.parse(text);
+            } catch {
+                const jsonMatch = text.match(/```json?\s*([\s\S]*?)```/);
+                if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
+                console.error(`Model ${model} returned non-JSON:`, text.substring(0, 200));
+                lastError = `${model}: non-JSON response`;
+                continue;
+            }
+        }
+
         const errText = await response.text();
-        console.error('Gemini error:', errText);
-        throw new Error(`Gemini API error: ${response.status}`);
+        console.error(`Model ${model} failed (${response.status}):`, errText.substring(0, 300));
+        lastError = `${model}: ${response.status}`;
     }
 
-    const result = await response.json();
-    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!text) {
-        throw new Error('No response from Gemini');
-    }
-
-    try {
-        return JSON.parse(text);
-    } catch {
-        // Try extracting JSON from markdown code blocks
-        const jsonMatch = text.match(/```json?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-            return JSON.parse(jsonMatch[1].trim());
-        }
-        throw new Error('Failed to parse Gemini response as JSON');
-    }
+    throw new Error(`All Gemini models failed. Last: ${lastError}`);
 }
