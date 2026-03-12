@@ -20,6 +20,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { TopPerformingPosts } from "@/components/TopPerformingPosts";
+import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
+import { Globe, Share2 } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -548,6 +550,26 @@ const ClientDashboard = () => {
 
           {/* Top Performing Posts */}
           <TopPerformingPosts clientId={clientId!} />
+
+          {/* AI-Powered Analytics Summaries */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {!isAdsOnlyClient && (
+              <AnalyticsSummaryCard
+                clientId={clientId!}
+                type="social"
+                title="Social Media Summary"
+                icon={<Share2 className="h-5 w-5 text-violet-400" />}
+              />
+            )}
+            {client?.supabase_url && (
+              <AnalyticsSummaryCard
+                clientId={clientId!}
+                type="website"
+                title="Website Analytics Summary"
+                icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
+              />
+            )}
+          </div>
 
           {/* Main Content Tabs */}
           <Tabs defaultValue="analytics" className="space-y-6">
