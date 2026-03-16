@@ -36,7 +36,7 @@ const WebAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
   const { isAdmin, isAuthenticated } = useAuth();
-  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
+  const [dateRange, setDateRange] = useState<DateRangePreset>("all");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
