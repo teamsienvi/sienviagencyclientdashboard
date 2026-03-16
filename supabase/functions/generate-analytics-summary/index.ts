@@ -583,7 +583,15 @@ CRITICAL RULES:
 - ONLY reference data that is actually present above. Do NOT invent or assume any numbers.
 - If data is sparse, acknowledge the limitation and recommend actions to improve data collection.
 - Keep each bullet to 1-2 sentences max.
-- Use plain language, no jargon. Write as if briefing a busy client.`;
+- Use plain language, no jargon. Write as if briefing a busy client.
+
+Respond with ONLY a valid JSON object in this exact format (no markdown, no code fences, just raw JSON):
+{
+  "strengths": ["item 1", "item 2"],
+  "weaknesses": ["item 1", "item 2"],
+  "smartActions": ["item 1", "item 2"],
+  "highlights": ["item 1", "item 2"]
+}`;
 }
 
 async function callGemini(apiKey: string, prompt: string): Promise<any> {
@@ -597,33 +605,6 @@ async function callGemini(apiKey: string, prompt: string): Promise<any> {
             generationConfig: {
                 temperature: 0.7,
                 maxOutputTokens: 2048,
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: "object",
-                    properties: {
-                        strengths: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "What is working well (2-4 items)",
-                        },
-                        weaknesses: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "Areas that need improvement (2-4 items)",
-                        },
-                        smartActions: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "Specific actionable recommendations in SMART format (2-4 items)",
-                        },
-                        highlights: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "Notable trends, standout posts, or milestones (2-4 items)",
-                        },
-                    },
-                    required: ["strengths", "weaknesses", "smartActions", "highlights"],
-                },
             },
         }),
     });
