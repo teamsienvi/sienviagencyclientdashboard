@@ -14,10 +14,17 @@ serve(async (req) => {
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const googleApiKey = Deno.env.get("GEMINI_API_KEY");
+        const googleApiKey = Deno.env.get("GEMINI_API_KEY")
+            || Deno.env.get("GOOGLE_API_KEY")
+            || Deno.env.get("YOUTUBE_API_KEY");
+
+        const keySource = Deno.env.get("GEMINI_API_KEY") ? "GEMINI_API_KEY"
+            : Deno.env.get("GOOGLE_API_KEY") ? "GOOGLE_API_KEY"
+                : Deno.env.get("YOUTUBE_API_KEY") ? "YOUTUBE_API_KEY" : "none";
+        console.log("Using API key from:", keySource, "key prefix:", googleApiKey?.substring(0, 8) + "...");
 
         if (!googleApiKey) {
-            throw new Error("GEMINI_API_KEY is not configured");
+            throw new Error("No Gemini/Google API key configured. Set GEMINI_API_KEY, GOOGLE_API_KEY, or YOUTUBE_API_KEY");
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -611,8 +618,8 @@ async function callGemini(apiKey: string, prompt: string): Promise<any> {
 
     if (!response.ok) {
         const errBody = await response.text();
-        console.error("Gemini API error:", errBody);
-        throw new Error(`Gemini API returned ${response.status}`);
+        console.error("Gemini API error:", response.status, errBody);
+        throw new Error(`Gemini API returned ${response.status}: ${errBody.substring(0, 500)}`);
     }
 
     const result = await response.json();
