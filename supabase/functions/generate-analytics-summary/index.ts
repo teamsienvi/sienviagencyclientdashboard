@@ -649,15 +649,19 @@ async function callGemini(apiKey: string, prompt: string): Promise<any> {
 
     console.log("Gemini raw text (first 300 chars):", text.substring(0, 300));
 
-    // Parse the JSON response
+    // Parse the JSON response — strip markdown fences and extract JSON object
     try {
-        // Even with responseMimeType, do a safety strip of code fences just in case
-        let cleanText = text.trim();
-        if (cleanText.startsWith("```")) {
-            cleanText = cleanText.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+        // Most robust approach: find the JSON object between first { and last }
+        const firstBrace = text.indexOf("{");
+        const lastBrace = text.lastIndexOf("}");
+
+        if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+            console.error("No JSON object found in Gemini response:", text.substring(0, 500));
+            throw new Error("No JSON object in response");
         }
 
-        const parsed = JSON.parse(cleanText);
+        const jsonStr = text.substring(firstBrace, lastBrace + 1);
+        const parsed = JSON.parse(jsonStr);
 
         // Validate required fields, provide defaults if missing
         return {
@@ -667,20 +671,7 @@ async function callGemini(apiKey: string, prompt: string): Promise<any> {
             highlights: parsed.highlights || ["Summary data is limited for this period."],
         };
     } catch (parseErr) {
-        // Fallback: try to extract JSON object from the response
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            try {
-                const fallback = JSON.parse(jsonMatch[0]);
-                return {
-                    strengths: fallback.strengths || ["Partial analysis available."],
-                    weaknesses: fallback.weaknesses || ["Could not fully analyze weaknesses."],
-                    smartActions: fallback.smartActions || ["Review data sources and try again."],
-                    highlights: fallback.highlights || ["Limited data available for highlights."],
-                };
-            } catch { }
-        }
-        console.error("Failed to parse Gemini response. Full raw text:", text);
+        console.error("Failed to parse Gemini response:", parseErr, "Full raw text:", text);
         throw new Error("Failed to parse AI response as JSON. Raw preview: " + text.substring(0, 500));
     }
 }
