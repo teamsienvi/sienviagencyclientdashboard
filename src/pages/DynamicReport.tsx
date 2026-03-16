@@ -138,30 +138,35 @@ const DynamicReport = () => {
         .select("*")
         .eq("report_id", reportId);
 
-      // Also fetch YouTube content from social_content for this date range
-      const { data: youtubeContent } = await supabase
+      // Also fetch content from social_content for ALL platforms for this date range
+      const { data: socialContent } = await supabase
         .from("social_content")
         .select(`
-          id, url, title, content_type, published_at,
-          social_content_metrics!inner(views, likes, comments, shares, period_start, period_end)
+          id, url, title, content_type, published_at, platform,
+          social_content_metrics!inner(views, likes, comments, shares, reach, period_start, period_end)
         `)
         .eq("client_id", reportData.client_id)
-        .eq("platform", "youtube")
         .gte("published_at", `${reportData.week_start}T00:00:00Z`)
         .lte("published_at", `${reportData.week_end}T23:59:59Z`);
 
-      // Fetch YouTube subscriber count
-      const { data: youtubeMetrics } = await supabase
+      // Fetch latest subscriber/follower counts for all platforms
+      const { data: allMetrics } = await supabase
         .from("social_account_metrics")
-        .select("followers")
+        .select("platform, followers")
         .eq("client_id", reportData.client_id)
-        .eq("platform", "youtube")
-        .order("collected_at", { ascending: false })
-        .limit(1);
+        .order("collected_at", { ascending: false });
 
-      const youtubeFollowers = youtubeMetrics?.[0]?.followers || 0;
+      // Build platform -> followers map (first entry per platform = latest)
+      const followerMap: Record<string, number> = {};
+      if (allMetrics) {
+        for (const m of allMetrics) {
+          if (!followerMap[m.platform]) {
+            followerMap[m.platform] = m.followers || 0;
+          }
+        }
+      }
 
-      // Combine existing top posts with YouTube content
+      // Combine existing top posts with content from social_content
       let allTopPosts: TopPost[] = topPostsData || [];
 
       // Helper function to extract video ID from YouTube URL
@@ -178,25 +183,25 @@ const DynamicReport = () => {
         return null;
       };
 
-      // Check if we have YouTube posts in social_content that aren't in top_performing_posts
-      if (youtubeContent && youtubeContent.length > 0) {
-        // Extract video IDs from existing posts for proper comparison
-        const existingYoutubeVideoIds = new Set(
-          allTopPosts
-            .filter((p) => p.platform?.toLowerCase() === "youtube")
-            .map((p) => extractYoutubeVideoId(p.link))
-            .filter(Boolean)
-        );
+      // Build a set of existing post URLs/IDs to avoid duplicates
+      const existingPostUrls = new Set(
+        allTopPosts.map((p) => p.link?.toLowerCase()).filter(Boolean)
+      );
 
-        // Process YouTube content and add missing posts
-        const youtubeTopPosts: TopPost[] = youtubeContent
+      // Process social_content for ALL platforms and add missing posts
+      if (socialContent && socialContent.length > 0) {
+        const socialTopPosts: TopPost[] = socialContent
           .map((content: any) => {
-            // Get the latest metrics
             const metrics = content.social_content_metrics?.[0] || {};
-            const views = metrics.views || 0;
+            const views = Math.max(metrics.views || 0, metrics.reach || 0);
             const likes = metrics.likes || 0;
             const comments = metrics.comments || 0;
-            const engagementPercent = views > 0 ? ((likes + comments) / views) * 100 : 0;
+            const shares = metrics.shares || 0;
+            const engagementPercent = views > 0 ? ((likes + comments + shares) / views) * 100 : 0;
+
+            // Capitalize platform name for display
+            const platformName = content.platform.charAt(0).toUpperCase() + content.platform.slice(1);
+            const platformFollowers = followerMap[content.platform] || 0;
 
             // Calculate reach tier
             let reachTier = "Tier 1";
@@ -217,27 +222,41 @@ const DynamicReport = () => {
               link: content.url || "",
               views,
               engagement_percent: parseFloat(engagementPercent.toFixed(2)),
-              platform: "Youtube",
-              followers: youtubeFollowers,
+              platform: platformName,
+              followers: platformFollowers,
               reach_tier: reachTier,
               engagement_tier: engagementTier,
               influence: Math.min(Math.ceil(views / 100) + (engagementPercent >= 3 ? 1 : 0), 5),
             };
           })
           .filter((post: TopPost) => {
-            const videoId = extractYoutubeVideoId(post.link);
-            return post.views > 0 && videoId && !existingYoutubeVideoIds.has(videoId);
+            // Skip if already in existing posts (by URL)
+            if (post.link && existingPostUrls.has(post.link.toLowerCase())) return false;
+            // Skip YouTube duplicates by video ID
+            if (post.platform.toLowerCase() === "youtube") {
+              const videoId = extractYoutubeVideoId(post.link);
+              const existingYtIds = new Set(
+                allTopPosts
+                  .filter((p) => p.platform?.toLowerCase() === "youtube")
+                  .map((p) => extractYoutubeVideoId(p.link))
+                  .filter(Boolean)
+              );
+              if (videoId && existingYtIds.has(videoId)) return false;
+            }
+            return post.views > 0;
           });
 
-        // Merge and sort by views + engagement
-        allTopPosts = [...allTopPosts, ...youtubeTopPosts];
+        // Merge
+        allTopPosts = [...allTopPosts, ...socialTopPosts];
       }
 
-      // Update followers for any YouTube posts with 0 followers
+      // Update followers for any posts with 0 followers using followerMap
       const enhancedTopPosts = allTopPosts
         .map((post) => {
-          if ((post.platform?.toLowerCase() === "youtube" || post.platform === "Youtube") && post.followers === 0) {
-            return { ...post, followers: youtubeFollowers };
+          if (post.followers === 0) {
+            const platformKey = post.platform.toLowerCase();
+            const mappedFollowers = followerMap[platformKey] || 0;
+            if (mappedFollowers > 0) return { ...post, followers: mappedFollowers };
           }
           return post;
         })
@@ -288,7 +307,7 @@ const DynamicReport = () => {
 
   const refreshFollowerCounts = async () => {
     if (!report?.client_id) return;
-    
+
     setRefreshingFollowers(true);
     try {
       // Fetch latest social account metrics for all platforms
@@ -455,73 +474,73 @@ const DynamicReport = () => {
 
         {/* Top Performing Insights */}
         <TooltipProvider>
-        <Card className="mb-8">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5 text-primary" />
-              Top Performing Insights
-              <Tooltip>
-                <TooltipTrigger>
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p className="text-sm">
-                    <strong>Scoring:</strong> Posts are ranked by a weighted score combining views and engagement. 
-                    Posts with fewer than 50 views are excluded to prevent artificially inflated engagement rates.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search posts..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-48"
-                />
+          <Card className="mb-8">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary" />
+                Top Performing Insights
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-sm">
+                      <strong>Scoring:</strong> Posts are ranked by a weighted score combining views and engagement.
+                      Posts with fewer than 50 views are excluded to prevent artificially inflated engagement rates.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search posts..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 w-48"
+                  />
+                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={refreshFollowerCounts}
+                      disabled={refreshingFollowers}
+                    >
+                      <RefreshCw className={`h-4 w-4 ${refreshingFollowers ? "animate-spin" : ""}`} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Refresh follower counts from latest metrics</p>
+                  </TooltipContent>
+                </Tooltip>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    exportToCSV(
+                      filteredTopPosts.map((p) => ({
+                        Link: p.link,
+                        Views: p.views,
+                        "Engagement %": p.engagement_percent,
+                        Platform: p.platform,
+                        Followers: p.followers,
+                        "Reach Tier": p.reach_tier || "",
+                        "Engagement Tier": p.engagement_tier || "",
+                        Influence: p.influence || 0,
+                      })),
+                      "top-posts.csv"
+                    )
+                  }
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export CSV
+                </Button>
               </div>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={refreshFollowerCounts}
-                    disabled={refreshingFollowers}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${refreshingFollowers ? "animate-spin" : ""}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Refresh follower counts from latest metrics</p>
-                </TooltipContent>
-              </Tooltip>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  exportToCSV(
-                    filteredTopPosts.map((p) => ({
-                      Link: p.link,
-                      Views: p.views,
-                      "Engagement %": p.engagement_percent,
-                      Platform: p.platform,
-                      Followers: p.followers,
-                      "Reach Tier": p.reach_tier || "",
-                      "Engagement Tier": p.engagement_tier || "",
-                      Influence: p.influence || 0,
-                    })),
-                    "top-posts.csv"
-                  )
-                }
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -604,8 +623,8 @@ const DynamicReport = () => {
                   )}
                 </TableBody>
               </Table>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
         </TooltipProvider>
 
         {/* Platform Performance Overview Chart */}
@@ -672,11 +691,10 @@ const DynamicReport = () => {
                             <span className="text-3xl font-bold">{(pd.engagement_rate || 0).toFixed(2)}%</span>
                             {pd.last_week_engagement_rate !== null && (
                               <span
-                                className={`text-sm flex items-center ${
-                                  (pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0)
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                                }`}
+                                className={`text-sm flex items-center ${(pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0)
+                                  ? "text-green-500"
+                                  : "text-red-500"
+                                  }`}
                               >
                                 {(pd.engagement_rate || 0) >= (pd.last_week_engagement_rate || 0) ? (
                                   <TrendingUp className="h-3 w-3" />
@@ -700,11 +718,10 @@ const DynamicReport = () => {
                             <span className="text-3xl font-bold">{pd.total_content || 0}</span>
                             {pd.last_week_total_content !== null && (
                               <span
-                                className={`text-sm flex items-center ${
-                                  (pd.total_content || 0) >= (pd.last_week_total_content || 0)
-                                    ? "text-green-500"
-                                    : "text-red-500"
-                                }`}
+                                className={`text-sm flex items-center ${(pd.total_content || 0) >= (pd.last_week_total_content || 0)
+                                  ? "text-green-500"
+                                  : "text-red-500"
+                                  }`}
                               >
                                 {(pd.total_content || 0) >= (pd.last_week_total_content || 0) ? (
                                   <TrendingUp className="h-3 w-3" />
@@ -735,8 +752,8 @@ const DynamicReport = () => {
                         />
                       </div>
                       <div className="flex gap-2">
-                        {(pd.platform === "YouTube" || pd.platform === "Youtube" 
-                          ? ["All", "Video", "Short"] 
+                        {(pd.platform === "YouTube" || pd.platform === "Youtube"
+                          ? ["All", "Video", "Short"]
                           : ["All", "Reel", "Post"]
                         ).map((filter) => (
                           <Button

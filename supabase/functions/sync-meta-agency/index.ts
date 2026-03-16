@@ -40,13 +40,19 @@ serve(async (req) => {
       .maybeSingle();
 
     if (connError || !agencyConnection) {
-      throw new Error('No agency Meta connection found. Please connect first.');
+      return new Response(
+        JSON.stringify({ success: false, error: 'No agency Meta connection found. Please connect via Admin > Meta Assets.', results: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Check if token is expired
     const tokenExpiry = new Date(agencyConnection.token_expires_at);
     if (tokenExpiry < new Date()) {
-      throw new Error('Agency token has expired. Please reconnect.');
+      return new Response(
+        JSON.stringify({ success: false, error: `Agency token expired on ${tokenExpiry.toISOString().split('T')[0]}. Please reconnect via Admin > Meta Assets.`, results: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const userAccessToken = agencyConnection.access_token;
@@ -78,7 +84,7 @@ serve(async (req) => {
       `https://graph.facebook.com/v21.0/me/accounts?fields=id,access_token&limit=100&access_token=${userAccessToken}`
     );
     const pagesData = await pagesResponse.json();
-    
+
     if (pagesData.error) {
       throw new Error(pagesData.error.message || 'Failed to fetch page tokens');
     }
@@ -103,7 +109,7 @@ serve(async (req) => {
     }
 
     const results: SyncResult[] = [];
-    
+
     // Calculate the last completed week (Monday-Sunday) to match UI's logic
     const now = new Date();
     const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
@@ -111,24 +117,24 @@ serve(async (req) => {
     const thisMonday = new Date(now);
     thisMonday.setDate(now.getDate() - daysToSubtract);
     thisMonday.setHours(0, 0, 0, 0);
-    
+
     const prevMonday = new Date(thisMonday);
     prevMonday.setDate(thisMonday.getDate() - 7);
     const prevSunday = new Date(thisMonday);
     prevSunday.setDate(thisMonday.getDate() - 1);
-    
+
     const periodStartStr = prevMonday.toISOString().split('T')[0];
     const periodEndStr = prevSunday.toISOString().split('T')[0];
-    
+
     // Previous week for comparison
     const prevPrevMonday = new Date(prevMonday);
     prevPrevMonday.setDate(prevMonday.getDate() - 7);
     const prevPrevSunday = new Date(prevMonday);
     prevPrevSunday.setDate(prevMonday.getDate() - 1);
-    
+
     const prevPeriodStartStr = prevPrevMonday.toISOString().split('T')[0];
     const prevPeriodEndStr = prevPrevSunday.toISOString().split('T')[0];
-    
+
     console.log(`Sync period: ${periodStartStr} to ${periodEndStr}`);
     console.log(`Comparison period: ${prevPeriodStartStr} to ${prevPeriodEndStr}`);
 
@@ -216,9 +222,9 @@ serve(async (req) => {
 
     if (oauthAccounts && oauthAccounts.length > 0) {
       console.log(`Found ${oauthAccounts.length} individual OAuth accounts to sync`);
-      
+
       const oauthTasks: Array<() => Promise<SyncResult>> = [];
-      
+
       for (const account of oauthAccounts) {
         const clientId = account.client_id;
         const clientName = account.clients?.name || 'Unknown';
@@ -285,11 +291,11 @@ serve(async (req) => {
     console.log(`Sync completed: ${successCount}/${results.length} successful`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         totalMappings: mappings.length,
         totalOAuthAccounts: oauthAccounts?.length || 0,
-        results 
+        results
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -312,36 +318,36 @@ async function fetchPostsWithPagination(
 ): Promise<any[]> {
   const allPosts: any[] = [];
   let nextUrl: string | null = baseUrl;
-  
+
   while (nextUrl && allPosts.length < maxItems) {
     const resp: Response = await fetch(nextUrl);
     if (!resp.ok) {
       console.log(`Failed to fetch posts: ${resp.status}`);
       break;
     }
-    
+
     const json = await resp.json();
     if (json.error) {
       console.log(`API error fetching posts: ${json.error.message}`);
       break;
     }
-    
+
     const posts = json.data || [];
     if (posts.length === 0) break;
-    
+
     allPosts.push(...posts);
-    
+
     // Check if oldest post is before our period start - we can stop
     const oldestPost = posts[posts.length - 1];
     const oldestDate = new Date(oldestPost.created_time || oldestPost.timestamp);
     if (oldestDate < periodStart) {
       break;
     }
-    
+
     // Get next page URL
     nextUrl = json.paging?.next || null;
   }
-  
+
   return allPosts;
 }
 
@@ -356,7 +362,7 @@ async function syncFacebookPage(
 ): Promise<SyncResult> {
   let syncLogId: string | null = null;
   let errorMessages: string[] = [];
-  
+
   try {
     console.log(`Syncing Facebook page ${pageId} for client ${clientName} (${periodStart} to ${periodEnd})`);
 
@@ -370,7 +376,7 @@ async function syncFacebookPage(
       })
       .select()
       .single();
-    
+
     syncLogId = syncLog?.id;
 
     // Fetch page info (fallback)
@@ -425,7 +431,7 @@ async function syncFacebookPage(
         const followsUrl = `https://graph.facebook.com/v21.0/${pageId}/insights?metric=page_follows&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
         const followsResp = await fetch(followsUrl);
         const followsData = await followsResp.json();
-        
+
         if (!followsData.error && followsData.data) {
           for (const insight of followsData.data) {
             if (insight.name === 'page_follows') {
@@ -448,7 +454,7 @@ async function syncFacebookPage(
     // Fetch posts with pagination to cover the period
     const postsUrl = `https://graph.facebook.com/v21.0/${pageId}/posts?fields=id,message,created_time,permalink_url,shares,reactions.summary(true),comments.summary(true)&limit=50&access_token=${accessToken}`;
     const allPosts = await fetchPostsWithPagination(postsUrl, accessToken, periodStartDate, 100);
-    
+
     console.log(`Fetched ${allPosts.length} total Facebook posts`);
 
     // Filter posts to only those in the requested period
@@ -456,7 +462,7 @@ async function syncFacebookPage(
       const postDate = new Date(post.created_time);
       return postDate >= periodStartDate && postDate <= periodEndDate;
     });
-    
+
     console.log(`Found ${postsInPeriod.length} Facebook posts in period ${periodStart} to ${periodEnd}`);
 
     let recordsSynced = 0;
@@ -480,7 +486,7 @@ async function syncFacebookPage(
       // Posts with more engagement get proportionally more reach attributed
       let postReach = 0;
       let postImpressions = 0;
-      
+
       if (pageReach > 0 && totalPostEngagement > 0) {
         const engagementRatio = postEngagement / totalPostEngagement;
         postReach = Math.round(pageReach * engagementRatio);
@@ -569,7 +575,7 @@ async function syncFacebookPage(
   } catch (error) {
     console.error(`Error syncing Facebook for ${clientName}:`, error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    
+
     if (syncLogId) {
       await supabase
         .from('social_sync_logs')
@@ -580,7 +586,7 @@ async function syncFacebookPage(
         })
         .eq('id', syncLogId);
     }
-    
+
     return {
       clientId,
       clientName,
@@ -602,7 +608,7 @@ async function syncInstagramAccount(
 ): Promise<SyncResult> {
   let syncLogId: string | null = null;
   let errorMessages: string[] = [];
-  
+
   try {
     console.log(`Syncing Instagram account ${igBusinessId} for client ${clientName} (${periodStart} to ${periodEnd})`);
 
@@ -616,7 +622,7 @@ async function syncInstagramAccount(
       })
       .select()
       .single();
-    
+
     syncLogId = syncLog?.id;
 
     // Fetch account info (fallback)
@@ -658,7 +664,7 @@ async function syncInstagramAccount(
     // Fetch media with pagination to cover the period
     const mediaUrl = `https://graph.facebook.com/v21.0/${igBusinessId}/media?fields=id,caption,timestamp,permalink,media_type,like_count,comments_count&limit=50&access_token=${accessToken}`;
     const allMedia = await fetchPostsWithPagination(mediaUrl, accessToken, periodStartDate, 100);
-    
+
     console.log(`Fetched ${allMedia.length} total Instagram posts`);
 
     // Filter media to only those in the requested period
@@ -666,7 +672,7 @@ async function syncInstagramAccount(
       const postDate = new Date(item.timestamp);
       return postDate >= periodStartDate && postDate <= periodEndDate;
     });
-    
+
     console.log(`Found ${mediaInPeriod.length} Instagram posts in period ${periodStart} to ${periodEnd}`);
 
     let recordsSynced = 0;
@@ -682,17 +688,17 @@ async function syncInstagramAccount(
           `https://graph.facebook.com/v21.0/${post.id}/insights?metric=${metrics}&access_token=${accessToken}`
         );
         const data = await resp.json();
-        
+
         // Check for API error in response (Graph API can return 200 with error)
         if (data.error) {
           console.log(`IG insights API error for ${post.id}: ${data.error.message?.substring(0, 100)}`);
-          
+
           // Try fallback with just reach (most reliable metric)
           const fallbackResp = await fetch(
             `https://graph.facebook.com/v21.0/${post.id}/insights?metric=reach&access_token=${accessToken}`
           );
           const fallbackData = await fallbackResp.json();
-          
+
           if (!fallbackData.error && fallbackData.data?.length > 0) {
             let reach = 0;
             for (const insight of fallbackData.data || []) {
@@ -700,10 +706,10 @@ async function syncInstagramAccount(
             }
             return { postId: post.id, reach, views: null, failed: false, fallback: true };
           }
-          
+
           return { postId: post.id, reach: null, views: null, failed: true, reason: data.error.code || 'unknown' };
         }
-        
+
         if (resp.ok && data.data) {
           let reach = 0, views = 0;
           for (const insight of data.data || []) {
@@ -821,7 +827,7 @@ async function syncInstagramAccount(
   } catch (error) {
     console.error(`Error syncing Instagram for ${clientName}:`, error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    
+
     // Update sync log with error
     if (syncLogId) {
       await supabase
@@ -833,7 +839,7 @@ async function syncInstagramAccount(
         })
         .eq('id', syncLogId);
     }
-    
+
     return {
       clientId,
       clientName,
