@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, eachDayOfInterval } from "date-fns";
@@ -485,340 +486,349 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       )}
 
       {hasAnyData && (
-        <Tabs defaultValue={hasMetaData ? "meta" : hasGoogleData ? "google" : "tiktok"} className="space-y-6">
-          <TabsList>
-            {hasMetaData && <TabsTrigger value="meta" className="gap-2">
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-              </svg>
-              Meta Ads
-            </TabsTrigger>}
-            {hasGoogleData && <TabsTrigger value="google" className="gap-2">
-              <svg className="h-4 w-4" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-              </svg>
-              Google Ads
-            </TabsTrigger>}
-            {hasTikTokAdsData && <TabsTrigger value="tiktok" className="gap-2">
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.8.1V9.01a6.27 6.27 0 0 0-.8-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.94a8.2 8.2 0 0 0 3.76.97V6.69z" />
-              </svg>
-              TikTok Ads
-            </TabsTrigger>}
-          </TabsList>
+        <>
+          <Tabs defaultValue={hasMetaData ? "meta" : hasGoogleData ? "google" : "tiktok"} className="space-y-6">
+            <TabsList>
+              {hasMetaData && <TabsTrigger value="meta" className="gap-2">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                </svg>
+                Meta Ads
+              </TabsTrigger>}
+              {hasGoogleData && <TabsTrigger value="google" className="gap-2">
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                Google Ads
+              </TabsTrigger>}
+              {hasTikTokAdsData && <TabsTrigger value="tiktok" className="gap-2">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.8.1V9.01a6.27 6.27 0 0 0-.8-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.94a8.2 8.2 0 0 0 3.76.97V6.69z" />
+                </svg>
+                TikTok Ads
+              </TabsTrigger>}
+            </TabsList>
 
-          {/* META ADS TAB */}
-          {hasMetaData && metaAds && (
-            <TabsContent value="meta" className="space-y-6">
-              {/* KPI Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <MetricCard label="Spend" value={metaAds.current.spend} previousValue={metaAds.previous.spend} format={formatCurrency} invertColors />
-                <MetricCard label="Impressions" value={metaAds.current.impressions} previousValue={metaAds.previous.impressions} />
-                <MetricCard label="Reach" value={metaAds.current.reach} previousValue={metaAds.previous.reach} />
-                <MetricCard label="Clicks" value={metaAds.current.clicks} previousValue={metaAds.previous.clicks} />
-                <MetricCard label="CTR" value={metaAds.current.ctr} previousValue={metaAds.previous.ctr} format={formatPercent} />
-                <MetricCard label="CPC" value={metaAds.current.cpc} previousValue={metaAds.previous.cpc} format={formatCurrency} invertColors />
-              </div>
+            {/* META ADS TAB */}
+            {hasMetaData && metaAds && (
+              <TabsContent value="meta" className="space-y-6">
+                {/* KPI Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <MetricCard label="Spend" value={metaAds.current.spend} previousValue={metaAds.previous.spend} format={formatCurrency} invertColors />
+                  <MetricCard label="Impressions" value={metaAds.current.impressions} previousValue={metaAds.previous.impressions} />
+                  <MetricCard label="Reach" value={metaAds.current.reach} previousValue={metaAds.previous.reach} />
+                  <MetricCard label="Clicks" value={metaAds.current.clicks} previousValue={metaAds.previous.clicks} />
+                  <MetricCard label="CTR" value={metaAds.current.ctr} previousValue={metaAds.previous.ctr} format={formatPercent} />
+                  <MetricCard label="CPC" value={metaAds.current.cpc} previousValue={metaAds.previous.cpc} format={formatCurrency} invertColors />
+                </div>
 
-              {/* Performance Row */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard label="CPM" value={metaAds.current.cpm} previousValue={metaAds.previous.cpm} format={formatCurrency} invertColors />
-                <MetricCard
-                  label="Conversions"
-                  value={metaAds.current.conversions}
-                  previousValue={metaAds.previous.conversions}
-                  info={`${getConversionLabel(metaAds.current.actions)} tracked via Meta Pixel. May include non-purchase events.`}
-                />
-                <MetricCard label="ROAS" value={metaAds.current.roas} previousValue={metaAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
-                <MetricCard label="Conv. Value" value={metaAds.current.conversionValue} previousValue={metaAds.previous.conversionValue} format={formatCurrency} />
-              </div>
+                {/* Performance Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <MetricCard label="CPM" value={metaAds.current.cpm} previousValue={metaAds.previous.cpm} format={formatCurrency} invertColors />
+                  <MetricCard
+                    label="Conversions"
+                    value={metaAds.current.conversions}
+                    previousValue={metaAds.previous.conversions}
+                    info={`${getConversionLabel(metaAds.current.actions)} tracked via Meta Pixel. May include non-purchase events.`}
+                  />
+                  <MetricCard label="ROAS" value={metaAds.current.roas} previousValue={metaAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                  <MetricCard label="Conv. Value" value={metaAds.current.conversionValue} previousValue={metaAds.previous.conversionValue} format={formatCurrency} />
+                </div>
 
-              {/* Spend & Impressions Chart */}
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Spend & Impressions Over Time</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <ComposedChart data={chartData}>
-                      <defs>
-                        <linearGradient id="impGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                          <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.05} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="displayDate" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                      <YAxis yAxisId="left" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => formatNumber(v)} />
-                      <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <Bar yAxisId="right" dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} name="spend" />
-                      <Area yAxisId="left" type="monotone" dataKey="impressions" stroke="hsl(217, 91%, 60%)" strokeWidth={2} fill="url(#impGradient)" name="impressions" />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              {/* All Campaigns Table */}
-              {metaAds.current.campaigns.length > 0 && (
+                {/* Spend & Impressions Chart */}
                 <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">All Campaigns ({metaAds.current.campaigns.length})</CardTitle>
-                    <CardDescription>Sorted by spend</CardDescription>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Spend & Impressions Over Time</CardTitle>
                   </CardHeader>
-                  <CardContent className="px-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/30">
-                            <TableHead className="pl-4">Campaign</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Impressions</TableHead>
-                            <TableHead className="text-right">Reach</TableHead>
-                            <TableHead className="text-right">Clicks</TableHead>
-                            <TableHead className="text-right">Spent</TableHead>
-                            <TableHead className="text-right">CTR</TableHead>
-                            <TableHead className="text-right">CPC</TableHead>
-                            <TableHead className="text-right pr-4">
-                              <div className="flex items-center justify-end gap-1">
-                                Conv.
-                                <UITooltip>
-                                  <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">Pixel events (may include non-purchases)</p></TooltipContent>
-                                </UITooltip>
-                              </div>
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {[...metaAds.current.campaigns]
-                            .sort((a, b) => b.spent - a.spent)
-                            .map((campaign, idx) => (
-                              <TableRow key={campaign.campaignId || idx} className="hover:bg-muted/20">
-                                <TableCell className="font-medium max-w-[200px] pl-4">
-                                  <div className="flex items-center gap-2">
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <ComposedChart data={chartData}>
+                        <defs>
+                          <linearGradient id="impGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.05} />
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="displayDate" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                        <YAxis yAxisId="left" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => formatNumber(v)} />
+                        <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `$${v}`} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Bar yAxisId="right" dataKey="spend" fill="hsl(45, 93%, 47%)" opacity={0.7} radius={[4, 4, 0, 0]} barSize={20} name="spend" />
+                        <Area yAxisId="left" type="monotone" dataKey="impressions" stroke="hsl(217, 91%, 60%)" strokeWidth={2} fill="url(#impGradient)" name="impressions" />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* All Campaigns Table */}
+                {metaAds.current.campaigns.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">All Campaigns ({metaAds.current.campaigns.length})</CardTitle>
+                      <CardDescription>Sorted by spend</CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="pl-4">Campaign</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Impressions</TableHead>
+                              <TableHead className="text-right">Reach</TableHead>
+                              <TableHead className="text-right">Clicks</TableHead>
+                              <TableHead className="text-right">Spent</TableHead>
+                              <TableHead className="text-right">CTR</TableHead>
+                              <TableHead className="text-right">CPC</TableHead>
+                              <TableHead className="text-right pr-4">
+                                <div className="flex items-center justify-end gap-1">
+                                  Conv.
+                                  <UITooltip>
+                                    <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
+                                    <TooltipContent><p className="text-xs">Pixel events (may include non-purchases)</p></TooltipContent>
+                                  </UITooltip>
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {[...metaAds.current.campaigns]
+                              .sort((a, b) => b.spent - a.spent)
+                              .map((campaign, idx) => (
+                                <TableRow key={campaign.campaignId || idx} className="hover:bg-muted/20">
+                                  <TableCell className="font-medium max-w-[200px] pl-4">
+                                    <div className="flex items-center gap-2">
+                                      <span className="truncate" title={campaign.name}>{campaign.name}</span>
+                                      {campaign.campaignId && (
+                                        <a
+                                          href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${campaign.campaignId}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-muted-foreground hover:text-primary shrink-0"
+                                          title="Open in Meta Ads Manager"
+                                        >
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={campaign.status === 'ACTIVE' ? 'default' : 'secondary'} className="text-xs">
+                                      {campaign.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.reach)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                                  <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
+                                  <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                                  <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            )}
+
+            {/* GOOGLE ADS TAB */}
+            {hasGoogleData && googleAds && (
+              <TabsContent value="google" className="space-y-6">
+                {/* KPI Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <MetricCard label="Spend" value={googleAds.current.spend} previousValue={googleAds.previous.spend} format={formatCurrency} invertColors />
+                  <MetricCard label="Impressions" value={googleAds.current.impressions} previousValue={googleAds.previous.impressions} />
+                  <MetricCard label="Clicks" value={googleAds.current.clicks} previousValue={googleAds.previous.clicks} />
+                  <MetricCard label="CTR" value={googleAds.current.ctr} previousValue={googleAds.previous.ctr} format={formatPercent} />
+                  <MetricCard label="CPC" value={googleAds.current.cpc} previousValue={googleAds.previous.cpc} format={formatCurrency} invertColors />
+                </div>
+
+                {/* Performance Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <MetricCard label="CPM" value={googleAds.current.cpm} previousValue={googleAds.previous.cpm} format={formatCurrency} invertColors />
+                  <MetricCard
+                    label="Conversions"
+                    value={googleAds.current.conversions}
+                    previousValue={googleAds.previous.conversions}
+                    info="Conversion actions configured in Google Ads (e.g., purchases, leads, page views)"
+                  />
+                  <MetricCard label="ROAS" value={googleAds.current.roas} previousValue={googleAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                  <MetricCard label="Conv. Value" value={googleAds.current.allConversionsValue} previousValue={googleAds.previous.allConversionsValue} format={formatCurrency} />
+                </div>
+
+                {/* All Campaigns Table */}
+                {googleAds.current.campaigns.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">All Campaigns ({googleAds.current.campaigns.length})</CardTitle>
+                      <CardDescription>Sorted by spend</CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="pl-4">Campaign</TableHead>
+                              <TableHead>Objective</TableHead>
+                              <TableHead className="text-right">Impressions</TableHead>
+                              <TableHead className="text-right">Clicks</TableHead>
+                              <TableHead className="text-right">Spent</TableHead>
+                              <TableHead className="text-right">CTR</TableHead>
+                              <TableHead className="text-right">CPC</TableHead>
+                              <TableHead className="text-right pr-4">
+                                <div className="flex items-center justify-end gap-1">
+                                  Conv.
+                                  <UITooltip>
+                                    <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
+                                    <TooltipContent><p className="text-xs">Conversion actions (purchases, leads, etc.)</p></TooltipContent>
+                                  </UITooltip>
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {[...googleAds.current.campaigns]
+                              .sort((a, b) => b.spent - a.spent)
+                              .map((campaign, idx) => (
+                                <TableRow key={idx} className="hover:bg-muted/20">
+                                  <TableCell className="font-medium max-w-[200px] pl-4">
+                                    <div className="flex items-center gap-2">
+                                      <span className="truncate" title={campaign.name}>{campaign.name}</span>
+                                      {campaign.providerCampaignId && (
+                                        <a
+                                          href={`https://ads.google.com/aw/campaigns?campaignId=${campaign.providerCampaignId}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-muted-foreground hover:text-primary shrink-0"
+                                          title="Open in Google Ads"
+                                        >
+                                          <ExternalLink className="h-3.5 w-3.5" />
+                                        </a>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {campaign.objective || "N/A"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                                  <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
+                                  <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                                  <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            )}
+
+            {/* TIKTOK ADS TAB */}
+            {hasTikTokAdsData && tiktokAds && (
+              <TabsContent value="tiktok" className="space-y-6">
+                {/* KPI Summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <MetricCard label="Spend" value={tiktokAds.current.spend} previousValue={tiktokAds.previous.spend} format={formatCurrency} invertColors />
+                  <MetricCard label="Impressions" value={tiktokAds.current.impressions} previousValue={tiktokAds.previous.impressions} />
+                  <MetricCard label="Reach" value={tiktokAds.current.reach} previousValue={tiktokAds.previous.reach} />
+                  <MetricCard label="Clicks" value={tiktokAds.current.clicks} previousValue={tiktokAds.previous.clicks} />
+                  <MetricCard label="CTR" value={tiktokAds.current.ctr} previousValue={tiktokAds.previous.ctr} format={formatPercent} />
+                  <MetricCard label="CPC" value={tiktokAds.current.cpc} previousValue={tiktokAds.previous.cpc} format={formatCurrency} invertColors />
+                </div>
+
+                {/* Performance Row */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <MetricCard label="CPM" value={tiktokAds.current.cpm} previousValue={tiktokAds.previous.cpm} format={formatCurrency} invertColors />
+                  <MetricCard label="Video Views" value={tiktokAds.current.videoViews} previousValue={tiktokAds.previous.videoViews} />
+                  <MetricCard label="Conversions" value={tiktokAds.current.conversions} previousValue={tiktokAds.previous.conversions} info="Conversion events tracked via TikTok Pixel" />
+                  <MetricCard label="ROAS" value={tiktokAds.current.roas} previousValue={tiktokAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                </div>
+
+                {/* All Campaigns Table */}
+                {tiktokAds.current.campaigns.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">All Campaigns ({tiktokAds.current.campaigns.length})</CardTitle>
+                      <CardDescription>Sorted by spend</CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30">
+                              <TableHead className="pl-4">Campaign</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Impressions</TableHead>
+                              <TableHead className="text-right">Reach</TableHead>
+                              <TableHead className="text-right">Clicks</TableHead>
+                              <TableHead className="text-right">Spent</TableHead>
+                              <TableHead className="text-right">CTR</TableHead>
+                              <TableHead className="text-right">CPC</TableHead>
+                              <TableHead className="text-right">Video Views</TableHead>
+                              <TableHead className="text-right pr-4">
+                                <div className="flex items-center justify-end gap-1">
+                                  Conv.
+                                  <UITooltip>
+                                    <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
+                                    <TooltipContent><p className="text-xs">TikTok Pixel conversion events</p></TooltipContent>
+                                  </UITooltip>
+                                </div>
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {[...tiktokAds.current.campaigns]
+                              .sort((a, b) => b.spent - a.spent)
+                              .map((campaign, idx) => (
+                                <TableRow key={campaign.campaignId || idx} className="hover:bg-muted/20">
+                                  <TableCell className="font-medium max-w-[200px] pl-4">
                                     <span className="truncate" title={campaign.name}>{campaign.name}</span>
-                                    {campaign.campaignId && (
-                                      <a
-                                        href={`https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=${campaign.campaignId}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-muted-foreground hover:text-primary shrink-0"
-                                        title="Open in Meta Ads Manager"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                      </a>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={campaign.status === 'ACTIVE' ? 'default' : 'secondary'} className="text-xs">
-                                    {campaign.status}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.reach)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
-                                <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
-                                <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
-                                <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          )}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={campaign.status === 'ACTIVE' || campaign.status === 'ENABLE' ? 'default' : 'secondary'} className="text-xs">
+                                      {campaign.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.reach)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
+                                  <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
+                                  <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
+                                  <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
+                                  <TableCell className="text-right">{formatNumber(campaign.videoViews)}</TableCell>
+                                  <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
+                                </TableRow>
+                              ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            )}
+          </Tabs>
 
-          {/* GOOGLE ADS TAB */}
-          {hasGoogleData && googleAds && (
-            <TabsContent value="google" className="space-y-6">
-              {/* KPI Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                <MetricCard label="Spend" value={googleAds.current.spend} previousValue={googleAds.previous.spend} format={formatCurrency} invertColors />
-                <MetricCard label="Impressions" value={googleAds.current.impressions} previousValue={googleAds.previous.impressions} />
-                <MetricCard label="Clicks" value={googleAds.current.clicks} previousValue={googleAds.previous.clicks} />
-                <MetricCard label="CTR" value={googleAds.current.ctr} previousValue={googleAds.previous.ctr} format={formatPercent} />
-                <MetricCard label="CPC" value={googleAds.current.cpc} previousValue={googleAds.previous.cpc} format={formatCurrency} invertColors />
-              </div>
-
-              {/* Performance Row */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard label="CPM" value={googleAds.current.cpm} previousValue={googleAds.previous.cpm} format={formatCurrency} invertColors />
-                <MetricCard
-                  label="Conversions"
-                  value={googleAds.current.conversions}
-                  previousValue={googleAds.previous.conversions}
-                  info="Conversion actions configured in Google Ads (e.g., purchases, leads, page views)"
-                />
-                <MetricCard label="ROAS" value={googleAds.current.roas} previousValue={googleAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
-                <MetricCard label="Conv. Value" value={googleAds.current.allConversionsValue} previousValue={googleAds.previous.allConversionsValue} format={formatCurrency} />
-              </div>
-
-              {/* All Campaigns Table */}
-              {googleAds.current.campaigns.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">All Campaigns ({googleAds.current.campaigns.length})</CardTitle>
-                    <CardDescription>Sorted by spend</CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/30">
-                            <TableHead className="pl-4">Campaign</TableHead>
-                            <TableHead>Objective</TableHead>
-                            <TableHead className="text-right">Impressions</TableHead>
-                            <TableHead className="text-right">Clicks</TableHead>
-                            <TableHead className="text-right">Spent</TableHead>
-                            <TableHead className="text-right">CTR</TableHead>
-                            <TableHead className="text-right">CPC</TableHead>
-                            <TableHead className="text-right pr-4">
-                              <div className="flex items-center justify-end gap-1">
-                                Conv.
-                                <UITooltip>
-                                  <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">Conversion actions (purchases, leads, etc.)</p></TooltipContent>
-                                </UITooltip>
-                              </div>
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {[...googleAds.current.campaigns]
-                            .sort((a, b) => b.spent - a.spent)
-                            .map((campaign, idx) => (
-                              <TableRow key={idx} className="hover:bg-muted/20">
-                                <TableCell className="font-medium max-w-[200px] pl-4">
-                                  <div className="flex items-center gap-2">
-                                    <span className="truncate" title={campaign.name}>{campaign.name}</span>
-                                    {campaign.providerCampaignId && (
-                                      <a
-                                        href={`https://ads.google.com/aw/campaigns?campaignId=${campaign.providerCampaignId}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="text-muted-foreground hover:text-primary shrink-0"
-                                        title="Open in Google Ads"
-                                      >
-                                        <ExternalLink className="h-3.5 w-3.5" />
-                                      </a>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary" className="text-xs">
-                                    {campaign.objective || "N/A"}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
-                                <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
-                                <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
-                                <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          )}
-
-          {/* TIKTOK ADS TAB */}
-          {hasTikTokAdsData && tiktokAds && (
-            <TabsContent value="tiktok" className="space-y-6">
-              {/* KPI Summary */}
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <MetricCard label="Spend" value={tiktokAds.current.spend} previousValue={tiktokAds.previous.spend} format={formatCurrency} invertColors />
-                <MetricCard label="Impressions" value={tiktokAds.current.impressions} previousValue={tiktokAds.previous.impressions} />
-                <MetricCard label="Reach" value={tiktokAds.current.reach} previousValue={tiktokAds.previous.reach} />
-                <MetricCard label="Clicks" value={tiktokAds.current.clicks} previousValue={tiktokAds.previous.clicks} />
-                <MetricCard label="CTR" value={tiktokAds.current.ctr} previousValue={tiktokAds.previous.ctr} format={formatPercent} />
-                <MetricCard label="CPC" value={tiktokAds.current.cpc} previousValue={tiktokAds.previous.cpc} format={formatCurrency} invertColors />
-              </div>
-
-              {/* Performance Row */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard label="CPM" value={tiktokAds.current.cpm} previousValue={tiktokAds.previous.cpm} format={formatCurrency} invertColors />
-                <MetricCard label="Video Views" value={tiktokAds.current.videoViews} previousValue={tiktokAds.previous.videoViews} />
-                <MetricCard label="Conversions" value={tiktokAds.current.conversions} previousValue={tiktokAds.previous.conversions} info="Conversion events tracked via TikTok Pixel" />
-                <MetricCard label="ROAS" value={tiktokAds.current.roas} previousValue={tiktokAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
-              </div>
-
-              {/* All Campaigns Table */}
-              {tiktokAds.current.campaigns.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">All Campaigns ({tiktokAds.current.campaigns.length})</CardTitle>
-                    <CardDescription>Sorted by spend</CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="bg-muted/30">
-                            <TableHead className="pl-4">Campaign</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Impressions</TableHead>
-                            <TableHead className="text-right">Reach</TableHead>
-                            <TableHead className="text-right">Clicks</TableHead>
-                            <TableHead className="text-right">Spent</TableHead>
-                            <TableHead className="text-right">CTR</TableHead>
-                            <TableHead className="text-right">CPC</TableHead>
-                            <TableHead className="text-right">Video Views</TableHead>
-                            <TableHead className="text-right pr-4">
-                              <div className="flex items-center justify-end gap-1">
-                                Conv.
-                                <UITooltip>
-                                  <TooltipTrigger><Info className="h-3 w-3 text-muted-foreground" /></TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">TikTok Pixel conversion events</p></TooltipContent>
-                                </UITooltip>
-                              </div>
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {[...tiktokAds.current.campaigns]
-                            .sort((a, b) => b.spent - a.spent)
-                            .map((campaign, idx) => (
-                              <TableRow key={campaign.campaignId || idx} className="hover:bg-muted/20">
-                                <TableCell className="font-medium max-w-[200px] pl-4">
-                                  <span className="truncate" title={campaign.name}>{campaign.name}</span>
-                                </TableCell>
-                                <TableCell>
-                                  <Badge variant={campaign.status === 'ACTIVE' || campaign.status === 'ENABLE' ? 'default' : 'secondary'} className="text-xs">
-                                    {campaign.status}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.impressions)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.reach)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.clicks)}</TableCell>
-                                <TableCell className="text-right font-medium">{formatCurrency(campaign.spent)}</TableCell>
-                                <TableCell className="text-right">{formatPercent(campaign.ctr)}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(campaign.cpc)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(campaign.videoViews)}</TableCell>
-                                <TableCell className="text-right pr-4">{formatNumber(campaign.conversions)}</TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          )}
-        </Tabs>
+          {/* Ads Shredder Analysis */}
+          <AdsShredderCard
+            clientId={clientId}
+            adPlatform={hasMetaData ? "meta" : hasGoogleData ? "google" : "tiktok"}
+            title="Ads Shredder Analysis"
+          />
+        </>
       )}
     </div>
   );
