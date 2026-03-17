@@ -548,9 +548,6 @@ const ClientDashboard = () => {
             </Card>
           </div>
 
-          {/* Top Performing Posts */}
-          <TopPerformingPosts clientId={clientId!} />
-
           {/* AI-Powered Analytics Summaries */}
           <div className="grid gap-4 md:grid-cols-2">
             {!isAdsOnlyClient && (
@@ -570,6 +567,9 @@ const ClientDashboard = () => {
               />
             )}
           </div>
+
+          {/* Top Performing Posts */}
+          <TopPerformingPosts clientId={clientId!} />
 
           {/* Main Content Tabs */}
           <Tabs defaultValue="analytics" className="space-y-6">
