@@ -639,11 +639,18 @@ const ClientDashboard = () => {
                           <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                         </CardHeader>
                         <CardContent>
-                          {connectedAccounts?.meta ? (
-                            <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                          ) : (
-                            <Badge variant="outline">Connect Account</Badge>
-                          )}
+                          <div className="flex justify-between items-center">
+                            {connectedAccounts?.meta || metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) ? (
+                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                            ) : (
+                              <Badge variant="outline">Connect Account</Badge>
+                            )}
+                            {(socialMetrics?.instagram?.followers || socialMetrics?.facebook?.followers) && (
+                              <span className="text-sm text-muted-foreground">
+                                {(socialMetrics?.instagram?.followers || socialMetrics?.facebook?.followers || 0).toLocaleString()} followers
+                              </span>
+                            )}
+                          </div>
                         </CardContent>
                       </Card>
                     )}
