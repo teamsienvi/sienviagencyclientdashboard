@@ -581,9 +581,9 @@ For each category, write 2-4 bullet points. Each bullet should:
 - Be actionable — don't just describe, explain what it means and what to do about it
 
 Category definitions:
-- "strengths": What's performing well. Cite the best metrics and why they matter.
-- "weaknesses": What's underperforming or missing. Be honest but constructive.
-- "smartActions": 2-4 specific, actionable next steps the team should take THIS week. Be concrete (e.g. "Post 2 Reels on Instagram focusing on behind-the-scenes content" not "improve engagement").
+- "strengths": What's performing well. IMPORTANT: Analyze which CONTENT FORMAT is the strongest performer — compare photos/static posts vs reels/short video vs carousels/stories. Identify the format that gets the most engagement, views, and reach. Cite specific content pieces and their numbers. Example: "Reels outperformed static posts by 3x in reach (2,500 avg vs 800 avg), making short-form video the strongest content format this week."
+- "weaknesses": What's underperforming or missing. Be honest but constructive. Identify content formats or platforms that are lagging.
+- "smartActions": 2-4 specific, actionable social media strategies and content hooks the team should execute THIS week. Be concrete and creative — suggest specific content ideas, hooks, captions angles, or posting tactics based on what performed well in the data. Examples: "Create 3 Reels using the 'day in the life' hook that drove 805 views on TikTok this week" or "Test carousel posts on Instagram with educational tips — the single photo format only got 2% engagement." Do NOT give generic advice like "improve engagement" or "post more consistently."
 - "highlights": Key milestones, trending content, or notable changes worth celebrating or flagging.
 
 CRITICAL RULES:
