@@ -16,18 +16,18 @@ interface ShopifySummary {
   returnFees: number;        // Fees for returns (usually 0)
   taxes: number;             // Total tax collected
   totalSales: number;        // Net Sales + Shipping + Taxes (what customer pays)
-  
+
   // Order metrics
   orders: number;
   ordersFulfilled: number;
   ordersUnfulfilled: number;
   averageOrderValue: number;
-  
+
   // Customer metrics
   newCustomers: number;
   returningCustomers: number;
   returningCustomerRate: number;
-  
+
   // Previous period for comparison
   prevGrossSales?: number;
   prevNetSales?: number;
@@ -72,6 +72,9 @@ interface OrderItem {
   totalTax: number;
   totalDiscounts: number;
   itemCount: number;
+  source: string;
+  channel: "organic" | "paid" | "unknown";
+  referringSite: string | null;
   lineItems: {
     title: string;
     quantity: number;
@@ -88,7 +91,7 @@ interface OrderItem {
 function parseLinkHeader(linkHeader: string | null): { next?: string; previous?: string } {
   if (!linkHeader) return {};
   const links: { next?: string; previous?: string } = {};
-  
+
   const parts = linkHeader.split(",");
   for (const part of parts) {
     const match = part.match(/<([^>]+)>;\s*rel="([^"]+)"/);
@@ -108,11 +111,11 @@ function sleep(ms: number): Promise<void> {
 
 // Make Shopify Admin API request with retry logic for rate limiting
 async function shopifyRequest(shopDomain: string, accessToken: string, endpoint: string, retries = 3): Promise<{ json: any; linkHeader: string | null }> {
-  const url = endpoint.startsWith("http") 
-    ? endpoint 
+  const url = endpoint.startsWith("http")
+    ? endpoint
     : `https://${shopDomain}/admin/api/2024-01/${endpoint}`;
   console.log(`[shopify-analytics] Fetching: ${url}`);
-  
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const response = await fetch(url, {
       headers: {
@@ -120,31 +123,31 @@ async function shopifyRequest(shopDomain: string, accessToken: string, endpoint:
         "Content-Type": "application/json",
       },
     });
-    
+
     // Handle rate limiting (429)
     if (response.status === 429) {
       const retryAfter = response.headers.get("Retry-After");
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000;
       console.log(`[shopify-analytics] Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}/${retries}`);
-      
+
       if (attempt < retries) {
         await sleep(waitTime);
         continue;
       }
     }
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[shopify-analytics] API error: ${response.status} - ${errorText}`);
       throw new Error(`Shopify API error: ${response.status}`);
     }
-    
+
     return {
       json: await response.json(),
       linkHeader: response.headers.get("Link"),
     };
   }
-  
+
   throw new Error("Shopify API error: 429 - Rate limited after retries");
 }
 
@@ -152,28 +155,28 @@ async function shopifyRequest(shopDomain: string, accessToken: string, endpoint:
 async function fetchAllOrders(shopDomain: string, accessToken: string, startDate: string, endDate: string) {
   const allOrders: any[] = [];
   let nextUrl: string | undefined;
-  
+
   const initialParams = new URLSearchParams({
     created_at_min: `${startDate}T00:00:00Z`,
     created_at_max: `${endDate}T23:59:59Z`,
     status: "any",
     limit: "250",
   });
-  
+
   let endpoint = `orders.json?${initialParams}`;
-  
+
   do {
     const { json, linkHeader } = await shopifyRequest(shopDomain, accessToken, endpoint);
     const orders = json.orders || [];
     allOrders.push(...orders);
-    
+
     const links = parseLinkHeader(linkHeader);
     nextUrl = links.next;
     if (nextUrl) {
       endpoint = nextUrl;
     }
   } while (nextUrl);
-  
+
   console.log(`[shopify-analytics] Fetched ${allOrders.length} total orders`);
   return allOrders;
 }
@@ -186,22 +189,22 @@ async function fetchOrders(shopDomain: string, accessToken: string, startDate: s
     status: "any",
     limit: "250",
   });
-  
+
   const { json } = await shopifyRequest(shopDomain, accessToken, `orders.json?${params}`);
   return json.orders || [];
 }
 
 // Fetch paginated orders for display (with full pagination info)
 async function fetchOrdersPage(
-  shopDomain: string, 
-  accessToken: string, 
-  startDate: string, 
+  shopDomain: string,
+  accessToken: string,
+  startDate: string,
   endDate: string,
   pageInfo?: string,
   limit: number = 20
 ) {
   let endpoint: string;
-  
+
   if (pageInfo) {
     endpoint = `orders.json?limit=${limit}&page_info=${pageInfo}`;
   } else {
@@ -213,17 +216,17 @@ async function fetchOrdersPage(
     });
     endpoint = `orders.json?${params}`;
   }
-  
+
   const { json, linkHeader } = await shopifyRequest(shopDomain, accessToken, endpoint);
   const links = parseLinkHeader(linkHeader);
-  
+
   // Extract page_info from URLs
   const getPageInfo = (url?: string) => {
     if (!url) return undefined;
     const parsed = new URL(url);
     return parsed.searchParams.get("page_info") || undefined;
   };
-  
+
   return {
     orders: json.orders || [],
     nextPageInfo: getPageInfo(links.next),
@@ -244,7 +247,7 @@ async function fetchCustomers(shopDomain: string, accessToken: string, startDate
     created_at_max: `${endDate}T23:59:59Z`,
     limit: "250",
   });
-  
+
   const { json } = await shopifyRequest(shopDomain, accessToken, `customers.json?${params}`);
   return json.customers || [];
 }
@@ -258,56 +261,56 @@ function calculateSummary(orders: any[], customers: any[]): ShopifySummary {
   let taxes = 0;
   let ordersFulfilled = 0;
   let ordersUnfulfilled = 0;
-  
+
   console.log(`[shopify-analytics] Processing ${orders.length} orders for summary`);
-  
+
   for (const order of orders) {
     // Subtotal = product line items total (after line discounts, before order discounts, excludes shipping/tax)
     const subtotal = parseFloat(order.subtotal_price || "0");
     const totalDiscount = parseFloat(order.total_discounts || "0");
     const shipping = parseFloat(order.total_shipping_price_set?.shop_money?.amount || order.shipping_lines?.[0]?.price || "0");
     const tax = parseFloat(order.total_tax || "0");
-    
+
     // Calculate refund amounts
     const totalRefund = (order.refunds || []).reduce((sum: number, r: any) => {
       return sum + (r.transactions || []).reduce((tSum: number, t: any) => tSum + parseFloat(t.amount || "0"), 0);
     }, 0);
-    
+
     // Gross sales = subtotal + discounts (what it would have been at full price)
     grossSales += subtotal + totalDiscount;
     discounts += totalDiscount;
     returns += totalRefund;
     shippingCharges += shipping;
     taxes += tax;
-    
+
     // Track fulfillment status
     if (order.fulfillment_status === "fulfilled") {
       ordersFulfilled++;
     } else if (order.financial_status !== "refunded") {
       ordersUnfulfilled++;
     }
-    
+
     console.log(`[shopify-analytics] Order ${order.name}: subtotal=${subtotal}, discounts=${totalDiscount}, shipping=${shipping}, tax=${tax}, refunds=${totalRefund}`);
   }
-  
+
   // Net sales = Gross - Discounts - Returns (product revenue only)
   const netSales = grossSales - discounts - returns;
-  
+
   // Total sales = Net Sales + Shipping + Taxes (what customer actually pays)
   const totalSales = netSales + shippingCharges + taxes;
-  
+
   const orderCount = orders.filter(o => o.financial_status !== "refunded").length;
   // AOV based on total sales (what customers pay)
   const avgOrderValue = orderCount > 0 ? totalSales / orderCount : 0;
-  
+
   // Count new vs returning customers
   const newCustomers = customers.filter(c => c.orders_count === 1).length;
   const returningCustomers = customers.filter(c => c.orders_count > 1).length;
   const totalCustomers = newCustomers + returningCustomers;
   const returningCustomerRate = totalCustomers > 0 ? (returningCustomers / totalCustomers) * 100 : 0;
-  
+
   console.log(`[shopify-analytics] Summary: grossSales=${grossSales}, netSales=${netSales}, totalSales=${totalSales}, orders=${orderCount}, fulfilled=${ordersFulfilled}`);
-  
+
   return {
     grossSales: Math.round(grossSales * 100) / 100,
     discounts: Math.round(discounts * 100) / 100,
@@ -333,7 +336,7 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
   const end = new Date(endDate);
   const dailyData: Record<string, number> = {};
   const dailyCounts: Record<string, number> = {};
-  
+
   // Initialize all days
   const current = new Date(start);
   while (current <= end) {
@@ -342,18 +345,18 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
     dailyCounts[dateStr] = 0;
     current.setDate(current.getDate() + 1);
   }
-  
+
   // Aggregate order data by day
   for (const order of orders) {
     if (order.financial_status === "refunded") continue;
-    
+
     const orderDate = new Date(order.created_at).toISOString().split("T")[0];
     if (dailyData[orderDate] !== undefined) {
       const subtotal = parseFloat(order.subtotal_price || "0");
       const shipping = parseFloat(order.total_shipping_price_set?.shop_money?.amount || "0");
       const tax = parseFloat(order.total_tax || "0");
       const totalPrice = subtotal + shipping + tax;
-      
+
       switch (metric) {
         case "total_sales":
           dailyData[orderDate] += totalPrice;
@@ -371,7 +374,7 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
       }
     }
   }
-  
+
   // For AOV, calculate the average
   if (metric === "average_order_value") {
     for (const date of Object.keys(dailyData)) {
@@ -380,20 +383,20 @@ function calculateTimeseries(orders: any[], startDate: string, endDate: string, 
       }
     }
   }
-  
+
   // Convert to array
   const points: TimeseriesPoint[] = [];
   for (const [date, value] of Object.entries(dailyData).sort()) {
     points.push({ date, value: Math.round(value * 100) / 100 });
   }
-  
+
   return points;
 }
 
 // Calculate top products from orders
 function calculateTopProducts(orders: any[], products: any[]): { products: TopProduct[]; total: number } {
   const productSales: Record<string, { unitsSold: number; revenue: number; refunds: number }> = {};
-  
+
   // Aggregate sales data
   for (const order of orders) {
     for (const lineItem of order.line_items || []) {
@@ -404,7 +407,7 @@ function calculateTopProducts(orders: any[], products: any[]): { products: TopPr
       productSales[productId].unitsSold += lineItem.quantity;
       productSales[productId].revenue += parseFloat(lineItem.price || "0") * lineItem.quantity;
     }
-    
+
     // Track refunds
     for (const refund of order.refunds || []) {
       for (const lineItem of refund.refund_line_items || []) {
@@ -415,13 +418,13 @@ function calculateTopProducts(orders: any[], products: any[]): { products: TopPr
       }
     }
   }
-  
+
   // Create product map for details
   const productMap: Record<string, any> = {};
   for (const product of products) {
     productMap[String(product.id)] = product;
   }
-  
+
   // Build top products list
   const topProducts: TopProduct[] = Object.entries(productSales)
     .map(([id, stats]) => {
@@ -437,39 +440,131 @@ function calculateTopProducts(orders: any[], products: any[]): { products: TopPr
     })
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 10);
-  
+
   return { products: topProducts, total: Object.keys(productSales).length };
+}
+
+// Determine order source and channel (organic vs paid) from Shopify order data
+function classifyOrderSource(order: any): { source: string; channel: "organic" | "paid" | "unknown" } {
+  const landingSite = (order.landing_site || "").toLowerCase();
+  const referringSite = (order.referring_site || "").toLowerCase();
+  const sourceName = (order.source_name || "").toLowerCase();
+
+  // Parse UTM parameters from landing_site
+  let utmSource = "";
+  let utmMedium = "";
+  let utmCampaign = "";
+  try {
+    if (landingSite && (landingSite.includes("utm_") || landingSite.includes("?") || landingSite.includes("&"))) {
+      const queryStr = landingSite.includes("?") ? landingSite.split("?")[1] : landingSite;
+      const params = new URLSearchParams(queryStr);
+      utmSource = (params.get("utm_source") || "").toLowerCase();
+      utmMedium = (params.get("utm_medium") || "").toLowerCase();
+      utmCampaign = params.get("utm_campaign") || "";
+    }
+  } catch (e) {
+    // Ignore URL parse errors
+  }
+
+  // Check if it's a paid ad
+  const isPaidMedium = ["cpc", "paid", "ppc", "paid_social", "paidsocial", "ad", "ads"].includes(utmMedium);
+  const isPaidSource = utmSource.includes("fb") || utmSource.includes("facebook") || utmSource.includes("ig") || utmSource.includes("instagram") || utmSource.includes("meta") || utmSource.includes("google") || utmSource.includes("tiktok");
+  const hasCampaign = utmCampaign.length > 0;
+  const isPaid = isPaidMedium || (isPaidSource && hasCampaign);
+
+  // Determine source name
+  if (utmSource) {
+    // Has UTM tracking
+    if (utmSource.includes("facebook") || utmSource.includes("fb") || utmSource.includes("meta")) {
+      return { source: isPaid ? "Meta Ads (FB)" : "Facebook (Organic)", channel: isPaid ? "paid" : "organic" };
+    }
+    if (utmSource.includes("instagram") || utmSource.includes("ig")) {
+      return { source: isPaid ? "Meta Ads (IG)" : "Instagram (Organic)", channel: isPaid ? "paid" : "organic" };
+    }
+    if (utmSource.includes("google")) {
+      return { source: isPaid ? "Google Ads" : "Google (Organic)", channel: isPaid ? "paid" : "organic" };
+    }
+    if (utmSource.includes("tiktok")) {
+      return { source: isPaid ? "TikTok Ads" : "TikTok (Organic)", channel: isPaid ? "paid" : "organic" };
+    }
+    if (utmSource.includes("pinterest")) {
+      return { source: isPaid ? "Pinterest Ads" : "Pinterest (Organic)", channel: isPaid ? "paid" : "organic" };
+    }
+    return { source: isPaid ? `${utmSource} (Paid)` : `${utmSource} (Organic)`, channel: isPaid ? "paid" : "organic" };
+  }
+
+  // No UTM — check referring_site
+  if (referringSite) {
+    if (referringSite.includes("facebook.com") || referringSite.includes("fb.com") || referringSite.includes("l.facebook.com")) {
+      return { source: "Facebook (Organic)", channel: "organic" };
+    }
+    if (referringSite.includes("instagram.com") || referringSite.includes("l.instagram.com")) {
+      return { source: "Instagram (Organic)", channel: "organic" };
+    }
+    if (referringSite.includes("google.com") || referringSite.includes("google.")) {
+      return { source: "Google (Organic)", channel: "organic" };
+    }
+    if (referringSite.includes("tiktok.com")) {
+      return { source: "TikTok (Organic)", channel: "organic" };
+    }
+    if (referringSite.includes("pinterest.com")) {
+      return { source: "Pinterest (Organic)", channel: "organic" };
+    }
+    return { source: `Referral (${referringSite.replace(/https?:\/\//, "").split("/")[0]})`, channel: "organic" };
+  }
+
+  // No referring site — check source_name
+  if (sourceName === "web" || sourceName === "shopify_draft_order") {
+    return { source: "Direct / Online Store", channel: "organic" };
+  }
+  if (sourceName === "pos") {
+    return { source: "Point of Sale", channel: "organic" };
+  }
+  if (sourceName === "580111") {
+    return { source: "TikTok Shop", channel: "paid" };
+  }
+  if (sourceName === "iphone" || sourceName === "android") {
+    return { source: "Mobile App", channel: "organic" };
+  }
+
+  return { source: "Direct / Unknown", channel: "unknown" };
 }
 
 // Transform Shopify orders to our OrderItem format
 function transformOrders(orders: any[]): OrderItem[] {
-  return orders.map((order) => ({
-    id: String(order.id),
-    orderNumber: order.name || `#${order.order_number}`,
-    createdAt: order.created_at,
-    customerName: order.customer 
-      ? `${order.customer.first_name || ""} ${order.customer.last_name || ""}`.trim() || "Guest"
-      : "Guest",
-    customerEmail: order.customer?.email || order.email || "",
-    financialStatus: order.financial_status || "pending",
-    fulfillmentStatus: order.fulfillment_status || "unfulfilled",
-    totalPrice: parseFloat(order.total_price || "0"),
-    subtotalPrice: parseFloat(order.subtotal_price || "0"),
-    totalShipping: parseFloat(order.total_shipping_price_set?.shop_money?.amount || "0"),
-    totalTax: parseFloat(order.total_tax || "0"),
-    totalDiscounts: parseFloat(order.total_discounts || "0"),
-    itemCount: (order.line_items || []).reduce((sum: number, item: any) => sum + item.quantity, 0),
-    lineItems: (order.line_items || []).map((item: any) => ({
-      title: item.title,
-      quantity: item.quantity,
-      price: parseFloat(item.price || "0"),
-    })),
-    shippingAddress: order.shipping_address ? {
-      city: order.shipping_address.city || "",
-      province: order.shipping_address.province || "",
-      country: order.shipping_address.country || "",
-    } : undefined,
-  }));
+  return orders.map((order) => {
+    const { source, channel } = classifyOrderSource(order);
+    return {
+      id: String(order.id),
+      orderNumber: order.name || `#${order.order_number}`,
+      createdAt: order.created_at,
+      customerName: order.customer
+        ? `${order.customer.first_name || ""} ${order.customer.last_name || ""}`.trim() || "Guest"
+        : "Guest",
+      customerEmail: order.customer?.email || order.email || "",
+      financialStatus: order.financial_status || "pending",
+      fulfillmentStatus: order.fulfillment_status || "unfulfilled",
+      totalPrice: parseFloat(order.total_price || "0"),
+      subtotalPrice: parseFloat(order.subtotal_price || "0"),
+      totalShipping: parseFloat(order.total_shipping_price_set?.shop_money?.amount || "0"),
+      totalTax: parseFloat(order.total_tax || "0"),
+      totalDiscounts: parseFloat(order.total_discounts || "0"),
+      itemCount: (order.line_items || []).reduce((sum: number, item: any) => sum + item.quantity, 0),
+      source,
+      channel,
+      referringSite: order.referring_site || null,
+      lineItems: (order.line_items || []).map((item: any) => ({
+        title: item.title,
+        quantity: item.quantity,
+        price: parseFloat(item.price || "0"),
+      })),
+      shippingAddress: order.shipping_address ? {
+        city: order.shipping_address.city || "",
+        province: order.shipping_address.province || "",
+        country: order.shipping_address.country || "",
+      } : undefined,
+    };
+  });
 }
 
 serve(async (req) => {
@@ -480,7 +575,7 @@ serve(async (req) => {
   try {
     const url = new URL(req.url);
     const pathParts = url.pathname.split("/").filter(Boolean);
-    
+
     const body = req.method === "POST" ? await req.json() : {};
     const endpoint = body.endpoint || pathParts[pathParts.length - 1];
     const clientId = body.clientId;
@@ -539,7 +634,7 @@ serve(async (req) => {
       case "summary": {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];
-        
+
         // Calculate previous period for comparison
         const startDate = new Date(start);
         const endDate = new Date(end);
@@ -548,10 +643,10 @@ serve(async (req) => {
         prevStart.setDate(prevStart.getDate() - periodLength);
         const prevEnd = new Date(startDate);
         prevEnd.setDate(prevEnd.getDate() - 1);
-        
+
         const prevStartStr = prevStart.toISOString().split("T")[0];
         const prevEndStr = prevEnd.toISOString().split("T")[0];
-        
+
         // Fetch current and previous period data
         const [orders, customers, prevOrders, prevCustomers] = await Promise.all([
           fetchOrders(shopDomain, accessToken, start, end),
@@ -559,10 +654,10 @@ serve(async (req) => {
           fetchOrders(shopDomain, accessToken, prevStartStr, prevEndStr),
           fetchCustomers(shopDomain, accessToken, prevStartStr, prevEndStr),
         ]);
-        
+
         const summary = calculateSummary(orders, customers);
         const prevSummary = calculateSummary(prevOrders, prevCustomers);
-        
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -590,7 +685,7 @@ serve(async (req) => {
 
         const orders = await fetchOrders(shopDomain, accessToken, start, end);
         const timeseries = calculateTimeseries(orders, start, end, metric);
-        
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -612,9 +707,9 @@ serve(async (req) => {
           fetchOrders(shopDomain, accessToken, start, end),
           fetchProducts(shopDomain, accessToken, 100),
         ]);
-        
+
         const { products: topProducts, total } = calculateTopProducts(orders, products);
-        
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -623,7 +718,7 @@ serve(async (req) => {
               page,
               pageSize,
               total,
-            totalPages: Math.ceil(total / pageSize),
+              totalPages: Math.ceil(total / pageSize),
             },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -635,58 +730,53 @@ serve(async (req) => {
         const end = body.end || new Date().toISOString().split("T")[0];
 
         const orders = await fetchOrders(shopDomain, accessToken, start, end);
-        
-        // Aggregate orders by source
-        const sourceData: Record<string, { orders: number; revenue: number }> = {};
-        
+
+        // Aggregate orders by source using improved classification
+        const sourceData: Record<string, { orders: number; revenue: number; channel: string }> = {};
+        let totalOrganic = 0;
+        let totalPaid = 0;
+        let revenueOrganic = 0;
+        let revenuePaid = 0;
+
         for (const order of orders) {
           if (order.financial_status === "refunded") continue;
-          
-          // Get order source from source_name, referring_site, or app IDs
-          let sourceName = order.source_name || "Unknown";
-          
-          // Map common source names to friendlier labels
-          if (sourceName === "web" || sourceName === "shopify_draft_order") {
-            sourceName = "Online Store";
-          } else if (sourceName === "pos") {
-            sourceName = "Point of Sale";
-          } else if (sourceName === "580111") {
-            // TikTok Shop app ID
-            sourceName = "TikTok Shop";
-          } else if (order.referring_site?.includes("tiktok")) {
-            sourceName = "TikTok";
-          } else if (order.referring_site?.includes("facebook") || order.referring_site?.includes("instagram")) {
-            sourceName = "Meta (FB/IG)";
-          } else if (order.referring_site?.includes("google")) {
-            sourceName = "Google";
-          } else if (order.referring_site?.includes("pinterest")) {
-            sourceName = "Pinterest";
-          } else if (sourceName === "iphone" || sourceName === "android") {
-            sourceName = "Mobile App";
+
+          const { source, channel } = classifyOrderSource(order);
+          const revenue = parseFloat(order.total_price || "0");
+
+          if (!sourceData[source]) {
+            sourceData[source] = { orders: 0, revenue: 0, channel };
           }
-          
-          if (!sourceData[sourceName]) {
-            sourceData[sourceName] = { orders: 0, revenue: 0 };
+          sourceData[source].orders += 1;
+          sourceData[source].revenue += revenue;
+
+          if (channel === "paid") {
+            totalPaid++;
+            revenuePaid += revenue;
+          } else {
+            totalOrganic++;
+            revenueOrganic += revenue;
           }
-          
-          sourceData[sourceName].orders += 1;
-          // Use total_price for revenue (what customer pays)
-          sourceData[sourceName].revenue += parseFloat(order.total_price || "0");
         }
-        
+
         // Convert to array and sort by revenue
-        const sources: OrderSource[] = Object.entries(sourceData)
+        const sources = Object.entries(sourceData)
           .map(([name, stats]) => ({
             name,
             orders: stats.orders,
             revenue: Math.round(stats.revenue * 100) / 100,
+            channel: stats.channel,
           }))
           .sort((a, b) => b.revenue - a.revenue);
-        
+
         return new Response(
           JSON.stringify({
             success: true,
             data: sources,
+            channelBreakdown: {
+              organic: { orders: totalOrganic, revenue: Math.round(revenueOrganic * 100) / 100 },
+              paid: { orders: totalPaid, revenue: Math.round(revenuePaid * 100) / 100 },
+            },
             period: { start, end },
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -701,16 +791,16 @@ serve(async (req) => {
         const limit = parseInt(body.limit) || 20;
 
         const { orders, nextPageInfo, prevPageInfo } = await fetchOrdersPage(
-          shopDomain, 
-          accessToken, 
-          start, 
-          end, 
-          pageInfo, 
+          shopDomain,
+          accessToken,
+          start,
+          end,
+          pageInfo,
           limit
         );
-        
+
         const transformedOrders = transformOrders(orders);
-        
+
         return new Response(
           JSON.stringify({
             success: true,

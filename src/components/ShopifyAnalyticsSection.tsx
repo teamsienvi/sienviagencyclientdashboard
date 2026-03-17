@@ -5,8 +5,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { 
-  RefreshCw, ShoppingBag, DollarSign, Package, Users, 
+import {
+  RefreshCw, ShoppingBag, DollarSign, Package, Users,
   TrendingUp, ArrowUpRight, ArrowDownRight,
   AlertCircle, CheckCircle2, Loader2, ShoppingCart,
   ChevronLeft, ChevronRight
@@ -92,6 +92,9 @@ interface OrderItem {
   totalTax: number;
   totalDiscounts: number;
   itemCount: number;
+  source?: string;
+  channel?: "organic" | "paid" | "unknown";
+  referringSite?: string | null;
   lineItems: {
     title: string;
     quantity: number;
@@ -122,7 +125,7 @@ const CHART_COLORS = [
 // Mini sparkline component for KPI cards
 const MiniSparkline = ({ data, color = "hsl(var(--primary))" }: { data: TimeseriesPoint[]; color?: string }) => {
   if (!data || data.length === 0) return null;
-  
+
   return (
     <div className="h-10 w-24">
       <ResponsiveContainer width="100%" height="100%">
@@ -250,7 +253,7 @@ const ProductBarChart = ({
     <div className="space-y-2">
       {products.slice(0, 5).map((product, index) => (
         <div key={product.id} className="flex items-center gap-2">
-          <div 
+          <div
             className="h-5 rounded-sm flex-shrink-0"
             style={{
               width: `${Math.max((product.revenue / maxRevenue) * 60, 10)}%`,
@@ -271,7 +274,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   // State
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   // Data state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
   const [summary, setSummary] = useState<ShopifySummary | null>(null);
@@ -280,7 +283,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const [ordersTimeseries, setOrdersTimeseries] = useState<TimeseriesPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [orderSources, setOrderSources] = useState<OrderSource[]>([]);
-  
+
   // Orders list state
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -387,7 +390,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
 
       // Batch 2: Secondary data (with small delay to avoid rate limit)
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       const [aovRes, ordersRes, productsRes] = await Promise.all([
         supabase.functions.invoke("shopify-analytics", {
           body: {
@@ -431,7 +434,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
 
       // Batch 3: Order sources and orders list
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       const sourcesRes = await supabase.functions.invoke("shopify-analytics", {
         body: {
           clientId,
@@ -525,8 +528,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   // Render not connected state - use OAuth connect component
   if (!loading && connectionStatus && !connectionStatus.connected) {
     return (
-      <ShopifyOAuthConnect 
-        clientId={clientId} 
+      <ShopifyOAuthConnect
+        clientId={clientId}
         clientName={clientName}
         onConnected={() => fetchData()}
       />
@@ -619,14 +622,14 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Gross sales"
           value={formatCurrency(summary?.grossSales || 0)}
           sparklineData={totalSalesTimeseries}
-          trend={summary?.prevGrossSales !== undefined 
+          trend={summary?.prevGrossSales !== undefined
             ? (summary.grossSales > summary.prevGrossSales ? "up" : summary.grossSales < summary.prevGrossSales ? "down" : "neutral")
             : undefined}
         />
         <KPICardWithSparkline
           title="Returning customer rate"
           value={`${summary?.returningCustomerRate?.toFixed(0) || 0}%`}
-          trend={summary?.prevReturningCustomerRate !== undefined 
+          trend={summary?.prevReturningCustomerRate !== undefined
             ? (summary.returningCustomerRate > summary.prevReturningCustomerRate ? "up" : summary.returningCustomerRate < summary.prevReturningCustomerRate ? "down" : "neutral")
             : undefined}
         />
@@ -634,7 +637,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Orders fulfilled"
           value={String(summary?.ordersFulfilled || 0)}
           sparklineData={ordersTimeseries}
-          trend={summary?.prevOrdersFulfilled !== undefined 
+          trend={summary?.prevOrdersFulfilled !== undefined
             ? (summary.ordersFulfilled > summary.prevOrdersFulfilled ? "up" : summary.ordersFulfilled < summary.prevOrdersFulfilled ? "down" : "neutral")
             : undefined}
         />
@@ -642,7 +645,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           title="Orders"
           value={String(summary?.orders || 0)}
           sparklineData={ordersTimeseries}
-          trend={summary?.prevOrders !== undefined 
+          trend={summary?.prevOrders !== undefined
             ? (summary.orders > summary.prevOrders ? "up" : summary.orders < summary.prevOrders ? "down" : "neutral")
             : undefined}
         />
@@ -738,9 +741,9 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                         nameKey="name"
                       >
                         {orderSources.map((_, index) => (
-                          <Cell 
-                            key={`source-${index}`} 
-                            fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                          <Cell
+                            key={`source-${index}`}
+                            fill={CHART_COLORS[index % CHART_COLORS.length]}
                           />
                         ))}
                       </Pie>
@@ -769,8 +772,8 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                   {orderSources.slice(0, 4).map((source, index) => (
                     <div key={source.name} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div 
-                          className="w-2.5 h-2.5 rounded-full" 
+                        <div
+                          className="w-2.5 h-2.5 rounded-full"
                           style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}
                         />
                         <span className="text-muted-foreground truncate max-w-[120px]">{source.name}</span>
@@ -886,6 +889,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                       <TableHead className="font-semibold">Order</TableHead>
                       <TableHead className="font-semibold">Date</TableHead>
                       <TableHead className="font-semibold">Customer</TableHead>
+                      <TableHead className="font-semibold">Source</TableHead>
                       <TableHead className="font-semibold">Payment</TableHead>
                       <TableHead className="font-semibold">Fulfillment</TableHead>
                       <TableHead className="font-semibold">Items</TableHead>
@@ -915,6 +919,15 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
                               {[order.shippingAddress.city, order.shippingAddress.province].filter(Boolean).join(", ")}
                             </div>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-xs font-medium">{order.source || "Direct"}</div>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-1.5 py-0 mt-0.5 ${order.channel === "paid" ? "bg-orange-500/15 text-orange-600 border-orange-200" : "bg-emerald-500/15 text-emerald-600 border-emerald-200"}`}
+                          >
+                            {order.channel === "paid" ? "Paid" : "Organic"}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           {getFinancialStatusBadge(order.financialStatus)}
