@@ -42,7 +42,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon }: AnalyticsS
         queryFn: async () => {
             const { data, error } = await supabase
                 .from("analytics_summaries" as any)
-                .select("summary_data, generated_at")
+                .select("summary_data, generated_at, period_start, period_end")
                 .eq("client_id", clientId)
                 .eq("type", type)
                 .order("generated_at", { ascending: false })
@@ -81,12 +81,33 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon }: AnalyticsS
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
-            toast({ title: "Summary generated!", description: `${title} analysis updated.` });
+            toast({ title: "Summary updated!", description: `${title} analysis refreshed with latest data.` });
         },
         onError: (error: Error) => {
             toast({ title: "Error", description: error.message, variant: "destructive" });
         },
     });
+
+    // Auto-regenerate if cached summary is stale (older than 6 hours)
+    const [autoRefreshed, setAutoRefreshed] = useState(false);
+
+    // Reset auto-refresh when client changes
+    useState(() => { setAutoRefreshed(false); });
+
+    // Auto-trigger regeneration for stale summaries
+    if (
+        !autoRefreshed &&
+        !isLoadingCache &&
+        !generateMutation.isPending &&
+        cachedSummary
+    ) {
+        const generatedTime = new Date((cachedSummary as any)?.generated_at || 0).getTime();
+        const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+        if (generatedTime < sixHoursAgo) {
+            setAutoRefreshed(true);
+            setTimeout(() => generateMutation.mutate(), 100);
+        }
+    }
 
     const summary: SummaryData | null =
         generateMutation.data || (cachedSummary as any)?.summary_data || null;
