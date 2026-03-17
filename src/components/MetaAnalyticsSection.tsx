@@ -1472,7 +1472,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
             <CardContent className="pt-6">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <ImageIcon className="h-4 w-4" />
-                <span className="text-sm">Total Posts</span>
+                <span className="text-sm">Total Content</span>
               </div>
               <p className="text-2xl font-bold">
                 {displayValue(currentTotalPosts)}
