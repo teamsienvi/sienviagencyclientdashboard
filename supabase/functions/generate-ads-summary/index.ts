@@ -342,12 +342,26 @@ async function callGemini(
 
     const data = await res.json();
 
-    // Extract text from Gemini response
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    // gemini-2.5-flash is a thinking model — it may return multiple parts
+    // (thought parts + text parts). We need the last text part with the JSON.
+    const parts = data?.candidates?.[0]?.content?.parts;
+
+    if (!parts || parts.length === 0) {
+        console.error("No parts in Gemini response:", JSON.stringify(data).substring(0, 500));
+        throw new Error("Empty response from Gemini");
+    }
+
+    // Extract the last text part (skip thinking parts)
+    let text = "";
+    for (const part of parts) {
+        if (part.text) {
+            text = part.text;
+        }
+    }
 
     if (!text) {
-        console.error("Empty Gemini response:", JSON.stringify(data).substring(0, 500));
-        throw new Error("Empty response from Gemini");
+        console.error("No text found in Gemini response parts:", JSON.stringify(parts).substring(0, 500));
+        throw new Error("Empty text response from Gemini");
     }
 
     console.log("Gemini raw text (first 300 chars):", text.substring(0, 300));
