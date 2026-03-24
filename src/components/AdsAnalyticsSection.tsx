@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
+import { AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, eachDayOfInterval } from "date-fns";
@@ -828,23 +829,28 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
               <AdsShredderCard
                 clientId={clientId}
                 adPlatform="meta"
-                title="Ads Shredder — Meta/Facebook Ads"
+                title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`}
               />
             )}
             {hasGoogleData && (
               <AdsShredderCard
                 clientId={clientId}
                 adPlatform="google"
-                title="Ads Shredder — Google Ads"
+                title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`}
               />
             )}
             {hasTikTokAdsData && (
               <AdsShredderCard
                 clientId={clientId}
                 adPlatform="tiktok"
-                title="Ads Shredder — TikTok Ads"
+                title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`}
               />
             )}
+            <AdsShredderCard
+              clientId={clientId}
+              adPlatform="amazon"
+              title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`}
+            />
           </div>
         </>
       )}

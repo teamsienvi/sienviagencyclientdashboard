@@ -177,4 +177,8 @@ export const clientsData: Client[] = [
     logo: playiqLogo,
     reports: [],
   },
+  {
+    name: "Ban Batu",
+    reports: [],
+  },
 ];

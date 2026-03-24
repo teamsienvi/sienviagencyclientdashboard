@@ -7,6 +7,7 @@ import { AnalyticsPageLayout } from "@/components/AnalyticsPageLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
+import { AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 
 const AdsAnalytics = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -79,8 +80,10 @@ const AdsAnalytics = () => {
             </TabsContent>
           </Tabs>
           <div className="space-y-4">
-            <AdsShredderCard clientId={clientId!} adPlatform="meta" title="Ads Shredder — Meta/Facebook Ads" />
-            <AdsShredderCard clientId={clientId!} adPlatform="google" title="Ads Shredder — Google Ads" />
+            <AdsShredderCard clientId={clientId!} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
+            <AdsShredderCard clientId={clientId!} adPlatform="google" title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} />
+            <AdsShredderCard clientId={clientId!} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
+            <AdsShredderCard clientId={clientId!} adPlatform="amazon" title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`} />
           </div>
         </>
       ) : (

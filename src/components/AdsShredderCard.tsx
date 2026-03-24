@@ -232,10 +232,10 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
                             className="border-2 border-dashed border-border/60 rounded-lg p-4 text-center hover:border-primary/40 transition-colors cursor-pointer"
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={handleDrop}
-                            onClick={() => document.getElementById(`file-upload-${adPlatform}`)?.click()}
+                            onClick={() => document.getElementById(`file-upload-${clientId}-${adPlatform}`)?.click()}
                         >
                             <input
-                                id={`file-upload-${adPlatform}`}
+                                id={`file-upload-${clientId}-${adPlatform}`}
                                 type="file"
                                 accept=".xlsx,.xls,.csv"
                                 onChange={handleFileChange}

@@ -22,6 +22,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
+import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { Globe, Share2 } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -567,11 +568,17 @@ const ClientDashboard = () => {
                 icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
               />
             )}
-            <AdsShredderCard
-              clientId={clientId!}
-              adPlatform="all"
-              title="Ads Analytics Summary"
-            />
+            {client && (() => {
+              const platforms = getClientAdPlatforms(client.name);
+              return platforms.map((platform) => (
+                <AdsShredderCard
+                  key={platform}
+                  clientId={clientId!}
+                  adPlatform={platform}
+                  title={`Ads Shredder — ${AD_PLATFORM_LABELS[platform]}`}
+                />
+              ));
+            })()}
           </div>
 
           {/* Top Performing Posts */}
