@@ -78,7 +78,10 @@ const AdsAnalytics = () => {
               </Card>
             </TabsContent>
           </Tabs>
-          <AdsShredderCard clientId={clientId!} adPlatform="meta" title="Ads Shredder Analysis" />
+          <div className="space-y-4">
+            <AdsShredderCard clientId={clientId!} adPlatform="meta" title="Ads Shredder — Meta/Facebook Ads" />
+            <AdsShredderCard clientId={clientId!} adPlatform="google" title="Ads Shredder — Google Ads" />
+          </div>
         </>
       ) : (
         <AdsAnalyticsSection clientId={clientId!} clientName={client?.name || ""} />

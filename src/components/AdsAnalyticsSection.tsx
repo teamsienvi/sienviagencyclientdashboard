@@ -822,12 +822,30 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
             )}
           </Tabs>
 
-          {/* Ads Shredder Analysis */}
-          <AdsShredderCard
-            clientId={clientId}
-            adPlatform={hasMetaData ? "meta" : hasGoogleData ? "google" : "tiktok"}
-            title="Ads Shredder Analysis"
-          />
+          {/* Ads Shredder Analysis — one card per platform */}
+          <div className="space-y-4">
+            {hasMetaData && (
+              <AdsShredderCard
+                clientId={clientId}
+                adPlatform="meta"
+                title="Ads Shredder — Meta/Facebook Ads"
+              />
+            )}
+            {hasGoogleData && (
+              <AdsShredderCard
+                clientId={clientId}
+                adPlatform="google"
+                title="Ads Shredder — Google Ads"
+              />
+            )}
+            {hasTikTokAdsData && (
+              <AdsShredderCard
+                clientId={clientId}
+                adPlatform="tiktok"
+                title="Ads Shredder — TikTok Ads"
+              />
+            )}
+          </div>
         </>
       )}
     </div>
