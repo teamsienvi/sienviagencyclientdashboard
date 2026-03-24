@@ -16,6 +16,7 @@ import {
     ChevronDown,
     ChevronUp,
     X,
+    Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -42,6 +43,7 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
     const [analysisResult, setAnalysisResult] = useState<AdsSummaryData | null>(null);
     const { toast } = useToast();
 
+    const [isClearing, setIsClearing] = useState(false);
     const displayTitle = title || `Ads Shredder Analysis — ${adPlatform.charAt(0).toUpperCase() + adPlatform.slice(1)}`;
 
     // Fetch cached summary
@@ -284,16 +286,45 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
                                 {isAnalyzing ? "Shredding..." : "Analyze with Shredder"}
                             </Button>
                             {summary && (
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={handleAnalyze}
-                                    disabled={isAnalyzing || !file}
-                                    className="h-8 text-xs"
-                                >
-                                    <RefreshCw className={`h-3 w-3 mr-1.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
-                                    Re-analyze
-                                </Button>
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleAnalyze}
+                                        disabled={isAnalyzing || !file}
+                                        className="h-8 text-xs"
+                                    >
+                                        <RefreshCw className={`h-3 w-3 mr-1.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
+                                        Re-analyze
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={async () => {
+                                            setIsClearing(true);
+                                            try {
+                                                await supabase
+                                                    .from("ads_analytics_summaries" as any)
+                                                    .delete()
+                                                    .eq("client_id", clientId)
+                                                    .eq("type", adPlatform);
+                                                setAnalysisResult(null);
+                                                setFile(null);
+                                                refetch();
+                                                toast({ title: "Summary cleared" });
+                                            } catch (err: any) {
+                                                toast({ title: "Failed to clear", description: err.message, variant: "destructive" });
+                                            } finally {
+                                                setIsClearing(false);
+                                            }
+                                        }}
+                                        disabled={isClearing}
+                                        className="h-8 text-xs text-red-400 hover:text-red-300 border-red-500/30 hover:border-red-500/50"
+                                    >
+                                        <Trash2 className={`h-3 w-3 mr-1.5 ${isClearing ? 'animate-spin' : ''}`} />
+                                        Clear
+                                    </Button>
+                                </>
                             )}
                         </div>
                     </div>
