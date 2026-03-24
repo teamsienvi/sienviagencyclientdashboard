@@ -6,25 +6,60 @@ const corsHeaders = {
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ─── OpenAI Assistant ID Mapping ────────────────────────────────────────────
-const ASSISTANT_IDS: Record<string, string> = {
-    meta: "asst_iZ6DPy2JACkHIcGIR9n8sUZG",
-    google: "asst_iP6yG99Hn5ErReNxgBwzZ1Kq",
-    amazon: "asst_YQf5tpRHLbcXtdNuNwIn6RWJ",
-    tiktok: "asst_417YSXWwLtO5paLn3mVTR71c",     // general "billion-dollar" assistant
-    all: "asst_417YSXWwLtO5paLn3mVTR71c",         // fallback to general
-};
+// ─── Platform-specific system prompts ───────────────────────────────────────
 
-// Special TikTok GMV Max preamble
-const TIKTOK_PREAMBLE = `Give me the strength, weakness and smart action plan and highlights. For this tiktok gmv max campaign, remember that I can't move any budget since gmv max has campaign budget not budget per sku. Also I can't choose sku I can't manually choose sku the gmv max campaign is set for all sku.\n\n`;
+const META_SYSTEM_PROMPT = `You are the Meta Ads Analyzer (HQ + Department). Meta-only.
 
-// Default analysis instructions for non-TikTok platforms
-const DEFAULT_INSTRUCTIONS = `Analyze the following ad performance data. Provide a brutally honest analysis looking at:
-- Spend efficiency (CPC, CPM trends)
+Operating model:
+- Diagnose performance, pick one primary bottleneck, and produce a change plan.
+- Analyze the uploaded Meta performance data for the given date window.
+
+Non-negotiables:
+- Prefer ID-based mapping (Campaign ID, Ad Set ID, Ad ID).
+- One Primary Action Rule: per ad set per weekly run, only one of: budget OR status OR bid change.
+
+Your analysis must cover:
+- Campaign structure diagnosis
+- Budget allocation efficiency
+- Creative performance (CTR, CPC, CPM trends)
+- Audience/targeting signals
 - Conversion performance (CPA, ROAS, conversion rates)
-- Creative effectiveness (CTR patterns, which campaigns/ads perform best vs worst)
-- Budget allocation (is spend going to the right campaigns?)
-- Audience/targeting signals (any patterns in which segments convert better?)
+- Delivery stability and fatigue detection
+
+Respond with ONLY a valid JSON object (no markdown, no code fences):
+{
+  "strengths": ["3-5 things working well with specific numbers from the data"],
+  "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
+  "smartActions": ["3-5 specific, actionable fixes ranked by impact — one primary action per ad set"],
+  "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
+  "hardTruths": ["2-4 uncomfortable truths the team needs to hear — no sugar coating"]
+}
+
+RULES:
+- ONLY reference numbers actually present in the data. Do NOT invent metrics.
+- Be specific: name campaigns, ad sets, or ads by name/ID when the data provides them.
+- No fluff. No pleasantries. Direct and actionable.
+- Each bullet should be 1-2 sentences max.`;
+
+const GOOGLE_SYSTEM_PROMPT = `You are the Google Ads Analyzer (HQ + Department). Google-only.
+
+Operating model:
+- Phase 1: Plan Mode. Diagnose and identify the primary bottleneck.
+- Analyze the uploaded Google Ads performance data.
+
+Non-negotiables:
+- Never guess IDs, names, or required values.
+- One operation type per batch.
+- Small batches preferred.
+
+Your analysis must cover:
+- Campaign structure and match type analysis
+- Search term relevance and negative keyword opportunities
+- Quality Score and ad rank factors
+- Bid strategy effectiveness
+- Conversion tracking accuracy
+- Budget pacing and allocation
+- Ad copy performance (headlines, descriptions)
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
 {
@@ -37,11 +72,95 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 
 RULES:
 - ONLY reference numbers actually present in the data. Do NOT invent metrics.
-- Be specific: name campaigns, ad sets, or ads by name when the data provides them.
+- Be specific: name campaigns, ad groups, or keywords by name when the data provides them.
 - No fluff. No pleasantries. Direct and actionable.
-- Each bullet should be 1-2 sentences max.
+- Each bullet should be 1-2 sentences max.`;
 
-`;
+const AMAZON_SYSTEM_PROMPT = `You are the Amazon Ads Analyzer (HQ + Department). Amazon-only.
+
+Scope: Sponsored Products (SP) primarily. SB and SD may be analyzed if present but never patched.
+
+Operating model:
+- Diagnose first. Analyze the uploaded Amazon Ads performance data.
+
+Your analysis must cover:
+- Sponsored Products campaign structure
+- ACOS vs TACoS analysis
+- Search term performance and harvesting opportunities
+- Bid optimization (keyword-level)
+- Budget allocation across campaigns
+- Product targeting effectiveness
+- Negative keyword/ASIN opportunities
+- Organic rank impact signals
+
+Non-negotiables:
+- Never guess missing values.
+- Use the uploaded data as the source of truth for safety, ranking, probability, economics, listing readiness, waste control, structure, and compliance.
+
+Respond with ONLY a valid JSON object (no markdown, no code fences):
+{
+  "strengths": ["3-5 things working well with specific numbers from the data"],
+  "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
+  "smartActions": ["3-5 specific, actionable fixes ranked by impact"],
+  "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
+  "hardTruths": ["2-4 uncomfortable truths the team needs to hear — no sugar coating"]
+}
+
+RULES:
+- ONLY reference numbers actually present in the data. Do NOT invent metrics.
+- Be specific: name campaigns, ad groups, ASINs, or keywords by name when the data provides them.
+- No fluff. No pleasantries. Direct and actionable.
+- Each bullet should be 1-2 sentences max.`;
+
+const TIKTOK_SYSTEM_PROMPT = `You are the Billion-Dollar Ad Surgeon — a brutally direct ads operator.
+
+You diagnose root causes, not surface tweaks. You must respect platform control limits, especially TikTok Shop GMV Max.
+
+Mission:
+- Find highest-leverage bottleneck across creative, offer, PDP, catalog, and structure.
+- Refuse impossible recommendations.
+- Separate controllable levers from blocked levers.
+- Optimize for profit, GMV, CPA, ROAS, and cost per order.
+
+Hard truths doctrine:
+- If GMV Max is campaign_only and all_products, never recommend per-SKU budget shifts.
+- If all_products is active, never recommend manually picking or pausing SKUs inside that same campaign.
+- If attribution is blended, do not treat dashboard ROAS as pure creative truth.
+- Bad PDP, weak price, poor promo, stock issues, or low creator coverage can choke GMV Max harder than a weak hook.
+- When controls are blocked, the answer is structure change, not nicer analysis.
+
+Reporter rules:
+- Always state what you can control, what you cannot control, and what structure change is needed.
+- If gmv_max_product + all_products: say "Budget is campaign-level. I cannot move budget by SKU inside this campaign."
+- If SKU prioritization is needed: say "Create a separate selected-products GMV Max campaign for hero SKUs."
+- If attribution is blended: say "ROAS is directional, not clean paid-only truth."
+- Reject any recommendation using blocked levers.
+
+Give me the strength, weakness and smart action plan and highlights. For this tiktok gmv max campaign, remember that I can't move any budget since gmv max has campaign budget not budget per sku. Also I can't choose sku I can't manually choose sku the gmv max campaign is set for all sku.
+
+Respond with ONLY a valid JSON object (no markdown, no code fences):
+{
+  "strengths": ["3-5 things working well with specific numbers from the data"],
+  "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
+  "smartActions": ["3-5 specific, actionable fixes ranked by impact — only using controllable levers"],
+  "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
+  "hardTruths": ["2-4 uncomfortable truths — state what is controllable vs blocked"]
+}
+
+RULES:
+- ONLY reference numbers actually present in the data. Do NOT invent metrics.
+- Be specific: name campaigns or metrics by name when the data provides them.
+- No fluff. No pleasantries. Direct and actionable.
+- Each bullet should be 1-2 sentences max.`;
+
+// Map platform to system prompt
+const PLATFORM_PROMPTS: Record<string, string> = {
+    meta: META_SYSTEM_PROMPT,
+    google: GOOGLE_SYSTEM_PROMPT,
+    amazon: AMAZON_SYSTEM_PROMPT,
+    tiktok: TIKTOK_SYSTEM_PROMPT,
+    all: TIKTOK_SYSTEM_PROMPT, // fallback to general
+};
 
 serve(async (req) => {
     if (req.method === "OPTIONS") {
@@ -51,10 +170,10 @@ serve(async (req) => {
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+        const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
-        if (!openaiApiKey) {
-            throw new Error("OPENAI_API_KEY is not configured. Set it via: supabase secrets set OPENAI_API_KEY=sk-...");
+        if (!geminiApiKey) {
+            throw new Error("GEMINI_API_KEY is not configured.");
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -124,16 +243,16 @@ serve(async (req) => {
             ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated for analysis ...]"
             : fileContent;
 
-        // Build the user message
-        const preamble = adPlatform === "tiktok" ? TIKTOK_PREAMBLE : DEFAULT_INSTRUCTIONS;
-        const userMessage = `${preamble}Client: ${client.name}\nPlatform: ${adPlatform}\nData Source: ${fileName}\n\n──────────────────────────────────────────────────────────────\nRAW AD DATA:\n${truncatedData}\n──────────────────────────────────────────────────────────────`;
+        // Get the platform-specific system prompt
+        const systemPrompt = PLATFORM_PROMPTS[adPlatform] || PLATFORM_PROMPTS["all"];
 
-        // Resolve the assistant ID
-        const assistantId = ASSISTANT_IDS[adPlatform] || ASSISTANT_IDS["all"];
-        console.log(`Using OpenAI assistant: ${assistantId} for platform: ${adPlatform}`);
+        // Build user message
+        const userMessage = `Client: ${client.name}\nPlatform: ${adPlatform}\nData Source: ${fileName}\n\n──────────────────────────────────────────────────────────────\nRAW AD DATA:\n${truncatedData}\n──────────────────────────────────────────────────────────────`;
 
-        // Call OpenAI Assistant
-        const summaryData = await callOpenAIAssistant(openaiApiKey, assistantId, userMessage);
+        console.log(`Using Gemini for platform: ${adPlatform}`);
+
+        // Call Gemini
+        const summaryData = await callGemini(geminiApiKey, systemPrompt, userMessage);
 
         // Cache the result
         try {
@@ -187,120 +306,57 @@ async function parseExcelToText(fileBytes: Uint8Array): Promise<string> {
     }
 }
 
-// ─── OpenAI Assistants API ──────────────────────────────────────────────────
-const OPENAI_BASE = "https://api.openai.com/v1";
-
-async function openaiRequest(
+// ─── Gemini API ─────────────────────────────────────────────────────────────
+async function callGemini(
     apiKey: string,
-    path: string,
-    method: string,
-    body?: unknown
+    systemPrompt: string,
+    userMessage: string
 ): Promise<any> {
-    const headers: Record<string, string> = {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2",
-    };
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
-    const res = await fetch(`${OPENAI_BASE}${path}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
+    const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            system_instruction: {
+                parts: [{ text: systemPrompt }],
+            },
+            contents: [
+                {
+                    role: "user",
+                    parts: [{ text: userMessage }],
+                },
+            ],
+            generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 4096,
+                responseMimeType: "application/json",
+            },
+        }),
     });
 
     if (!res.ok) {
         const errText = await res.text();
-        console.error(`OpenAI API error ${res.status}:`, errText);
-        throw new Error(`OpenAI API ${res.status}: ${errText.substring(0, 500)}`);
+        console.error(`Gemini API error ${res.status}:`, errText);
+        throw new Error(`Gemini API ${res.status}: ${errText.substring(0, 500)}`);
     }
 
-    return res.json();
-}
+    const data = await res.json();
 
-async function callOpenAIAssistant(
-    apiKey: string,
-    assistantId: string,
-    userMessage: string
-): Promise<any> {
-    // 1. Create a thread
-    const thread = await openaiRequest(apiKey, "/threads", "POST", {});
-    const threadId = thread.id;
-    console.log(`Created thread: ${threadId}`);
-
-    // 2. Add user message to thread
-    await openaiRequest(apiKey, `/threads/${threadId}/messages`, "POST", {
-        role: "user",
-        content: userMessage,
-    });
-
-    // 3. Create a run
-    const run = await openaiRequest(apiKey, `/threads/${threadId}/runs`, "POST", {
-        assistant_id: assistantId,
-    });
-    let runId = run.id;
-    console.log(`Created run: ${runId}`);
-
-    // 4. Poll for completion (max 120 seconds)
-    const maxWait = 120_000;
-    const pollInterval = 2_000;
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < maxWait) {
-        const runStatus = await openaiRequest(
-            apiKey,
-            `/threads/${threadId}/runs/${runId}`,
-            "GET"
-        );
-
-        console.log(`Run status: ${runStatus.status}`);
-
-        if (runStatus.status === "completed") {
-            break;
-        } else if (
-            runStatus.status === "failed" ||
-            runStatus.status === "cancelled" ||
-            runStatus.status === "expired"
-        ) {
-            const errMsg = runStatus.last_error?.message || runStatus.status;
-            throw new Error(`OpenAI run ${runStatus.status}: ${errMsg}`);
-        }
-
-        // Wait before next poll
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-    }
-
-    // 5. Get messages
-    const messages = await openaiRequest(
-        apiKey,
-        `/threads/${threadId}/messages?order=desc&limit=1`,
-        "GET"
-    );
-
-    const assistantMessage = messages.data?.[0];
-    if (!assistantMessage || assistantMessage.role !== "assistant") {
-        throw new Error("No assistant response found in thread");
-    }
-
-    // Extract text content
-    let text = "";
-    for (const content of assistantMessage.content) {
-        if (content.type === "text") {
-            text = content.text.value;
-            break;
-        }
-    }
+    // Extract text from Gemini response
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
-        throw new Error("Empty text response from OpenAI assistant");
+        console.error("Empty Gemini response:", JSON.stringify(data).substring(0, 500));
+        throw new Error("Empty response from Gemini");
     }
 
-    console.log("OpenAI raw text (first 300 chars):", text.substring(0, 300));
+    console.log("Gemini raw text (first 300 chars):", text.substring(0, 300));
 
-    // Parse JSON from the response
-    return parseAssistantResponse(text);
+    return parseGeminiResponse(text);
 }
 
-function parseAssistantResponse(text: string): any {
+function parseGeminiResponse(text: string): any {
     try {
         const firstBrace = text.indexOf("{");
         const lastBrace = text.lastIndexOf("}");
@@ -320,7 +376,7 @@ function parseAssistantResponse(text: string): any {
             hardTruths: parsed.hardTruths || parsed.hard_truths || ["Insufficient data to deliver hard truths. Upload more comprehensive ad metrics."],
         };
     } catch (parseErr) {
-        console.error("Failed to parse OpenAI response:", parseErr, "Full raw text:", text);
+        console.error("Failed to parse Gemini response:", parseErr, "Full raw text:", text);
         throw new Error("Failed to parse AI response as JSON. Raw preview: " + text.substring(0, 500));
     }
 }
