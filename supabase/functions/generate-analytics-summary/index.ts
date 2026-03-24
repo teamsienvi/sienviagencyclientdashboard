@@ -212,12 +212,14 @@ async function collectSocialData(
             "## Platform Metrics (latest snapshot)\n" +
             unique
                 .map(
-                    (m: any) =>
-                        `- ${m.platform}: ${m.followers?.toLocaleString() ?? "?"} followers, ` +
-                        `${m.engagement_rate ?? "?"}% engagement rate, ` +
-                        `${m.new_followers ?? "?"} new followers this period, ` +
-                        `${m.total_content ?? "?"} total posts, ` +
-                        `last updated: ${m.collected_at ? new Date(m.collected_at).toLocaleDateString() : "?"}`
+                    (m: any) => {
+                        const parts = [`- ${m.platform}:`];
+                        if (m.followers != null) parts.push(`${m.followers.toLocaleString()} followers`);
+                        if (m.engagement_rate != null) parts.push(`${m.engagement_rate}% engagement rate`);
+                        if (m.new_followers != null) parts.push(`${m.new_followers} new followers this period`);
+                        if (m.total_content != null) parts.push(`${m.total_content} total posts`);
+                        return parts.join(" ");
+                    }
                 )
                 .join("\n")
         );
@@ -250,11 +252,14 @@ async function collectSocialData(
                 "## Platform Summary (from latest reports)\n" +
                 unique
                     .map(
-                        (p: any) =>
-                            `- ${p.platform}: ${p.followers?.toLocaleString() ?? "?"} followers, ` +
-                            `${p.engagement_rate ?? "?"}% engagement, ` +
-                            `${p.total_content ?? "?"} posts published, ` +
-                            `${p.new_followers ?? "?"} new followers`
+                        (p: any) => {
+                            const parts = [`- ${p.platform}:`];
+                            if (p.followers != null) parts.push(`${p.followers.toLocaleString()} followers`);
+                            if (p.engagement_rate != null) parts.push(`${p.engagement_rate}% engagement`);
+                            if (p.total_content != null) parts.push(`${p.total_content} posts published`);
+                            if (p.new_followers != null) parts.push(`${p.new_followers} new followers`);
+                            return parts.join(" ");
+                        }
                     )
                     .join("\n")
             );
@@ -275,11 +280,14 @@ async function collectSocialData(
                     "## Top Performing Posts\n" +
                     filteredPosts
                         .map(
-                            (p: any) =>
-                                `- ${p.platform}: ${p.views?.toLocaleString() ?? "?"} views, ` +
-                                `${p.engagement_percent ?? 0}% engagement, ` +
-                                `${p.followers?.toLocaleString() ?? "?"} followers at time of post, ` +
-                                `reach tier: ${p.reach_tier ?? "N/A"}, engagement tier: ${p.engagement_tier ?? "N/A"}`
+                            (p: any) => {
+                                const parts = [`- ${p.platform}:`];
+                                if (p.views != null) parts.push(`${p.views.toLocaleString()} views`);
+                                if (p.engagement_percent) parts.push(`${p.engagement_percent}% engagement`);
+                                if (p.reach_tier) parts.push(`reach tier: ${p.reach_tier}`);
+                                if (p.engagement_tier) parts.push(`engagement tier: ${p.engagement_tier}`);
+                                return parts.join(" ");
+                            }
                         )
                         .join("\n")
                 );
@@ -343,11 +351,14 @@ async function collectSocialData(
                 withMetrics
                     .map((c: any) => {
                         const m = c.latestMetric;
-                        return `- ${c.platform} ${c.content_type || "post"} (${c.published_at?.split("T")[0] || "?"}): ` +
-                            `${c.primaryViews?.toLocaleString()} views, ` +
-                            `${m.likes ?? 0} likes, ${m.comments ?? 0} comments, ` +
-                            `${m.shares ?? 0} shares, reach: ${m.reach?.toLocaleString() ?? "?"}` +
-                            (c.title ? ` — "${c.title.substring(0, 50)}"` : "");
+                        const parts = [`- ${c.platform} ${c.content_type || "post"} (${c.published_at?.split("T")[0] || "unknown date"}):`];
+                        parts.push(`${c.primaryViews?.toLocaleString()} views`);
+                        if (m.likes) parts.push(`${m.likes} likes`);
+                        if (m.comments) parts.push(`${m.comments} comments`);
+                        if (m.shares) parts.push(`${m.shares} shares`);
+                        if (m.reach) parts.push(`reach: ${m.reach.toLocaleString()}`);
+                        if (c.title) parts.push(`— "${c.title.substring(0, 50)}"`);
+                        return parts.join(" ");
                     })
                     .join("\n")
             );
@@ -588,7 +599,7 @@ Category definitions:
 
 CRITICAL RULES:
 - ONLY reference data that is actually present above. Do NOT invent or assume any numbers.
-- If data is sparse, acknowledge the limitation and recommend actions to improve data collection.
+- Focus your analysis ONLY on the data provided. Do NOT mention missing data, incomplete metrics, or platforms lacking data as weaknesses. Weaknesses should ONLY be about actual performance problems visible in the numbers (e.g. low engagement, declining reach, poor content mix).
 - Keep each bullet to 1-2 sentences max.
 - Use plain language, no jargon. Write as if briefing a busy client.
 
