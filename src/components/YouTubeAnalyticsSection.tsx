@@ -436,28 +436,26 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       const watchTimeHours = metrics?.watch_time_hours || 0;
       const contentType = content.content_type || "video";
 
-      // Only add to totals and list if there's any activity in this period
-      if (views > 0 || likes > 0 || comments > 0 || shares > 0) {
-        totalViews += views;
-        totalLikes += likes;
-        totalComments += comments;
-        totalShares += shares;
+      // Include all videos for the period (even zero-engagement ones)
+      totalViews += views;
+      totalLikes += likes;
+      totalComments += comments;
+      totalShares += shares;
 
-        videoList.push({
-          id: content.id,
-          title: content.title,
-          url: content.url,
-          content_type: contentType,
-          published_at: content.published_at,
-          views,
-          likes,
-          comments,
-          shares,
-          avg_view_duration: 0,
-          watch_time_hours: watchTimeHours,
-          engagement_rate: computeEngagementRate(likes, comments, shares, views),
-        });
-      }
+      videoList.push({
+        id: content.id,
+        title: content.title,
+        url: content.url,
+        content_type: contentType,
+        published_at: content.published_at,
+        views,
+        likes,
+        comments,
+        shares,
+        avg_view_duration: 0,
+        watch_time_hours: watchTimeHours,
+        engagement_rate: computeEngagementRate(likes, comments, shares, views),
+      });
     });
 
     allContentData?.forEach((content: any) => {

@@ -1276,7 +1276,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const prevEngagement = weeklyData?.previous?.engagementAgg ?? reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
 
     // Posts count from weekly data
-    const currentTotalPosts = weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? metrics?.total_content ?? (platform === "instagram" ? instagramContent.length : facebookContent.length);
+    const currentTotalPosts = (platform === "instagram" ? instagramContent.length : facebookContent.length) || weeklyData?.current?.postsCount || overviewKPIs?.postsCount || reportData?.total_content || metrics?.total_content || 0;
     const prevTotalPosts = weeklyData?.previous?.postsCount ?? reportData?.last_week_total_content ?? prevMetrics?.total_content;
 
     // Helper to display value or N/A
@@ -1531,7 +1531,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       : (reportData?.new_followers ?? null);
 
     // Total content count
-    const totalContent = weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? content.length;
+    const totalContent = content.length || weeklyData?.current?.postsCount || overviewKPIs?.postsCount || reportData?.total_content || 0;
 
     // Only render if we have timeline data
     if (followersTimeline.length === 0) {

@@ -397,7 +397,7 @@ export const MetricoolAnalyticsSection = ({
         .gte("published_at", start.toISOString())
         .lte("published_at", end.toISOString())
         .order("published_at", { ascending: false })
-        .limit(20);
+        .limit(100);
 
       if (contentError) throw contentError;
       if (!content || content.length === 0) return [];
@@ -511,7 +511,7 @@ export const MetricoolAnalyticsSection = ({
 
   // Update livePosts when auto-fetched posts arrive
   useEffect(() => {
-    if (autoFetchedPosts && autoFetchedPosts.length > 0 && livePosts.length === 0) {
+    if (autoFetchedPosts && autoFetchedPosts.length > 0) {
       setLivePosts(autoFetchedPosts);
     }
   }, [autoFetchedPosts, livePosts.length]);
