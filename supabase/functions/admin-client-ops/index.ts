@@ -38,6 +38,36 @@ serve(async (req) => {
             return new Response(JSON.stringify({ success: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        if (action === "list_clients") {
+            const { data, error } = await supabaseAdmin
+                .from("clients")
+                .select("id, name")
+                .order("name");
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return new Response(JSON.stringify({ clients: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "upsert_metricool_config") {
+            const platforms = platform ? [platform] : ["instagram", "facebook", "tiktok", "youtube", "meta_ads", "google_ads", "tiktok_ads"];
+            const results = [];
+            for (const p of platforms) {
+                const { data, error } = await supabaseAdmin
+                    .from("client_metricool_config")
+                    .upsert(
+                        { client_id: clientId, user_id: userId, blog_id: blogId, platform: p, is_active: true },
+                        { onConflict: "client_id,platform" }
+                    )
+                    .select("id, client_id, platform, blog_id")
+                    .single();
+                if (error) {
+                    results.push({ platform: p, error: error.message });
+                } else {
+                    results.push({ platform: p, config: data });
+                }
+            }
+            return new Response(JSON.stringify({ results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         if (action === "insert_metricool_config") {
             const { data, error } = await supabaseAdmin
                 .from("client_metricool_config")
@@ -46,6 +76,16 @@ serve(async (req) => {
                 .single();
             if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
             return new Response(JSON.stringify({ config: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "delete_metricool_config") {
+            const { error, count } = await supabaseAdmin
+                .from("client_metricool_config")
+                .delete({ count: "exact" })
+                .eq("client_id", clientId)
+                .eq("platform", platform);
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return new Response(JSON.stringify({ success: true, deleted: count }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         if (action === "update_client_name") {
