@@ -1,0 +1,62 @@
+remote: error: GH013: Repository rule violations found for refs/heads/fix/meta-analytics-repair.        
+remote: 
+remote: - GITHUB PUSH PROTECTION        
+remote:   —————————————————————————————————————————        
+remote:     Resolve the following violations before pushing again        
+remote: 
+remote:     - Push cannot contain secrets        
+remote: 
+remote:             
+remote:      (?) Learn how to resolve a blocked push        
+remote:      https://docs.github.com/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line#resolving-a-blocked-push        
+remote:             
+remote:             
+remote:       —— Shopify Access Token ——————————————————————————————        
+remote:        locations:        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: csv_analysis.txt:4        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: import_01_shopify_oauth_connections.sql:3        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: import_data.sql:7        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: supabase/migrations/20260225050900_import_shopify_oauth.sql:4        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/teamsienvi/sienviagencyclientdashboard/security/secret-scanning/unblock-secret/3BdW1vLu0DzkT8UEa69HZ6HOlBJ        
+remote:             
+remote:             
+remote:       —— Shopify Access Token ——————————————————————————————        
+remote:        locations:        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: csv_analysis.txt:4        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: import_01_shopify_oauth_connections.sql:4        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: import_data.sql:8        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: supabase/migrations/20260225050900_import_shopify_oauth.sql:5        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/teamsienvi/sienviagencyclientdashboard/security/secret-scanning/unblock-secret/3BdW1sPzu8aKWjxVkXfEtnSLouN        
+remote:             
+remote:             
+remote:       —— Shopify Access Token ——————————————————————————————        
+remote:        locations:        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: csv_analysis.txt:4        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: import_01_shopify_oauth_connections.sql:5        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: import_data.sql:9        
+remote:          - commit: ae4d5a27d4566ad47dfd285e1a468c27b9cb1493        
+remote:            path: supabase/migrations/20260225050900_import_shopify_oauth.sql:6        
+remote:             
+remote:        (?) To push, remove secret from commit(s) or follow this URL to allow the secret.        
+remote:        https://github.com/teamsienvi/sienviagencyclientdashboard/security/secret-scanning/unblock-secret/3BdW1rvVneWYL1oHNW8F4MvQw8w        
+remote:             
+remote: 
+remote: 
+To https://github.com/teamsienvi/sienviagencyclientdashboard.git
+ ! [remote rejected] fix/meta-analytics-repair -> fix/meta-analytics-repair (push declined due to repository rule violations)
+error: failed to push some refs to 'https://github.com/teamsienvi/sienviagencyclientdashboard.git'

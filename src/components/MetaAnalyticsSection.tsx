@@ -1664,7 +1664,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     // FB Reels: Video Views, Reach
     const getViewsHeader = () => {
       if (platform === "instagram") {
-        return contentTab === "reels" ? "Organic Views" : "Impressions";
+        return contentTab === "reels" ? "Video Views" : "Impressions";
       }
       return contentTab === "reels" ? "Video Views" : "Views";
     };
