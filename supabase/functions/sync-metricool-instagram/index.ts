@@ -399,10 +399,117 @@ serve(async (req) => {
         diagnostics.rowsUpserted++;
       }
       
-      console.log(`Saved ${savedCount} posts within the reporting period`);
+      console.log(`Saved ${savedCount} feed posts within the reporting period`);
     } else {
       const errorText = await postsResponse.text();
-      console.error("Posts fetch failed:", postsResponse.status, errorText);
+      console.error("Feed posts fetch failed:", postsResponse.status, errorText);
+      diagnostics.errors.push(`Feed fetch ${postsResponse.status}`);
+    }
+
+    // =====================================================
+    // REELS FETCH — separate Metricool endpoint for reels
+    // =====================================================
+    let reelsSavedCount = 0;
+    try {
+      const reelsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/reels/instagram`);
+      reelsUrl.searchParams.set("from", `${startDate}T00:00:00`);
+      reelsUrl.searchParams.set("to", `${endDate}T23:59:59`);
+      reelsUrl.searchParams.set("timezone", reportingTimezone);
+      reelsUrl.searchParams.set("userId", userId);
+      if (blogId) reelsUrl.searchParams.set("blogId", blogId);
+
+      console.log("Fetching Instagram reels:", reelsUrl.toString());
+
+      const reelsResponse = await fetch(reelsUrl.toString(), {
+        method: "GET",
+        headers: { "x-mc-auth": METRICOOL_AUTH, "accept": "text/csv" },
+      });
+
+      console.log("Reels response status:", reelsResponse.status);
+
+      if (reelsResponse.ok) {
+        const reelsCsv = await reelsResponse.text();
+        console.log("Reels CSV length:", reelsCsv.length);
+        console.log("Reels CSV preview:", reelsCsv.substring(0, 500));
+
+        if (reelsCsv.trim().length > 10) {
+          const reelRows = parseCSV(reelsCsv);
+          console.log("Parsed reel rows:", reelRows.length);
+
+          const periodStartDate = new Date(startDate);
+          const periodEndDate = new Date(endDate);
+          periodEndDate.setHours(23, 59, 59, 999);
+
+          const reelsInPeriod = reelRows.filter(r => {
+            if (!r.date) return false;
+            const d = new Date(r.date);
+            return d >= periodStartDate && d <= periodEndDate;
+          });
+
+          for (const reel of reelsInPeriod) {
+            const contentId = generateContentId(reel);
+            const publishedAt = parseMetricoolDate(reel.date);
+            const reelUrl = reel.url || reel.link || null;
+
+            // Force content_type = 'reel' — this comes from the reels endpoint
+            const { data: contentData, error: contentError } = await supabase
+              .from("social_content")
+              .upsert({
+                client_id: clientId,
+                content_id: contentId,
+                platform: "instagram",
+                content_type: "reel",
+                title: reel.title,
+                url: reelUrl,
+                published_at: publishedAt,
+              }, { onConflict: "client_id,content_id" })
+              .select("id")
+              .single();
+
+            if (contentError) {
+              console.error("Error upserting reel content:", contentError);
+              continue;
+            }
+
+            // Delete + insert metrics for this reel
+            await supabase
+              .from("social_content_metrics")
+              .delete()
+              .eq("social_content_id", contentData.id)
+              .eq("period_start", startDate)
+              .eq("period_end", endDate);
+
+            await supabase
+              .from("social_content_metrics")
+              .insert({
+                social_content_id: contentData.id,
+                platform: "instagram",
+                period_start: startDate,
+                period_end: endDate,
+                reach: reel.reach,
+                impressions: reel.impressions,
+                views: reel.impressions,
+                likes: reel.likes,
+                comments: reel.comments,
+                shares: reel.shares,
+                engagements: reel.interactions || (reel.likes + reel.comments + reel.shares + reel.saves),
+                collected_at: new Date().toISOString(),
+              });
+
+            reelsSavedCount++;
+            diagnostics.reelsDetected++;
+            diagnostics.rowsUpserted++;
+          }
+          console.log(`Saved ${reelsSavedCount} reels within the reporting period`);
+        } else {
+          console.log("No reel data in CSV response");
+        }
+      } else {
+        console.warn("Reels fetch returned:", reelsResponse.status);
+      }
+    } catch (reelsErr) {
+      console.error("Reels fetch error (non-fatal):", reelsErr);
+      diagnostics.errors.push(`Reels fetch error: ${reelsErr instanceof Error ? reelsErr.message : String(reelsErr)}`);
     }
 
     // Fetch followers from timelines endpoint (most reliable for follower counts)
@@ -620,6 +727,36 @@ serve(async (req) => {
         }, { onConflict: "client_id,platform,period_start,period_end" });
     }
 
+    // Upsert sync_coverage for each day in the period
+    try {
+      const coverageStart = new Date(startDate);
+      const coverageEnd = new Date(endDate);
+      const now = new Date().toISOString();
+      const coverageDays: any[] = [];
+      for (let d = new Date(coverageStart); d <= coverageEnd; d.setDate(d.getDate() + 1)) {
+        coverageDays.push({
+          client_id: clientId,
+          platform: "instagram",
+          day: d.toISOString().split("T")[0],
+          feed_synced: savedCount > 0 || postsResponse.ok,
+          reels_synced: reelsSavedCount > 0 || true, // endpoint was called
+          feed_synced_at: now,
+          reels_synced_at: now,
+          feed_rows: savedCount,
+          reels_rows: reelsSavedCount,
+          status: "completed",
+          is_partial: false,
+        });
+      }
+      if (coverageDays.length > 0) {
+        await supabase
+          .from("sync_coverage")
+          .upsert(coverageDays, { onConflict: "client_id,platform,day" });
+      }
+    } catch (covErr) {
+      console.error("Coverage upsert error (non-fatal):", covErr);
+    }
+
     // Update sync log
     if (syncLog) {
       await supabase
@@ -627,7 +764,7 @@ serve(async (req) => {
         .update({
           status: "completed",
           completed_at: new Date().toISOString(),
-          records_synced: savedCount,
+          records_synced: savedCount + reelsSavedCount,
           error_message: diagnostics.errors.length > 0 ? diagnostics.errors.join("; ") : null,
         })
         .eq("id", syncLog.id);

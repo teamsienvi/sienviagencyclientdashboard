@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +30,7 @@ import {
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { subDays, format, startOfDay, endOfDay, formatDistanceToNow, differenceInDays } from "date-fns";
-import { getDashboardDateRange, getComparisonRange, formatPeriodLabel, type DateRange as DashboardDateRange } from "@/utils/dashboardDateRange";
+import { getDashboardDateRange, getComparisonDateRange as getComparisonRange, formatPeriodLabel, type DateRange as DashboardDateRange } from "@/utils/dashboardDateRange";
 import { MetaPageSelector } from "@/components/MetaPageSelector";
 import MetaGrowthChart from "@/components/MetaGrowthChart";
 
@@ -240,6 +240,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [instagramWeekly, setInstagramWeekly] = useState<WeeklyComparison | null>(null);
   const [facebookWeekly, setFacebookWeekly] = useState<WeeklyComparison | null>(null);
 
+  // Auto-hydration state
+  const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({ instagram: false, facebook: false });
+  const [lastSyncedAt, setLastSyncedAt] = useState<Record<string, string | null>>({ instagram: null, facebook: null });
+  const syncLockRef = React.useRef<Record<string, boolean>>({ instagram: false, facebook: false });
+  const [coverageFresh, setCoverageFresh] = useState<Record<string, boolean>>({ instagram: false, facebook: false });
+
   // isConnected is true if OAuth, agency mapping, OR Metricool config exists
   const isConnected = (oauthAccount !== null && oauthAccount.is_active) ||
     (agencyMapping !== null) ||
@@ -265,6 +271,68 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     setDateRangePreset(preset);
     if (preset === "custom" && customRange) {
       setCustomDateRange(customRange);
+    }
+  };
+
+  // Check if the selected date range is fully covered and fresh in sync_coverage
+  const checkCoverageAndHydrate = async (platform: string, startDate: string, endDate: string) => {
+    if (syncLockRef.current[platform]) return; // prevent duplicate
+    try {
+      const { data: coverage } = await supabase
+        .from("sync_coverage")
+        .select("day, feed_synced, reels_synced, feed_synced_at, reels_synced_at")
+        .eq("client_id", clientId)
+        .eq("platform", platform)
+        .gte("day", startDate)
+        .lte("day", endDate);
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const expectedDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const coveredDays = coverage?.length || 0;
+      const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+
+      // Check if all days are covered and fresh (< 6h)
+      const allFresh = coveredDays >= expectedDays && coverage!.every(c =>
+        c.feed_synced && c.reels_synced &&
+        c.feed_synced_at && c.feed_synced_at > sixHoursAgo &&
+        c.reels_synced_at && c.reels_synced_at > sixHoursAgo
+      );
+
+      // Update last synced timestamp
+      const latestSync = coverage?.reduce((latest: string | null, c: any) => {
+        const ts = c.feed_synced_at || c.reels_synced_at;
+        return ts && (!latest || ts > latest) ? ts : latest;
+      }, null) || null;
+      setLastSyncedAt(prev => ({ ...prev, [platform]: latestSync }));
+
+      if (allFresh) {
+        setCoverageFresh(prev => ({ ...prev, [platform]: true }));
+        return; // data is fresh, no sync needed
+      }
+
+      setCoverageFresh(prev => ({ ...prev, [platform]: false }));
+
+      // Queue background sync for missing/stale data
+      syncLockRef.current[platform] = true;
+      setIsSyncing(prev => ({ ...prev, [platform]: true }));
+
+      const syncFn = platform === "instagram" ? "sync-metricool-instagram" : "sync-metricool-facebook";
+      supabase.functions.invoke(syncFn, {
+        body: { clientId, periodStart: startDate, periodEnd: endDate },
+      }).then(() => {
+        // Re-fetch data after sync completes
+        return fetchData();
+      }).catch(err => {
+        console.error(`Auto-sync ${platform} error:`, err);
+      }).finally(() => {
+        syncLockRef.current[platform] = false;
+        setIsSyncing(prev => ({ ...prev, [platform]: false }));
+        setCoverageFresh(prev => ({ ...prev, [platform]: true }));
+      });
+
+    } catch (err) {
+      console.error(`Coverage check error for ${platform}:`, err);
     }
   };
 
@@ -757,6 +825,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       setFacebookMetrics(facebookData.metrics);
       setFacebookPrevMetrics(facebookData.prevMetrics);
       setFacebookContent(facebookData.content);
+
+      // Auto-hydration: check coverage and trigger background sync if stale
+      if (hasInstagramMetricool) {
+        checkCoverageAndHydrate("instagram", startDate, endDate);
+      }
+      if (hasFacebookMetricool) {
+        checkCoverageAndHydrate("facebook", startDate, endDate);
+      }
 
       // Fetch Instagram profile and Facebook page if we have the OAuth data
       if (oauth?.access_token) {
