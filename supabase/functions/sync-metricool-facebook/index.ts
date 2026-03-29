@@ -133,6 +133,14 @@ function parseMetricoolDate(dateStr: string | null): string {
   return new Date().toISOString();
 }
 
+/** Normalize content type — robust reel detection */
+function normalizeContentType(type: string | null, url: string | null): string {
+  const t = (type || "").toLowerCase().trim();
+  if (["reel", "video", "reel_video", "reels", "igtv"].includes(t)) return "reel";
+  if (url && /\/reel\//i.test(url)) return "reel";
+  return "post";
+}
+
 function generateContentId(post: FacebookPost): string {
   // Use date + title for stable content ID (don't include URL as it may vary between syncs)
   const datePart = post.date || "";
@@ -167,10 +175,32 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch config from database
+    // --- JWT/Admin Auth Gate ---
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (user && !authError) {
+        const { data: roleData } = await supabase
+          .from("user_roles").select("role").eq("user_id", user.id).maybeSingle();
+        const isAdmin = roleData?.role === "admin";
+        if (!isAdmin) {
+          const { data: accessData } = await supabase
+            .from("client_users").select("id").eq("user_id", user.id).eq("client_id", clientId).maybeSingle();
+          if (!accessData) {
+            return new Response(
+              JSON.stringify({ error: "Access denied" }),
+              { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+        }
+      }
+    }
+
+    // Fetch config from database (including reporting_timezone)
     const { data: config, error: configError } = await supabase
       .from("client_metricool_config")
-      .select("user_id, blog_id, followers")
+      .select("user_id, blog_id, followers, reporting_timezone")
       .eq("client_id", clientId)
       .eq("platform", "facebook")
       .eq("is_active", true)
@@ -185,8 +215,19 @@ serve(async (req) => {
 
     const userId = config.user_id;
     const blogId = config.blog_id;
+    const reportingTimezone = config.reporting_timezone || "America/Chicago";
 
-    console.log("Starting Facebook Metricool sync:", { clientId, userId, blogId });
+    // --- Sync diagnostics ---
+    const diagnostics = {
+      rowsFetched: 0,
+      postsDetected: 0,
+      reelsDetected: 0,
+      rowsUpserted: 0,
+      timezoneUsed: reportingTimezone,
+      errors: [] as string[],
+    };
+
+    console.log("Starting Facebook Metricool sync:", { clientId, userId, blogId, reportingTimezone });
 
     const METRICOOL_BASE_URL = Deno.env.get("METRICOOL_BASE_URL") || "https://app.metricool.com";
     const METRICOOL_AUTH = Deno.env.get("METRICOOL_USER_TOKEN");
@@ -217,7 +258,7 @@ serve(async (req) => {
     const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/facebook`);
     postsUrl.searchParams.set("from", `${startDate}T00:00:00`);
     postsUrl.searchParams.set("to", `${endDate}T23:59:59`);
-    postsUrl.searchParams.set("timezone", "UTC");
+    postsUrl.searchParams.set("timezone", reportingTimezone);
     postsUrl.searchParams.set("userId", userId);
     if (blogId) {
       postsUrl.searchParams.set("blogId", blogId);
@@ -244,6 +285,7 @@ serve(async (req) => {
       console.log("CSV preview:", csvText.substring(0, 500));
       
       rows = parseCSV(csvText);
+      diagnostics.rowsFetched = rows.length;
       console.log("Parsed rows count:", rows.length);
 
       // Filter to only posts within the reporting period
@@ -264,14 +306,12 @@ serve(async (req) => {
         const contentId = generateContentId(post);
         const publishedAt = parseMetricoolDate(post.date);
         const postUrl = post.url || post.link || null;
-        
-        // Detect content type: check type field AND URL for reels
-        let contentType = "post";
-        const typeField = post.type?.toLowerCase() || "";
-        if (typeField === "video" || typeField === "reel") {
-          contentType = "reel";
-        } else if (postUrl && postUrl.includes("/reel/")) {
-          contentType = "reel";
+        const contentType = normalizeContentType(post.type, postUrl);
+
+        if (contentType === "reel") {
+          diagnostics.reelsDetected++;
+        } else {
+          diagnostics.postsDetected++;
         }
 
         const { data: contentData, error: contentError } = await supabase
@@ -328,6 +368,7 @@ serve(async (req) => {
         }
 
         savedCount++;
+        diagnostics.rowsUpserted++;
       }
       
       console.log(`Saved ${savedCount} posts within the reporting period`);
@@ -346,7 +387,7 @@ serve(async (req) => {
       timelinesUrl.searchParams.set("metric", "pageFollows");
       timelinesUrl.searchParams.set("network", "facebook");
       timelinesUrl.searchParams.set("subject", "account");
-      timelinesUrl.searchParams.set("timezone", "UTC");
+      timelinesUrl.searchParams.set("timezone", reportingTimezone);
       timelinesUrl.searchParams.set("userId", userId);
       if (blogId) {
         timelinesUrl.searchParams.set("blogId", blogId);
@@ -490,6 +531,7 @@ serve(async (req) => {
           status: "completed",
           completed_at: new Date().toISOString(),
           records_synced: savedCount,
+          error_message: diagnostics.errors.length > 0 ? diagnostics.errors.join("; ") : null,
         })
         .eq("id", syncLog.id);
     }
@@ -501,6 +543,7 @@ serve(async (req) => {
         followers,
         newFollowers,
         engagementRate,
+        diagnostics,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

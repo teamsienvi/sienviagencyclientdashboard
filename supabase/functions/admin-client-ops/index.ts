@@ -132,6 +132,68 @@ serve(async (req) => {
             return new Response(JSON.stringify({ client: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
+        if (action === "resync_meta") {
+            // --- Strict JWT + admin role verification ---
+            const authHeader = req.headers.get("authorization");
+            if (!authHeader) {
+                return new Response(JSON.stringify({ error: "Authorization required" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            const token = authHeader.replace("Bearer ", "");
+            const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+            if (authError || !user) {
+                return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            const { data: roleData } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", user.id).maybeSingle();
+            if (roleData?.role !== "admin") {
+                return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+
+            // --- Parse params ---
+            const body = await req.json().catch(() => ({}));
+            const periodStart = body.periodStart || new Date(Date.now() - 7 * 24*60*60*1000).toISOString().split("T")[0];
+            const periodEnd = body.periodEnd || new Date().toISOString().split("T")[0];
+            const platforms: string[] = body.platforms || ["instagram", "facebook"];
+
+            // --- Async backfill: chunk large ranges into ≤ 7-day windows ---
+            const start = new Date(periodStart);
+            const end = new Date(periodEnd);
+            const diffDays = Math.ceil((end.getTime() - start.getTime()) / (1000*60*60*24));
+            const chunkSize = 7; // max days per sync call
+            const chunks: { periodStart: string; periodEnd: string }[] = [];
+
+            if (diffDays <= chunkSize) {
+                chunks.push({ periodStart, periodEnd });
+            } else {
+                let cur = new Date(start);
+                while (cur < end) {
+                    const chunkEnd = new Date(Math.min(cur.getTime() + (chunkSize - 1) * 24*60*60*1000, end.getTime()));
+                    chunks.push({
+                        periodStart: cur.toISOString().split("T")[0],
+                        periodEnd: chunkEnd.toISOString().split("T")[0],
+                    });
+                    cur = new Date(chunkEnd.getTime() + 24*60*60*1000);
+                }
+            }
+
+            // Fire each chunk as a separate sync call (async — don't await all at once for large backfills)
+            const results: any[] = [];
+            for (const chunk of chunks) {
+                for (const p of platforms) {
+                    const fn = p === "instagram" ? "sync-metricool-instagram" : "sync-metricool-facebook";
+                    try {
+                        const { data, error } = await supabaseAdmin.functions.invoke(fn, {
+                            body: { clientId, periodStart: chunk.periodStart, periodEnd: chunk.periodEnd },
+                        });
+                        results.push({ platform: p, chunk, success: !error, data: data?.diagnostics || data, error: error?.message });
+                    } catch (e: any) {
+                        results.push({ platform: p, chunk, success: false, error: e.message });
+                    }
+                }
+            }
+
+            return new Response(JSON.stringify({ success: true, chunksProcessed: chunks.length, results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         return new Response(JSON.stringify({ error: "unknown action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } catch (error) {
         return new Response(

@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
-import { subDays, format, startOfDay, endOfDay, formatDistanceToNow } from "date-fns";
+import { subDays, format, startOfDay, endOfDay, formatDistanceToNow, differenceInDays } from "date-fns";
+import { getDashboardDateRange, getComparisonRange, formatPeriodLabel, type DateRange as DashboardDateRange } from "@/utils/dashboardDateRange";
 import { MetaPageSelector } from "@/components/MetaPageSelector";
 import MetaGrowthChart from "@/components/MetaGrowthChart";
 
@@ -250,39 +251,14 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const hasInstagramMetricool = metricoolConfig !== null;
   const hasFacebookMetricool = facebookMetricoolConfig !== null;
 
-  // Get the most recent Monday (start of reporting week)
-  const getMostRecentMonday = (fromDate: Date = new Date()) => {
-    const date = new Date(fromDate);
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday
-    const daysToSubtract = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    date.setDate(date.getDate() - daysToSubtract);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  };
-
-  // Get the last completed week (previous Monday to Sunday) - updates every Monday
+  // Dashboard date ranges: rolling 7d/30d (not Mon-Sun)
   const getDateRange = () => {
-    if (dateRangePreset === "custom" && customDateRange) {
-      return { start: customDateRange.start, end: customDateRange.end };
-    }
-    if (dateRangePreset === "30d") {
-      const today = new Date();
-      return { start: subDays(today, 30), end: today };
-    }
-    // Weekly: Show the last completed week (Mon-Sun), updates each Monday
-    const today = new Date();
-    const thisMonday = getMostRecentMonday(today);
-    const prevMonday = subDays(thisMonday, 7); // Previous week's Monday
-    const prevSunday = subDays(thisMonday, 1); // Previous week's Sunday
-    return { start: prevMonday, end: prevSunday };
+    return getDashboardDateRange(dateRangePreset, customDateRange ? { start: customDateRange.start, end: customDateRange.end } : undefined);
   };
 
-  // Get the week before the reporting period for comparison
+  // Equal-length comparison period immediately preceding the selected period
   const getComparisonDateRange = () => {
-    const { start: currentStart } = getDateRange();
-    const prevMonday = subDays(currentStart, 7); // Two weeks ago Monday
-    const prevSunday = subDays(currentStart, 1); // Two weeks ago Sunday
-    return { start: prevMonday, end: prevSunday };
+    return getComparisonRange(getDateRange());
   };
 
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
@@ -725,7 +701,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
           platform,
           from: startDate,
           to: endDate,
-          timezone: "America/Chicago",
+          // timezone removed — server reads from per-client config
         },
       });
 
@@ -803,7 +779,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               to: endDate,
               prevFrom: compStartDate,
               prevTo: compEndDate,
-              timezone: "America/Chicago",
+              // timezone removed — server reads from per-client config
             },
           });
 
@@ -839,7 +815,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
               clientId,
               from: startDate,
               to: endDate,
-              timezone: "America/Chicago",
+              // timezone removed — server reads from per-client config
             },
           }),
           fetchWeeklyData("facebook"),
@@ -1276,7 +1252,11 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     const prevEngagement = weeklyData?.previous?.engagementAgg ?? reportData?.last_week_engagement_rate ?? prevMetrics?.engagement_rate;
 
     // Posts count from weekly data
-    const currentTotalPosts = (platform === "instagram" ? instagramContent.length : facebookContent.length) || weeklyData?.current?.postsCount || overviewKPIs?.postsCount || reportData?.total_content || metrics?.total_content || 0;
+    // KPI source-of-truth: prefer local content count > API weekly > overview > report > DB metrics.
+    // Use ?? (not ||) so real 0 stays 0, only true null/undefined falls through.
+    const contentLen = platform === "instagram" ? instagramContent.length : facebookContent.length;
+    const currentTotalPosts = contentLen > 0 ? contentLen
+      : (weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? metrics?.total_content ?? null);
     const prevTotalPosts = weeklyData?.previous?.postsCount ?? reportData?.last_week_total_content ?? prevMetrics?.total_content;
 
     // Helper to display value or N/A
@@ -1531,7 +1511,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       : (reportData?.new_followers ?? null);
 
     // Total content count
-    const totalContent = content.length || weeklyData?.current?.postsCount || overviewKPIs?.postsCount || reportData?.total_content || 0;
+    const totalContent = content.length > 0 ? content.length
+      : (weeklyData?.current?.postsCount ?? overviewKPIs?.postsCount ?? reportData?.total_content ?? null);
 
     // Only render if we have timeline data
     if (followersTimeline.length === 0) {

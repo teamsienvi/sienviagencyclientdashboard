@@ -46,7 +46,7 @@ serve(async (req) => {
   }
 
   try {
-    const { clientId, platform, from, to, prevFrom, prevTo, timezone = "America/Chicago" } = await req.json();
+    const { clientId, platform, from, to, prevFrom, prevTo } = await req.json();
 
     if (!clientId || !platform || !from || !to || !prevFrom || !prevTo) {
       return new Response(
@@ -98,7 +98,7 @@ serve(async (req) => {
     // Load client's metricool config for the SPECIFIC platform
     const { data: config, error: configError } = await supabase
       .from("client_metricool_config")
-      .select("user_id, blog_id")
+      .select("user_id, blog_id, reporting_timezone")
       .eq("client_id", clientId)
       .eq("platform", platform)
       .eq("is_active", true)
@@ -117,6 +117,8 @@ serve(async (req) => {
 
     const userId = config.user_id;
     const blogId = config.blog_id;
+    // Timezone from config is the single source of truth (not request param)
+    const timezone = config.reporting_timezone || "America/Chicago";
 
     console.log(`Fetching ${platform} weekly data for:`, { clientId, userId, blogId, from, to, prevFrom, prevTo, timezone });
 
