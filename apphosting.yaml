@@ -4,12 +4,6 @@
 # Environment variables that are required by Next.js at runtime
 env:
   - variable: NEXT_PUBLIC_SUPABASE_URL
-    value: "https://xysuapqjvwuokvylnwha.supabase.co"
-    availability:
-      - BUILD
-      - RUN
+    value: https://xysuapqjvwuokvylnwha.supabase.co
   - variable: NEXT_PUBLIC_SUPABASE_ANON_KEY
-    value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5c3VhcHFqdm12dXU4ZnUzaXRnZ20wNmEib2JqZWN0In0"
-    availability:
-      - BUILD
-      - RUN
+    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5c3VhcHFqdm12dXU4ZnUzaXRnZ20wNmEib2JqZWN0In0
