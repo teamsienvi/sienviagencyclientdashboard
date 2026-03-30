@@ -1,0 +1,9 @@
+# Firebase App Hosting Configuration
+# https://firebase.google.com/docs/app-hosting
+
+# Environment variables that are required by Next.js at runtime
+# NOTE: Secret keys like SUPABASE_SERVICE_ROLE_KEY are NOT declared here.
+# They belong exclusively in Supabase Edge Functions.
+env:
+  NEXT_PUBLIC_SUPABASE_URL: "https://xysuapqjvwuokvylnwha.supabase.co"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5c3VhcHFqdm..."
