@@ -469,12 +469,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
       if (error) {
         console.error("Failed to fetch Instagram profile:", error);
-        toast.error("Instagram connection needs re-authorization.");
+        // toast.error("Instagram connection needs re-authorization.");
         return null;
       }
 
       if (data?.needsReconnect) {
-        toast.error("Meta permissions missing. Disconnect and reconnect to grant Facebook Pages access.");
+        // toast.error("Meta permissions missing. Disconnect and reconnect to grant Facebook Pages access.");
         return null;
       }
 
@@ -500,12 +500,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
       if (error) {
         console.error("Failed to fetch Facebook page:", error);
-        toast.error("Facebook connection needs re-authorization.");
+        // toast.error("Facebook connection needs re-authorization.");
         return null;
       }
 
       if (data?.needsReconnect) {
-        toast.error("Meta permissions missing. Disconnect and reconnect to grant Facebook Pages access.");
+        // toast.error("Meta permissions missing. Disconnect and reconnect to grant Facebook Pages access.");
         return null;
       }
 
