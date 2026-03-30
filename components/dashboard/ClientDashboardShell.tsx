@@ -433,7 +433,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       !hasMetaOAuth && !hasYouTube && !hasX;
   }, [metricoolPlatforms, connectedAccounts, client]);
 
-  const latestReport = clientReports?.reports[clientReports.reports.length - 1];
+  const latestReport = clientReports?.reports && clientReports.reports.length > 0 
+    ? clientReports.reports[clientReports.reports.length - 1] 
+    : null;
 
   if (isLoadingClient) {
     return (
@@ -488,7 +490,38 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
             </p>
           </div>
 
-          {/* KPIs and Summaries removed as requested */}
+          {/* AI-Powered Analytics Summaries */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {!isAdsOnlyClient && (
+              <AnalyticsSummaryCard
+                clientId={clientId!}
+                type="social"
+                title="Social Media Summary"
+                icon={<Share2 className="h-5 w-5 text-violet-400" />}
+              />
+            )}
+            {client?.supabase_url && (
+              <AnalyticsSummaryCard
+                clientId={clientId!}
+                type="website"
+                title="Website Analytics Summary"
+                icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
+              />
+            )}
+            {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
+              <div className="space-y-4">
+                {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
+                  <AdsShredderCard clientId={clientId!} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
+                )}
+                {metricoolPlatforms?.some(p => p.platform === 'google_ads') && (
+                  <AdsShredderCard clientId={clientId!} adPlatform="google" title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} />
+                )}
+                {metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') && (
+                  <AdsShredderCard clientId={clientId!} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Top Performing Posts */}
           <TopPerformingPosts clientId={clientId!} />
@@ -542,7 +575,33 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       </Card>
                     )}
 
-                    {/* Meta section removed */}
+                    {/* Meta - only show if client has Meta configured */}
+                    {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
+                      <Card
+                        className="hover:border-primary/30 transition-all cursor-pointer group"
+                        onClick={() => router.push(`/meta-analytics/${clientId}`)}
+                      >
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                              <TrendingUp className="h-5 w-5 text-blue-500" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-base">Meta</CardTitle>
+                              <CardDescription>Instagram & Facebook</CardDescription>
+                            </div>
+                          </div>
+                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                        </CardHeader>
+                        <CardContent>
+                          {connectedAccounts?.meta ? (
+                            <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                          ) : (
+                            <Badge variant="outline">Connect Account</Badge>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
 
                     {/* X (Twitter) - Only show for Sienvi Agency and Father Figure Formula */}
                     {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
