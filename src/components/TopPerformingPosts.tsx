@@ -104,7 +104,7 @@ type RankingChoice = "all" | "instagram" | "facebook" | "tiktok" | "youtube" | "
 
 const rankingLabels: Record<RankingChoice, string> = {
   all: "All Views",
-  instagram: "IG Video Views",
+  instagram: "IG Organic Views",
   facebook: "FB Views",
   tiktok: "TikTok Views",
   youtube: "YouTube Views",
