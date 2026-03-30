@@ -483,103 +483,7 @@ const ClientDashboard = () => {
             </p>
           </div>
 
-          {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-4">
-            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Followers</CardTitle>
-                <Users className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  {isLoadingMetrics ? (
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  ) : (
-                    totalFollowers.toLocaleString()
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Across all connected platforms
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Past Reports</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  {clientReports?.reports.length || 0}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Available reports
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Platforms</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">
-                  {connectedPlatformsCount}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Live analytics connections
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Latest Report</CardTitle>
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-lg font-bold">
-                  {getCurrentReportingWeek().dateRange}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Current reporting period
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* AI-Powered Analytics Summaries */}
-          <div className="grid gap-4 grid-cols-1">
-            {!isAdsOnlyClient && (
-              <AnalyticsSummaryCard
-                clientId={clientId!}
-                type="social"
-                title="Social Media Summary"
-                icon={<Share2 className="h-5 w-5 text-violet-400" />}
-              />
-            )}
-            {client?.supabase_url && (
-              <AnalyticsSummaryCard
-                clientId={clientId!}
-                type="website"
-                title="Website Analytics Summary"
-                icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
-              />
-            )}
-            {client && (() => {
-              const platforms = getClientAdPlatforms(client.name);
-              return platforms.map((platform) => (
-                <AdsShredderCard
-                  key={platform}
-                  clientId={clientId!}
-                  adPlatform={platform}
-                  title={`Ads Shredder — ${AD_PLATFORM_LABELS[platform]}`}
-                />
-              ));
-            })()}
-          </div>
+          {/* KPIs and Summaries removed as requested */}
 
           {/* Top Performing Posts */}
           <TopPerformingPosts clientId={clientId!} />
@@ -633,40 +537,7 @@ const ClientDashboard = () => {
                       </Card>
                     )}
 
-                    {/* Meta - only show if client has Meta configured */}
-                    {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
-                      <Card
-                        className="hover:border-primary/30 transition-all cursor-pointer group"
-                        onClick={() => navigate(`/meta-analytics/${clientId}`)}
-                      >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                              <TrendingUp className="h-5 w-5 text-blue-500" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">Meta</CardTitle>
-                              <CardDescription>Instagram & Facebook</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex justify-between items-center">
-                            {connectedAccounts?.meta || metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) ? (
-                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                            ) : (
-                              <Badge variant="outline">Connect Account</Badge>
-                            )}
-                            {(socialMetrics?.instagram?.followers || socialMetrics?.facebook?.followers) && (
-                              <span className="text-sm text-muted-foreground">
-                                {(socialMetrics?.instagram?.followers || socialMetrics?.facebook?.followers || 0).toLocaleString()} followers
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
+                    {/* Meta section removed */}
 
                     {/* X (Twitter) - Only show for Sienvi Agency and Father Figure Formula */}
                     {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (

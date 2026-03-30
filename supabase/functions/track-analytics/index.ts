@@ -34,6 +34,80 @@ serve(async (req) => {
     return new Response(null, { headers: getCorsHeaders(req) });
   }
 
+  // Handle GET request: Serve the tracking script
+  if (req.method === 'GET') {
+    const scriptContent = `
+(function() {
+  try {
+    var currentScript = document.currentScript;
+    if (!currentScript) {
+      var scripts = document.getElementsByTagName('script');
+      for (var i = 0; i < scripts.length; i++) {
+        if (scripts[i].src && scripts[i].src.indexOf('track-analytics') !== -1) {
+          currentScript = scripts[i];
+          break;
+        }
+      }
+    }
+    var clientId = currentScript ? currentScript.getAttribute('data-client-id') : null;
+    if (!clientId) return;
+
+    var endpoint = currentScript.src;
+    
+    var visitorId = localStorage.getItem('sienvi_vid');
+    if (!visitorId) {
+      visitorId = 'v_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
+      localStorage.setItem('sienvi_vid', visitorId);
+    }
+
+    var urlParams = new URLSearchParams(window.location.search);
+    var payload = {
+      clientId: clientId,
+      visitorId: visitorId,
+      pageUrl: window.location.pathname,
+      pageTitle: document.title,
+      referrer: document.referrer || '',
+      utmSource: urlParams.get('utm_source') || '',
+      utmMedium: urlParams.get('utm_medium') || '',
+      utmCampaign: urlParams.get('utm_campaign') || ''
+    };
+
+    var sendData = function(data) {
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        credentials: 'omit',
+        keepalive: true
+      }).catch(function(){}); // Ignore errors silently to not clutter client console
+    };
+
+    // Attempt to fetch country from a free IP-to-Country API
+    fetch('https://ipapi.co/json/')
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
+        if (data && data.country_code) {
+          payload.country = data.country_code;
+        }
+        sendData(payload);
+      })
+      .catch(function() {
+        sendData(payload); // Send without country if geolocation fails
+      });
+  } catch (e) {
+    console.error('Sienvi Analytics Tracker Error:', e);
+  }
+})();
+`;
+    return new Response(scriptContent, {
+      headers: {
+        'Content-Type': 'application/javascript',
+        'Cache-Control': 'public, max-age=3600',
+        ...getCorsHeaders(req)
+      }
+    });
+  }
+
   try {
     const body = await req.json();
     const {
