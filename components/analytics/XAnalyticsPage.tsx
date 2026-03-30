@@ -3,7 +3,7 @@
 import XAnalyticsSection from "@/components/XAnalyticsSection";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { AnalyticsPageLayout } from "@/components/AnalyticsPageLayout";
+import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/analytics/NextAnalyticsPageLayout";
 
 interface Client {
   id: string;

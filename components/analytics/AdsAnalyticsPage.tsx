@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import MetaAdsManagerReport from "@/components/MetaAdsManagerReport";
 import AdsAnalyticsSection from "@/components/AdsAnalyticsSection";
-import { AnalyticsPageLayout } from "@/components/AnalyticsPageLayout";
+import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/analytics/NextAnalyticsPageLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdsShredderCard } from "@/components/AdsShredderCard";

@@ -1,70 +1,79 @@
-﻿node.exe : ΓÜá Warning: Next.js inferred 
-your workspace root, but it may not be 
-correct.
+﻿node.exe : ΓÜá Warning: Next.js inferred your 
+workspace root, but it may not be correct.
 At line:1 char:1
 + & "C:\Program Files\nodejs/node.exe" 
 "C:\Program Files\nodejs/node_mo ...
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: 
-    (ΓÜá Warning: Ne...not be correct.:Str  
-  ing) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommand 
-   Error
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified:     
+(ΓÜá Warning: Ne...not be correct.:Str    ing) 
+[], RemoteException
+    + FullyQualifiedErrorId : NativeCommand    
+Error
  
- We detected multiple lockfiles and 
-selected the directory of 
+ We detected multiple lockfiles and selected 
+the directory of 
 C:\Users\Iris\package-lock.json as the root 
 directory.
- To silence this warning, set 
-`turbopack.root` in your Next.js config, or 
-consider removing one of the lockfiles if 
-it's not needed.
-   See https://nextjs.org/docs/app/api-refer
-ence/config/next-config-js/turbopack#root-di
-rectory for more information.
+ To silence this warning, set `turbopack.root` 
+in your Next.js config, or consider removing 
+one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference
+/config/next-config-js/turbopack#root-directory 
+for more information.
  Detected additional lockfiles: 
-   * C:\Users\Iris\Downloads\sienviagencycli
-entdashboard (1)\sienviagencyclientdashboard
-\package-lock.json
-   * C:\Users\Iris\Downloads\sienviagencycli
-entdashboard (1)\package-lock.json
-   * 
-C:\Users\Iris\Downloads\package-lock.json
+   * C:\Users\Iris\Downloads\sienviagencyclientd
+ashboard (1)\sienviagencyclientdashboard\package
+-lock.json
+   * C:\Users\Iris\Downloads\sienviagencyclientd
+ashboard (1)\package-lock.json
+   * C:\Users\Iris\Downloads\package-lock.json
 
 Γû▓ Next.js 16.2.1 (Turbopack)
 - Environments: .env.local, .env
 
 ΓÜá The "middleware" file convention is 
-deprecated. Please use "proxy" instead. 
-Learn more: https://nextjs.org/docs/messages
-/middleware-to-proxy
+deprecated. Please use "proxy" instead. Learn 
+more: https://nextjs.org/docs/messages/middlewar
+e-to-proxy
   Creating an optimized production build ...
-Browserslist: browsers data (caniuse-lite) 
-is 9 months old. Please run:
+Browserslist: browsers data (caniuse-lite) is 9 
+months old. Please run:
   npx update-browserslist-db@latest
-  Why you should do it regularly: https://gi
-thub.com/browserslist/update-db#readme
-Γ£ô Compiled successfully in 9.8s
+  Why you should do it regularly: 
+https://github.com/browserslist/update-db#readme
+Γ£ô Compiled successfully in 9.0s
   Running TypeScript ...
-Failed to type check.
+  Finished TypeScript in 12.0s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/6) ...
+  Generating static pages using 11 workers (1/6) 
+  Generating static pages using 11 workers (2/6) 
+  Generating static pages using 11 workers (4/6) 
+Γ£ô Generating static pages using 11 workers (6/6) in 696ms
+  Finalizing page optimization ...
 
-./components/analytics/YouTubeAnalyticsPage.
-tsx:45:9
-Type error: Type '"youtube"' is not 
-assignable to type '"tiktok" | "linkedin"'.
+Route (app)
+Γöî ╞Æ /
+Γö£ Γùï /_not-found
+Γö£ ╞Æ /admin
+Γö£ ╞Æ /ads-analytics/[clientId]
+Γö£ ╞Æ /api/oauth/shopify/callback
+Γö£ ╞Æ /callback
+Γö£ ╞Æ /client/[clientId]
+Γö£ ╞Æ /linkedin-metricool/[clientId]
+Γö£ ╞Æ /login
+Γö£ Γùï /oauth/result
+Γö£ ╞Æ /report/[reportId]
+Γö£ ╞Æ /reset-password
+Γö£ ╞Æ /shopify-analytics/[clientId]
+Γö£ ╞Æ /tiktok-metricool/[clientId]
+Γö£ ╞Æ /x-analytics/[clientId]
+Γöö ╞Æ /youtube-analytics/[clientId]
 
-  [90m43 |[0m         clientId={clientId}
-  [90m44 |[0m         
-clientName={client?.name || [32m""[0m}
-[31m[1m>[0m [90m45 |[0m         
-platform=[32m"youtube"[0m
-  [90m   |[0m         [31m[1m^[0m
-  [90m46 |[0m         
-platformIcon={<[33mYoutube[0m 
-className=[32m"h-5 w-5"[0m />}
-  [90m47 |[0m         
-platformColor=[32m"text-red-500"[0m
-  [90m48 |[0m       />
-Next.js build worker exited with code: 1 
-and signal: null
+
+╞Æ Proxy (Middleware)
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+
