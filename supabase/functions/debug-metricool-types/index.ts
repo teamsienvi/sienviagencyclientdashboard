@@ -69,7 +69,7 @@ serve(async (req) => {
     const endDate = periodEnd || new Date().toISOString().split("T")[0];
 
     // Fetch raw CSV
-    const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/reels/${platform}`);
+    const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
     postsUrl.searchParams.set("from", `${startDate}T00:00:00`);
     postsUrl.searchParams.set("to", `${endDate}T23:59:59`);
     postsUrl.searchParams.set("timezone", tz);
@@ -151,6 +151,7 @@ serve(async (req) => {
         hasReelInUrl: urlVal ? /\/reel\//i.test(urlVal) : false,
         url: urlVal?.substring(0, 80),
         date: dateVal,
+        rawValues: values
       });
     }
 

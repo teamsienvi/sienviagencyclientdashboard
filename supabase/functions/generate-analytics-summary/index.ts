@@ -192,6 +192,59 @@ async function collectSocialData(
             (p === "x" && activePlatforms.has("twitter"));
     };
 
+    // 0. Real-time Metricool Overview KPIs (Most accurate follower counts for AI)
+    if (metricoolConfigs && metricoolConfigs.length > 0) {
+        const prevEnd = new Date(startStr);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+        const prevStart = new Date(prevEnd);
+        prevStart.setDate(prevStart.getDate() - 7);
+        const prevStartStr = prevStart.toISOString().split("T")[0];
+        const prevEndStr = prevEnd.toISOString().split("T")[0];
+
+        const liveMetrics: string[] = [];
+        
+        await Promise.all(metricoolConfigs.map(async (c: any) => {
+            if (!c.platform) return;
+            const platform = c.platform.toLowerCase();
+            try {
+                const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
+                    body: { 
+                        clientId, 
+                        platform, 
+                        from: startStr, 
+                        to: endStr, 
+                        prevFrom: prevStartStr, 
+                        prevTo: prevEndStr 
+                    }
+                });
+
+                if (!error && data?.success && data?.current) {
+                    const current = data.current;
+                    // Use debug lastPoint for most accurate Followers
+                    const followers = current.followersDebug?.lastPoint?.value ?? null;
+                    const engagement = current.engagementAgg ?? null;
+                    const postsCount = current.postsCount ?? null;
+                    
+                    if (followers != null || engagement != null || postsCount != null) {
+                        const parts = [`- ${platform}:`];
+                        if (followers != null) parts.push(`${followers.toLocaleString()} followers`);
+                        if (engagement != null) parts.push(`${engagement}% engagement rate`);
+                        if (postsCount != null) parts.push(`${postsCount} total posts`);
+                        liveMetrics.push(parts.join(" "));
+                    }
+                }
+            } catch (err) {
+                console.error(`Failed to fetch live Metricool data for ${platform}:`, err);
+            }
+        }));
+
+        if (liveMetrics.length > 0) {
+            sections.push(
+                "## Live Follower & Platform Metrics (Most Accurate)\n" + liveMetrics.join("\n")
+            );
+        }
+    }
+
     // 1. Social account metrics (latest per platform) — only active platforms
     const { data: metrics } = await supabase
         .from("social_account_metrics")
