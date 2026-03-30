@@ -315,7 +315,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         if (!existingDateRanges.has(normalizedRange)) {
           staticReports.push({
             dateRange,
-            link: `/dynamic-report/${dbReport.id}`,
+            link: `/report/${dbReport.id}`,
             isInternal: true,
           });
           existingDateRanges.add(normalizedRange);

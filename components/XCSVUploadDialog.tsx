@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -73,7 +73,7 @@ export const XCSVUploadDialog = ({
   onUploadComplete,
 }: XCSVUploadDialogProps) => {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -621,7 +621,7 @@ export const XCSVUploadDialog = ({
       onUploadComplete?.();
 
       // Navigate to X analytics page (pre-set the date range to the imported period)
-      navigate(`/x-analytics/${clientId}?start=${effectivePeriodStart}&end=${effectivePeriodEnd}`);
+      router.push(`/x-analytics/${clientId}?start=${effectivePeriodStart}&end=${effectivePeriodEnd}`);
 
       onSuccess?.();
     } catch (error) {

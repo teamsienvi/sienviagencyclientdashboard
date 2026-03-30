@@ -1,56 +1,59 @@
-﻿node.exe : ΓÜá Warning: Next.js inferred your 
-workspace root, but it may not be correct.
+﻿node.exe : ΓÜá Warning: Next.js inferred 
+your workspace root, but it may not be 
+correct.
 At line:1 char:1
 + & "C:\Program Files\nodejs/node.exe" 
 "C:\Program Files\nodejs/node_mo ...
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified:     
-(ΓÜá Warning: Ne...not be correct.:Str    ing) 
-[], RemoteException
-    + FullyQualifiedErrorId : NativeCommand    
-Error
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: 
+    (ΓÜá Warning: Ne...not be correct.:Str  
+  ing) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommand 
+   Error
  
- We detected multiple lockfiles and selected 
-the directory of 
+ We detected multiple lockfiles and 
+selected the directory of 
 C:\Users\Iris\package-lock.json as the root 
 directory.
- To silence this warning, set `turbopack.root` 
-in your Next.js config, or consider removing 
-one of the lockfiles if it's not needed.
-   See https://nextjs.org/docs/app/api-reference
-/config/next-config-js/turbopack#root-directory 
-for more information.
+ To silence this warning, set 
+`turbopack.root` in your Next.js config, or 
+consider removing one of the lockfiles if 
+it's not needed.
+   See https://nextjs.org/docs/app/api-refer
+ence/config/next-config-js/turbopack#root-di
+rectory for more information.
  Detected additional lockfiles: 
-   * C:\Users\Iris\Downloads\sienviagencyclientd
-ashboard (1)\sienviagencyclientdashboard\package
--lock.json
-   * C:\Users\Iris\Downloads\sienviagencyclientd
-ashboard (1)\package-lock.json
-   * C:\Users\Iris\Downloads\package-lock.json
+   * C:\Users\Iris\Downloads\sienviagencycli
+entdashboard (1)\sienviagencyclientdashboard
+\package-lock.json
+   * C:\Users\Iris\Downloads\sienviagencycli
+entdashboard (1)\package-lock.json
+   * 
+C:\Users\Iris\Downloads\package-lock.json
 
 Γû▓ Next.js 16.2.1 (Turbopack)
 - Environments: .env.local, .env
 
 ΓÜá The "middleware" file convention is 
-deprecated. Please use "proxy" instead. Learn 
-more: https://nextjs.org/docs/messages/middlewar
-e-to-proxy
+deprecated. Please use "proxy" instead. 
+Learn more: https://nextjs.org/docs/messages
+/middleware-to-proxy
   Creating an optimized production build ...
-Browserslist: browsers data (caniuse-lite) is 9 
-months old. Please run:
+Browserslist: browsers data (caniuse-lite) 
+is 9 months old. Please run:
   npx update-browserslist-db@latest
-  Why you should do it regularly: 
-https://github.com/browserslist/update-db#readme
-Γ£ô Compiled successfully in 9.0s
+  Why you should do it regularly: https://gi
+thub.com/browserslist/update-db#readme
+Γ£ô Compiled successfully in 10.0s
   Running TypeScript ...
-  Finished TypeScript in 12.0s ...
+  Finished TypeScript in 13.0s ...
   Collecting page data using 11 workers ...
   Generating static pages using 11 workers (0/6) ...
   Generating static pages using 11 workers (1/6) 
   Generating static pages using 11 workers (2/6) 
   Generating static pages using 11 workers (4/6) 
-Γ£ô Generating static pages using 11 workers (6/6) in 696ms
+Γ£ô Generating static pages using 11 workers (6/6) in 296ms
   Finalizing page optimization ...
 
 Route (app)

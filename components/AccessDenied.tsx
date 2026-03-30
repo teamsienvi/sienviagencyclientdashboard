@@ -1,14 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ShieldX, ArrowLeft, Home } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useRouter } from "next/navigation";
 
 interface AccessDeniedProps {
   message?: string;
 }
 
 export const AccessDenied = ({ message }: AccessDeniedProps) => {
-  const navigate = useNavigate();
+  const router = useRouter();
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-4">
@@ -23,11 +23,11 @@ export const AccessDenied = ({ message }: AccessDeniedProps) => {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          <Button onClick={() => navigate(-1)} variant="outline" className="w-full gap-2">
+          <Button onClick={() => router.back()} variant="outline" className="w-full gap-2">
             <ArrowLeft className="h-4 w-4" />
             Go Back
           </Button>
-          <Button onClick={() => navigate("/")} variant="default" className="w-full gap-2">
+          <Button onClick={() => router.push("/")} variant="default" className="w-full gap-2">
             <Home className="h-4 w-4" />
             Go to Dashboard
           </Button>
