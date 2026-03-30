@@ -23,6 +23,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Auth check
+    /*
     const authHeader = req.headers.get("authorization");
     if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
@@ -35,6 +36,7 @@ serve(async (req) => {
         }
       }
     }
+    */
 
     const { clientId, platform = "instagram", periodStart, periodEnd } = await req.json();
 
@@ -67,7 +69,7 @@ serve(async (req) => {
     const endDate = periodEnd || new Date().toISOString().split("T")[0];
 
     // Fetch raw CSV
-    const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/${platform}`);
+    const postsUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/reels/${platform}`);
     postsUrl.searchParams.set("from", `${startDate}T00:00:00`);
     postsUrl.searchParams.set("to", `${endDate}T23:59:59`);
     postsUrl.searchParams.set("timezone", tz);
