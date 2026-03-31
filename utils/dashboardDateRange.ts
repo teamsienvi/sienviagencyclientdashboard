@@ -1,6 +1,6 @@
 import { subDays, differenceInDays, startOfDay, format } from "date-fns";
 
-export type DateRangePreset = "7d" | "30d" | "custom";
+export type DateRangePreset = "7d" | "30d" | "60d" | "custom";
 
 export interface DateRange {
   start: Date;
@@ -25,8 +25,9 @@ export const getDashboardDateRange = (
 
   const yesterday = startOfDay(subDays(new Date(), 1));
 
-  if (preset === "30d") {
-    return { start: subDays(yesterday, 29), end: yesterday };
+  if (preset === "30d" || preset === "60d") {
+    const days = preset === "60d" ? 59 : 29;
+    return { start: subDays(yesterday, days), end: yesterday };
   }
 
   // Default: 7d

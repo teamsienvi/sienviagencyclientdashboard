@@ -105,6 +105,16 @@ export const NextAnalyticsPageLayout = ({
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
+                  <Link href="/" className="hover:text-primary transition-colors">
+                    Home
+                  </Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator>
+                <ChevronRight className="h-4 w-4" />
+              </BreadcrumbSeparator>
+              <BreadcrumbItem>
+                <BreadcrumbLink asChild>
                   <Link href={`/client/${clientId}`} className="hover:text-primary transition-colors">
                     Dashboard
                   </Link>

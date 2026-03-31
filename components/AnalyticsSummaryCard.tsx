@@ -106,10 +106,10 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 const pStart = new Date((cachedSummary as any).period_start).getTime();
                 const pEnd = new Date((cachedSummary as any).period_end).getTime();
                 const cachedDays = Math.round((pEnd - pStart) / (1000 * 60 * 60 * 24));
+                const requestedDays = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
                 
-                if (dateRange === "30d" && cachedDays < 20) {
-                    needsRegen = true;
-                } else if (dateRange === "7d" && cachedDays > 15) {
+                // Regenerate if cached period length doesn't roughly match requested
+                if (Math.abs(cachedDays - requestedDays) > 5) {
                     needsRegen = true;
                 }
             }

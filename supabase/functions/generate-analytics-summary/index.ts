@@ -53,7 +53,7 @@ serve(async (req) => {
         // Calculate date range based on param (default 7 days)
         const periodEnd = new Date();
         const periodStart = new Date();
-        const daysToSubtract = dateRange === "30d" ? 30 : 7;
+        const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
         periodStart.setDate(periodStart.getDate() - daysToSubtract);
         const startStr = periodStart.toISOString().split("T")[0];
         const endStr = periodEnd.toISOString().split("T")[0];

@@ -109,7 +109,7 @@ interface FacebookPage {
   picture_url: string | null;
 }
 
-type DateRangePreset = "7d" | "30d" | "custom";
+type DateRangePreset = "7d" | "30d" | "60d" | "custom";
 type MetaPlatform = "instagram" | "facebook";
 
 const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProps) => {

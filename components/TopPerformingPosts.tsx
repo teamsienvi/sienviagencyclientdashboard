@@ -207,7 +207,7 @@ export const TopPerformingPosts = ({ clientId, dateRange = "7d" }: TopPerforming
             </Select>
             <Badge variant="outline" className="text-xs">
               {(() => {
-                const daysToSubtract = dateRange === "30d" ? 30 : 7;
+                const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
                 const end = new Date();
                 const start = subDays(end, daysToSubtract);
                 // Simple display "Mar 23-29" or "Mar 1-30"

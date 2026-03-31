@@ -9,7 +9,7 @@ export function useTopPerformingPosts(clientId: string | undefined, dateRange: s
     queryFn: async (): Promise<RankedTopInsight[]> => {
       if (!clientId) return [];
 
-      const daysToSubtract = dateRange === "30d" ? 30 : 7;
+      const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
       const periodEndDate = endOfDay(new Date());
       const periodStartDate = startOfDay(subDays(new Date(), daysToSubtract));
 

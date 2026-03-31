@@ -51,7 +51,7 @@ interface PrevMetrics {
   total_likes: number | null;
 }
 
-type DateRangePreset = "7d" | "30d" | "custom";
+type DateRangePreset = "7d" | "30d" | "60d" | "custom";
 
 interface TikTokPost {
   title: string | null;
@@ -135,10 +135,10 @@ export const MetricoolAnalyticsSection = ({
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
     }
-    if (dateRangePreset === "30d") {
-      // For 30d, use the last 30 days from today
+    if (dateRangePreset === "30d" || dateRangePreset === "60d") {
+      const days = dateRangePreset === "60d" ? 60 : 30;
       const today = new Date();
-      return { start: subDays(today, 30), end: today };
+      return { start: subDays(today, days), end: today };
     }
     // For 7d (default), use the standardized reporting week (last completed Mon-Sun)
     const { start, end } = getCurrentReportingWeek();
@@ -146,6 +146,7 @@ export const MetricoolAnalyticsSection = ({
   };
 
   const getPrevPeriodLabel = () => {
+    if (dateRangePreset === "60d") return "prev 60 days";
     if (dateRangePreset === "30d") return "prev 30 days";
     if (dateRangePreset === "custom") return "prev period";
     return "prev week";

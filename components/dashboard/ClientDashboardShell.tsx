@@ -50,7 +50,7 @@ const getMonthFromDateRange = (dateRange: string): string => {
 
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 
-type DateRangePreset = "7d" | "30d" | "custom";
+type DateRangePreset = "7d" | "30d" | "60d" | "custom";
 type RankingChoice = "all" | "engagement" | "reach" | "clicks";
 
 interface ClientDashboardShellProps {
