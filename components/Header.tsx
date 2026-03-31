@@ -22,8 +22,8 @@ export const Header = () => {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Fetch clients for admin dropdown
-  const { data: clients } = useQuery({
+  // Fetch all clients for admin dropdown
+  const { data: adminClients } = useQuery({
     queryKey: ["admin-clients-dropdown"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -36,6 +36,36 @@ export const Header = () => {
     },
     enabled: isAdmin && isAuthenticated,
   });
+
+  // Fetch assigned clients for non-admin users
+  const { data: userClients } = useQuery({
+    queryKey: ["user-assigned-clients", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data: clientMappings, error: mappingError } = await supabase
+        .from("client_users")
+        .select("client_id")
+        .eq("user_id", user.id);
+
+      if (mappingError) throw mappingError;
+      if (!clientMappings || clientMappings.length === 0) return [];
+
+      const clientIds = clientMappings.map(m => m.client_id);
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .in("id", clientIds)
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !isAdmin && isAuthenticated && !!user,
+  });
+
+  const clients = isAdmin ? adminClients : userClients;
+  const showClientSwitcher = clients && clients.length > 0;
 
   // Get current client from URL if on a client page
   const getCurrentClientId = () => {
@@ -89,8 +119,8 @@ export const Header = () => {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {/* Admin Client Selector - Only show for admins */}
-            {isAdmin && clients && clients.length > 0 && (
+            {/* Client Selector */}
+            {showClientSwitcher && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">

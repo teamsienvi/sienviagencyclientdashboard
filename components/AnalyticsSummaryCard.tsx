@@ -240,7 +240,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                             <p className="text-xs mt-1">Click "Generate" to create an AI-powered summary</p>
                         </div>
                     ) : (
-                        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                        <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
                             {sections.map((section) => (
                                 <div
                                     key={section.key}

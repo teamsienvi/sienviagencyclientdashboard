@@ -514,7 +514,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
           </div>
 
           {/* AI-Powered Analytics Summaries */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-6">
             {!isAdsOnlyClient && (
               <AnalyticsSummaryCard
                 clientId={clientId!}

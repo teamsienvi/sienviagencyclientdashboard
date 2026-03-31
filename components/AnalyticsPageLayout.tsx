@@ -43,10 +43,10 @@ export const AnalyticsPageLayout = ({
   children,
 }: AnalyticsPageLayoutProps) => {
   const navigate = useNavigate();
-  const { isAdmin, isAuthenticated } = useAuth();
+  const { isAdmin, isAuthenticated, user } = useAuth();
 
-  // Fetch clients for admin dropdown
-  const { data: clients } = useQuery({
+  // Fetch all clients for admin dropdown
+  const { data: adminClients } = useQuery({
     queryKey: ["admin-clients-dropdown"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -59,6 +59,36 @@ export const AnalyticsPageLayout = ({
     },
     enabled: isAdmin && isAuthenticated,
   });
+
+  // Fetch assigned clients for non-admin users
+  const { data: userClients } = useQuery({
+    queryKey: ["user-assigned-clients", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data: clientMappings, error: mappingError } = await supabase
+        .from("client_users")
+        .select("client_id")
+        .eq("user_id", user.id);
+
+      if (mappingError) throw mappingError;
+      if (!clientMappings || clientMappings.length === 0) return [];
+
+      const clientIds = clientMappings.map(m => m.client_id);
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .in("id", clientIds)
+        .eq("is_active", true)
+        .order("name");
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !isAdmin && isAuthenticated && !!user,
+  });
+
+  const clients = isAdmin ? adminClients : userClients;
+  const showClientSwitcher = clients && clients.length > 0;
 
   const handleClientSelect = (newClientId: string) => {
     navigate(`/client/${newClientId}`);
@@ -126,8 +156,8 @@ export const AnalyticsPageLayout = ({
             </BreadcrumbList>
           </Breadcrumb>
 
-          {/* Admin Client Switcher */}
-          {isAdmin && clients && clients.length > 0 && (
+          {/* Client Switcher */}
+          {showClientSwitcher && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
