@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,7 +89,10 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         },
     });
 
+    const attemptRef = useRef<string | null>(null);
+
     useEffect(() => {
+        // useQuery's isFetching would be better than isLoading, but we use strict ref check
         if (isLoadingCache || generateMutation.isPending) return;
 
         let needsRegen = false;
@@ -109,14 +112,27 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 const requestedDays = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
                 
                 // Regenerate if cached period length doesn't roughly match requested
+                // Note: custom ranges are ignored in this logic block, they default to 7 internally
                 if (Math.abs(cachedDays - requestedDays) > 5) {
                     needsRegen = true;
                 }
             }
         }
 
+        const currentSettingsKey = `${clientId}-${type}-${dateRange}`;
+
         if (needsRegen) {
-            setTimeout(() => generateMutation.mutate(), 100);
+            // Only fire if we haven't already attempted for this exact setting
+            if (attemptRef.current !== currentSettingsKey) {
+                attemptRef.current = currentSettingsKey;
+                setTimeout(() => generateMutation.mutate(), 100);
+            }
+        } else {
+            // Once we have a valid, un-expired cache for these settings, clear the ref 
+            // so future expirations (6 hrs from now) can trigger again.
+            if (attemptRef.current === currentSettingsKey) {
+                attemptRef.current = null;
+            }
         }
     }, [clientId, type, dateRange, cachedSummary, isLoadingCache, generateMutation.isPending]);
 
