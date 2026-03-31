@@ -513,8 +513,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
             </div>
           </div>
 
+          {/* Top Performing Posts - Moved to Top */}
+          <TopPerformingPosts clientId={clientId!} />
+
           {/* AI-Powered Analytics Summaries */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 mt-8">
             {!isAdsOnlyClient && (
               <AnalyticsSummaryCard
                 clientId={clientId!}
@@ -547,9 +550,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               </div>
             )}
           </div>
-
-          {/* Top Performing Posts */}
-          <TopPerformingPosts clientId={clientId!} />
 
           {/* Main Content Tabs */}
           <Tabs defaultValue="analytics" className="space-y-6">
@@ -1026,9 +1026,9 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
   const router = useRouter();
   const { isAdmin, isAuthenticated, signOut, user } = useAuth();
 
-  // Fetch all clients for admin dropdown
-  const { data: adminClients } = useQuery({
-    queryKey: ["admin-clients-dropdown"],
+  // Fetch all clients unconditionally for the Switch Client dropdown
+  const { data: clients } = useQuery({
+    queryKey: ["all-clients-dropdown"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
@@ -1037,40 +1037,9 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
         .order("name");
       if (error) throw error;
       return data;
-    },
-    enabled: isAdmin && isAuthenticated,
+    }
   });
 
-  // Fetch assigned clients for non-admin users
-  const { data: userClients } = useQuery({
-    queryKey: ["user-assigned-clients", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      // Get client IDs assigned to user
-      const { data: clientMappings, error: mappingError } = await supabase
-        .from("client_users")
-        .select("client_id")
-        .eq("user_id", user.id);
-
-      if (mappingError) throw mappingError;
-      if (!clientMappings || clientMappings.length === 0) return [];
-
-      const clientIds = clientMappings.map(m => m.client_id);
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, logo_url")
-        .in("id", clientIds)
-        .eq("is_active", true)
-        .order("name");
-
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !isAdmin && isAuthenticated && !!user,
-  });
-
-  // Use admin clients for admins, user clients for regular users
-  const clients = isAdmin ? adminClients : userClients;
   const showClientSwitcher = clients && clients.length > 0;
 
   const handleClientSelect = (clientId: string) => {
