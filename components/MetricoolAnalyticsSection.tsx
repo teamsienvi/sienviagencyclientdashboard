@@ -145,6 +145,12 @@ export const MetricoolAnalyticsSection = ({
     return { start, end };
   };
 
+  const getPrevPeriodLabel = () => {
+    if (dateRangePreset === "30d") return "prev 30 days";
+    if (dateRangePreset === "custom") return "prev period";
+    return "prev week";
+  };
+
   const handleDateRangeChange = (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => {
     setDateRangePreset(preset);
     if (preset === "custom" && customRange) {
@@ -1604,7 +1610,7 @@ export const MetricoolAnalyticsSection = ({
                   return (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {formatNumber(prevMetrics.followers)} (prev week)
+                        vs {formatNumber(prevMetrics.followers)} ({getPrevPeriodLabel()})
                       </span>
                       {renderTrendIndicator(
                         currentFollowerCount,
@@ -1644,7 +1650,7 @@ export const MetricoolAnalyticsSection = ({
                   {prevViews != null && currentViews != null && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {formatNumber(prevViews)} (prev week)
+                        vs {formatNumber(prevViews)} ({getPrevPeriodLabel()})
                       </span>
                       {renderTrendIndicator(currentViews, prevViews, false, true)}
                     </div>
@@ -1676,7 +1682,7 @@ export const MetricoolAnalyticsSection = ({
                   {prevLikes != null && currentLikes != null && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {formatNumber(prevLikes)} (prev week)
+                        vs {formatNumber(prevLikes)} ({getPrevPeriodLabel()})
                       </span>
                       {renderTrendIndicator(currentLikes, prevLikes, false, true)}
                     </div>
@@ -1702,7 +1708,7 @@ export const MetricoolAnalyticsSection = ({
             {prevMetrics?.engagement_rate != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {prevMetrics.engagement_rate.toFixed(2)}% (prev week)
+                  vs {prevMetrics.engagement_rate.toFixed(2)}% ({getPrevPeriodLabel()})
                 </span>
                 {renderTrendIndicator(
                   liveEngagement ?? accountMetrics?.engagement_rate,
@@ -1735,7 +1741,7 @@ export const MetricoolAnalyticsSection = ({
                   {prevPosts != null && currentPosts != null && (
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        vs {prevPosts} (prev week)
+                        vs {prevPosts} ({getPrevPeriodLabel()})
                       </span>
                       {renderTrendIndicator(currentPosts, prevPosts, false, true)}
                     </div>

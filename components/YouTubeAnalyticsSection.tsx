@@ -125,6 +125,12 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     }
   };
 
+  const getPrevPeriodLabel = () => {
+    if (dateRange === "30d") return "prev 30 days";
+    if (dateRange === "custom") return "prev period";
+    return "prev week";
+  };
+
   // Fetch from Metricool edge function
   const fetchMetricoolData = async () => {
     try {
@@ -657,7 +663,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 )}
                 {stats.prevFollowers > 0 && stats.newFollowers >= 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    vs {stats.prevFollowers.toLocaleString()} prev week
+                    vs {stats.prevFollowers.toLocaleString()} {getPrevPeriodLabel()}
                   </p>
                 )}
               </CardContent>
@@ -691,7 +697,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 })()}
                 {stats.prevTotalViews > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    vs {stats.prevTotalViews.toLocaleString()} prev week
+                    vs {stats.prevTotalViews.toLocaleString()} {getPrevPeriodLabel()}
                   </p>
                 )}
                 {reportingPeriodLabel && (
@@ -727,7 +733,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 })()}
                 {stats.prevEngagementRate > 0 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    vs {stats.prevEngagementRate.toFixed(2)}% prev week
+                    vs {stats.prevEngagementRate.toFixed(2)}% {getPrevPeriodLabel()}
                   </p>
                 )}
                 {reportingPeriodLabel && (

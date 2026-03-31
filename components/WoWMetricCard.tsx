@@ -25,6 +25,8 @@ interface WoWMetricCardProps {
   isLoading?: boolean;
   /** Custom formatter for the main value */
   formatValue?: (value: number) => string;
+  /** Custom label for previous comparison (e.g. "prev 30 days") */
+  previousLabel?: string;
   /** Additional class names */
   className?: string;
 }
@@ -51,6 +53,7 @@ export const WoWMetricCard = ({
   isLive = false,
   isLoading = false,
   formatValue,
+  previousLabel = "prev week",
   className,
 }: WoWMetricCardProps) => {
   const renderTrendIndicator = () => {
@@ -146,7 +149,7 @@ export const WoWMetricCard = ({
             {previousValue != null && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
-                  vs {displayPreviousValue()} (prev week)
+                  vs {displayPreviousValue()} ({previousLabel})
                 </span>
                 {renderTrendIndicator()}
               </div>
