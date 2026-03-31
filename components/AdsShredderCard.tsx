@@ -172,7 +172,7 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
         },
         {
             key: "smartActions",
-            label: "SMART Action Plan",
+            label: "Client Action Plan",
             icon: <Target className="h-4 w-4" />,
             color: "text-blue-400",
             bgColor: "bg-blue-500/10",

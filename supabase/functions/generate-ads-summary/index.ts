@@ -22,7 +22,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 {
   "strengths": ["3-5 things working well with specific numbers from the data"],
   "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
-  "smartActions": ["3-5 specific, actionable fixes ranked by impact — only using controllable levers"],
+  "smartActions": ["3-5 highly specific, step-by-step actions for a Client Action Plan, tailored exactly to the client's actual data — only using controllable levers"],
   "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
   "hardTruths": ["2-4 uncomfortable truths — state what is controllable vs blocked"]
 }
@@ -41,7 +41,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 {
   "strengths": ["3-5 things working well with specific numbers from the data"],
   "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
-  "smartActions": ["3-5 specific, actionable fixes ranked by impact"],
+  "smartActions": ["3-5 highly specific, step-by-step actions for a Client Action Plan, tailored exactly to the client's actual data"],
   "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
   "hardTruths": ["2-4 uncomfortable truths the team needs to hear — no sugar coating"]
 }

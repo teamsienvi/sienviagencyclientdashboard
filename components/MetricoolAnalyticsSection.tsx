@@ -16,6 +16,7 @@ import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRang
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface MetricoolAnalyticsSectionProps {
   clientId: string;
@@ -31,6 +32,7 @@ interface MetricoolConfig {
   blog_id: string | null;
   is_active: boolean;
   followers: number | null;
+  is_business?: boolean | null;
 }
 
 interface AccountMetric {
@@ -116,6 +118,7 @@ export const MetricoolAnalyticsSection = ({
   const [userId, setUserId] = useState("");
   const [blogId, setBlogId] = useState("");
   const [followers, setFollowers] = useState("");
+  const [isBusiness, setIsBusiness] = useState<boolean | null>(null);
 
   // Store live data from Metricool API
   const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
@@ -175,6 +178,8 @@ export const MetricoolAnalyticsSection = ({
       return data as MetricoolConfig | null;
     },
   });
+
+  const currentIsBusiness = isBusiness !== null ? isBusiness : (config?.is_business ?? true);
 
   // Automatically fetch live followers from Metricool API on config load
   useQuery({
@@ -589,6 +594,7 @@ export const MetricoolAnalyticsSection = ({
           blog_id: blogId || config?.blog_id || null,
           followers: followersValue !== null && !isNaN(followersValue) ? followersValue : (config?.followers || null),
           is_active: true,
+          is_business: platform === "tiktok" ? currentIsBusiness : null,
         }, { onConflict: "client_id,platform" });
 
       if (error) throw error;
@@ -1466,6 +1472,21 @@ export const MetricoolAnalyticsSection = ({
                 Optional: used only if follower sync is unavailable.
               </p>
             </div>
+            {platform === "tiktok" && (
+              <div className="flex items-start space-x-2 pt-2 pb-1">
+                <Checkbox 
+                  id="initIsBusiness" 
+                  checked={currentIsBusiness} 
+                  onCheckedChange={(checked) => setIsBusiness(checked === true)} 
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label htmlFor="initIsBusiness" className="cursor-pointer">Is this a TikTok Business Account?</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Uncheck if this is a personal/creator account to hide demographic metrics.
+                  </p>
+                </div>
+              </div>
+            )}
             <Button
               onClick={() => saveConfigMutation.mutate()}
               disabled={!userId || saveConfigMutation.isPending}
@@ -1574,6 +1595,21 @@ export const MetricoolAnalyticsSection = ({
                 Optional: used only if follower sync is unavailable.
               </p>
             </div>
+            {platform === "tiktok" && (
+              <div className="flex items-start space-x-2 pt-2 pb-1">
+                <Checkbox 
+                  id="editIsBusiness" 
+                  checked={currentIsBusiness} 
+                  onCheckedChange={(checked) => setIsBusiness(checked === true)} 
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label htmlFor="editIsBusiness" className="cursor-pointer">Is this a TikTok Business Account?</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Uncheck if this is a personal/creator account to hide demographic metrics.
+                  </p>
+                </div>
+              </div>
+            )}
             <Button
               size="sm"
               onClick={() => saveConfigMutation.mutate()}
@@ -1779,7 +1815,7 @@ export const MetricoolAnalyticsSection = ({
 
 
       {/* Demographics Section - TikTok */}
-      {platform === "tiktok" && (
+      {platform === "tiktok" && currentIsBusiness && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Gender Distribution */}
           <Card>

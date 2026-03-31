@@ -162,7 +162,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         },
         {
             key: "smartActions",
-            label: "SMART Action Plan",
+            label: "Client Action Plan",
             icon: <Target className="h-4 w-4" />,
             color: "text-blue-400",
             bgColor: "bg-blue-500/10",

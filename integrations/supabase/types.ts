@@ -101,6 +101,7 @@ export type Database = {
           followers: number | null
           id: string
           is_active: boolean
+          is_business: boolean | null
           platform: string
           updated_at: string
           user_id: string
@@ -112,6 +113,7 @@ export type Database = {
           followers?: number | null
           id?: string
           is_active?: boolean
+          is_business?: boolean | null
           platform: string
           updated_at?: string
           user_id: string
@@ -123,6 +125,7 @@ export type Database = {
           followers?: number | null
           id?: string
           is_active?: boolean
+          is_business?: boolean | null
           platform?: string
           updated_at?: string
           user_id?: string
