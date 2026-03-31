@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useMemo } from "react";
-import { format, subDays } from "date-fns";
+import Link from "next/link";
+import { format, subDays, startOfWeek, endOfWeek } from "date-fns";
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { getClientLogo } from "@/utils/clientLogos";
 import {
@@ -15,6 +16,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -489,10 +498,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
           {/* Welcome Section */}
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <BarChart3 className="h-4 w-4" />
-                <span>Analytics Dashboard</span>
-              </div>
+              <Breadcrumb className="mb-2">
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink asChild>
+                      <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
+                        <BarChart3 className="h-3.5 w-3.5" />
+                        Home
+                      </Link>
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </BreadcrumbSeparator>
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Dashboard</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
               <h1 className="text-4xl font-bold text-foreground">
                 Welcome to your Dashboard
               </h1>
