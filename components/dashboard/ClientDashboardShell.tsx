@@ -514,7 +514,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
           </div>
 
           {/* Top Performing Posts - Moved to Top */}
-          <TopPerformingPosts clientId={clientId!} />
+          <TopPerformingPosts clientId={clientId!} dateRange={dateRange} />
 
           {/* AI-Powered Analytics Summaries */}
           <div className="flex flex-col gap-6 mt-8">

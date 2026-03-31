@@ -1,0 +1,13 @@
+﻿(auth)\login\page.tsx
+(auth)\reset-password\page.tsx
+(dashboard)\ads-analytics\[clientId]\page.tsx
+(dashboard)\client\[clientId]\page.tsx
+(dashboard)\linkedin-metricool\[clientId]\page.tsx
+(dashboard)\page.tsx
+(dashboard)\report\[reportId]\page.tsx
+(dashboard)\shopify-analytics\[clientId]\page.tsx
+(dashboard)\tiktok-metricool\[clientId]\page.tsx
+(dashboard)\x-analytics\[clientId]\page.tsx
+(dashboard)\youtube-analytics\[clientId]\page.tsx
+admin\page.tsx
+oauth\result\page.tsx

@@ -1,0 +1,80 @@
+﻿c655eb3 fix: replace all react-router-dom with next/navigation, fix report links
+622ee4c fix(analytics): replace react-router-dom with next/navigation in analytics layout
+3b46880 feat(routes): migrate all social analytics pages to App Router
+572359f fix(hosting): enable standalone output mode and lock sharp for cloud run
+5140e71 fix(hosting): strip UTF-16 encoding corruption from apphosting.yaml
+63b7ebb chore(hosting): trigger firebase rollout
+892fb65 chore(hosting): trigger firebase webhook
+8e8b6e5 chore: trigger firebase app hosting webhook
+a972ad4 fix(hosting): simplify apphosting.yaml schema constraints
+ea8d46f fix(hosting): correct apphosting.yaml schema and harden supabase client boot
+0effb94 feat: finalize Metricool-first integration and Firebase App Hosting prep
+2d3aca6 feat(dashboard): remove KPIs, social summaries, and meta section; fix(analytics): resolve 'XX' country tracking by implementing client-side geolocation
+7275d2e fix(analytics-summary): fetch live Metricool kpis for AI context
+2b42050 fix(reels): support exact Metricool Reels CSV column names
+10b713d fix(reels): extract 'organic views' and 'organic reach' fields from Metricool CSV
+6883d76 fix(ui): remove misleading Meta re-authorization toast errors
+24f5da0 fix(ui): ensure Organic Views and Organic Reach are correctly labeled for Instagram Reels and Posts
+6ec7645 fix(ui): rename 'Organic Views' to 'Video Views' for IG reels
+d4a7c77 chore(db): insert Metricool Instagram and Facebook config for Snarky Humans
+2bb6be5 fix(meta): add reels endpoint fetch, sync_coverage table, auto-hydration on date change
+9c88055 fix(meta-analytics): repair date ranges, timezone, reels, null coalescing, admin resync
+59b862f feat: restore OpenAI Assistants API for ads summaries + add admin upsert/delete metricool config actions
+d10466d fix: remove missing data noise from social summaries - omit null fields and update prompt
+433da0e feat: add Clear button to remove ads summaries
+94eaca5 fix: handle gemini-2.5-flash thinking model multi-part response
+5696426 fix: remove responseMimeType and increase maxOutputTokens for gemini-2.5-flash compatibility
+a770e4a fix: use gemini-2.5-flash (matching working model)
+b6cc96c fix: use gemini-1.5-flash (2.0-flash deprecated)
+111b102 revert: switch Ads Shredder back to Gemini with platform-specific system prompts
+bb85ed5 fix: sync recent posts/videos count with KPI totals across all platforms
+ba25646 feat: migrate Ads Shredder to OpenAI Assistants + per-client platform config + Ban Batu
+098728e feat: show separate Ads Shredder cards per platform (Meta, Google, TikTok)
+8f0eec5 feat: add Ads Shredder card to main client dashboard
+ce962e0 fix: make summary cards full-width for readable 4-column layout
+968dc31 feat: add Ads Shredder analysis with Excel upload (Gemini-powered)
+729f3f7 ui: move summary cards above top posts, 4-column layout
+3a8a383 fix: auto-regenerate stale AI summaries (older than 6 hours)
+5e1d9a7 feat: Shopify order source attribution (organic vs paid) + Meta posts date filter fix
+4690b77 fix: Meta recent posts only show content published during reporting period week
+0e8b543 fix: rename Total Posts to Total Content (includes stories+reels from Metricool)
+93f3d52 fix: improve AI summary prompt - content type strengths and strategy-focused SMART actions
+b14be3e fix: Meta card shows Connected when Metricool has data, add follower count display, default date range to all-time
+93007a3 fix: default date range to all-time, fix page view data inconsistency in fetch-client-analytics
+f3fd00c fix: country-breakdown function now fetches from external Supabase projects
+2478638 add: vercel.json for Vercel deployment with SPA rewrites
+31d43ec fix: top posts include all platforms, better Meta sync error handling
+b3d7a6a fix: increase maxOutputTokens to 8192 - response was truncating mid-JSON
+45368b1 fix: robust JSON parsing - extract between first { and last } to handle markdown fences
+a3123fe fix: switch to gemini-2.5-flash - 2.0-flash unavailable for new users
+c7db5cc fix: add multi-key fallback and detailed error logging for Gemini API debugging
+63a91af fix: remove responseSchema causing Gemini 400, use prompt-based JSON output
+15206ff fix: update Gemini API model to 2.0-flash, add connected platform filtering, improve AI prompt
+b4fa5c1 fix: use gemini-2.5-flash model, remove YouTube key fallback
+741d7f1 fix: try YOUTUBE_API_KEY and GOOGLE_API_KEY as Gemini fallbacks
+7b07404 fix: Gemini model fallback - try gemini-2.0-flash, 1.5-flash-latest, gemini-pro
+033a21f fix: update Gemini model to 2.0-flash-lite
+a4a64a7 feat: AI-powered analytics summaries per client - New generate-analytics-summary edge function (Gemini) - Gathers ALL social + ads data OR website analytics - Returns Strengths, Weaknesses, SMART actions, Highlights - AnalyticsSummaryCard component with generate/refresh - Integrated into ClientDashboard above Live Analytics tabs
+bd3c520 fix: clients with website analytics not treated as ads-only - Add client.supabase_url check to isAdsOnlyClient logic - Snarky Ac:\Users\Iris\Downloads\sienviagencyclientdashboard (1)\sienviagencyclientdashboard Humans now shows Website card alongside Ads
+063ac5f fix: CORS on track-analytics - reflect request origin instead of wildcard - Fixes credentials:include conflict with Access-Control-Allow-Origin:* - Dynamic getCorsHeaders(req) returns specific origin + Allow-Credentials
+fdabdd6 fix: correct table names in get-analytics function - analytics_sessions -> web_analytics_sessions - analytics_page_views -> web_analytics_page_views - Fix traffic source detection from referrer URLs - Fix page path extraction from page_url column
+61814f3 fix: restore supabase_url gate on Website Analytics card - Only show Website card for clients with supabase_url configured - Prevents card from appearing on wrong clients
+482bfa4 feat: add website analytics for Snarky Ac:\Users\Iris\Downloads\sienviagencyclientdashboard (1)\sienviagencyclientdashboard Humans - Add analytics_api_key support for two-key auth in fetch-client-analytics - Normalize breakdowns-style API responses (key/value format) - Normalize dailyTimeSeries to dailyBreakdown - Add 90d/365d date range presets - Add Pages Per Visit and Avg Scroll Depth KPI cards - Default date range to 30 days - Show Website Analytics card for all non-ads clients
+3dd8cb5 feat: add dedicated FFF LMS analytics page with beta testers, traffic, and KPIs
+acd2bbc fix: update beta testers label to FFF LMS Course
+21c55c6 feat: add beta testers count card for Father Figure Formula
+9fa6a65 fix: show Mar 2-8 content without metrics + fix CSV parser for FFF total posts
+2cfecd8 fix: add PlayIQ to homepage, fix BlingyBag and SnarkyAzz logos in clients.ts
+5ffaa14 fix: correct Snarky logo mapping - SnarkyAzz separate from Snarky Humans, add real Snarky Humans logo
+8c3d45e feat: add PlayIQ client + logos for PlayIQ, BlingyBag, Snarky Humans in src/assets
+f56073d feat: add browser breakdown, Amazon clicks, and unique visitors per page to web analytics
+ae2033c fix: only show YouTube/Meta cards for clients that have those platforms configured
+8d73d34 fix: show Ads card for google_ads and tiktok_ads clients
+f50d87c fix: hide YouTube/Meta for ads-only clients like Snarky Ac:\Users\Iris\Downloads\sienviagencyclientdashboard (1)\sienviagencyclientdashboard Humans
+21a2b99 fix: move Snarky Azz Humans Ads link to its own client card
+45f1892 feat: move Snarky Azz Google Ads to own client card
+b7067bf feat: add client logins and Snarky Ac:\Users\Iris\Downloads\sienviagencyclientdashboard (1)\sienviagencyclientdashboard Humans client card
+4599d4b Fix Meta reporting period date display across months (Feb 23-1 -> Feb 23 - Mar 1)
+03aab8d Support multi-account Google Ads, filter content by date range, hide follower decreases
+ae4d5a2 Remove Growth chart, hide follower decreases, filter content by reporting period, add Amazon Ads OAuth callback
+c5b6126 fix: enable Facebook tab in Meta Analytics when connected via Metricool

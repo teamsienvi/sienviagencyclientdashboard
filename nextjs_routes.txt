@@ -1,0 +1,2 @@
+﻿(auth)\callback\route.ts
+api\oauth\shopify\callback\route.ts

@@ -15,8 +15,7 @@ import {
   ENGAGEMENT_TIER_DEFINITIONS,
   PERFORMANCE_TIER_DEFINITIONS
 } from "@/utils/topPerformingInsights";
-import { format } from "date-fns";
-import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
+import { format, subDays } from "date-fns";
 
 // Tooltip content for each metric
 const MetricTooltip = ({ children, content }: { children: React.ReactNode; content: React.ReactNode }) => (
@@ -98,6 +97,7 @@ const TierTooltip = () => (
 );
 interface TopPerformingPostsProps {
   clientId: string;
+  dateRange?: string; // e.g. "7d" | "30d" | "custom"
 }
 
 type RankingChoice = "all" | "instagram" | "facebook" | "tiktok" | "youtube" | "x";
@@ -117,11 +117,11 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
+export const TopPerformingPosts = ({ clientId, dateRange = "7d" }: TopPerformingPostsProps) => {
   const [rankingChoice, setRankingChoice] = useState<RankingChoice>("all");
   
   // Always show top 3 posts from last 7 days, ranked by views
-  const { data: allPosts, isLoading, error } = useTopPerformingPosts(clientId, 10); // Fetch more, filter client-side
+  const { data: allPosts, isLoading, error } = useTopPerformingPosts(clientId, dateRange, 10); // Fetch more, filter client-side
   
   // Filter and re-rank based on ranking choice
   const posts = allPosts
@@ -207,8 +207,14 @@ export const TopPerformingPosts = ({ clientId }: TopPerformingPostsProps) => {
             </Select>
             <Badge variant="outline" className="text-xs">
               {(() => {
-                const { start, end } = getCurrentReportingWeek();
-                return formatDateRange(start, end);
+                const daysToSubtract = dateRange === "30d" ? 30 : 7;
+                const end = new Date();
+                const start = subDays(end, daysToSubtract);
+                // Simple display "Mar 23-29" or "Mar 1-30"
+                if (start.getMonth() === end.getMonth()) {
+                  return `${format(start, "MMM d")}-${format(end, "d")}`;
+                }
+                return `${format(start, "MMM d")} - ${format(end, "MMM d")}`;
               })()}
             </Badge>
           </div>

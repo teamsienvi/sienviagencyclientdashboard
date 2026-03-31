@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,22 +89,12 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         },
     });
 
-    // Auto-regenerate if cached summary is stale (older than 6 hours)
-    const [autoRefreshed, setAutoRefreshed] = useState(false);
+    useEffect(() => {
+        if (isLoadingCache || generateMutation.isPending) return;
 
-    // Reset auto-refresh when client changes
-    useState(() => { setAutoRefreshed(false); });
-
-    // Auto-trigger regeneration for stale summaries OR mismatched date ranges OR first-time loads
-    if (
-        !autoRefreshed &&
-        !isLoadingCache &&
-        !generateMutation.isPending
-    ) {
         let needsRegen = false;
 
         if (!cachedSummary) {
-            // First time load: auto-generate immediately
             needsRegen = true;
         } else {
             const generatedTime = new Date((cachedSummary as any)?.generated_at || 0).getTime();
@@ -112,7 +102,6 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             
             needsRegen = generatedTime < sixHoursAgo;
             
-            // Also regenerate if the requested date range differs from the cached period length
             if (!needsRegen && (cachedSummary as any)?.period_start && (cachedSummary as any)?.period_end) {
                 const pStart = new Date((cachedSummary as any).period_start).getTime();
                 const pEnd = new Date((cachedSummary as any).period_end).getTime();
@@ -125,12 +114,11 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 }
             }
         }
-        
+
         if (needsRegen) {
-            setAutoRefreshed(true);
             setTimeout(() => generateMutation.mutate(), 100);
         }
-    }
+    }, [clientId, type, dateRange, cachedSummary, isLoadingCache, generateMutation.isPending]);
 
     const summary: SummaryData | null =
         generateMutation.data || (cachedSummary as any)?.summary_data || null;

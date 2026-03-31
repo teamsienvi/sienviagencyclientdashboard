@@ -1,19 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { format, parseISO, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
-import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 
-export const useTopPerformingPosts = (clientId: string, limit: number = 3) => {
-  const { start, end } = getCurrentReportingWeek();
-  const periodKey = `${format(start, "yyyy-MM-dd")}_${format(end, "yyyy-MM-dd")}`;
-
+export function useTopPerformingPosts(clientId: string | undefined, dateRange: string = "7d", limit: number = 3) {
   return useQuery({
-    queryKey: ["top-performing-posts", clientId, limit, periodKey],
+    queryKey: ["top-performing-posts", clientId, dateRange, limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
-      const periodStartDate = startOfDay(start);
-      const periodEndDate = endOfDay(end);
-      
+      if (!clientId) return [];
+
+      const daysToSubtract = dateRange === "30d" ? 30 : 7;
+      const periodEndDate = endOfDay(new Date());
+      const periodStartDate = startOfDay(subDays(new Date(), daysToSubtract));
 
       // Fetch content with metrics for this client across all platforms
       // Only fetch content published on or after the reporting period start
