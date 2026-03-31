@@ -22,9 +22,9 @@ export const Header = () => {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Fetch all clients for admin dropdown
-  const { data: adminClients } = useQuery({
-    queryKey: ["admin-clients-dropdown"],
+  // Fetch all clients unconditionally for the Switch Client dropdown
+  const { data: clients } = useQuery({
+    queryKey: ["all-clients-dropdown"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
@@ -33,38 +33,9 @@ export const Header = () => {
         .order("name");
       if (error) throw error;
       return data;
-    },
-    enabled: isAdmin && isAuthenticated,
+    }
   });
 
-  // Fetch assigned clients for non-admin users
-  const { data: userClients } = useQuery({
-    queryKey: ["user-assigned-clients", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data: clientMappings, error: mappingError } = await supabase
-        .from("client_users")
-        .select("client_id")
-        .eq("user_id", user.id);
-
-      if (mappingError) throw mappingError;
-      if (!clientMappings || clientMappings.length === 0) return [];
-
-      const clientIds = clientMappings.map(m => m.client_id);
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, logo_url")
-        .in("id", clientIds)
-        .eq("is_active", true)
-        .order("name");
-
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !isAdmin && isAuthenticated && !!user,
-  });
-
-  const clients = isAdmin ? adminClients : userClients;
   const showClientSwitcher = clients && clients.length > 0;
 
   // Get current client from URL if on a client page
