@@ -596,16 +596,24 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
+  // Automatically sync when date range changes
+  useEffect(() => {
+    if (config && config.is_active && !syncMutation.isPending && !configLoading) {
+      const timer = setTimeout(() => {
+        syncMutation.mutate();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [dateRangePreset, customDateRange, config?.is_active, configLoading]);
+
   // Sync mutation - uses metricool-tiktok-posts edge function to fetch CSV data
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!config) throw new Error("No configuration found");
       if (!config.user_id) throw new Error("User ID not configured");
 
-      // Use standardized reporting week for consistency across all analytics
-      const { start: weekStart, end: weekEnd } = getCurrentReportingWeek();
-      const startDate = weekStart;
-      const endDate = weekEnd;
+      // Use the currently selected date range instead of hardcoding reporting week
+      const { start: startDate, end: endDate } = getDateRange();
 
       const formatWithOffset = (date: Date, isEnd: boolean, offsetMinutes: number) => {
         // Format date in a fixed-offset "local" time by shifting the timestamp

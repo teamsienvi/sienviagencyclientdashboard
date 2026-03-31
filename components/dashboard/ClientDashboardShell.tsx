@@ -48,6 +48,11 @@ const getMonthFromDateRange = (dateRange: string): string => {
   return match ? (monthMap[match[1]] || match[1]) : dateRange;
 };
 
+import { DateRangeSelector } from "@/components/DateRangeSelector";
+
+type DateRangePreset = "7d" | "30d" | "custom";
+type RankingChoice = "all" | "engagement" | "reach" | "clicks";
+
 interface ClientDashboardShellProps {
   clientId: string;
 }
@@ -55,6 +60,11 @@ interface ClientDashboardShellProps {
 export default function ClientDashboardShell({ clientId }: ClientDashboardShellProps) {
   const router = useRouter();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [metricRankingChoice, setMetricRankingChoice] = useState<RankingChoice>("all");
+  
+  // Dashboard Date Range State (for AI Summaries)
+  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
 
   // Fetch client details from database
   const { data: client, isLoading: isLoadingClient } = useQuery({
@@ -477,17 +487,30 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-8">
           {/* Welcome Section */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <BarChart3 className="h-4 w-4" />
-              <span>Analytics Dashboard</span>
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <BarChart3 className="h-4 w-4" />
+                <span>Analytics Dashboard</span>
+              </div>
+              <h1 className="text-4xl font-bold text-foreground">
+                Welcome to your Dashboard
+              </h1>
+              <p className="text-muted-foreground text-lg">
+                View your performance metrics and past reports all in one place.
+              </p>
             </div>
-            <h1 className="text-4xl font-bold text-foreground">
-              Welcome to your Dashboard
-            </h1>
-            <p className="text-muted-foreground text-lg">
-              View your performance metrics and past reports all in one place.
-            </p>
+            
+            <div className="flex items-center gap-2">
+              <DateRangeSelector 
+                value={dateRange} 
+                onChange={(preset, custom) => {
+                  setDateRange(preset);
+                  if (preset === "custom" && custom) setCustomDateRange(custom);
+                }} 
+                customRange={customDateRange}
+              />
+            </div>
           </div>
 
           {/* AI-Powered Analytics Summaries */}
@@ -498,6 +521,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 type="social"
                 title="Social Media Summary"
                 icon={<Share2 className="h-5 w-5 text-violet-400" />}
+                dateRange={dateRange}
               />
             )}
             {client?.supabase_url && (
@@ -506,6 +530,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 type="website"
                 title="Website Analytics Summary"
                 icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
+                dateRange={dateRange}
               />
             )}
             {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
@@ -1046,7 +1071,7 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
 
   // Use admin clients for admins, user clients for regular users
   const clients = isAdmin ? adminClients : userClients;
-  const showClientSwitcher = clients && clients.length > 1;
+  const showClientSwitcher = clients && clients.length > 0;
 
   const handleClientSelect = (clientId: string) => {
     router.push(`/client/${clientId}`);

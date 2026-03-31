@@ -28,16 +28,16 @@ serve(async (req) => {
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        const { clientId, type } = await req.json();
+        const { clientId, type, dateRange } = await req.json();
 
         if (!clientId || !type) {
             throw new Error("clientId and type are required");
         }
-        if (type !== "social" && type !== "website") {
-            throw new Error("type must be 'social' or 'website'");
+        if (type !== "social" && type !== "website" && type !== "lms") {
+            throw new Error("type must be 'social', 'website', or 'lms'");
         }
 
-        console.log(`Generating ${type} summary for client ${clientId}`);
+        console.log(`Generating ${type} summary for client ${clientId} (${dateRange || "7d"})`);
 
         // Fetch client info
         const { data: client, error: clientError } = await supabase
@@ -50,10 +50,11 @@ serve(async (req) => {
             throw new Error(`Client not found: ${clientError?.message}`);
         }
 
-        // Calculate date range (last 7 days)
+        // Calculate date range based on param (default 7 days)
         const periodEnd = new Date();
         const periodStart = new Date();
-        periodStart.setDate(periodStart.getDate() - 7);
+        const daysToSubtract = dateRange === "30d" ? 30 : 7;
+        periodStart.setDate(periodStart.getDate() - daysToSubtract);
         const startStr = periodStart.toISOString().split("T")[0];
         const endStr = periodEnd.toISOString().split("T")[0];
 

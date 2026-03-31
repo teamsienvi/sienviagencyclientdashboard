@@ -26,12 +26,13 @@ interface SummaryData {
 
 interface AnalyticsSummaryCardProps {
     clientId: string;
-    type: "social" | "website";
+    type: "social" | "website" | string;
     title: string;
     icon: React.ReactNode;
+    dateRange?: string;
 }
 
-export function AnalyticsSummaryCard({ clientId, type, title, icon }: AnalyticsSummaryCardProps) {
+export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d" }: AnalyticsSummaryCardProps) {
     const [expanded, setExpanded] = useState(true);
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -70,7 +71,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon }: AnalyticsS
                         Authorization: `Bearer ${session?.access_token}`,
                         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
                     },
-                    body: JSON.stringify({ clientId, type }),
+                    body: JSON.stringify({ clientId, type, dateRange }),
                 }
             );
             if (!response.ok) {
@@ -94,16 +95,38 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon }: AnalyticsS
     // Reset auto-refresh when client changes
     useState(() => { setAutoRefreshed(false); });
 
-    // Auto-trigger regeneration for stale summaries
+    // Auto-trigger regeneration for stale summaries OR mismatched date ranges OR first-time loads
     if (
         !autoRefreshed &&
         !isLoadingCache &&
-        !generateMutation.isPending &&
-        cachedSummary
+        !generateMutation.isPending
     ) {
-        const generatedTime = new Date((cachedSummary as any)?.generated_at || 0).getTime();
-        const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
-        if (generatedTime < sixHoursAgo) {
+        let needsRegen = false;
+
+        if (!cachedSummary) {
+            // First time load: auto-generate immediately
+            needsRegen = true;
+        } else {
+            const generatedTime = new Date((cachedSummary as any)?.generated_at || 0).getTime();
+            const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
+            
+            needsRegen = generatedTime < sixHoursAgo;
+            
+            // Also regenerate if the requested date range differs from the cached period length
+            if (!needsRegen && (cachedSummary as any)?.period_start && (cachedSummary as any)?.period_end) {
+                const pStart = new Date((cachedSummary as any).period_start).getTime();
+                const pEnd = new Date((cachedSummary as any).period_end).getTime();
+                const cachedDays = Math.round((pEnd - pStart) / (1000 * 60 * 60 * 24));
+                
+                if (dateRange === "30d" && cachedDays < 20) {
+                    needsRegen = true;
+                } else if (dateRange === "7d" && cachedDays > 15) {
+                    needsRegen = true;
+                }
+            }
+        }
+        
+        if (needsRegen) {
             setAutoRefreshed(true);
             setTimeout(() => generateMutation.mutate(), 100);
         }
@@ -217,7 +240,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon }: AnalyticsS
                             <p className="text-xs mt-1">Click "Generate" to create an AI-powered summary</p>
                         </div>
                     ) : (
-                        <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
+                        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                             {sections.map((section) => (
                                 <div
                                     key={section.key}
