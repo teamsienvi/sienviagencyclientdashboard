@@ -90,8 +90,8 @@ function parseCSV(csvText: string): FacebookPost[] {
       clicks: parseInt(row["clicks"] || row["link clicks"] || row["linkclicks"] || "0", 10) || 0,
       reactions: parseInt(row["reactions"] || "0", 10) || 0,
       engagement: parseFloat(row["engagement"] || "0") || 0,
-      url: row["postlink"] || row["reel_link"] || row["url"] || null,
-      link: row["link"] || null,
+      url: row["url"] || row["permalink"] || row["post link"] || row["postlink"] || row["reel link"] || row["reel_link"] || row["video link"] || row["link"] || null,
+      link: row["link"] || row["url"] || null,
       image: row["image"] || null,
     };
 

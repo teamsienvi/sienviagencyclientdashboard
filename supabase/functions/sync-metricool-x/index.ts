@@ -77,7 +77,7 @@ function parseCSV(csvText: string): XPost[] {
       likes: parseInt(row["likes"] || row["favorites"] || "0", 10) || 0,
       comments: parseInt(row["replies"] || row["comments"] || "0", 10) || 0,
       retweets: parseInt(row["retweets"] || row["shares"] || "0", 10) || 0,
-      url: row["url"] || row["link"] || row["postlink"] || null,
+      url: row["url"] || row["permalink"] || row["post link"] || row["postlink"] || row["reel link"] || row["reel_link"] || row["video link"] || row["link"] || null,
     };
 
     rows.push(post);

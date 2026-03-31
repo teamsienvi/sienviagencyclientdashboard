@@ -104,8 +104,8 @@ function parseCSV(csvText: string): InstagramPost[] {
       saves: parseInt(row["saved (organic)"] || row["saved"] || row["saves"] || "0", 10) || 0,
       interactions: parseInt(row["interactions (organic)"] || row["interactions"] || "0", 10) || 0,
       engagement: parseFloat(row["engagement (organic)"] || row["engagement"] || "0") || 0,
-      url: row["url"] || null,
-      link: row["link"] || null,
+      url: row["url"] || row["permalink"] || row["post link"] || row["postlink"] || row["reel link"] || row["reel_link"] || row["video link"] || row["link"] || null,
+      link: row["link"] || row["url"] || null,
       image: row["image"] || null,
     };
 

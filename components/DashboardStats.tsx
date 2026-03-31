@@ -1,6 +1,7 @@
 import { Users, FileText, Clock } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 
 export const DashboardStats = () => {
   // Fetch real stats from database
@@ -22,20 +23,13 @@ export const DashboardStats = () => {
 
       if (reportError) throw reportError;
 
-      // Fetch latest report date
-      const { data: latestReport, error: latestError } = await supabase
-        .from("reports")
-        .select("date_range, week_end")
-        .order("week_end", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (latestError) throw latestError;
+      // Get the current reporting week instead of relying on stale report generations
+      const { dateRange } = getCurrentReportingWeek();
 
       return {
         totalClients: clientCount || 0,
         totalReports: reportCount || 0,
-        latestUpdate: latestReport?.date_range || "N/A",
+        latestUpdate: dateRange,
       };
     },
   });
