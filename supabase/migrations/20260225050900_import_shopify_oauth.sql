@@ -1,4 +1,6 @@
 -- Import shopify_oauth_connections from Lovable
+-- NOTE: Access tokens have been removed for security. 
+-- Re-insert tokens via Supabase dashboard SQL editor or environment variables.
 INSERT INTO public.shopify_oauth_connections (id, client_id, shop_domain, access_token, scope, is_active, connected_at, updated_at)
 VALUES
   ('e2fa3ef2-d598-4e64-90a5-e368822fec0d', 'ef580ebf-439f-4305-826a-f1f8aa89fd03', 'bedd78-a1.myshopify.com', '***REDACTED***', 'read_all_orders,read_analytics,read_customers,read_orders,read_products,read_reports', true, '2026-01-31T03:13:14.044+00:00', '2026-01-31T03:13:14.044+00:00'),
