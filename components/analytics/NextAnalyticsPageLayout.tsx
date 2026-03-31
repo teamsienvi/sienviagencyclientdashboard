@@ -99,24 +99,13 @@ export const NextAnalyticsPageLayout = ({
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container mx-auto px-4 py-8">
-        {/* Breadcrumb Navigation */}
         <div className="flex items-center justify-between mb-6">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbLink asChild>
-                  <Link href="/" className="hover:text-primary transition-colors">
-                    Dashboard
-                  </Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator>
-                <ChevronRight className="h-4 w-4" />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
                   <Link href={`/client/${clientId}`} className="hover:text-primary transition-colors">
-                    {clientName}
+                    Dashboard
                   </Link>
                 </BreadcrumbLink>
               </BreadcrumbItem>
