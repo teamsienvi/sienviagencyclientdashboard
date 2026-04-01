@@ -97,8 +97,10 @@ function parseCSV(csvText: string): TikTokPost[] {
     console.log("Row keys:", Object.keys(row).join(", "));
 
     // Convert to TikTokPost with numeric casting
-    // Calculate engagement if not provided: (likes + comments + shares) / views * 100
-    const views = parseInt(row["views"] || "0", 10) || 0;
+    // Try multiple possible column names for views that Metricool might export depending on language/version
+    const viewsStr = row["views"] || row["video_views"] || row["play_count"] || row["visualizaciones"] || "0";
+    const views = parseInt(viewsStr, 10) || 0;
+    
     const likes = parseInt(row["likes"] || "0", 10) || 0;
     const comments = parseInt(row["comments"] || "0", 10) || 0;
     const shares = parseInt(row["shares"] || "0", 10) || 0;
