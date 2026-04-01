@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { getCurrentReportingWeek, getPreviousReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 import { useAnalyticsCache, getWeekKey } from "@/hooks/useAnalyticsCache";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
+import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 
 interface XAnalyticsSectionProps {
   clientId: string;
@@ -461,6 +462,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <AllTimeTopPostsModal clientId={clientId} platformFilter="x" buttonLabel="All-Time Top 3" />
           {lastSyncAt && (
             <span className="text-xs text-muted-foreground">
               Last sync: {formatDate(lastSyncAt)}

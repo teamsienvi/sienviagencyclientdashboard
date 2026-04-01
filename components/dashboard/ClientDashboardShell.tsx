@@ -45,6 +45,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 
 // Helper to extract month from date range
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -537,6 +538,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               </div>
               
               <div className="flex items-center gap-2">
+                <AllTimeTopPostsModal clientId={clientId} />
                 <DateRangeSelector 
                   value={dateRange} 
                   onChange={(preset, custom) => {

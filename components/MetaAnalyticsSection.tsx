@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
+import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { subDays, format, startOfDay, endOfDay, formatDistanceToNow, differenceInDays } from "date-fns";
 import { getDashboardDateRange, getComparisonDateRange as getComparisonRange, formatPeriodLabel, type DateRange as DashboardDateRange } from "@/utils/dashboardDateRange";
 import { MetaPageSelector } from "@/components/MetaPageSelector";
@@ -2193,11 +2194,18 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
       {/* Header with date range */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <DateRangeSelector
-          value={dateRangePreset}
-          onChange={handleDateRangeChange}
-          customRange={customDateRange}
-        />
+        <div className="flex items-center gap-2">
+          <AllTimeTopPostsModal 
+            clientId={clientId} 
+            platformFilter={["instagram", "facebook"]} 
+            buttonLabel="All-Time Top 3" 
+          />
+          <DateRangeSelector
+            value={dateRangePreset}
+            onChange={handleDateRangeChange}
+            customRange={customDateRange}
+          />
+        </div>
       </div>
 
       {/* Platform Tabs */}

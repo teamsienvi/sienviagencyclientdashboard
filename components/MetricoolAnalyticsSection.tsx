@@ -16,6 +16,7 @@ import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRang
 import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
+import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface MetricoolAnalyticsSectionProps {
@@ -1573,6 +1574,7 @@ export const MetricoolAnalyticsSection = ({
           <Badge variant="outline" className="text-xs">
             Metricool Connected
           </Badge>
+          <AllTimeTopPostsModal clientId={clientId} platformFilter={platform} buttonLabel="All-Time Top 3" />
           <DateRangeSelector
             value={dateRangePreset}
             onChange={handleDateRangeChange}

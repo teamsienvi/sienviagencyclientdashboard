@@ -39,6 +39,7 @@ import { format, subDays, subMonths, parseISO, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
 import { format as formatDate } from "date-fns";
+import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 
 interface YouTubeStats {
   followers: number;
@@ -617,6 +618,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
         </div>
 
         <div className="flex items-center gap-2">
+          <AllTimeTopPostsModal clientId={clientId} platformFilter="youtube" buttonLabel="All-Time Top 3" />
           {useMetricool && (
             <Badge variant="secondary" className="text-xs">
               Metricool
