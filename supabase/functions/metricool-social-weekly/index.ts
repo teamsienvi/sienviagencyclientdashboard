@@ -370,7 +370,7 @@ serve(async (req) => {
 
         const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
         const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
-        const dateIdx = headers.findIndex(h => h === 'date' || h === 'published' || h === 'published_at');
+        const dateIdx = headers.findIndex(h => h === 'date' || h === 'published' || h === 'published_at' || h === 'timestamp');
 
         // Parse period dates for strict filtering
         const periodStartDate = new Date(fromDate);
@@ -497,12 +497,16 @@ serve(async (req) => {
 
       // Finalize postsCount with platform-specific precedence.
       if (platform === 'instagram' || platform === 'facebook') {
-        // Never let CSV undercount reels vs timelines.
-        const a = timelinesTotal ?? 0;
-        const b = csvTotal ?? 0;
-        const best = Math.max(a, b);
-        result.postsCount = best > 0 ? best : (timelinesTotal ?? csvTotal ?? result.postsCount);
-        console.log(`Total content finalized (${platform}, ${fromDate} to ${toDate}): ${result.postsCount}`);
+        // ALWAYS trust the CSV count for total posts when available!
+        // The timelines API (with subject=account) returns the COMBINED sum of ALL networks for this blogId
+        // which severely inflates the count when a client has both Facebook + Instagram linked properly.
+        if (csvTotal !== null) {
+          result.postsCount = csvTotal;
+          console.log(`Total content finalized from CSV isolated to ${platform} (${fromDate} to ${toDate}): ${result.postsCount}`);
+        } else if (timelinesTotal !== null) {
+          result.postsCount = timelinesTotal;
+          console.log(`Fallback to timelines Total (WARNING: may include other networks) (${platform}, ${fromDate} to ${toDate}): ${result.postsCount}`);
+        }
       } else {
         // Keep existing behavior for other platforms (TikTok/LinkedIn/etc.):
         // prefer CSV when it exists; fallback to timelines.

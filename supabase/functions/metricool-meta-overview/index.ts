@@ -282,10 +282,9 @@ serve(async (req) => {
 
     if (postsData) {
       if (Array.isArray(postsData)) {
-        // Posts is an array - count them
-        if (kpis.postsCount === null || kpis.postsCount === 0) {
-          kpis.postsCount = postsData.length;
-        }
+        // Posts is an array from network-specific endpoint - use this as the absolute source of truth!
+        // This prevents the overall blog-level timelines API from inflating counts for Facebook/Instagram
+        kpis.postsCount = postsData.length;
         
         // Calculate total reach, impressions, interactions from posts
         if (postsData.length > 0) {
