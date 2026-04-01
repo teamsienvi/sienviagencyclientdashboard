@@ -368,7 +368,9 @@ serve(async (req) => {
         const lines = csv.split('\n').filter(l => l.trim());
         if (lines.length < 2) return { totalCount: 0, feedPostsCount: 0, reelsCount: 0 };
 
-        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+        // Strip BOM from headers to prevent matching issues on the first column (often 'date')
+        const headerLine = lines[0].replace(/^\uFEFF/, '').trim();
+        const headers = parseCSVLine(headerLine).map(h => h.toLowerCase().trim());
         const typeIdx = headers.findIndex(h => h === 'type' || h === 'format');
         const dateIdx = headers.findIndex(h => h === 'date' || h === 'published' || h === 'published_at' || h === 'timestamp');
 
