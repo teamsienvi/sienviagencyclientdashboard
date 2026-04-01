@@ -32,12 +32,31 @@ interface TikTokPost {
 }
 
 function parseCSV(csvText: string): TikTokPost[] {
-  const lines = csvText.trim().split("\n");
+  // Parse CSV flexibly handling newlines inside quoted captions
+  const normalizedText = csvText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines: string[] = [];
+  let currentRecord = "";
+  let isInsideQuotes = false;
+  
+  for (let i = 0; i < normalizedText.length; i++) {
+    const char = normalizedText[i];
+    if (char === '"') {
+      isInsideQuotes = !isInsideQuotes;
+      currentRecord += char;
+    } else if (char === "\n" && !isInsideQuotes) {
+      if (currentRecord.trim()) lines.push(currentRecord);
+      currentRecord = "";
+    } else {
+      currentRecord += char;
+    }
+  }
+  if (currentRecord.trim()) lines.push(currentRecord);
+
   if (lines.length < 2) return [];
 
   // Parse header line - handle potential BOM and whitespace
   const headerLine = lines[0].replace(/^\uFEFF/, "").trim();
-  const headers = headerLine.split(",").map((h) => h.trim().toLowerCase());
+  const headers = headerLine.split(",").map((h) => h.trim().replace(/"/g, '').toLowerCase());
   
   console.log("CSV Headers:", headers);
 
@@ -47,7 +66,7 @@ function parseCSV(csvText: string): TikTokPost[] {
     const line = lines[i].trim();
     if (!line) continue;
 
-    // Parse CSV line - handle quoted values
+    // Parse CSV line - handle quoted values for columns
     const values: string[] = [];
     let current = "";
     let inQuotes = false;

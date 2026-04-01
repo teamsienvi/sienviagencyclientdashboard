@@ -186,13 +186,31 @@ serve(async (req) => {
       return points.reduce((sum, p) => sum + p.value, 0);
     };
 
-    // Parse CSV to video rows
+    // Parse CSV to video rows reliably handling quoted newlines and BOMs
     const parseVideosCSV = (csv: string): VideoData[] => {
-      const lines = csv.split('\n').filter(l => l.trim());
+      const normalizedText = csv.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const lines: string[] = [];
+      let currentRecord = "";
+      let isInsideQuotes = false;
+      
+      for (let i = 0; i < normalizedText.length; i++) {
+        const char = normalizedText[i];
+        if (char === '"') {
+          isInsideQuotes = !isInsideQuotes;
+          currentRecord += char;
+        } else if (char === "\n" && !isInsideQuotes) {
+          if (currentRecord.trim()) lines.push(currentRecord);
+          currentRecord = "";
+        } else {
+          currentRecord += char;
+        }
+      }
+      if (currentRecord.trim()) lines.push(currentRecord);
+
       if (lines.length < 2) return [];
 
-      // Parse headers - handle quoted headers
-      const headerLine = lines[0];
+      // Parse headers - strip \uFEFF BOM and handle quoted headers
+      const headerLine = lines[0].replace(/^\uFEFF/, '').trim();
       const headers = headerLine.split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
 
       // Find column indices
@@ -218,7 +236,7 @@ serve(async (req) => {
 
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
-        // Handle CSV parsing with quoted values
+        // Handle CSV parsing with quoted values for columns
         const values: string[] = [];
         let current = '';
         let inQuotes = false;
