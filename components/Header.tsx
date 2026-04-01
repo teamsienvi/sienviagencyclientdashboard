@@ -95,7 +95,11 @@ export const Header = () => {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
-                    <Building2 className="h-4 w-4" />
+                    {currentClient?.logo_url ? (
+                      <img src={currentClient.logo_url} alt={currentClient.name} className="h-4 w-4 rounded-sm object-cover" />
+                    ) : (
+                      <Building2 className="h-4 w-4" />
+                    )}
                     <span className="hidden sm:inline max-w-[150px] truncate">
                       {currentClient?.name || "Switch Client"}
                     </span>
