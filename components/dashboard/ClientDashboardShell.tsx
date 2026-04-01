@@ -436,6 +436,19 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     return count;
   }, [metricoolPlatforms, connectedAccounts]);
 
+  // Check if client has any active social media platforms
+  const hasSocialMedia = useMemo(() => {
+    if (!metricoolPlatforms || !connectedAccounts) return false;
+    const platforms = metricoolPlatforms.map(p => p.platform);
+    const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
+    const nonAdsPlatforms = platforms.filter(p => !adsPlatforms.includes(p));
+    
+    return nonAdsPlatforms.length > 0 || 
+           connectedAccounts.meta || 
+           connectedAccounts.youtube || 
+           connectedAccounts.xHasData;
+  }, [metricoolPlatforms, connectedAccounts]);
+
   // Check if client only has ads (meta_ads) and no other platforms
   const isAdsOnlyClient = useMemo(() => {
     if (!metricoolPlatforms) return false;
@@ -444,14 +457,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
-    const nonAdsPlatforms = platforms.filter(p => !adsPlatforms.includes(p));
-    const hasMetaOAuth = connectedAccounts?.meta;
-    const hasYouTube = connectedAccounts?.youtube;
-    const hasX = connectedAccounts?.xHasData;
-    return hasAnyAdsPlatform &&
-      nonAdsPlatforms.length === 0 &&
-      !hasMetaOAuth && !hasYouTube && !hasX;
-  }, [metricoolPlatforms, connectedAccounts, client]);
+    return hasAnyAdsPlatform && !hasSocialMedia;
+  }, [metricoolPlatforms, hasSocialMedia, client]);
 
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
     ? clientReports.reports[clientReports.reports.length - 1] 
@@ -552,7 +559,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
           </div>
 
           {/* Top Performing Posts - Moved to Top */}
-          <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
+          {hasSocialMedia && (
+            <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
+          )}
 
           {/* AI-Powered Analytics Summaries */}
           <div className="flex flex-col gap-6 mt-8">
