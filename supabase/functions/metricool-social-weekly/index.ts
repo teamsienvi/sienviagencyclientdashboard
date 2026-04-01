@@ -364,8 +364,25 @@ serve(async (req) => {
         if (!res.ok) throw new Error(`Posts CSV: ${res.status}`);
         const csv = await res.text();
 
-        // Parse CSV to count posts and reels
-        const lines = csv.split('\n').filter(l => l.trim());
+        // Parse CSV to count posts and reels robustly (handling newlines in captions)
+        const normalizedText = csv.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const lines: string[] = [];
+        let currentRecord = "";
+        let inQuotes = false;
+        for (let i = 0; i < normalizedText.length; i++) {
+          const char = normalizedText[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+            currentRecord += char;
+          } else if (char === "\n" && !inQuotes) {
+            if (currentRecord.trim()) lines.push(currentRecord);
+            currentRecord = "";
+          } else {
+            currentRecord += char;
+          }
+        }
+        if (currentRecord.trim()) lines.push(currentRecord);
+
         if (lines.length < 2) return { totalCount: 0, feedPostsCount: 0, reelsCount: 0 };
 
         // Strip BOM from headers to prevent matching issues on the first column (often 'date')
@@ -390,10 +407,14 @@ serve(async (req) => {
           // Verify the post falls within the exact date range
           if (dateIdx >= 0) {
             const dateStr = values[dateIdx];
-            const postDate = new Date(dateStr);
-            if (postDate < periodStartDate || postDate > periodEndDate) {
-              continue; // Skip posts outside the period
+            const postDate = new Date(dateStr || "");
+            // If the date is invalid (NaN) or falls outside the period, skip it entirely
+            if (isNaN(postDate.getTime()) || postDate < periodStartDate || postDate > periodEndDate) {
+              continue; 
             }
+          } else {
+            // If we somehow can't find a date column, rely on basic row validation (must have at least 3 columns)
+            if (values.length < 3) continue;
           }
 
           totalCount++;
@@ -401,8 +422,6 @@ serve(async (req) => {
           const type = values[typeIdx]?.toLowerCase() || 'post';
 
           // Categorize as reel or feed post based on type
-          // REEL types: reel, video, REEL, VIDEO
-          // Feed post types: FEED_IMAGE, CAROUSEL_ALBUM, IMAGE, PHOTO, post, etc.
           if (type === 'reel' || type === 'video') {
             reelsCount++;
           } else {
