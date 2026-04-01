@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
+import { getDashboardDateRange, type DateRangePreset } from "@/utils/dashboardDateRange";
 
 export function useTopPerformingPosts(
   clientId: string | undefined,
@@ -21,9 +22,9 @@ export function useTopPerformingPosts(
         periodStartDate = startOfDay(customRange.start);
         periodEndDate = endOfDay(customRange.end);
       } else {
-        const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
-        periodEndDate = endOfDay(new Date());
-        periodStartDate = startOfDay(subDays(new Date(), daysToSubtract));
+        const range = getDashboardDateRange(dateRange as DateRangePreset);
+        periodStartDate = range.start;
+        periodEndDate = endOfDay(range.end);
       }
 
       // Fetch content with metrics for this client across all platforms
