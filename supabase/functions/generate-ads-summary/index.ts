@@ -29,7 +29,29 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 
 `;
 
-// Default analysis instructions for non-TikTok platforms
+// Google Ads specific preamble — handles Asset Groups, Campaign, Search Terms, etc.
+const GOOGLE_PREAMBLE = `Analyze the following Google Ads data. The data may be from Asset Groups reports, Campaign reports, Search Terms reports, Ad Groups reports, or other Google Ads exports. Regardless of the report type or column headers, extract every meaningful metric you can find (impressions, clicks, conversions, cost, CTR, CPC, ROAS, conversion value, etc.) and provide a brutally honest analysis.
+
+IMPORTANT: You MUST respond with ONLY a valid JSON object. No markdown. No code fences. No commentary outside the JSON. Just the raw JSON object.
+
+{
+  "strengths": ["3-5 things working well with specific numbers from the data"],
+  "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
+  "smartActions": ["3-5 highly specific, step-by-step actions the client should take, referencing actual campaign/asset group names from the data"],
+  "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
+  "hardTruths": ["2-4 uncomfortable truths the team needs to hear — no sugar coating"]
+}
+
+RULES:
+- ONLY reference numbers actually present in the data. Do NOT invent metrics.
+- Be specific: name campaigns, asset groups, ad groups, or keywords by name when the data provides them.
+- No fluff. No pleasantries. Direct and actionable.
+- Each bullet should be 1-2 sentences max.
+- Your response must start with { and end with } — nothing else.
+
+`;
+
+// Default analysis instructions for other platforms
 const DEFAULT_INSTRUCTIONS = `Analyze the following ad performance data. Provide a brutally honest analysis looking at:
 - Spend efficiency (CPC, CPM trends)
 - Conversion performance (CPA, ROAS, conversion rates)
@@ -37,7 +59,8 @@ const DEFAULT_INSTRUCTIONS = `Analyze the following ad performance data. Provide
 - Budget allocation (is spend going to the right campaigns?)
 - Audience/targeting signals (any patterns in which segments convert better?)
 
-Respond with ONLY a valid JSON object (no markdown, no code fences):
+IMPORTANT: You MUST respond with ONLY a valid JSON object. No markdown. No code fences. No explanation text. Just the raw JSON object starting with { and ending with }.
+
 {
   "strengths": ["3-5 things working well with specific numbers from the data"],
   "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
@@ -51,6 +74,7 @@ RULES:
 - Be specific: name campaigns, ad sets, or ads by name when the data provides them.
 - No fluff. No pleasantries. Direct and actionable.
 - Each bullet should be 1-2 sentences max.
+- Your response must start with { and end with } — nothing else.
 
 `;
 
@@ -136,7 +160,9 @@ serve(async (req) => {
             : fileContent;
 
         // Build the user message
-        const preamble = adPlatform === "tiktok" ? TIKTOK_PREAMBLE : DEFAULT_INSTRUCTIONS;
+        const preamble = adPlatform === "tiktok" ? TIKTOK_PREAMBLE 
+            : adPlatform === "google" ? GOOGLE_PREAMBLE 
+            : DEFAULT_INSTRUCTIONS;
         const userMessage = `${preamble}Client: ${client.name}\nPlatform: ${adPlatform}\nData Source: ${fileName}\n\n──────────────────────────────────────────────────────────────\nRAW AD DATA:\n${truncatedData}\n──────────────────────────────────────────────────────────────`;
 
         // Resolve the assistant ID
