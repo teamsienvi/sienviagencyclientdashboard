@@ -259,6 +259,28 @@ export const MetricoolAnalyticsSection = ({
             }));
           }
         }
+      } else {
+        // Fallback: use the earliest data point from the current period 
+        // so we still show follower growth when previous period has no data (e.g. 30d)
+        if (data?.success && data?.data?.data?.[0]?.values) {
+          const curValues = data.data.data[0].values;
+          if (curValues.length > 1) {
+            const sortedAsc = [...curValues].sort((a: any, b: any) =>
+              new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
+            );
+            const periodStartFollowers = sortedAsc[0]?.value ?? null;
+            if (periodStartFollowers !== null) {
+              setPrevMetrics(prev => ({
+                ...prev,
+                followers: periodStartFollowers,
+                engagement_rate: prev?.engagement_rate ?? null,
+                total_content: prev?.total_content ?? null,
+                total_views: prev?.total_views ?? null,
+                total_likes: prev?.total_likes ?? null,
+              }));
+            }
+          }
+        }
       }
 
       return data;
@@ -318,6 +340,19 @@ export const MetricoolAnalyticsSection = ({
             setPrevMetrics(prev => ({
               ...prev,
               followers: prevFollowers,
+              engagement_rate: prev?.engagement_rate ?? null,
+              total_content: prev?.total_content ?? null,
+              total_views: prev?.total_views ?? null,
+              total_likes: prev?.total_likes ?? null,
+            }));
+          }
+        } else if (data.data.current?.followersDebug?.firstPoint) {
+          // Fallback: use firstPoint of current period when previous period has no data
+          const periodStartFollowers = data.data.current.followersDebug.firstPoint.value;
+          if (periodStartFollowers !== null && periodStartFollowers !== undefined) {
+            setPrevMetrics(prev => ({
+              ...prev,
+              followers: periodStartFollowers,
               engagement_rate: prev?.engagement_rate ?? null,
               total_content: prev?.total_content ?? null,
               total_views: prev?.total_views ?? null,

@@ -1319,9 +1319,12 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
     // Priority: Use debug.lastPoint (most accurate) > fallback to timeline parsing > other sources
     const currentFollowersFromDebug = currentDebug?.lastPoint?.value ?? null;
     const prevFollowersFromDebug = prevDebug?.lastPoint?.value ?? null;
+    // Fallback: use current period's firstPoint as "start of period" follower count
+    // This ensures we show follower growth even when comparison period has no data (e.g. 30d)
+    const periodStartFollowers = currentDebug?.firstPoint?.value ?? null;
 
     const currentFollowers = currentFollowersFromDebug ?? overviewKPIs?.followers ?? reportData?.followers ?? metrics?.followers;
-    const prevFollowers = prevFollowersFromDebug ?? (reportData?.new_followers != null && reportData?.followers != null
+    const prevFollowers = prevFollowersFromDebug ?? periodStartFollowers ?? (reportData?.new_followers != null && reportData?.followers != null
       ? reportData.followers - reportData.new_followers
       : prevMetrics?.followers);
 
