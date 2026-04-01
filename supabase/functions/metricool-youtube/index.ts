@@ -444,16 +444,31 @@ serve(async (req) => {
 
       // Process videos CSV — used for video list and as fallback for KPI totals
       if (videosCSVRes.status === 'fulfilled') {
-        const videos = parseVideosCSV(videosCSVRes.value);
-        result.videos = videos;
-        result.videosCount = videos.length;
+        const allVideos = parseVideosCSV(videosCSVRes.value);
+        
+        // Filter videos to only include those actually published during this period
+        // because Metricool postsType: "all" returns historical videos too
+        const start = new Date(fromDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+
+        const periodVideos = allVideos.filter(v => {
+          if (!v.publishedAt) return true; // include if no date to be safe
+          const pubDate = new Date(v.publishedAt);
+          if (isNaN(pubDate.getTime())) return true;
+          return pubDate >= start && pubDate <= end;
+        });
+
+        result.videos = periodVideos;
+        result.videosCount = periodVideos.length;
 
         // Aggregate from CSV only as fallback if timeline APIs didn't provide data
         let totalWatchTime = 0;
         let weightedDurationSum = 0;
         let csvViews = 0, csvLikes = 0, csvComments = 0, csvShares = 0;
 
-        for (const video of videos) {
+        for (const video of allVideos) {
           csvViews += video.views;
           csvLikes += video.likes;
           csvComments += video.comments;
