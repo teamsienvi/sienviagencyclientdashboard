@@ -3,15 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
 
-export function useTopPerformingPosts(clientId: string | undefined, dateRange: string = "7d", limit: number = 3) {
+export function useTopPerformingPosts(
+  clientId: string | undefined,
+  dateRange: string = "7d",
+  limit: number = 3,
+  customRange?: { start: Date; end: Date }
+) {
   return useQuery({
-    queryKey: ["top-performing-posts", clientId, dateRange, limit],
+    queryKey: ["top-performing-posts", clientId, dateRange, customRange?.start?.toISOString(), customRange?.end?.toISOString(), limit],
     queryFn: async (): Promise<RankedTopInsight[]> => {
       if (!clientId) return [];
 
-      const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
-      const periodEndDate = endOfDay(new Date());
-      const periodStartDate = startOfDay(subDays(new Date(), daysToSubtract));
+      let periodStartDate: Date;
+      let periodEndDate: Date;
+
+      if (dateRange === "custom" && customRange) {
+        periodStartDate = startOfDay(customRange.start);
+        periodEndDate = endOfDay(customRange.end);
+      } else {
+        const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
+        periodEndDate = endOfDay(new Date());
+        periodStartDate = startOfDay(subDays(new Date(), daysToSubtract));
+      }
 
       // Fetch content with metrics for this client across all platforms
       // Only fetch content published on or after the reporting period start

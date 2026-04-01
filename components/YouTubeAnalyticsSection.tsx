@@ -860,7 +860,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {videos.slice(0, 10).map((video) => (
+                {videos.slice(0, 25).map((video) => (
                   <TableRow key={video.id}>
                     <TableCell>
                       <Badge className={getTypeBadgeColor(video.content_type)}>

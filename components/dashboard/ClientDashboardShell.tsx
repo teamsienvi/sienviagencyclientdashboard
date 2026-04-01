@@ -494,50 +494,63 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       <ClientHeader clientName={client.name} clientLogo={getClientLogo(client.name, client.logo_url)} currentClientId={clientId} />
 
       <main className="container mx-auto px-4 py-8">
-        <div className="space-y-8">
-          {/* Welcome Section */}
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-            <div className="space-y-2">
-              <Breadcrumb className="mb-2">
-                <BreadcrumbList>
-                  <BreadcrumbItem>
-                    <BreadcrumbLink asChild>
-                      <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1">
-                        <BarChart3 className="h-3.5 w-3.5" />
-                        Home
-                      </Link>
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator>
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </BreadcrumbSeparator>
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>Dashboard</BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
-              <h1 className="text-4xl font-bold text-foreground">
-                Welcome to your Dashboard
-              </h1>
-              <p className="text-muted-foreground text-lg">
-                View your performance metrics and past reports all in one place.
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <DateRangeSelector 
-                value={dateRange} 
-                onChange={(preset, custom) => {
-                  setDateRange(preset);
-                  if (preset === "custom" && custom) setCustomDateRange(custom);
-                }} 
-                customRange={customDateRange}
-              />
+        <div className="space-y-6">
+          {/* Branded Hero Section */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border border-primary/10 p-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <Breadcrumb className="mb-1">
+                  <BreadcrumbList>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink asChild>
+                        <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1 text-xs">
+                          <BarChart3 className="h-3 w-3" />
+                          Home
+                        </Link>
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator>
+                      <ChevronRight className="h-3 w-3" />
+                    </BreadcrumbSeparator>
+                    <BreadcrumbItem>
+                      <BreadcrumbPage className="text-xs">Dashboard</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+                <h1 className="text-2xl font-bold text-foreground tracking-tight">
+                  {client.name} <span className="text-muted-foreground font-normal text-lg">— Analytics</span>
+                </h1>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  {connectedPlatformsCount > 0 && (
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="h-3.5 w-3.5" />
+                      {connectedPlatformsCount} platforms
+                    </span>
+                  )}
+                  {totalFollowers > 0 && (
+                    <span className="flex items-center gap-1">
+                      <Users className="h-3.5 w-3.5" />
+                      {totalFollowers.toLocaleString()} followers
+                    </span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <DateRangeSelector 
+                  value={dateRange} 
+                  onChange={(preset, custom) => {
+                    setDateRange(preset);
+                    if (preset === "custom" && custom) setCustomDateRange(custom);
+                  }} 
+                  customRange={customDateRange}
+                />
+              </div>
             </div>
           </div>
 
           {/* Top Performing Posts - Moved to Top */}
-          <TopPerformingPosts clientId={clientId!} dateRange={dateRange} />
+          <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
 
           {/* AI-Powered Analytics Summaries */}
           <div className="flex flex-col gap-6 mt-8">

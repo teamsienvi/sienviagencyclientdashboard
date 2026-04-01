@@ -98,6 +98,7 @@ const TierTooltip = () => (
 interface TopPerformingPostsProps {
   clientId: string;
   dateRange?: string; // e.g. "7d" | "30d" | "custom"
+  customDateRange?: { start: Date; end: Date };
 }
 
 type RankingChoice = "all" | "instagram" | "facebook" | "tiktok" | "youtube" | "x";
@@ -117,11 +118,11 @@ const formatNumber = (num: number): string => {
   return num.toString();
 };
 
-export const TopPerformingPosts = ({ clientId, dateRange = "7d" }: TopPerformingPostsProps) => {
+export const TopPerformingPosts = ({ clientId, dateRange = "7d", customDateRange }: TopPerformingPostsProps) => {
   const [rankingChoice, setRankingChoice] = useState<RankingChoice>("all");
   
-  // Always show top 3 posts from last 7 days, ranked by views
-  const { data: allPosts, isLoading, error } = useTopPerformingPosts(clientId, dateRange, 10); // Fetch more, filter client-side
+  // Show top posts from the selected date range, ranked by views
+  const { data: allPosts, isLoading, error } = useTopPerformingPosts(clientId, dateRange, 10, customDateRange); // Fetch more, filter client-side
   
   // Filter and re-rank based on ranking choice
   const posts = allPosts
@@ -207,10 +208,17 @@ export const TopPerformingPosts = ({ clientId, dateRange = "7d" }: TopPerforming
             </Select>
             <Badge variant="outline" className="text-xs">
               {(() => {
+                if (dateRange === "custom" && customDateRange) {
+                  const start = customDateRange.start;
+                  const end = customDateRange.end;
+                  if (start.getMonth() === end.getMonth()) {
+                    return `${format(start, "MMM d")}-${format(end, "d")}`;
+                  }
+                  return `${format(start, "MMM d")} - ${format(end, "MMM d")}`;
+                }
                 const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
                 const end = new Date();
                 const start = subDays(end, daysToSubtract);
-                // Simple display "Mar 23-29" or "Mar 1-30"
                 if (start.getMonth() === end.getMonth()) {
                   return `${format(start, "MMM d")}-${format(end, "d")}`;
                 }
@@ -263,17 +271,13 @@ export const TopPerformingPosts = ({ clientId, dateRange = "7d" }: TopPerforming
                         href={post.post_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-medium hover:underline flex items-center gap-1 max-w-[200px] truncate"
+                        className="font-medium text-primary hover:underline flex items-center gap-1.5"
                       >
-                        <span className="truncate">
-                          {post.post_url.length > 30 
-                            ? `${post.post_url.substring(0, 30)}...` 
-                            : post.post_url}
-                        </span>
+                        View Post
                         <ExternalLink className="h-3 w-3 flex-shrink-0" />
                       </a>
                     ) : (
-                      <span className="text-muted-foreground">No URL</span>
+                      <span className="text-muted-foreground italic text-xs">No URL</span>
                     )}
                   </td>
 

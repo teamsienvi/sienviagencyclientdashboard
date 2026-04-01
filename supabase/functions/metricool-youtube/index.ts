@@ -318,7 +318,7 @@ serve(async (req) => {
         timezone,
         userId,
         blogId: blogId || '',
-        postsType: 'publishedInRange',
+        postsType: 'all',
       };
 
       // Fetch all data in parallel — including timeline KPIs for period-specific totals
