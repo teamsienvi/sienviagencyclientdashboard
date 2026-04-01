@@ -34,7 +34,8 @@ export function useAllTimeTopPosts(
           )
         `)
         .eq("client_id", clientId)
-        .limit(2000);
+        .order("published_at", { ascending: false })
+        .limit(5000);
 
       // Apply platform filtering if specified
       if (platformFilter) {
