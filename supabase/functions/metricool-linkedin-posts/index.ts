@@ -1,0 +1,334 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+interface TikTokPostsRequest {
+  from: string;
+  to: string;
+  timezone: string;
+  userId: string;
+  blogId?: string;
+  clientId?: string; // Optional: if provided, will persist to database
+}
+
+interface LinkedInPost {
+  title: string | null;
+  date: string | null;
+  type: string | null;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  reach: number;
+  duration: string | null;
+  engagement: number;
+  url: string | null;
+  link: string | null;
+  image: string | null;
+}
+
+function parseCSV(csvText: string): LinkedInPost[] {
+  // Parse CSV flexibly handling newlines inside quoted captions
+  const normalizedText = csvText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines: string[] = [];
+  let currentRecord = "";
+  let isInsideQuotes = false;
+  
+  for (let i = 0; i < normalizedText.length; i++) {
+    const char = normalizedText[i];
+    if (char === '"') {
+      isInsideQuotes = !isInsideQuotes;
+      currentRecord += char;
+    } else if (char === "\n" && !isInsideQuotes) {
+      if (currentRecord.trim()) lines.push(currentRecord);
+      currentRecord = "";
+    } else {
+      currentRecord += char;
+    }
+  }
+  if (currentRecord.trim()) lines.push(currentRecord);
+
+  if (lines.length < 2) return [];
+
+  // Parse header line - handle potential BOM and whitespace
+  const headerLine = lines[0].replace(/^\uFEFF/, "").trim();
+  const headers = headerLine.split(",").map((h) => h.trim().replace(/"/g, '').toLowerCase());
+  
+  console.log("CSV Headers:", headers);
+
+  const rows: LinkedInPost[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    // Parse CSV line - handle quoted values for columns
+    const values: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let j = 0; j < line.length; j++) {
+      const char = line[j];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === "," && !inQuotes) {
+        values.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    values.push(current.trim());
+
+    // Map values to object - normalize header keys
+    const row: Record<string, string> = {};
+    headers.forEach((header, idx) => {
+      // Normalize header: lowercase, trim, replace spaces with underscores
+      const normalizedHeader = header.toLowerCase().trim().replace(/\s+/g, "_");
+      row[normalizedHeader] = values[idx] || "";
+      // Also store original for backward compatibility
+      row[header] = values[idx] || "";
+    });
+
+    console.log("Row keys:", Object.keys(row).join(", "));
+
+    // Convert to LinkedInPost with numeric casting
+    // Try multiple possible column names for views that Metricool might export depending on language/version
+    const viewsStr = row["views"] || row["video_views"] || row["play_count"] || row["visualizaciones"] || row["impressions"] || "0";
+    const views = parseInt(viewsStr, 10) || 0;
+    
+    const likes = parseInt(row["likes"] || "0", 10) || 0;
+    const comments = parseInt(row["comments"] || "0", 10) || 0;
+    const shares = parseInt(row["shares"] || "0", 10) || 0;
+    
+    // Try to parse engagement from CSV first, then compute if needed
+    let engagement = parseFloat(row["engageme"] || row["engagement"] || "0") || 0;
+    
+    // If engagement is 0 or missing, compute it from likes + comments + shares / views
+    if (engagement === 0 && views > 0) {
+      engagement = ((likes + comments + shares) / views) * 100;
+    }
+    
+    // Extract URL - try multiple possible column names from Metricool CSV
+    const postUrl = row["link"] || row["url"] || row["post_link"] || row["linkedin_link"] || null;
+    
+    const post: LinkedInPost = {
+      title: row["title"] || null,
+      date: row["date"] || null,
+      type: row["type"] || null,
+      views,
+      likes,
+      comments,
+      shares,
+      reach: parseInt(row["reach"] || "0", 10) || parseInt(row["impressions"] || "0", 10) || views,
+      duration: row["duration"] || null,
+      engagement,
+      url: postUrl,
+      link: postUrl,
+      image: row["image"] || row["thumbnail"] || row["cover"] || null,
+    };
+
+    rows.push(post);
+  }
+
+  return rows;
+}
+
+// Parse date string from Metricool format to ISO
+function parseMetricoolDate(dateStr: string | null): string {
+  if (!dateStr) return new Date().toISOString();
+  
+  // Try parsing common formats like "Jan 5, 2025" or "2025-01-05"
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+  
+  return new Date().toISOString();
+}
+
+// Generate a unique content_id from post data
+function generateContentId(post: LinkedInPost): string {
+  const urlPart = post.url || post.link || "";
+  const datePart = post.date || "";
+  const titlePart = post.title || "";
+  
+  // Create a hash-like string from the components
+  const combined = `${urlPart}-${datePart}-${titlePart}`;
+  // Use a simple hash for uniqueness
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return `linkedin_${Math.abs(hash).toString(16)}`;
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const body: LinkedInPostsRequest = await req.json();
+    const { from, to, timezone, userId, blogId, clientId } = body;
+
+    if (!from || !to || !userId) {
+      return new Response(
+        JSON.stringify({ error: "Missing required params: from, to, userId" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const METRICOOL_BASE_URL = Deno.env.get("METRICOOL_BASE_URL") || "https://app.metricool.com";
+    const METRICOOL_AUTH = Deno.env.get("METRICOOL_USER_TOKEN");
+
+    if (!METRICOOL_AUTH) {
+      return new Response(
+        JSON.stringify({ error: "METRICOOL_USER_TOKEN not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Build URL with searchParams to properly encode special characters like +
+    const url = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/posts/linkedin`);
+    
+    // Metricool requires datetime format: yyyy-MM-dd'T'HH:mm:ss
+    // If from/to are just dates, append T00:00:00 / T23:59:59
+    const fromFormatted = from.includes("T") ? from : `${from}T00:00:00`;
+    const toFormatted = to.includes("T") ? to : `${to}T23:59:59`;
+    
+    url.searchParams.set("from", fromFormatted);
+    url.searchParams.set("to", toFormatted);
+    url.searchParams.set("timezone", timezone || "UTC");
+    url.searchParams.set("userId", userId);
+    if (blogId) {
+      url.searchParams.set("blogId", blogId);
+    }
+
+    console.log("Metricool LinkedIn posts request URL:", url.toString());
+
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "x-mc-auth": METRICOOL_AUTH,
+        "accept": "text/csv",
+      },
+    });
+
+    console.log("Metricool upstream status:", response.status);
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      console.error("Metricool upstream error:", response.status, errorBody);
+      return new Response(
+        JSON.stringify({
+          error: "Metricool API error",
+          upstreamStatus: response.status,
+          upstreamBody: errorBody,
+        }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const csvText = await response.text();
+    console.log("CSV response length:", csvText.length);
+    console.log("CSV preview:", csvText.substring(0, 500));
+
+    const rows = parseCSV(csvText);
+    console.log("Parsed rows count:", rows.length);
+
+    // If clientId is provided, persist to database
+    let savedCount = 0;
+    if (clientId && rows.length > 0) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+
+      console.log("Persisting", rows.length, "posts to database for client:", clientId);
+
+      // Create sync log
+      const { data: syncLog } = await supabaseAdmin
+        .from("social_sync_logs")
+        .insert({
+          client_id: clientId,
+          platform: "linkedin",
+          status: "in_progress",
+        })
+        .select()
+        .single();
+
+      for (const post of rows) {
+        if (!post.date) continue;
+        
+        const contentId = generateContentId(post);
+        const publishedAt = parseMetricoolDate(post.date);
+
+        // Upsert social_content
+        const { data: contentData, error: contentError } = await supabaseAdmin
+          .from("social_content")
+          .upsert({
+            client_id: clientId,
+            content_id: contentId,
+            platform: "linkedin",
+            content_type: "post",
+            title: post.title,
+            url: post.url || post.link,
+            media_url: post.image,
+            published_at: publishedAt,
+          }, { onConflict: "client_id,content_id" })
+          .select("id")
+          .single();
+
+        if (contentError) {
+          console.error("Error upserting content:", contentError);
+          continue;
+        }
+
+        // Standardize period dates
+        const periodStartDate = new Date(fromFormatted).toISOString().split("T")[0];
+        const periodEndDate = new Date(toFormatted).toISOString().split("T")[0];
+
+        // Insert metrics (use current period dates)
+        const { error: metricsError } = await supabaseAdmin
+          .from("social_content_metrics")
+          .upsert({
+            social_content_id: contentData.id,
+            views: post.views,
+            likes: post.likes,
+            comments: post.comments,
+            shares: post.shares,
+            reach: post.reach,
+            collected_at: new Date().toISOString(),
+          }, { onConflict: "social_content_id,period_start,period_end" });
+
+        if (metricsError) {
+          console.error("Error upserting metrics:", metricsError);
+          continue;
+        }
+
+        savedCount++;
+      }
+
+      console.log("Saved", savedCount, "posts to database for LinkedIn.");
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, rows, savedCount }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error("Edge function error:", errMsg);
+    return new Response(
+      JSON.stringify({ error: errMsg }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});

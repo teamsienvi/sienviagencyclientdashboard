@@ -702,128 +702,15 @@ export const MetricoolAnalyticsSection = ({
       let postsPromise: Promise<{ data: any; error: any }>;
 
       if (platform === "linkedin") {
-        // For LinkedIn, use metricool-csv to fetch posts from the correct endpoint
-        postsPromise = supabase.functions.invoke("metricool-csv", {
+        postsPromise = supabase.functions.invoke("metricool-linkedin-posts", {
           body: {
-            path: "/api/v2/analytics/posts/linkedin",
-            params: {
-              from: fromUTC,
-              to: toUTC,
-              timezone: "UTC",
-              userId: config.user_id,
-              blogId: config.blog_id || undefined,
-            },
+            from: fromUTC,
+            to: toUTC,
+            timezone: "UTC",
+            userId: config.user_id,
+            blogId: config.blog_id || undefined,
+            clientId,
           },
-        }).then(result => {
-          // Transform CSV response to match our post format
-          // LinkedIn CSV columns: Title, Date, URL, Reactions, LikeReactions, PraiseReactions, 
-          // AppreciationReactions, EmpathyReactions, InterestReactions, EntertainmentReactions,
-          // Comments, Shares, Impressions, Unique Impressions, Engagement, Vid. Views, 
-          // Viewers, Time Watched, Time Watched (avg), Type
-          if (result.data?.success && result.data?.rows) {
-            const transformedRows = result.data.rows.map((row: any) => {
-              // Get the LinkedIn URL from the CSV - map from correct column name
-              const postUrl = row.url || row.URL || null;
-
-              // Validate LinkedIn URL - log error if it contains tiktok.com
-              if (postUrl && postUrl.includes("tiktok.com")) {
-                console.error("MAPPING ERROR: LinkedIn post has TikTok URL:", postUrl, "Row:", row);
-              }
-
-              // Parse the date - LinkedIn CSV uses "Date" column
-              let displayDate = row.date || row.Date || null;
-              if (displayDate) {
-                try {
-                  // Try various date formats
-                  let parsedDate: Date | null = null;
-
-                  if (displayDate.includes("T")) {
-                    // ISO format
-                    parsedDate = new Date(displayDate);
-                  } else if (displayDate.includes("/")) {
-                    // MM/DD/YYYY or DD/MM/YYYY format
-                    const parts = displayDate.split("/");
-                    if (parts.length === 3) {
-                      // Assume MM/DD/YYYY
-                      parsedDate = new Date(`${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`);
-                    }
-                  } else if (displayDate.includes("-")) {
-                    // YYYY-MM-DD format
-                    parsedDate = new Date(displayDate);
-                  }
-
-                  if (parsedDate && !isNaN(parsedDate.getTime())) {
-                    displayDate = format(parsedDate, "MMM d, yyyy");
-                  }
-                } catch (e) {
-                  console.warn("Failed to parse LinkedIn date:", displayDate);
-                }
-              }
-
-              // Map LinkedIn CSV columns (these come from our metricool-csv function)
-              const impressions = parseMetricoolNumber(row.impressions ?? row.Impressions);
-              const uniqueImpressions = parseMetricoolNumber(
-                row.unique_impressions ?? row["Unique Impressions"] ?? row["unique impressions"]
-              );
-
-              const reactionsTotal = parseMetricoolNumber(
-                row.reactions_total ?? row.reactions ?? row.Reactions
-              );
-              const reactionsLike = parseMetricoolNumber(
-                row.reactions_like ?? row.likereactions ?? row.LikeReactions ?? row["Like Reactions"]
-              );
-
-              const comments = parseMetricoolNumber(row.comments ?? row.Comments);
-              const shares = parseMetricoolNumber(row.shares ?? row.Shares);
-              const vidViews = parseMetricoolNumber(
-                row.video_views ?? row.vid_views ?? row["Vid. Views"] ?? row["vid. views"]
-              );
-              const contentType = row.type || row.Type || "post";
-
-              // Use total reactions as "likes" (fallback to like reactions if total missing)
-              const totalReactions = reactionsTotal > 0 ? reactionsTotal : reactionsLike;
-
-              // Compute engagement from CSV or calculate
-              let engagement = Number(row.engagement || row.Engagement || 0);
-              if (engagement === 0 && impressions > 0) {
-                engagement = ((totalReactions + comments + shares) / impressions) * 100;
-              }
-
-              return {
-                title: row.title || row.Title || null,
-                date: displayDate,
-                type: contentType,
-                views: impressions,
-                likes: totalReactions,
-                comments: comments,
-                shares: shares,
-                reach: uniqueImpressions || impressions,
-                duration: row.time_watched_total || row.time_watched || row["Time Watched"] || null,
-                engagement: engagement,
-                url: postUrl,
-                link: postUrl,
-                image: null,
-                // Store raw LinkedIn-specific fields for display
-                rawData: {
-                  impressions,
-                  uniqueImpressions,
-                  reactions: reactionsTotal,
-                  vidViews,
-                  viewers: Number(row.viewers || row.Viewers || 0),
-                  timeWatched: row.time_watched_total || row["Time Watched"] || null,
-                  avgTimeWatched: row.time_watched_avg || row["Time Watched (avg)"] || null,
-                },
-              };
-            });
-            return { data: { success: true, rows: transformedRows, platform: "linkedin" }, error: null };
-          }
-
-          // Surface upstream errors for debugging
-          if (result.data && !result.data.success) {
-            console.error("LinkedIn CSV fetch error - upstreamStatus:", result.data.upstreamStatus, "upstreamBody:", result.data.upstreamBody);
-          }
-
-          return result;
         });
       } else {
         // For TikTok, use the existing endpoint
