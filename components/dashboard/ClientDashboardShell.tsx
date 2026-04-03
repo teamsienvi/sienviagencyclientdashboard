@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { TopPerformingPosts } from "@/components/TopPerformingPosts";
@@ -46,6 +47,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
+
+const PLATFORM_SHORT_NAMES: Record<string, string> = {
+  instagram: "IG",
+  facebook: "FB",
+  tiktok: "TikTok",
+  youtube: "YT",
+  linkedin: "LI",
+  x: "X",
+  twitter: "X"
+};
 
 // Helper to extract month from date range
 const getMonthFromDateRange = (dateRange: string): string => {
@@ -378,8 +389,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   // Aggregate total followers from ALL sources:
   // 1. Live Metricool API data (most accurate, real-time)
   // 2. social_account_metrics (for platforms not in Metricool)
-  const totalFollowers = useMemo(() => {
+  const { totalFollowers, followerBreakdown } = useMemo(() => {
     let total = 0;
+    const breakdown: { platform: string; count: number }[] = [];
     const countedPlatforms = new Set<string>();
 
     // First priority: Live Metricool followers (most accurate)
@@ -388,6 +400,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         if (followers && followers > 0) {
           total += followers;
           countedPlatforms.add(platform);
+          breakdown.push({ platform, count: followers });
         }
       });
     }
@@ -398,11 +411,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         if (m?.followers && !countedPlatforms.has(platform)) {
           total += m.followers;
           countedPlatforms.add(platform);
+          breakdown.push({ platform, count: m.followers });
         }
       });
     }
 
-    return total;
+    breakdown.sort((a, b) => b.count - a.count);
+
+    return { totalFollowers: total, followerBreakdown: breakdown };
   }, [socialMetrics, metricoolFollowers]);
 
   // Count connected platforms accurately
@@ -536,10 +552,17 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     </span>
                   )}
                   {totalFollowers > 0 && (
-                    <span className="flex items-center gap-1">
-                      <Users className="h-3.5 w-3.5" />
-                      {totalFollowers.toLocaleString()} followers
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5" />
+                        {totalFollowers.toLocaleString()} followers
+                      </span>
+                      {followerBreakdown.length > 0 && (
+                        <span className="text-muted-foreground/75 text-xs font-medium ml-1">
+                          ({followerBreakdown.map(b => `${PLATFORM_SHORT_NAMES[b.platform] || b.platform} ${Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(b.count)}`).join(', ')})
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -558,46 +581,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
             </div>
           </div>
 
-          {/* Top Performing Posts - Moved to Top */}
-          {hasSocialMedia && (
-            <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
-          )}
-
-          {/* AI-Powered Analytics Summaries */}
-          <div className="flex flex-col gap-6 mt-8">
-            {!isAdsOnlyClient && (
-              <AnalyticsSummaryCard
-                clientId={clientId!}
-                type="social"
-                title="Social Media Summary"
-                icon={<Share2 className="h-5 w-5 text-violet-400" />}
-                dateRange={dateRange}
-              />
-            )}
-            {client?.supabase_url && (
-              <AnalyticsSummaryCard
-                clientId={clientId!}
-                type="website"
-                title="Website Analytics Summary"
-                icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
-                dateRange={dateRange}
-              />
-            )}
-            {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
-              <div className="space-y-4">
-                {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
-                  <AdsShredderCard clientId={clientId!} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
-                )}
-                {metricoolPlatforms?.some(p => p.platform === 'google_ads') && (
-                  <AdsShredderCard clientId={clientId!} adPlatform="google" title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} />
-                )}
-                {metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') && (
-                  <AdsShredderCard clientId={clientId!} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Main Content Tabs */}
           <Tabs defaultValue="analytics" className="space-y-6">
             <TabsList className="grid w-full max-w-md grid-cols-2">
@@ -613,328 +596,327 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {/* Only show social platform cards if not an ads-only client */}
-                {!isAdsOnlyClient && (
-                  <>
-                    {/* YouTube - only show if client has YouTube configured */}
-                    {(metricoolPlatforms?.some(p => p.platform === 'youtube') || connectedAccounts?.youtube) && (
-                      <Card
-                        className="hover:border-primary/30 transition-all cursor-pointer group"
-                        onClick={() => router.push(`/youtube-analytics/${clientId}`)}
-                      >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
-                              <Youtube className="h-5 w-5 text-red-500" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">YouTube</CardTitle>
-                              <CardDescription>Video Analytics</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex items-center gap-2">
-                            {connectedAccounts?.youtube ? (
-                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                            ) : (
-                              <Badge variant="outline">View Channel</Badge>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* Meta - only show if client has Meta configured */}
-                    {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
-                      <Card
-                        className="hover:border-primary/30 transition-all cursor-pointer group"
-                        onClick={() => router.push(`/meta-analytics/${clientId}`)}
-                      >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                              <TrendingUp className="h-5 w-5 text-blue-500" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">Meta</CardTitle>
-                              <CardDescription>Instagram & Facebook</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                        </CardHeader>
-                        <CardContent>
-                          {connectedAccounts?.meta ? (
-                            <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+              <Accordion type="multiple" className="w-full space-y-4">
+                
+                {/* Social Bucket */}
+                {hasSocialMedia && (
+                  <AccordionItem value="social" className="border rounded-lg bg-card overflow-hidden">
+                    <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-violet-500/10">
+                          <Share2 className="h-5 w-5 text-violet-500" />
+                        </div>
+                        <div className="flex flex-col items-start bg-transparent">
+                          <span className="text-base font-semibold">Social Media</span>
+                          <span className="text-sm font-normal text-muted-foreground">Performance, engagement, and top posts</span>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6">
+                      {!isAdsOnlyClient && (
+                        <AnalyticsSummaryCard
+                          clientId={clientId!}
+                          type="social"
+                          title="Social Media Summary"
+                          icon={<Share2 className="h-5 w-5 text-violet-400" />}
+                          dateRange={dateRange}
+                        />
+                      )}
+                      
+                      <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
+                      
+                      {/* Drill down cards */}
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
+                        {/* YouTube */}
+                        {(metricoolPlatforms?.some(p => p.platform === 'youtube') || connectedAccounts?.youtube) && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/youtube-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                                  <Youtube className="h-5 w-5 text-red-500" />
+                                </div>
+                                <div><CardTitle className="text-base">YouTube</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              {connectedAccounts?.youtube ? (
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                              ) : (
+                                <Badge variant="outline">View Channel</Badge>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* Meta */}
+                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/meta-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                                  <TrendingUp className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <div><CardTitle className="text-base">Meta</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              {connectedAccounts?.meta ? (
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                              ) : (
+                                <Badge variant="outline">Connect Account</Badge>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* TikTok */}
+                        {metricoolPlatforms?.some(p => p.platform === 'tiktok') && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/tiktok-metricool/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-pink-500/10 group-hover:bg-pink-500/20 transition-colors">
+                                  <Music2 className="h-5 w-5 text-pink-500" />
+                                </div>
+                                <div><CardTitle className="text-base">TikTok</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex justify-between items-center">
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                                {socialMetrics?.tiktok?.followers && (
+                                  <span className="text-sm text-muted-foreground">{socialMetrics.tiktok.followers.toLocaleString()} followers</span>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* X */}
+                        {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
+                          connectedAccounts?.xHasData ? (
+                            <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/x-analytics/${clientId}`)}>
+                              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
+                                    <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                                  </div>
+                                  <div><CardTitle className="text-base">X</CardTitle></div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                              </CardHeader>
+                              <CardContent>
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">{connectedAccounts?.x ? "Connected" : "Data Available"}</Badge>
+                              </CardContent>
+                            </Card>
                           ) : (
-                            <Badge variant="outline">Connect Account</Badge>
-                          )}
-                        </CardContent>
-                      </Card>
-                    )}
+                            <Card className="hover:border-primary/30 transition-all group">
+                              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
+                                    <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                                  </div>
+                                  <div><CardTitle className="text-base">X</CardTitle></div>
+                                </div>
+                              </CardHeader>
+                              <CardContent>
+                                <XCSVUploadDialog clientId={clientId!} clientName={client.name} trigger={<Button variant="outline" size="sm" className="gap-2 w-full"><Upload className="h-4 w-4" />Upload CSV</Button>} />
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        {/* LinkedIn */}
+                        {metricoolPlatforms?.some(p => p.platform === 'linkedin') && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/linkedin-metricool/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-[#0A66C2]/10 group-hover:bg-[#0A66C2]/20 transition-colors">
+                                  <Linkedin className="h-5 w-5 text-[#0A66C2]" />
+                                </div>
+                                <div><CardTitle className="text-base">LinkedIn</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                )}
 
-                    {/* X (Twitter) - Only show for Sienvi Agency and Father Figure Formula */}
-                    {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
-                      connectedAccounts?.xHasData ? (
-                        <Card
-                          className="hover:border-primary/30 transition-all cursor-pointer group"
-                          onClick={() => router.push(`/x-analytics/${clientId}`)}
-                        >
-                          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                {/* Ads Bucket */}
+                {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
+                  <AccordionItem value="ads" className="border rounded-lg bg-card overflow-hidden">
+                    <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-orange-500/10">
+                          <BarChart3 className="h-5 w-5 text-orange-500" />
+                        </div>
+                        <div className="flex flex-col items-start bg-transparent">
+                          <span className="text-base font-semibold">Advertising</span>
+                          <span className="text-sm font-normal text-muted-foreground">Ad spend, impressions, and conversions</span>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6">
+                      <div className="space-y-4">
+                        {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
+                          <AdsShredderCard clientId={clientId!} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
+                        )}
+                        {metricoolPlatforms?.some(p => p.platform === 'google_ads') && (
+                          <AdsShredderCard clientId={clientId!} adPlatform="google" title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} />
+                        )}
+                        {metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') && (
+                          <AdsShredderCard clientId={clientId!} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
+                        )}
+                      </div>
+
+                      {/* Drill down cards */}
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
+                        <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/ads-analytics/${clientId}`)}>
+                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <div className="flex items-center gap-3">
-                              <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
-                                <Twitter className="h-5 w-5 text-[#1DA1F2]" />
+                              <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                                <BarChart3 className="h-5 w-5 text-orange-500" />
                               </div>
-                              <div>
-                                <CardTitle className="text-base">X</CardTitle>
-                                <CardDescription>Twitter Analytics</CardDescription>
-                              </div>
+                              <div><CardTitle className="text-base">Ads Platform</CardTitle></div>
                             </div>
                             <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                           </CardHeader>
                           <CardContent>
-                            <Badge variant="secondary" className="bg-green-500/10 text-green-600">
-                              {connectedAccounts?.x ? "Connected" : "Data Available"}
-                            </Badge>
-                          </CardContent>
-                        </Card>
-                      ) : (
-                        <Card className="hover:border-primary/30 transition-all group">
-                          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
-                                <Twitter className="h-5 w-5 text-[#1DA1F2]" />
-                              </div>
-                              <div>
-                                <CardTitle className="text-base">X</CardTitle>
-                                <CardDescription>Twitter Analytics</CardDescription>
-                              </div>
-                            </div>
-                          </CardHeader>
-                          <CardContent>
-                            <XCSVUploadDialog
-                              clientId={clientId!}
-                              clientName={client.name}
-                              trigger={
-                                <Button variant="outline" size="sm" className="gap-2 w-full">
-                                  <Upload className="h-4 w-4" />
-                                  Upload CSV
-                                </Button>
-                              }
-                            />
-                          </CardContent>
-                        </Card>
-                      )
-                    )}
-
-                    {/* TikTok */}
-                    {metricoolPlatforms?.some(p => p.platform === 'tiktok') && (
-                      <Card
-                        className="hover:border-primary/30 transition-all cursor-pointer group"
-                        onClick={() => router.push(`/tiktok-metricool/${clientId}`)}
-                      >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-pink-500/10 group-hover:bg-pink-500/20 transition-colors">
-                              <Music2 className="h-5 w-5 text-pink-500" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">TikTok</CardTitle>
-                              <CardDescription>Short-form Video</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                        </CardHeader>
-                        <CardContent>
-                          <div className="flex justify-between items-center">
                             <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                            {socialMetrics?.tiktok?.followers && (
-                              <span className="text-sm text-muted-foreground">
-                                {socialMetrics.tiktok.followers.toLocaleString()} followers
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-
-                    {/* LinkedIn */}
-                    {metricoolPlatforms?.some(p => p.platform === 'linkedin') && (
-                      <Card
-                        className="hover:border-primary/30 transition-all cursor-pointer group"
-                        onClick={() => router.push(`/linkedin-metricool/${clientId}`)}
-                      >
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                          <div className="flex items-center gap-3">
-                            <div className="p-2.5 rounded-xl bg-[#0A66C2]/10 group-hover:bg-[#0A66C2]/20 transition-colors">
-                              <Linkedin className="h-5 w-5 text-[#0A66C2]" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-base">LinkedIn</CardTitle>
-                              <CardDescription>Professional Network</CardDescription>
-                            </div>
-                          </div>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                        </CardHeader>
-                        <CardContent>
-                          <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
                 )}
 
-                {/* Ads Analytics - Show for clients with any ads config (meta_ads, google_ads, tiktok_ads) */}
-                {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
-                  <Card
-                    className="hover:border-primary/30 transition-all cursor-pointer group"
-                    onClick={() => router.push(`/ads-analytics/${clientId}`)}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                {/* Web Bucket */}
+                {(!isAdsOnlyClient && client.supabase_url) || (client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") || (client.name === "Father Figure Formula") ? (
+                  <AccordionItem value="web" className="border rounded-lg bg-card overflow-hidden">
+                    <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
-                          <BarChart3 className="h-5 w-5 text-orange-500" />
+                        <div className="p-2 rounded-lg bg-emerald-500/10">
+                          <Globe className="h-5 w-5 text-emerald-500" />
                         </div>
-                        <div>
-                          <CardTitle className="text-base">Ads</CardTitle>
-                          <CardDescription>Meta & Google Ads</CardDescription>
+                        <div className="flex flex-col items-start bg-transparent">
+                          <span className="text-base font-semibold">Web & E-Commerce</span>
+                          <span className="text-sm font-normal text-muted-foreground">Traffic, sales, and platform analytics</span>
                         </div>
                       </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                    </CardHeader>
-                    <CardContent>
-                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                    </CardContent>
-                  </Card>
-                )}
+                    </AccordionTrigger>
+                    <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6">
+                      
+                      {!isAdsOnlyClient && client.supabase_url && (
+                        <AnalyticsSummaryCard
+                          clientId={clientId!}
+                          type="website"
+                          title="Website Analytics Summary"
+                          icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
+                          dateRange={dateRange}
+                        />
+                      )}
 
-                {/* Shopify Analytics - Show for Snarky Pets, Snarky Humans, and BlingyBag */}
-                {(client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") && (
-                  <Card
-                    className="hover:border-primary/30 transition-all cursor-pointer group"
-                    onClick={() => router.push(`/shopify-analytics/${clientId}`)}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                          <ShoppingBag className="h-5 w-5 text-green-500" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">Shopify</CardTitle>
-                          <CardDescription>E-commerce Analytics</CardDescription>
-                        </div>
+                      {/* Drill down cards */}
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
+                        {/* Website specific */}
+                        {!isAdsOnlyClient && client.supabase_url && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/web-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+                                  <Eye className="h-5 w-5 text-emerald-500" />
+                                </div>
+                                <div><CardTitle className="text-base">Website</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Active</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+                        
+                        {/* Shopify */}
+                        {(client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/shopify-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                                  <ShoppingBag className="h-5 w-5 text-green-500" />
+                                </div>
+                                <div><CardTitle className="text-base">Shopify</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Podcasts and LMS - Father Figure Formula */}
+                        {client.name === "Father Figure Formula" && (
+                          <>
+                            <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => window.open('https://podcastsconnect.apple.com/analytics', '_blank')}>
+                              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
+                                    <Podcast className="h-5 w-5 text-purple-500" />
+                                  </div>
+                                  <div><CardTitle className="text-base">Apple Podcasts</CardTitle></div>
+                                </div>
+                                <ExternalLink className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-all" />
+                              </CardHeader>
+                              <CardContent>
+                                <Badge variant="secondary" className="bg-purple-500/10 text-purple-600">External</Badge>
+                              </CardContent>
+                            </Card>
+
+                            <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => window.open('https://creators.spotify.com/pod/show/1hkGUz3tDpJFHzmapxtSGk/analytics', '_blank')}>
+                              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                                    <Headphones className="h-5 w-5 text-green-500" />
+                                  </div>
+                                  <div><CardTitle className="text-base">Spotify</CardTitle></div>
+                                </div>
+                                <ExternalLink className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-all" />
+                              </CardHeader>
+                              <CardContent>
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">External</Badge>
+                              </CardContent>
+                            </Card>
+
+                            <Card className="hover:border-primary/30 transition-all cursor-pointer group bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-200/50 dark:border-amber-800/50" onClick={() => router.push(`/lms-analytics/${clientId}`)}>
+                              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
+                                    <FlaskConical className="h-5 w-5 text-amber-500" />
+                                  </div>
+                                  <div><CardTitle className="text-base">LMS Course</CardTitle></div>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                              </CardHeader>
+                              <CardContent>
+                                <div className="flex items-center justify-between">
+                                  <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                                    {isLoadingBeta ? <Loader2 className="h-5 w-5 animate-spin" /> : <>{betaCount?.summary?.beta_testers_count ?? "—"} <span className="text-sm font-normal text-muted-foreground">testers</span></>}
+                                  </div>
+                                  <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">Live</Badge>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </>
+                        )}
                       </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                    </CardHeader>
-                    <CardContent>
-                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Podcast Analytics - Father Figure Formula only */}
-                {client.name === "Father Figure Formula" && (
-                  <>
-                    <Card
-                      className="hover:border-primary/30 transition-all cursor-pointer group"
-                      onClick={() => window.open('https://podcastsconnect.apple.com/analytics', '_blank')}
-                    >
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
-                            <Podcast className="h-5 w-5 text-purple-500" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">Apple Podcasts</CardTitle>
-                            <CardDescription>Podcast Analytics</CardDescription>
-                          </div>
-                        </div>
-                        <ExternalLink className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-all" />
-                      </CardHeader>
-                      <CardContent>
-                        <Badge variant="secondary" className="bg-purple-500/10 text-purple-600">External Link</Badge>
-                      </CardContent>
-                    </Card>
-
-                    <Card
-                      className="hover:border-primary/30 transition-all cursor-pointer group"
-                      onClick={() => window.open('https://creators.spotify.com/pod/show/1hkGUz3tDpJFHzmapxtSGk/analytics', '_blank')}
-                    >
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
-                            <Headphones className="h-5 w-5 text-green-500" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">Spotify</CardTitle>
-                            <CardDescription>Podcast Analytics</CardDescription>
-                          </div>
-                        </div>
-                        <ExternalLink className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-all" />
-                      </CardHeader>
-                      <CardContent>
-                        <Badge variant="secondary" className="bg-green-500/10 text-green-600">External Link</Badge>
-                      </CardContent>
-                    </Card>
-                    {/* FFF LMS Course Analytics */}
-                    <Card
-                      className="hover:border-primary/30 transition-all cursor-pointer group bg-gradient-to-br from-amber-500/5 to-orange-500/5 border-amber-200/50 dark:border-amber-800/50"
-                      onClick={() => router.push(`/lms-analytics/${clientId}`)}
-                    >
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
-                            <FlaskConical className="h-5 w-5 text-amber-500" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">LMS Course</CardTitle>
-                            <CardDescription>FFF Beta Analytics</CardDescription>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center justify-between">
-                          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                            {isLoadingBeta ? (
-                              <Loader2 className="h-5 w-5 animate-spin" />
-                            ) : (
-                              <>{betaCount?.summary?.beta_testers_count ?? "—"} <span className="text-sm font-normal text-muted-foreground">testers</span></>
-                            )}
-                          </div>
-                          <Badge variant="secondary" className="bg-amber-500/10 text-amber-600">Live</Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </>
-                )}
-
-                {/* Website Analytics - show for clients with website analytics configured */}
-                {!isAdsOnlyClient && client.supabase_url && (
-                  <Card
-                    className="hover:border-primary/30 transition-all cursor-pointer group"
-                    onClick={() => router.push(`/web-analytics/${clientId}`)}
-                  >
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2.5 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
-                          <Eye className="h-5 w-5 text-emerald-500" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">Website</CardTitle>
-                          <CardDescription>Traffic Analytics</CardDescription>
-                        </div>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-                    </CardHeader>
-                    <CardContent>
-                      <Badge variant="secondary" className="bg-green-500/10 text-green-600">Active</Badge>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ) : null}
+              </Accordion>
             </TabsContent>
 
             {/* Reports Tab */}
