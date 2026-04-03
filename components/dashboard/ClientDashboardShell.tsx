@@ -568,7 +568,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               </div>
               
               <div className="flex items-center gap-2">
-                <AllTimeTopPostsModal clientId={clientId} />
                 <DateRangeSelector 
                   value={dateRange} 
                   onChange={(preset, custom) => {
@@ -623,6 +622,10 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         />
                       )}
                       
+                      <div className="flex justify-end">
+                        <AllTimeTopPostsModal clientId={clientId!} buttonLabel="🏆 View Hall of Fame" buttonSize="default" buttonVariant="outline" />
+                      </div>
+
                       <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
                       
                       {/* Drill down cards */}
