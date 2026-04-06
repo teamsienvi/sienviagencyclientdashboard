@@ -147,10 +147,11 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
 
   // Convert external sources format to trafficSources format
   const rawTrafficSources = analytics?.trafficSources || analytics?.sources;
-  const normalizedTrafficSources = rawTrafficSources ?
-    rawTrafficSources.map((s: any) => {
+  const ArrayTrafficSources = rawTrafficSources ? (Array.isArray(rawTrafficSources) ? rawTrafficSources : Object.entries(rawTrafficSources).map(([source, count]) => ({ source, count }))) : undefined;
+  const normalizedTrafficSources = ArrayTrafficSources ?
+    ArrayTrafficSources.map((s: any) => {
       const count = s.visitors ?? s.sessions ?? s.count ?? 0;
-      const totalCount = rawTrafficSources.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
+      const totalCount = ArrayTrafficSources.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
       return {
         source: s.source,
         visitors: count,
@@ -161,10 +162,11 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
 
   // Convert external devices format to deviceBreakdown format
   const rawDevices = analytics?.deviceBreakdown || analytics?.devices;
-  const normalizedDeviceBreakdown = rawDevices ?
-    rawDevices.map((d: any) => {
+  const ArrayDevices = rawDevices ? (Array.isArray(rawDevices) ? rawDevices : Object.entries(rawDevices).map(([device, count]) => ({ device, count }))) : undefined;
+  const normalizedDeviceBreakdown = ArrayDevices ?
+    ArrayDevices.map((d: any) => {
       const count = d.visitors ?? d.sessions ?? d.count ?? 0;
-      const totalCount = rawDevices.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
+      const totalCount = ArrayDevices.reduce((sum: number, item: any) => sum + (item.visitors ?? item.sessions ?? item.count ?? 0), 0);
       return {
         device: (d.device || "Unknown").charAt(0).toUpperCase() + (d.device || "Unknown").slice(1),
         visitors: count,
@@ -193,7 +195,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
       // Support all field name variations from different get-analytics implementations
       visitors: analytics.visitors ?? analytics.uniqueVisitors ?? analytics.summary?.uniqueVisitors ?? 0,
       pageViews: analytics.pageViews ?? analytics.totalPageViews ?? analytics.summary?.totalPageViews ?? 0,
-      totalSessions: analytics.totalSessions ?? analytics.summary?.totalSessions ?? 0,
+      totalSessions: analytics.totalSessions ?? (analytics as any).sessions ?? analytics.summary?.totalSessions ?? 0,
       avgDuration: analytics.avgDuration ?? analytics.avgSessionDuration ?? analytics.summary?.avgSessionDuration ?? 0,
       bounceRate: analytics.bounceRate ?? analytics.summary?.bounceRate ?? 0,
       pagesPerVisit: analytics.pagesPerVisit ?? analytics.summary?.avgPagesPerSession ??
@@ -201,7 +203,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
       avgScrollDepth: analytics.avgScrollDepth ?? undefined,
       trafficSources: normalizedTrafficSources,
       deviceBreakdown: normalizedDeviceBreakdown,
-      dailyBreakdown: analytics.dailyBreakdown || (analytics.dailyTimeSeries ? analytics.dailyTimeSeries.map((d: any) => ({
+      dailyBreakdown: analytics.dailyBreakdown || ((analytics.dailyTimeSeries || (analytics as any).timeseries) ? (analytics.dailyTimeSeries || (analytics as any).timeseries).map((d: any) => ({
         date: d.date,
         visitors: d.visitors || 0,
         sessions: d.sessions || d.visitors || 0,
@@ -279,7 +281,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
   const dailyData = useMemo(() => {
     // If we have real daily breakdown data from API, use it
     if (hasRealDailyBreakdown && normalizedAnalytics?.dailyBreakdown) {
-      return normalizedAnalytics.dailyBreakdown.map((day) => ({
+      return normalizedAnalytics.dailyBreakdown.map((day: any) => ({
         date: format(new Date(day.date), "MMM d"),
         visitors: day.visitors ?? day.sessions ?? 0,
         sessions: day.sessions ?? day.visitors ?? 0,
