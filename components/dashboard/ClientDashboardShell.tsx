@@ -454,16 +454,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any active social media platforms
   const hasSocialMedia = useMemo(() => {
+    if (client?.name === "Snarky A$$ Humans") return false;
+
     if (!metricoolPlatforms || !connectedAccounts) return false;
+    
+    if (client?.name === "Snarky Humans") return true;
+
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const nonAdsPlatforms = platforms.filter(p => !adsPlatforms.includes(p));
     
+    const hasMetricsData = socialMetrics ? Object.keys(socialMetrics).some(p => !adsPlatforms.includes(p)) : false;
+
     return nonAdsPlatforms.length > 0 || 
            connectedAccounts.meta || 
            connectedAccounts.youtube || 
-           connectedAccounts.xHasData;
-  }, [metricoolPlatforms, connectedAccounts]);
+           connectedAccounts.xHasData || 
+           hasMetricsData;
+  }, [metricoolPlatforms, connectedAccounts, socialMetrics, client]);
 
   // Check if client only has ads (meta_ads) and no other platforms
   const isAdsOnlyClient = useMemo(() => {
@@ -595,7 +603,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="space-y-6">
-              <Accordion type="multiple" className="w-full space-y-4">
+              <Accordion type="multiple" defaultValue={["social", "ads", "web"]} className="w-full space-y-4">
                 
                 {/* Social Bucket */}
                 {hasSocialMedia && (
@@ -750,7 +758,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Ads Bucket */}
-                {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds) && (
+                {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
                   <AccordionItem value="ads" className="border rounded-lg bg-card overflow-hidden">
                     <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
@@ -773,6 +781,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                         {metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') && (
                           <AdsShredderCard clientId={clientId!} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
+                        )}
+                        {getClientAdPlatforms(client.name).includes('amazon') && (
+                          <AdsShredderCard clientId={clientId!} adPlatform="amazon" title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`} />
                         )}
                       </div>
 
