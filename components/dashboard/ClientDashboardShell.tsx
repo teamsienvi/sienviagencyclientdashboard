@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
+import { UbersuggestSection } from "@/components/analytics/UbersuggestSection";
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -603,7 +604,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="space-y-6">
-              <Accordion type="multiple" defaultValue={["social", "ads", "web"]} className="w-full space-y-4">
+              <Accordion type="multiple" defaultValue={["social", "ads", "web", "seo"]} className="w-full space-y-4">
                 
                 {/* Social Bucket */}
                 {hasSocialMedia && (
@@ -930,6 +931,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     </AccordionContent>
                   </AccordionItem>
                 ) : null}
+
+                {/* SEO Bucket (Ubersuggest) */}
+                <AccordionItem value="seo" className="border rounded-lg bg-card overflow-hidden">
+                  <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-slate-800">
+                        <span className="text-xl">🔍</span>
+                      </div>
+                      <div className="flex flex-col items-start bg-transparent">
+                        <span className="text-base font-semibold">Search Engine Optimization</span>
+                        <span className="text-sm font-normal text-muted-foreground">Site audit score, issues, and keyword positions</span>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6 bg-slate-900/5">
+                    <UbersuggestSection clientId={clientId!} />
+                  </AccordionContent>
+                </AccordionItem>
               </Accordion>
             </TabsContent>
 
