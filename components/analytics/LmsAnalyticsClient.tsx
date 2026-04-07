@@ -316,7 +316,11 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {testers.map((tester, i) => (
+                                    {testers.map((tester, i) => {
+                                        const cappedProgress = Math.min(tester.progress_pct, 100);
+                                        const cappedCompleted = Math.min(tester.lessons_completed, tester.total_lessons);
+                                        
+                                        return (
                                         <TableRow key={i}>
                                             <TableCell>
                                                 <div>
@@ -327,16 +331,16 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                             <TableCell>
                                                 <div className="flex items-center gap-2 min-w-[120px]">
                                                     <Progress
-                                                        value={Math.min(tester.progress_pct, 100)}
+                                                        value={cappedProgress}
                                                         className="h-2 flex-1"
                                                     />
                                                     <span className="text-xs font-medium w-12 text-right">
-                                                        {Math.min(tester.progress_pct, 100).toFixed(0)}%
+                                                        {cappedProgress.toFixed(0)}%
                                                     </span>
                                                 </div>
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                <span className="font-medium">{tester.lessons_completed}</span>
+                                                <span className="font-medium">{cappedCompleted}</span>
                                                 <span className="text-muted-foreground">/{tester.total_lessons}</span>
                                             </TableCell>
                                             <TableCell className="text-center">
@@ -372,7 +376,7 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                                 )}
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    )})}
                                 </TableBody>
                             </Table>
                         </div>

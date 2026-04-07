@@ -640,7 +640,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       {/* Drill down cards */}
                       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
                         {/* YouTube */}
-                        {(metricoolPlatforms?.some(p => p.platform === 'youtube') || connectedAccounts?.youtube) && (
+                        {(metricoolPlatforms?.some(p => p.platform === 'youtube') || connectedAccounts?.youtube || client.name === "Snarky Humans") && (
                           <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/youtube-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
@@ -682,7 +682,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* TikTok */}
-                        {metricoolPlatforms?.some(p => p.platform === 'tiktok') && (
+                        {(metricoolPlatforms?.some(p => p.platform === 'tiktok') || client.name === "Snarky Humans") && (
                           <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/tiktok-metricool/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
@@ -704,7 +704,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* X */}
-                        {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
+                        {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula" || client.name === "Snarky Humans") && (
                           connectedAccounts?.xHasData ? (
                             <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/x-analytics/${clientId}`)}>
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

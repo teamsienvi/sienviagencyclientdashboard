@@ -1,0 +1,36 @@
+name: Ubersuggest Token Generator
+
+on:
+  schedule:
+    - cron: '0 0,12 * * *' # Run twice a day
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./scripts
+        run: npm init -y && npm install playwright playwright-extra puppeteer-extra-plugin-stealth
+
+      - name: Install Playwright Browsers
+        working-directory: ./scripts
+        run: npx playwright install chromium
+
+      - name: Generate Ubersuggest Token
+        working-directory: ./scripts
+        env:
+          UBERSUGGEST_EMAIL: ${{ secrets.UBERSUGGEST_EMAIL }}
+          UBERSUGGEST_PASSWORD: ${{ secrets.UBERSUGGEST_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node ubersuggest-auth.js
