@@ -758,7 +758,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Ads Bucket */}
-                {(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
+                {client?.name !== "Father Figure Formula" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
                   <AccordionItem value="ads" className="border rounded-lg bg-card overflow-hidden">
                     <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
