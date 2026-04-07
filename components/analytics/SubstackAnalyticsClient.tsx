@@ -206,22 +206,29 @@ const SubstackAnalyticsClient = ({ clientId }: { clientId: string }) => {
                   </Card>
                 ))}
               </div>
-            ) : errorType ? (
+            ) : analyticsError || errorType ? (
               <Card className="border-border">
                 <CardContent className="py-12 text-center">
                   <div className="flex flex-col items-center gap-4">
-                    <div className="p-4 rounded-full bg-muted">
+                    <div className="p-4 rounded-full bg-muted flex items-center justify-center">
                       <Info className="h-8 w-8 text-muted-foreground" />
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-muted-foreground">
-                        {errorType === 'not_configured' ? 'Substack GA4 Not Configured' : 'No Data Available'}
+                        {errorType === 'not_configured' ? 'Substack GA4 Not Configured' : analyticsError ? 'Error Fetching Information' : 'No Data Available'}
                       </h3>
                       <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
                         {errorType === 'not_configured'
                           ? 'Add a GA4 Measurement ID to your Substack Settings → Analytics to start tracking.'
-                          : 'No data available for this date range. GA4 data may take 24-48 hours to appear after initial setup.'}
+                          : analyticsError 
+                            ? 'Ensure that the GCP Service Account credentials are correct and the service account has Viewer access to this property.'
+                            : 'No data available for this date range. GA4 data may take 24-48 hours to appear after initial setup.'}
                       </p>
+                      {analyticsError && (
+                        <p className="text-xs text-red-500/80 mt-4 rounded bg-red-500/10 p-2 inline-block max-w-lg text-left overflow-hidden text-ellipsis whitespace-nowrap">
+                          {analyticsError instanceof Error ? analyticsError.message : String(analyticsError)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </CardContent>
