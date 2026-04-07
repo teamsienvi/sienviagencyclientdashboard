@@ -661,7 +661,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* Meta */}
-                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
+                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta || client.name === "Snarky Humans") && (
                           <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/meta-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
