@@ -124,7 +124,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   const { data: connectedAccounts } = useQuery({
     queryKey: ["client-connected-accounts", clientId],
     queryFn: async () => {
-      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false, shopify: false, metaAds: false };
+      if (!clientId) return { x: false, xHasData: false, meta: false, youtube: false, shopify: false, metaAds: false, substack: false };
 
       // Check X account connection
       const { data: xData } = await supabase
@@ -172,6 +172,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         .eq("is_active", true)
         .limit(1);
 
+      // Check Substack config
+      const { data: substackData } = await supabase
+        .from("client_substack_config" as any)
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("is_active", true)
+        .limit(1);
+
       return {
         x: xData && xData.length > 0,
         xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
@@ -179,6 +187,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         youtube: youtubeData && youtubeData.length > 0,
         shopify: shopifyData && shopifyData.length > 0,
         metaAds: metaAdsData && metaAdsData.length > 0,
+        substack: substackData && substackData.length > 0,
       };
     },
     enabled: !!clientId,
@@ -810,7 +819,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Web Bucket */}
-                {(!isAdsOnlyClient && client.supabase_url) || (client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") || (client.name === "Father Figure Formula") ? (
+                {(!isAdsOnlyClient && client.supabase_url) || (client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") || (client.name === "Father Figure Formula") || connectedAccounts?.substack ? (
                   <AccordionItem value="web" className="border rounded-lg bg-card overflow-hidden">
                     <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
                       <div className="flex items-center gap-3">
@@ -869,6 +878,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </CardHeader>
                             <CardContent>
                               <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Substack */}
+                        {connectedAccounts?.substack && (
+                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/substack-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                                  <FileText className="h-5 w-5 text-orange-500" />
+                                </div>
+                                <div><CardTitle className="text-base">Substack</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-orange-500/10 text-orange-600">Active</Badge>
                             </CardContent>
                           </Card>
                         )}

@@ -10,6 +10,12 @@ CREATE TABLE IF NOT EXISTS public.integration_credentials (
 -- Enable RLS
 ALTER TABLE public.integration_credentials ENABLE ROW LEVEL SECURITY;
 
+DO $$ 
+BEGIN
+    DROP POLICY IF EXISTS "Admins can view integration credentials" ON public.integration_credentials;
+    DROP POLICY IF EXISTS "Admins can update integration credentials" ON public.integration_credentials;
+END $$;
+
 -- Allow only authenticated admins to see these tokens (and service_role key ignores RLS)
 CREATE POLICY "Admins can view integration credentials" ON public.integration_credentials
     FOR SELECT TO authenticated

@@ -1,5 +1,5 @@
 -- Create config table to map Sienvi clients to Ubersuggest domains
-CREATE TABLE public.client_seo_config (
+CREATE TABLE IF NOT EXISTS public.client_seo_config (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   domain TEXT NOT NULL,
@@ -10,11 +10,18 @@ CREATE TABLE public.client_seo_config (
 
 -- Safely allow dashboard to read configs
 ALTER TABLE public.client_seo_config ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    DROP POLICY IF EXISTS "Anyone can view seo config" ON public.client_seo_config;
+    DROP POLICY IF EXISTS "Admins can manage seo config" ON public.client_seo_config;
+END $$;
+
 CREATE POLICY "Anyone can view seo config" ON public.client_seo_config FOR SELECT USING (true);
 CREATE POLICY "Admins can manage seo config" ON public.client_seo_config FOR ALL USING (true);
 
 -- Create table to store raw API metrics fetched by edge function
-CREATE TABLE public.report_seo_metrics (
+CREATE TABLE IF NOT EXISTS public.report_seo_metrics (
   id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
   site_audit_score INTEGER,
@@ -25,5 +32,12 @@ CREATE TABLE public.report_seo_metrics (
 
 -- Safely allow dashboard to read metrics
 ALTER TABLE public.report_seo_metrics ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    DROP POLICY IF EXISTS "Anyone can view seo metrics" ON public.report_seo_metrics;
+    DROP POLICY IF EXISTS "Edge Function can insert metrics" ON public.report_seo_metrics;
+END $$;
+
 CREATE POLICY "Anyone can view seo metrics" ON public.report_seo_metrics FOR SELECT USING (true);
 CREATE POLICY "Edge Function can insert metrics" ON public.report_seo_metrics FOR ALL USING (true);
