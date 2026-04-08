@@ -707,13 +707,40 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no code
 }
 
 async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promise<any> {
-    const models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    // Dynamically fetch available models to ensure we only request models that actually exist and are supported
+    const modelsReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (!modelsReq.ok) {
+        throw new Error(`Failed to fetch models from Gemini API: ${modelsReq.status}`);
+    }
+    const modelsData = await modelsReq.json();
+    
+    // Find supported models that are valid for generateContent. We prioritize 2.5, then 2.0, then 1.5
+    const availableModels = modelsData.models
+        .filter((m: any) => m.supportedGenerationMethods.includes("generateContent"))
+        .map((m: any) => m.name.replace('models/', ''));
+        
+    const candidateModels = [];
+    if (availableModels.includes("gemini-2.5-flash")) candidateModels.push("gemini-2.5-flash");
+    if (availableModels.includes("gemini-2.5-pro")) candidateModels.push("gemini-2.5-pro");
+    if (availableModels.includes("gemini-2.0-flash")) candidateModels.push("gemini-2.0-flash");
+    if (availableModels.includes("gemini-1.5-flash-latest")) candidateModels.push("gemini-1.5-flash-latest");
+    if (availableModels.includes("gemini-1.5-flash-002")) candidateModels.push("gemini-1.5-flash-002");
+    if (availableModels.includes("gemini-1.5-flash")) candidateModels.push("gemini-1.5-flash");
+    
+    // Fallback to whatever first model contains 'flash' if our specific candidates aren't there
+    if (candidateModels.length === 0) {
+        const anyFlash = availableModels.find((m: string) => m.includes("flash"));
+        if (anyFlash) candidateModels.push(anyFlash);
+        else candidateModels.push(availableModels[0] || "gemini-2.5-flash"); // hail mary
+    }
 
     let response: Response | null = null;
     let lastErrBody = "";
 
+    // Retry loop using the valid candidate models
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        const currentModel = models[Math.min(attempt, models.length - 1)];
+        // Shift to older/different models if our first choice throws 503 repeatedly
+        const currentModel = candidateModels[Math.min(attempt, candidateModels.length - 1)];
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
 
         if (attempt > 0) {
@@ -741,8 +768,9 @@ async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promi
         lastErrBody = await response.text();
         console.error(`Gemini API error (Attempt ${attempt + 1} with ${currentModel}):`, response.status, lastErrBody);
         
-        // Only retry on 503 (Unavailable/Overloaded) or 429 (Rate Limit)
-        if (response.status !== 503 && response.status !== 429) {
+        // Let it retry on 503, 429, OR 500/504
+        if (![503, 500, 502, 504, 429].includes(response.status)) {
+            // Throw immediately for 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found (if model name was somehow wrong even after fetch)
             throw new Error(`Gemini API returned ${response.status}: ${lastErrBody.substring(0, 500)}`);
         }
     }
