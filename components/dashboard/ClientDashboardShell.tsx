@@ -713,7 +713,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* X */}
-                        {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula" || client.name === "Snarky Humans") && (
+                        {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
                           connectedAccounts?.xHasData ? (
                             <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/x-analytics/${clientId}`)}>
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
