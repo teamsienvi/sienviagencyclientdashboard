@@ -864,8 +864,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           </CardContent>
                         </Card>
 
-                        {/* Top Countries */}
-                        <TopCountriesWidget clientId={clientId!} dateRange={dateRange} />
+                        {/* Top Countries (Temporarily hidden) */}
+                        {/* <TopCountriesWidget clientId={clientId!} dateRange={dateRange} /> */}
 
                         {/* Browser Breakdown */}
                         {normalizedAnalytics?.browsers && normalizedAnalytics.browsers.length > 0 && (
