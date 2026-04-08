@@ -90,27 +90,20 @@ export function useTopPerformingPosts(
           if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
           if (!c.published_at) return false;
           
-          // DO NOT strictly filter by published_at (Evergreen content still gets views!).
-          // Instead, ensure we have metrics that were collected strictly on or after the periodStartDate.
-          // This ensures old posts with active new data still rank on the dashboard.
-          const hasRecentMetrics = c.social_content_metrics.some((m: any) => {
-            const metricDate = new Date(m.collected_at || m.period_end || 0);
-            return metricDate >= periodStartDate && metricDate <= periodEndDate;
+          // Content must be published within the reporting period
+          const publishedDate = parseISO(c.published_at);
+          return isWithinInterval(publishedDate, { 
+            start: periodStartDate, 
+            end: periodEndDate 
           });
-          
-          return hasRecentMetrics;
         })
         .map((c) => {
-          // ONLY use metrics collected within the selected period for ranking
-          const periodMetrics = c.social_content_metrics.filter((m: any) => {
-            const metricDate = new Date(m.collected_at || m.period_end || 0);
-            return metricDate >= periodStartDate && metricDate <= periodEndDate;
-          });
-
-          // Sort period-specific metrics by recency
-          const sortedMetrics = [...periodMetrics].sort((a: any, b: any) => {
+          // Get the most recent metric (by period_end, then collected_at)
+          const sortedMetrics = [...c.social_content_metrics].sort((a: any, b: any) => {
+            // First by period_end descending
             const periodCompare = (b.period_end || "").localeCompare(a.period_end || "");
             if (periodCompare !== 0) return periodCompare;
+            // Then by collected_at descending
             return new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime();
           });
           
