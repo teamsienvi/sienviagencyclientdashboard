@@ -312,7 +312,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   const { data: betaCount, isLoading: isLoadingBeta } = useQuery({
     queryKey: ["fff-beta-count"],
     queryFn: async () => {
-      const res = await fetch("https://qnquitqllwpeivinvhzk.supabase.co/functions/v1/beta-count", {
+      const res = await fetch("https://ouxnqgwdwccjipmplure.supabase.co/functions/v1/beta-count", {
         headers: { "x-api-key": "Iydknyk1@#$%" },
       });
       if (!res.ok) throw new Error("Failed to fetch beta count");

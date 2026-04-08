@@ -63,7 +63,7 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
     const { data, isLoading, error, refetch, isFetching } = useQuery<LmsApiResponse>({
         queryKey: ["fff-lms-analytics"],
         queryFn: async () => {
-            const res = await fetch("https://qnquitqllwpeivinvhzk.supabase.co/functions/v1/beta-count", {
+            const res = await fetch("https://ouxnqgwdwccjipmplure.supabase.co/functions/v1/beta-count", {
                 headers: { "x-api-key": "Iydknyk1@#$%" },
             });
             if (!res.ok) throw new Error("Failed to fetch LMS data");
