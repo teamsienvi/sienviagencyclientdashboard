@@ -497,6 +497,46 @@ async function collectWebsiteData(
 ): Promise<string> {
     const sections: string[] = [];
 
+    // 0. Check for Substack GA4 integration
+    const { data: substackConfig } = await supabase
+        .from('client_substack_config')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (substackConfig) {
+        try {
+            const { data: ga4Data, error: ga4Err } = await supabase.functions.invoke("fetch-substack-ga4", {
+                body: { clientId, startDate: startStr, endDate: endStr }
+            });
+            
+            if (!ga4Err && ga4Data && ga4Data.ok !== false && ga4Data.analytics) {
+                const a = ga4Data.analytics;
+                let subOutput = `## Substack Newsletter Performance (${startStr} to ${endStr})\n` +
+                    `- Total Page Views: ${a.pageViews}\n` +
+                    `- Unique Readers: ${a.visitors}\n` +
+                    `- Total Sessions: ${a.totalSessions}\n` +
+                    `- Avg Read Time: ${a.avgDuration} seconds\n` +
+                    `- Bounce Rate: ${a.bounceRate}%\n`;
+                
+                if (a.topPages && a.topPages.length > 0) {
+                    subOutput += `- Top Read Articles:\n` + 
+                        a.topPages.slice(0, 5).map((p: any) => `  - ${p.title || p.url}: ${p.views} views`).join('\n') + `\n`;
+                }
+                
+                if (a.trafficSources && a.trafficSources.length > 0) {
+                    subOutput += `- Traffic Sources: ` +
+                        a.trafficSources.slice(0, 5).map((t: any) => `${t.source}: ${t.sessions} sessions`).join(', ') + `\n`;
+                }
+
+                sections.push(subOutput);
+            }
+        } catch (e) {
+            console.error("Failed to fetch Substack GA4 data for summary", e);
+        }
+    }
+
     // Website analytics data is stored in the agency's own Supabase
     // (the track-analytics edge function inserts into web_analytics_page_views
     //  and web_analytics_sessions using the agency's client_id)
