@@ -838,7 +838,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         <AnalyticsSummaryCard
                           clientId={clientId!}
                           type="website"
-                          title="Website Analytics Summary"
+                          title="Web & E-Commerce Summaries"
                           icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
                           dateRange={dateRange}
                         />
