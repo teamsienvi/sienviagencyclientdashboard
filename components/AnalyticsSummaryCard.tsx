@@ -122,11 +122,12 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         const currentSettingsKey = `${clientId}-${type}-${dateRange}`;
 
         if (needsRegen) {
-            // Only fire if we haven't already attempted for this exact setting
-            if (attemptRef.current !== currentSettingsKey) {
-                attemptRef.current = currentSettingsKey;
-                setTimeout(() => generateMutation.mutate(), 100);
-            }
+            // TEMPORARILY DISABLED: Auto-generation is paused due to Gemini API high demand.
+            // Users must click the Refresh button manually to generate a new AI summary.
+            // if (attemptRef.current !== currentSettingsKey) {
+            //     attemptRef.current = currentSettingsKey;
+            //     setTimeout(() => generateMutation.mutate(), 100);
+            // }
         } else {
             // Once we have a valid, un-expired cache for these settings, clear the ref 
             // so future expirations (6 hrs from now) can trigger again.

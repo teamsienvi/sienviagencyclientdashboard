@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -670,28 +670,35 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* Meta */}
-                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta || client.name === "Snarky Humans") && (
+                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta || client.name === "Snarky A$$ Humans") && (
                           <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/meta-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
-                                <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
-                                  <TrendingUp className="h-5 w-5 text-blue-500" />
+                                <div className="flex -space-x-2">
+                                  <div className="p-2 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-500 z-10 border-2 border-background">
+                                    <Instagram className="h-3.5 w-3.5 text-white" />
+                                  </div>
+                                  <div className="p-2 rounded-full bg-[#1877F2] border-2 border-background">
+                                    <Facebook className="h-3.5 w-3.5 text-white" />
+                                  </div>
                                 </div>
                                 <div><CardTitle className="text-base">Meta</CardTitle></div>
                               </div>
                               <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                             </CardHeader>
                             <CardContent>
-                              {connectedAccounts?.meta ? (
-                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                              ) : (
-                                <Badge variant="outline">Connect Account</Badge>
-                              )}
+                              <div className="flex justify-between items-center">
+                                {connectedAccounts?.meta ? (
+                                  <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                                ) : (
+                                  <Badge variant="outline">Connect Account</Badge>
+                                )}
+                              </div>
                             </CardContent>
                           </Card>
                         )}
                         {/* TikTok */}
-                        {(metricoolPlatforms?.some(p => p.platform === 'tiktok') || client.name === "Snarky Humans") && (
+                        {(metricoolPlatforms?.some(p => p.platform === 'tiktok') || client.name === "Snarky A$$ Humans") && (
                           <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/tiktok-metricool/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">

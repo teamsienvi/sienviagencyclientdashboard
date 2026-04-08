@@ -75,7 +75,7 @@ async function runReport(
   if (!resp.ok) {
     const errText = await resp.text();
     console.error(`GA4 runReport error (${resp.status}):`, errText);
-    throw new Error(`GA4 API error: ${resp.status}`);
+    throw new Error(`GA4 API error: ${resp.status} - ${errText}`);
   }
   return resp.json();
 }
