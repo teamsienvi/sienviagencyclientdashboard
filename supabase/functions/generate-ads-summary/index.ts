@@ -60,6 +60,7 @@ const DEFAULT_INSTRUCTIONS = `Analyze the following ad performance data. Provide
 - Audience/targeting signals (any patterns in which segments convert better?)
 
 IMPORTANT: You MUST respond with ONLY a valid JSON object. No markdown. No code fences. No explanation text. Just the raw JSON object starting with { and ending with }.
+CRITICAL: DO NOT use the Code Interpreter tool or write Python. Analyze the provided CSV text natively and return the JSON immediately.
 
 {
   "strengths": ["3-5 things working well with specific numbers from the data"],
@@ -277,8 +278,8 @@ async function callOpenAIAssistant(
     let runId = run.id;
     console.log(`Created run: ${runId}`);
 
-    // 4. Poll for completion (max 120 seconds)
-    const maxWait = 120_000;
+    // 4. Poll for completion (max 180 seconds)
+    const maxWait = 180_000;
     const pollInterval = 2_000;
     const startTime = Date.now();
 
@@ -304,6 +305,11 @@ async function callOpenAIAssistant(
 
         // Wait before next poll
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    // Check if we exited because of timeout
+    if (Date.now() - startTime >= maxWait) {
+        throw new Error("OpenAI Assistant took too long to analyze this file (exceeded 2 minutes). Ensure the dataset isn't unnecessarily large, or try again later when AI servers are less congested.");
     }
 
     // 5. Get messages
