@@ -124,8 +124,15 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
             );
 
             if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || "Failed to analyze ads");
+                let errPayload: any = {};
+                let rawText = "";
+                try {
+                    rawText = await response.text();
+                    errPayload = JSON.parse(rawText);
+                } catch (e) {
+                    // Not JSON
+                }
+                throw new Error(errPayload.error || errPayload.message || rawText || "Failed to analyze ads");
             }
 
             const result = await response.json();
