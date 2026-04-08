@@ -706,25 +706,46 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no code
 }`;
 }
 
-async function callGemini(apiKey: string, prompt: string): Promise<any> {
+async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promise<any> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 8192,
-            },
-        }),
-    });
+    let response: Response | null = null;
+    let lastErrBody = "";
 
-    if (!response.ok) {
-        const errBody = await response.text();
-        console.error("Gemini API error:", response.status, errBody);
-        throw new Error(`Gemini API returned ${response.status}: ${errBody.substring(0, 500)}`);
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+            const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+            console.log(`Gemini API overloaded. Retrying ${attempt}/${maxRetries} in ${Math.round(backoffMs)}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+        }
+
+        response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 8192,
+                },
+            }),
+        });
+
+        if (response.ok) {
+            break;
+        }
+
+        lastErrBody = await response.text();
+        console.error(`Gemini API error (Attempt ${attempt + 1}):`, response.status, lastErrBody);
+        
+        // Only retry on 503 (Unavailable/Overloaded) or 429 (Rate Limit)
+        if (response.status !== 503 && response.status !== 429) {
+            throw new Error(`Gemini API returned ${response.status}: ${lastErrBody.substring(0, 500)}`);
+        }
+    }
+
+    if (!response || !response.ok) {
+        throw new Error(`Gemini API failed after ${maxRetries} retries. Last error: ${response?.status}: ${lastErrBody.substring(0, 500)}`);
     }
 
     const result = await response.json();
