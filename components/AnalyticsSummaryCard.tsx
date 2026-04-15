@@ -37,11 +37,25 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
-    // Fetch cached summary
+    // Wait for Supabase auth session to be ready before querying RLS-protected tables
+    const [sessionReady, setSessionReady] = useState(false);
+    useEffect(() => {
+        // Check if session is already available
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) setSessionReady(true);
+        });
+        // Also listen for auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSessionReady(!!session);
+        });
+        return () => subscription.unsubscribe();
+    }, []);
+
+    // Fetch cached summary — only runs once auth session is ready
     const { data: cachedSummary, isLoading: isLoadingCache } = useQuery({
-        queryKey: ["analytics-summary", clientId, type],
+        queryKey: ["analytics-summary", clientId, type, sessionReady],
         queryFn: async () => {
-            console.log(`[SummaryCard] Fetching summary for ${clientId} type=${type}`);
+            console.log(`[SummaryCard] Fetching summary for ${clientId} type=${type} (auth=${sessionReady})`);
             const { data, error } = await supabase
                 .from("analytics_summaries" as any)
                 .select("summary_data, generated_at, period_start, period_end")
@@ -58,8 +72,9 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             console.log(`[SummaryCard] Query result for ${clientId}:`, data ? `found, generated=${(data as any).generated_at}` : "null");
             return data;
         },
-        staleTime: 10 * 60 * 1000, // 10 minutes — don't refetch on re-mount
-        gcTime: 30 * 60 * 1000,    // 30 minutes — keep in cache after unmount
+        enabled: !!clientId && sessionReady, // Don't fire until auth is loaded
+        staleTime: 10 * 60 * 1000, // 10 minutes
+        gcTime: 30 * 60 * 1000,    // 30 minutes
     });
 
     // Generate summary mutation
