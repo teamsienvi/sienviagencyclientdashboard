@@ -1838,7 +1838,7 @@ export const MetricoolAnalyticsSection = ({
                       <Tooltip
                         content={({ active, payload, label }: any) => {
                           if (active && payload && payload.length) {
-                            const isOthers = label === "Others" || label === "Other" || label === "Unknown";
+                            const isOthers = ["others", "other", "unknown"].includes((label || "").toLowerCase());
                             return (
                               <div className="bg-background border rounded-lg p-3 shadow-md max-w-[250px] text-left">
                                 <p className="font-medium mb-1 text-sm">{label}</p>
