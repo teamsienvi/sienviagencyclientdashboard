@@ -1,13 +1,19 @@
-import React from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useEffect, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface UbersuggestSectionProps {
   clientId: string;
 }
 
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
+  const queryClient = useQueryClient();
+  const autoSyncAttemptedRef = useRef<string | null>(null);
+
   const { data: allMetrics, isLoading } = useQuery({
     queryKey: ["client-seo-metrics", clientId],
     queryFn: async () => {
@@ -22,6 +28,42 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
     },
     enabled: !!clientId,
   });
+
+  // Sync mutation — calls the sync-ubersuggest edge function
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("sync-ubersuggest", {
+        body: { clientId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-seo-metrics", clientId] });
+    },
+    onError: (err: Error) => {
+      console.warn("SEO auto-sync failed:", err.message);
+    },
+  });
+
+  // Auto-sync: trigger when data is stale (>24h) or missing
+  useEffect(() => {
+    if (isLoading || syncMutation.isPending) return;
+
+    const latestEntry = allMetrics && allMetrics.length > 0
+      ? allMetrics[allMetrics.length - 1]
+      : null;
+
+    const isStale = !latestEntry ||
+      (Date.now() - new Date(latestEntry.collected_at).getTime()) > STALE_THRESHOLD_MS;
+
+    if (isStale && autoSyncAttemptedRef.current !== clientId) {
+      autoSyncAttemptedRef.current = clientId;
+      console.log(`SEO data stale for ${clientId}, auto-syncing...`);
+      syncMutation.mutate();
+    }
+  }, [clientId, allMetrics, isLoading, syncMutation.isPending]);
 
   if (isLoading) {
     return (
@@ -287,8 +329,26 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
         </div>
       )}
 
-      <div className="text-[10px] text-muted-foreground/60 text-right">
-        Last synced {new Date(latest.collected_at).toLocaleDateString()}
+      <div className="flex items-center justify-between">
+        <div className="text-[10px] text-muted-foreground/60">
+          {syncMutation.isPending ? (
+            <span className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" /> Syncing SEO data...
+            </span>
+          ) : (
+            <>Last synced {new Date(latest.collected_at).toLocaleDateString()}</>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 text-[10px] px-2 gap-1"
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+        >
+          <RefreshCw className={`h-3 w-3 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+          Sync Now
+        </Button>
       </div>
     </div>
   );
