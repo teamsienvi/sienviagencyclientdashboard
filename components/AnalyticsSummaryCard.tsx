@@ -41,6 +41,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const { data: cachedSummary, isLoading: isLoadingCache } = useQuery({
         queryKey: ["analytics-summary", clientId, type],
         queryFn: async () => {
+            console.log(`[SummaryCard] Fetching summary for ${clientId} type=${type}`);
             const { data, error } = await supabase
                 .from("analytics_summaries" as any)
                 .select("summary_data, generated_at, period_start, period_end")
@@ -51,11 +52,14 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 .maybeSingle();
 
             if (error) {
-                console.warn("No cached summary:", error.message);
+                console.warn("[SummaryCard] Query error:", error.message, error.code);
                 return null;
             }
+            console.log(`[SummaryCard] Query result for ${clientId}:`, data ? `found, generated=${(data as any).generated_at}` : "null");
             return data;
         },
+        staleTime: 10 * 60 * 1000, // 10 minutes — don't refetch on re-mount
+        gcTime: 30 * 60 * 1000,    // 30 minutes — keep in cache after unmount
     });
 
     // Generate summary mutation
