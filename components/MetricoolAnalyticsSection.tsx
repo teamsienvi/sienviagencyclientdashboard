@@ -1836,11 +1836,28 @@ export const MetricoolAnalyticsSection = ({
                         width={55}
                       />
                       <Tooltip
-                        formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
-                        contentStyle={{
-                          backgroundColor: 'hsl(var(--background))',
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px',
+                        content={({ active, payload, label }: any) => {
+                          if (active && payload && payload.length) {
+                            const isOthers = label === "Others" || label === "Other" || label === "Unknown";
+                            return (
+                              <div className="bg-background border rounded-lg p-3 shadow-md max-w-[250px] text-left">
+                                <p className="font-medium mb-1 text-sm">{label}</p>
+                                <p className="text-sm">
+                                  <span className="text-muted-foreground mr-1">Followers:</span>
+                                  {Number(payload[0].value).toFixed(1)}%
+                                </p>
+                                {isOthers && (
+                                  <div className="mt-3 text-xs text-muted-foreground pt-2 border-t space-y-2 leading-relaxed">
+                                    <p>In Metricool, "Others" represents the combined total of followers from all countries not explicitly listed in your top rankings.</p>
+                                    <p><strong>Minority Markets:</strong> It bundles every country that has too small a percentage to earn its own slice.</p>
+                                    <p><strong>Data Cleanup:</strong> It prevents the chart from becoming cluttered with dozens of tiny segments.</p>
+                                    <p><strong>Privacy:</strong> It includes users whose locations couldn't be verified by TikTok.</p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
                         }}
                       />
                       <Bar

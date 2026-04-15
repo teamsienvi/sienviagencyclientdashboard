@@ -80,7 +80,36 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             }
             return response.json();
         },
-        onSuccess: () => {
+        onSuccess: async (summaryData: SummaryData) => {
+            // Directly persist the summary to the DB from the frontend as a guaranteed
+            // backup in case the edge function's internal upsert silently failed.
+            const now = new Date();
+            const periodEnd = now.toISOString().split("T")[0];
+            const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
+            const periodStart = new Date(now);
+            periodStart.setDate(periodStart.getDate() - daysToSubtract);
+            const periodStartStr = periodStart.toISOString().split("T")[0];
+
+            const { error: upsertError } = await supabase
+                .from("analytics_summaries" as any)
+                .upsert(
+                    {
+                        client_id: clientId,
+                        type,
+                        summary_data: summaryData,
+                        period_start: periodStartStr,
+                        period_end: periodEnd,
+                        generated_at: now.toISOString(),
+                    },
+                    { onConflict: "client_id,type" }
+                );
+
+            if (upsertError) {
+                console.warn("Frontend upsert to analytics_summaries failed:", upsertError.message);
+            } else {
+                console.log("Summary persisted to analytics_summaries from frontend.");
+            }
+
             queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
             toast({ title: "Summary updated!", description: `${title} analysis refreshed with latest data.` });
         },
@@ -137,9 +166,14 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         }
     }, [clientId, type, dateRange, cachedSummary, isLoadingCache, generateMutation.isPending]);
 
+    // Show the freshly generated data immediately; fall back to DB cache.
+    // After invalidation, cachedSummary will reload from the DB.
     const summary: SummaryData | null =
         generateMutation.data || (cachedSummary as any)?.summary_data || null;
-    const generatedAt = (cachedSummary as any)?.generated_at;
+    const generatedAt =
+        generateMutation.isSuccess
+            ? new Date().toISOString()
+            : (cachedSummary as any)?.generated_at;
     const isGenerating = generateMutation.isPending;
 
     const sections = [
