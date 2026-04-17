@@ -58,6 +58,7 @@ serve(async (req) => {
     tiktok: { success: 0, failed: 0, errors: [] as string[] },
     linkedin: { success: 0, failed: 0, errors: [] as string[] },
     shopify: { success: 0, failed: 0, errors: [] as string[] },
+    ubersuggest: { success: 0, failed: 0, errors: [] as string[] },
   };
 
   // Helper to sync a platform for both periods
@@ -389,6 +390,36 @@ serve(async (req) => {
         results.shopify.failed++;
         console.error(`  ✗ Shopify failed for ${shopName}: ${err.message}`);
         results.shopify.errors.push(`${shopName}: ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 7. UBERSUGGEST SYNC
+    console.log("\n=== Syncing Ubersuggest ===");
+    const { data: ubersuggestConfigs } = await supabase
+      .from("client_seo_config")
+      .select("client_id, domain")
+      .eq("is_active", true);
+
+    for (const config of ubersuggestConfigs || []) {
+      const domainName = config.domain || config.client_id;
+      console.log(`Syncing Ubersuggest for client ${config.client_id}: ${domainName}`);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke("sync-ubersuggest", {
+          body: { clientId: config.client_id }
+        });
+        if (error) throw error;
+        if (data?.success) {
+          results.ubersuggest.success++;
+          console.log(`  ✓ Ubersuggest synced for ${domainName}`);
+        } else {
+          throw new Error(data?.error || "Unknown error");
+        }
+      } catch (err: any) {
+        results.ubersuggest.failed++;
+        console.error(`  ✗ Ubersuggest failed for ${domainName}: ${err.message}`);
+        results.ubersuggest.errors.push(`${domainName}: ${err.message}`);
       }
       await new Promise(r => setTimeout(r, 500));
     }
