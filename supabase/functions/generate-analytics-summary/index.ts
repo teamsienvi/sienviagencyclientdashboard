@@ -33,8 +33,8 @@ serve(async (req) => {
         if (!clientId || !type) {
             throw new Error("clientId and type are required");
         }
-        if (type !== "social" && type !== "website" && type !== "lms") {
-            throw new Error("type must be 'social', 'website', or 'lms'");
+        if (type !== "social" && type !== "website" && type !== "lms" && type !== "ads") {
+            throw new Error("type must be 'social', 'website', 'lms', or 'ads'");
         }
 
         console.log(`Generating ${type} summary for client ${clientId} (${dateRange || "7d"})`);
@@ -62,8 +62,10 @@ serve(async (req) => {
 
         if (type === "social") {
             analyticsContext = await collectSocialData(supabase, clientId, startStr, endStr);
-        } else {
+        } else if (type === "website") {
             analyticsContext = await collectWebsiteData(supabase, clientId, startStr, endStr);
+        } else if (type === "ads") {
+            analyticsContext = await collectAdsData(supabase, clientId, startStr, endStr);
         }
 
         if (!analyticsContext || analyticsContext.trim().length < 20) {
@@ -636,6 +638,58 @@ async function collectWebsiteData(
     return sections.join("\n\n");
 }
 
+async function collectAdsData(
+    supabase: any,
+    clientId: string,
+    startStr: string,
+    endStr: string
+): Promise<string> {
+    const sections: string[] = [];
+
+    const prevStart = new Date(startStr);
+    prevStart.setDate(prevStart.getDate() - 7);
+    const prevEnd = new Date(endStr);
+    prevEnd.setDate(prevEnd.getDate() - 7);
+
+    const prevStartStr = prevStart.toISOString().split("T")[0];
+    const prevEndStr = prevEnd.toISOString().split("T")[0];
+
+    const { data: adsData, error } = await supabase.functions.invoke("metricool-ads", {
+        body: {
+            clientId,
+            from: startStr,
+            to: endStr,
+            prevFrom: prevStartStr,
+            prevTo: prevEndStr
+        }
+    });
+
+    if (error || !adsData || !adsData.success) {
+        console.error("Failed to fetch metricool-ads:", error || adsData?.error);
+        return "No ads data available or failed to fetch.";
+    }
+
+    const report = adsData.data;
+    if (report?.metaAds) {
+        const current = report.metaAds.current;
+        sections.push(`## Meta Ads (Facebook/Instagram)\n- Spend: $${current.spend.toFixed(2)}\n- Impressions: ${current.impressions}\n- Clicks: ${current.clicks}\n- Conversions: ${current.conversions}\n- Conv. Value: $${current.conversionValue.toFixed(2)}\n- ROAS: ${current.roas.toFixed(2)}x\n- Top Campaigns by spend:\n` + current.campaigns.slice(0, 5).map((c: any) => `  - ${c.name}: Spend $${c.spent.toFixed(2)}, Conversions: ${c.conversions}, ROAS: ${c.purchaseRoas.toFixed(2)}x`).join("\n"));
+    }
+    if (report?.googleAds) {
+        const current = report.googleAds.current;
+        sections.push(`## Google Ads\n- Spend: $${current.spend.toFixed(2)}\n- Impressions: ${current.impressions}\n- Clicks: ${current.clicks}\n- Conversions: ${current.conversions}\n- Conv. Value: $${current.allConversionsValue.toFixed(2)}\n- ROAS: ${current.roas.toFixed(2)}x\n- Top Campaigns by spend:\n` + current.campaigns.slice(0, 5).map((c: any) => `  - ${c.name}: Spend $${c.spent.toFixed(2)}, Conversions: ${c.conversions}, ROAS: ${c.purchaseROAS.toFixed(2)}x`).join("\n"));
+    }
+    if (report?.tiktokAds) {
+        const current = report.tiktokAds.current;
+        sections.push(`## TikTok Ads\n- Spend: $${current.spend.toFixed(2)}\n- Impressions: ${current.impressions}\n- Clicks: ${current.clicks}\n- Conversions: ${current.conversions}\n- Conv. Value: $${current.conversionValue.toFixed(2)}\n- ROAS: ${current.roas.toFixed(2)}x\n- Top Campaigns by spend:\n` + current.campaigns.slice(0, 5).map((c: any) => `  - ${c.name}: Spend $${c.spent.toFixed(2)}, Conversions: ${c.conversions}`).join("\n"));
+    }
+
+    if (sections.length === 0) {
+        return "No ad campaigns were active during this period.";
+    }
+
+    return sections.join("\n\n");
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Extract platform names mentioned in the analytics context string */
@@ -667,12 +721,12 @@ function buildPrompt(
     endStr: string,
     platforms: string[]
 ): string {
-    const label = type === "social" ? "social media" : "website";
+    const label = type === "ads" ? "advertising" : (type === "social" ? "social media" : "website");
     const platformClause = platforms.length > 0
         ? `\nThis client is active on: ${platforms.join(", ")}. Only reference these platforms.`
         : "";
 
-    return `You are a senior social media strategist at a digital marketing agency. You are writing a performance brief for ${clientName}'s ${label} analytics for the week of ${startStr} to ${endStr}.${platformClause}
+    return `You are a senior digital strategist at a marketing agency. You are writing a performance brief for ${clientName}'s ${label} analytics for the week of ${startStr} to ${endStr}.${platformClause}
 
 Here is the raw analytics data:
 
@@ -681,13 +735,13 @@ ${data}
 Your task: Produce a concise, insight-driven executive summary. Focus on what a marketing manager needs to know to make decisions THIS week.
 
 For each category, write 2-4 bullet points. Each bullet should:
-- Reference specific numbers from the data (followers, views, engagement rates, etc.)
+- Reference specific numbers from the data (spend, roas, followers, views, engagement rates, etc.)
 - Compare metrics where possible (e.g. "engagement rate of 3.2% is above the 1-2% industry average")
 - Be actionable — don't just describe, explain what it means and what to do about it
 
 Category definitions:
-- "strengths": What's performing well. IMPORTANT: Analyze which CONTENT FORMAT is the strongest performer — compare photos/static posts vs reels/short video vs carousels/stories. Identify the format that gets the most engagement, views, and reach. Cite specific content pieces and their numbers. Example: "Reels outperformed static posts by 3x in reach (2,500 avg vs 800 avg), making short-form video the strongest content format this week."
-- "weaknesses": What's underperforming or missing. Be honest but constructive. Identify content formats or platforms that are lagging.
+- "strengths": What's performing well. IMPORTANT: Analyze which campaign, copy, or content format is the strongest performer. Cite specific content pieces or campaigns and their numbers (e.g., ROAS or Conversion values). Example for ads: "The Retargeting Campaign delivered a 4.5x ROAS, driving the majority of purchases this period."
+- "weaknesses": What's underperforming or missing. Be honest but constructive. Identify campaigns, content formats, or platforms that are lagging or wasting spend.
 - "smartActions": 2-4 highly specific, actionable steps for a "Client Action Plan" this week. Tailor these explicitly to ${clientName}'s actual metrics and performance data. Give them direct execution instructions based ONLY on what their numbers show. Example: "For ${clientName}'s next 3 TikToks, double down on the 'behind-the-scenes' format that drove 800 views yesterday, and pause static image posts which flatlined at 1% engagement." Avoid ANY generic advice like 'improve engagement' or 'post consistently'.
 - "highlights": Key milestones, trending content, or notable changes worth celebrating or flagging.
 

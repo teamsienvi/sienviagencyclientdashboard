@@ -8,11 +8,17 @@ export interface PlatformMetric {
     engagementRate: number;
 }
 
+export interface TimelineDataPoint {
+    date: string;
+    views: number;
+    engagement: number;
+}
+
 export function useSummaryMetrics(clientId: string, dateRange: string = "7d", customDateRange?: { start: Date; end: Date }) {
     return useQuery({
         queryKey: ["summary-metrics", clientId, dateRange, customDateRange?.start, customDateRange?.end],
-        queryFn: async (): Promise<{ totalViews: number; totalEngagements: number; platformData: PlatformMetric[] }> => {
-            if (!clientId) return { totalViews: 0, totalEngagements: 0, platformData: [] };
+        queryFn: async (): Promise<{ totalViews: number; totalEngagements: number; platformData: PlatformMetric[]; followersGained: number; timelineData: TimelineDataPoint[] }> => {
+            if (!clientId) return { totalViews: 0, totalEngagements: 0, platformData: [], followersGained: 0, timelineData: [] };
             
             let periodStartStr: string;
             let periodEndStr: string | undefined;
@@ -32,6 +38,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 .from("social_content")
                 .select(`
                     platform,
+                    published_at,
                     social_content_metrics (
                         views,
                         impressions,
@@ -49,11 +56,43 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
             const { data, error } = await query;
 
             if (error) throw error;
+
+            // Fetch Follower Timeline
+            const { data: timelineDataRaw } = await supabase
+                .from("social_follower_timeline")
+                .select("platform, date, followers")
+                .eq("client_id", clientId)
+                .gte("date", periodStartStr.split("T")[0])
+                .order("date", { ascending: true });
+
+            let followersGained = 0;
+            if (timelineDataRaw && timelineDataRaw.length > 0) {
+                const byPlatform: Record<string, any[]> = {};
+                timelineDataRaw.forEach((f) => {
+                    if (!byPlatform[f.platform]) byPlatform[f.platform] = [];
+                    byPlatform[f.platform].push(f);
+                });
+                Object.values(byPlatform).forEach((points) => {
+                    const first = points[0]?.followers || 0;
+                    const last = points[points.length - 1]?.followers || 0;
+                    followersGained += (last - first);
+                });
+            }
             
             let totalViews = 0;
             let totalEngagements = 0;
             
             const pMap: Record<string, { views: number; engagements: number }> = {};
+            const timelineMap: Record<string, { date: string, views: number, engagement: number }> = {};
+            
+            const days = dateRange === "30d" ? 30 : dateRange === "60d" ? 60 : 7;
+            for (let i = days; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const dStr = d.toISOString().split("T")[0];
+                const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                timelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0 };
+            }
             
             data?.forEach(post => {
                 if (!post.social_content_metrics || post.social_content_metrics.length === 0) return;
@@ -75,6 +114,12 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 
                 totalViews += postViews;
                 totalEngagements += postEngagements;
+
+                const postDate = post.published_at ? post.published_at.split("T")[0] : null;
+                if (postDate && timelineMap[postDate]) {
+                    timelineMap[postDate].views += postViews;
+                    timelineMap[postDate].engagement += postEngagements;
+                }
             });
             
             const platformData: PlatformMetric[] = Object.entries(pMap).map(([platform, stats]) => {
@@ -87,10 +132,14 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 };
             }).sort((a, b) => b.views - a.views);
 
+            const timelineData = Object.values(timelineMap);
+
             return {
                 totalViews,
                 totalEngagements,
-                platformData
+                platformData,
+                followersGained,
+                timelineData
             };
         },
         enabled: !!clientId,

@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -494,6 +494,15 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     return hasAnyAdsPlatform && !hasSocialMedia;
   }, [metricoolPlatforms, hasSocialMedia, client]);
 
+  // Check if client has any ads platforms connected
+  const hasAdsPlatform = useMemo(() => {
+    if (client?.name === "Father Figure Formula") return false;
+    if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
+    if (connectedAccounts?.metaAds) return true;
+    if (client?.name && getClientAdPlatforms(client.name).includes('amazon')) return true;
+    return false;
+  }, [client?.name, metricoolPlatforms, connectedAccounts]);
+
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
     ? clientReports.reports[clientReports.reports.length - 1] 
     : null;
@@ -632,6 +641,17 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       type="website"
                       title="Web & E-Commerce Overview"
                       icon={<Globe className="h-5 w-5 text-emerald-500" />}
+                      dateRange={dateRange}
+                      customDateRange={customDateRange}
+                    />
+                  )}
+
+                  {hasAdsPlatform && (
+                    <AnalyticsSummaryCard
+                      clientId={clientId!}
+                      type="ads"
+                      title="Ads & Campaigns Overview"
+                      icon={<Target className="h-5 w-5 text-amber-500" />}
                       dateRange={dateRange}
                       customDateRange={customDateRange}
                     />
