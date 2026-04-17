@@ -105,7 +105,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
 
   return (
     <div 
-      className="bg-card border border-border rounded-xl p-6 hover:shadow-lg hover:border-primary/30 transition-all duration-300 animate-fade-in group cursor-pointer"
+      className="bg-card/80 backdrop-blur-sm border border-border/80 rounded-2xl p-6 hover:shadow-xl hover:border-primary/50 shadow-sm transition-all duration-300 animate-fade-in group cursor-pointer"
       style={{ animationDelay: `${clientIndex * 100}ms` }}
       onClick={() => clientId && router.push(`/client/${clientId}`)}
     >
@@ -113,7 +113,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Logo Placeholder */}
-            <div className="h-14 w-14 rounded-xl bg-accent border-2 border-dashed border-border flex items-center justify-center overflow-hidden group-hover:border-primary/30 transition-all duration-300">
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-accent to-background border shadow-inner flex items-center justify-center overflow-hidden group-hover:border-primary/50 transition-all duration-300 relative">
               {client.logo ? (
                 <img 
                   src={client.logo} 
@@ -125,7 +125,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
               )}
             </div>
             <div>
-              <h3 className="text-xl font-heading font-semibold text-foreground mb-1 group-hover:text-primary transition-colors duration-300">
+              <h3 className="text-2xl font-heading font-bold text-foreground mb-1 tracking-tight group-hover:text-primary transition-colors duration-300">
                 {client.name}
               </h3>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -176,7 +176,7 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
         <div className="pt-2">
           <Button 
             variant="default" 
-            className="w-full justify-center gap-2"
+            className="w-full justify-center gap-2 h-11 shadow-sm mt-2 font-medium"
             onClick={(e) => {
               e.stopPropagation();
               if (clientId) router.push(`/client/${clientId}`);

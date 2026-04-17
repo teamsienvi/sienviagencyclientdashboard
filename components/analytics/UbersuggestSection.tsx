@@ -8,7 +8,7 @@ interface UbersuggestSectionProps {
   clientId: string;
 }
 
-const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+import { isDataStale } from "@/lib/freshnessPolicy";
 
 export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
   const queryClient = useQueryClient();
@@ -55,8 +55,7 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
       ? allMetrics[allMetrics.length - 1]
       : null;
 
-    const isStale = !latestEntry ||
-      (Date.now() - new Date(latestEntry.collected_at).getTime()) > STALE_THRESHOLD_MS;
+    const isStale = !latestEntry || isDataStale(latestEntry.collected_at, 'seo');
 
     if (isStale && autoSyncAttemptedRef.current !== clientId) {
       autoSyncAttemptedRef.current = clientId;

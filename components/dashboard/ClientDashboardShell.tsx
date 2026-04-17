@@ -35,7 +35,7 @@ import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
-import { Globe, Share2 } from "lucide-react";
+import { Globe, Share2, Star } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -541,24 +541,15 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border border-primary/10 p-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
-                <Breadcrumb className="mb-1">
-                  <BreadcrumbList>
-                    <BreadcrumbItem>
-                      <BreadcrumbLink asChild>
-                        <Link href="/" className="hover:text-primary transition-colors flex items-center gap-1 text-xs">
-                          <BarChart3 className="h-3 w-3" />
-                          Home
-                        </Link>
-                      </BreadcrumbLink>
-                    </BreadcrumbItem>
-                    <BreadcrumbSeparator>
-                      <ChevronRight className="h-3 w-3" />
-                    </BreadcrumbSeparator>
-                    <BreadcrumbItem>
-                      <BreadcrumbPage className="text-xs">Dashboard</BreadcrumbPage>
-                    </BreadcrumbItem>
-                  </BreadcrumbList>
-                </Breadcrumb>
+                <div className="mb-4">
+                  <Link 
+                    href="/" 
+                    className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors group px-2 py-1 -ml-2 rounded-md hover:bg-muted/50"
+                  >
+                    <ChevronRight className="h-3 w-3 rotate-180 transition-transform group-hover:-translate-x-1" />
+                    Back to Command Center
+                  </Link>
+                </div>
                 <h1 className="text-2xl font-bold text-foreground tracking-tight">
                   {client.name} <span className="text-muted-foreground font-normal text-lg">— Analytics</span>
                 </h1>
@@ -612,45 +603,76 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
             </TabsList>
 
             {/* Analytics Tab */}
-            <TabsContent value="analytics" className="space-y-6">
-              <Accordion type="multiple" defaultValue={["social", "ads", "web", "seo"]} className="w-full space-y-4">
+            <TabsContent value="analytics" className="space-y-12 pb-12">
+              
+              {/* Zone 2: Executive Insight Layer */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-3 pb-3 border-b">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Star className="h-5 w-5 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-heading font-semibold tracking-tight">Executive Insights</h2>
+                </div>
                 
-                {/* Social Bucket */}
-                {hasSocialMedia && (
-                  <AccordionItem value="social" className="border rounded-lg bg-card overflow-hidden">
-                    <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-violet-500/10">
-                          <Share2 className="h-5 w-5 text-violet-500" />
-                        </div>
-                        <div className="flex flex-col items-start bg-transparent">
-                          <span className="text-base font-semibold">Social Media</span>
-                          <span className="text-sm font-normal text-muted-foreground">Performance, engagement, and top posts</span>
-                        </div>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6">
-                      {!isAdsOnlyClient && (
-                        <AnalyticsSummaryCard
-                          clientId={clientId!}
-                          type="social"
-                          title="Social Media Summary"
-                          icon={<Share2 className="h-5 w-5 text-violet-400" />}
-                          dateRange={dateRange}
-                        />
-                      )}
-                      
-                      <div className="flex justify-end">
+                <div className="grid gap-6">
+                  {hasSocialMedia && !isAdsOnlyClient && (
+                    <AnalyticsSummaryCard
+                      clientId={clientId!}
+                      type="social"
+                      title="Social Media Overview"
+                      icon={<Share2 className="h-5 w-5 text-violet-500" />}
+                      dateRange={dateRange}
+                      customDateRange={customDateRange}
+                    />
+                  )}
+
+                  {(!isAdsOnlyClient && client.supabase_url) && (
+                    <AnalyticsSummaryCard
+                      clientId={clientId!}
+                      type="website"
+                      title="Web & E-Commerce Overview"
+                      icon={<Globe className="h-5 w-5 text-emerald-500" />}
+                      dateRange={dateRange}
+                      customDateRange={customDateRange}
+                    />
+                  )}
+
+                  {hasSocialMedia && (
+                    <div className="space-y-4 pt-2">
+                      <div className="flex justify-between flex-col sm:flex-row sm:items-center gap-4">
+                        <h3 className="text-lg font-semibold flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Top Performing Posts</h3>
                         <AllTimeTopPostsModal clientId={clientId!} buttonLabel="🏆 View Hall of Fame" buttonSize="default" buttonVariant="outline" />
                       </div>
-
                       <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
-                      
-                      {/* Drill down cards */}
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Zone 3: Channel Drill-down Layer */}
+              <div className="space-y-8 pt-4">
+                <div className="flex items-center gap-3 pb-3 border-b">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <BarChart3 className="h-5 w-5 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-heading font-semibold tracking-tight">Channel Drill-downs</h2>
+                </div>
+
+                {/* Social Channel */}
+                {hasSocialMedia && (
+                  <div className="mt-6 mb-12">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
+                      <div className="p-2 rounded-lg bg-violet-500/10"><Share2 className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div>
+                      <div>
+                        <h3 className="font-semibold text-xl text-foreground tracking-tight">Social Media</h3>
+                        <p className="text-sm text-muted-foreground mt-1">Platform-specific metrics and audience data</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* YouTube */}
                         {(metricoolPlatforms?.some(p => p.platform === 'youtube') || connectedAccounts?.youtube || client.name === "Snarky Humans") && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/youtube-analytics/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/youtube-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
@@ -671,7 +693,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                         {/* Meta */}
                         {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta || client.name === "Snarky A$$ Humans") && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/meta-analytics/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/meta-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="flex -space-x-2">
@@ -699,7 +721,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                         {/* TikTok */}
                         {(metricoolPlatforms?.some(p => p.platform === 'tiktok') || client.name === "Snarky A$$ Humans") && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/tiktok-metricool/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/tiktok-metricool/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-pink-500/10 group-hover:bg-pink-500/20 transition-colors">
@@ -722,7 +744,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         {/* X */}
                         {(client.name === "Sienvi Agency" || client.name === "Father Figure Formula") && (
                           connectedAccounts?.xHasData ? (
-                            <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/x-analytics/${clientId}`)}>
+                            <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/x-analytics/${clientId}`)}>
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <div className="flex items-center gap-3">
                                   <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
@@ -737,7 +759,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                               </CardContent>
                             </Card>
                           ) : (
-                            <Card className="hover:border-primary/30 transition-all group">
+                            <Card className="hover:border-primary/40 hover:shadow-md transition-all group shadow-sm bg-card/80 backdrop-blur-sm">
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <div className="flex items-center gap-3">
                                   <div className="p-2.5 rounded-xl bg-[#1DA1F2]/10 group-hover:bg-[#1DA1F2]/20 transition-colors">
@@ -754,7 +776,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                         {/* LinkedIn */}
                         {metricoolPlatforms?.some(p => p.platform === 'linkedin') && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/linkedin-metricool/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/linkedin-metricool/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-[#0A66C2]/10 group-hover:bg-[#0A66C2]/20 transition-colors">
@@ -770,26 +792,20 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                  </div>
                 )}
 
-                {/* Ads Bucket */}
+                {/* Ads Channel */}
                 {client?.name !== "Father Figure Formula" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
-                  <AccordionItem value="ads" className="border rounded-lg bg-card overflow-hidden">
-                    <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-orange-500/10">
-                          <BarChart3 className="h-5 w-5 text-orange-500" />
-                        </div>
-                        <div className="flex flex-col items-start bg-transparent">
-                          <span className="text-base font-semibold">Advertising</span>
-                          <span className="text-sm font-normal text-muted-foreground">Ad spend, impressions, and conversions</span>
-                        </div>
+                  <div className="mt-12 mb-12">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
+                      <div className="p-2 rounded-lg bg-orange-500/10"><BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" /></div>
+                      <div>
+                        <h3 className="font-semibold text-xl text-foreground tracking-tight">Advertising</h3>
+                        <p className="text-sm text-muted-foreground mt-1">Campaign performance, ad spend, and conversions</p>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6">
-                      <div className="space-y-4">
+                    </div>
+                    <div className="space-y-4">
                         {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
                           <AdsShredderCard clientId={clientId!} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
                         )}
@@ -805,8 +821,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       </div>
 
                       {/* Drill down cards */}
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
-                        <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/ads-analytics/${clientId}`)}>
+                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-6">
+                        <Card className="hover:border-primary/30 transition-all cursor-pointer group shadow-sm hover:shadow-md" onClick={() => router.push(`/ads-analytics/${clientId}`)}>
                           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <div className="flex items-center gap-3">
                               <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
@@ -821,41 +837,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </CardContent>
                         </Card>
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                  </div>
                 )}
 
-                {/* Web Bucket */}
+                {/* Web & E-Comm Channel */}
                 {(!isAdsOnlyClient && client.supabase_url) || (client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") || (client.name === "Father Figure Formula") || connectedAccounts?.substack ? (
-                  <AccordionItem value="web" className="border rounded-lg bg-card overflow-hidden">
-                    <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-emerald-500/10">
-                          <Globe className="h-5 w-5 text-emerald-500" />
-                        </div>
-                        <div className="flex flex-col items-start bg-transparent">
-                          <span className="text-base font-semibold">Web & E-Commerce</span>
-                          <span className="text-sm font-normal text-muted-foreground">Traffic, sales, and platform analytics</span>
-                        </div>
+                  <div className="mt-12 mb-12">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
+                      <div className="p-2 rounded-lg bg-emerald-500/10"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
+                      <div>
+                        <h3 className="font-semibold text-xl text-foreground tracking-tight">Web & E-Commerce</h3>
+                        <p className="text-sm text-muted-foreground mt-1">Site traffic, sales engines, and integrations</p>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6">
-                      
-                      {!isAdsOnlyClient && client.supabase_url && (
-                        <AnalyticsSummaryCard
-                          clientId={clientId!}
-                          type="website"
-                          title="Web & E-Commerce Summaries"
-                          icon={<Globe className="h-5 w-5 text-fuchsia-400" />}
-                          dateRange={dateRange}
-                        />
-                      )}
+                    </div>
 
-                      {/* Drill down cards */}
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-4 border-t">
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* Website specific */}
                         {!isAdsOnlyClient && client.supabase_url && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/web-analytics/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/web-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
@@ -873,7 +872,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         
                         {/* Shopify */}
                         {(client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/shopify-analytics/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/shopify-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
@@ -891,7 +890,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                         {/* Substack */}
                         {connectedAccounts?.substack && (
-                          <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => router.push(`/substack-analytics/${clientId}`)}>
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/substack-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
@@ -910,7 +909,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         {/* Podcasts and LMS - Father Figure Formula */}
                         {client.name === "Father Figure Formula" && (
                           <>
-                            <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => window.open('https://podcastsconnect.apple.com/analytics', '_blank')}>
+                            <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => window.open('https://podcastsconnect.apple.com/analytics', '_blank')}>
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <div className="flex items-center gap-3">
                                   <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
@@ -925,7 +924,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                               </CardContent>
                             </Card>
 
-                            <Card className="hover:border-primary/30 transition-all cursor-pointer group" onClick={() => window.open('https://creators.spotify.com/pod/show/1hkGUz3tDpJFHzmapxtSGk/analytics', '_blank')}>
+                            <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => window.open('https://creators.spotify.com/pod/show/1hkGUz3tDpJFHzmapxtSGk/analytics', '_blank')}>
                               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <div className="flex items-center gap-3">
                                   <div className="p-2.5 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
@@ -962,28 +961,27 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </>
                         )}
                       </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                  </div>
                 ) : null}
 
-                {/* SEO Bucket (Ubersuggest) */}
-                <AccordionItem value="seo" className="border rounded-lg bg-card overflow-hidden">
-                  <AccordionTrigger className="px-6 py-4 hover:bg-muted/50 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-slate-800">
-                        <span className="text-xl">🔍</span>
-                      </div>
-                      <div className="flex flex-col items-start bg-transparent">
-                        <span className="text-base font-semibold">Search Engine Optimization</span>
-                        <span className="text-sm font-normal text-muted-foreground">Site audit score, issues, and keyword positions</span>
-                      </div>
+                {/* SEO Channel (Ubersuggest) */}
+                <div className="mt-12 mb-12">
+                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
+                    <div className="p-3 rounded-xl bg-slate-800 flex items-center justify-center">
+                       <span className="text-xl leading-none">🔍</span>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-6 pt-2 border-t space-y-6 bg-slate-900/5">
+                    <div>
+                      <h3 className="font-semibold text-xl text-foreground tracking-tight">Search Engine Optimization</h3>
+                      <p className="text-sm text-muted-foreground mt-1">Site audit score, crawl issues, and rankings</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
                     <UbersuggestSection clientId={clientId!} />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+                  </div>
+                </div>
+
+              </div>
             </TabsContent>
 
             {/* Reports Tab */}
@@ -1120,9 +1118,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 // Client-specific header component
 const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?: string; clientLogo?: string | null; currentClientId?: string }) => {
   const router = useRouter();
-  const { isAdmin, isAuthenticated, signOut, user } = useAuth();
+  const { isAdmin, isAuthenticated, signOut } = useAuth();
 
-  // Fetch all clients unconditionally for the Switch Client dropdown
   const { data: clients } = useQuery({
     queryKey: ["all-clients-dropdown"],
     queryFn: async () => {
@@ -1137,6 +1134,7 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
   });
 
   const showClientSwitcher = clients && clients.length > 0;
+  const currentClient = clients?.find(c => c.id === currentClientId);
 
   const handleClientSelect = (clientId: string) => {
     router.push(`/client/${clientId}`);
@@ -1151,102 +1149,111 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
     if (isAdmin) {
       router.push("/");
     }
-    // Non-admin users with single client - no back navigation
-    // Non-admin users with multiple clients can use the switcher
   };
 
   return (
-    <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* Only show back button for admins */}
-            {isAdmin && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleBackClick}
-                className="shrink-0"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            )}
-
-            {clientLogo && (
-              <div className="h-10 w-10 rounded-lg overflow-hidden border">
-                <img
-                  src={clientLogo}
-                  alt={clientName || "Client"}
+    <header className="border-b border-border/40 bg-card sticky top-0 z-50 transition-colors duration-300 shadow-sm">
+      <div className="container mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="flex items-center gap-6 animate-fade-in">
+          {/* Static Branding */}
+          <div className="flex items-center gap-3">
+            {clientLogo ? (
+              <div className="h-8 w-8 rounded-lg overflow-hidden border border-border/60 shadow-sm flex-shrink-0 bg-white">
+                <img 
+                  src={clientLogo} 
+                  alt={clientName || "Client"} 
                   className="h-full w-full object-cover"
                 />
               </div>
+            ) : (
+              <div className="h-8 w-8 rounded-lg border border-border/60 shadow-sm bg-muted flex items-center justify-center">
+                 <Building2 className="h-4 w-4 text-muted-foreground stroke-[1.5]" />
+              </div>
             )}
-
-            <div>
-              <h1 className="text-xl font-bold text-foreground">
+            <div className="hidden sm:flex flex-col">
+              <h1 className="text-sm font-semibold tracking-tight text-foreground leading-none">
                 {clientName || "Client Dashboard"}
               </h1>
-              <p className="text-sm text-muted-foreground">Analytics & Reports</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Client Selector - for admins OR users with multiple assigned clients */}
-            {showClientSwitcher && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
-                    {clientLogo ? (
-                      <img src={clientLogo} alt={clientName || "Client"} className="h-4 w-4 rounded-sm object-cover" />
-                    ) : (
-                      <Building2 className="h-4 w-4" />
-                    )}
-                    <span className="hidden sm:inline max-w-[150px] truncate">
-                      {clientName || "Switch Client"}
-                    </span>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[220px] max-h-[400px] overflow-y-auto">
-                  <DropdownMenuLabel>Switch Client</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {clients.map((client) => (
-                    <DropdownMenuItem
-                      key={client.id}
-                      onClick={() => handleClientSelect(client.id)}
-                      className={`cursor-pointer flex items-center gap-2 ${currentClientId === client.id ? 'bg-accent' : ''}`}
-                    >
-                      {getClientLogo(client.name, client.logo_url) ? (
-                        <img
-                          src={getClientLogo(client.name, client.logo_url)!}
-                          alt={client.name}
-                          className="h-6 w-6 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
-                          <Building2 className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                      )}
-                      <span className="truncate">{client.name}</span>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            <ThemeToggle />
-            {/* Logout button for all authenticated users */}
-            {isAuthenticated && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSignOut}
-                className="gap-2 hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive transition-all duration-300"
+          <div className="h-6 w-px bg-border/60 hidden sm:block mx-1" />
+
+          <div className="flex items-center gap-2">
+            {/* Primary App Shell Nav */}
+            {isAdmin && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleBackClick}
+                className="gap-2 h-8 px-3 font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
               >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Sign Out</span>
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Command Center</span>
               </Button>
             )}
+
+            {/* Client Context */}
+            {showClientSwitcher && (
+              <>
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 hidden sm:block" />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-2.5 h-8 px-3 transition-all bg-primary/5 text-primary font-semibold">
+                      {currentClient?.logo_url ? (
+                        <img src={currentClient.logo_url} alt={currentClient.name} className="h-4 w-4 rounded-sm object-cover ring-1 ring-border shadow-sm" />
+                      ) : (
+                        <Building2 className="h-4 w-4" />
+                      )}
+                      <span className="max-w-[150px] truncate">
+                        {currentClient?.name || "Switch Client"}
+                      </span>
+                      <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[240px] max-h-[400px] overflow-y-auto mt-1 rounded-xl shadow-lg border-border/40 p-1">
+                    <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground px-3 py-2 font-semibold">Active Clients</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {clients.map((client) => (
+                      <DropdownMenuItem
+                        key={client.id}
+                        onClick={() => handleClientSelect(client.id)}
+                        className={`cursor-pointer flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 transition-colors ${currentClientId === client.id ? 'bg-primary/5 text-primary font-medium' : 'hover:bg-muted focus:bg-muted'}`}
+                      >
+                        {client.logo_url ? (
+                          <img 
+                            src={client.logo_url} 
+                            alt={client.name} 
+                            className="h-6 w-6 rounded-md object-cover ring-1 ring-border shadow-sm"
+                          />
+                        ) : (
+                          <div className="h-6 w-6 rounded-md bg-muted flex items-center justify-center ring-1 ring-border">
+                            <Building2 className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
+                        <span className="truncate">{client.name}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            )}
           </div>
+        </div>
+
+        <div className="flex items-center gap-1 sm:gap-2">
+          <ThemeToggle />
+          {isAuthenticated && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleSignOut}
+              className="h-8 w-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors ml-1"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </div>
     </header>

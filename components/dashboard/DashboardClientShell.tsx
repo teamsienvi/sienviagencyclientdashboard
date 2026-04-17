@@ -58,15 +58,18 @@ export default function DashboardClientShell({ dbClients, metricoolConfigs }: Da
     <div className="min-h-screen bg-background transition-colors duration-300">
       <Header />
       
-      <main className="container mx-auto px-6 py-16">
-        <div className="mb-8 animate-slide-up">
-          <h2 className="text-4xl font-heading font-bold text-foreground mb-3">Client Dashboard</h2>
-          <p className="text-muted-foreground text-lg">Access your weekly KPI reports and analytics</p>
+      <main className="container mx-auto px-6 py-12 max-w-[1400px]">
+        <div className="mb-10 animate-slide-up flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-border/40">
+          <div>
+            <h2 className="text-3xl sm:text-4xl font-heading font-bold text-foreground mb-3 tracking-tight">Agency Command Center</h2>
+            <p className="text-muted-foreground text-base sm:text-lg max-w-2xl">Monitor active client portfolios, track generative analytics insights, and manage weekly reporting schedules.</p>
+          </div>
+          <div className="w-full md:w-auto md:min-w-[320px]">
+            <ClientSearch value={searchQuery} onChange={setSearchQuery} />
+          </div>
         </div>
         
         <DashboardStats />
-        
-        <ClientSearch value={searchQuery} onChange={setSearchQuery} />
         
         {filteredClients.length === 0 ? (
           <div className="text-center py-16 animate-fade-in">

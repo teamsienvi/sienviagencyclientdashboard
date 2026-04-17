@@ -5,10 +5,12 @@ import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/to
 export function useAllTimeTopPosts(
   clientId: string | undefined,
   limit: number = 3,
-  platformFilter?: string | string[]
+  platformFilter?: string | string[],
+  periodStart?: string,
+  periodEnd?: string
 ) {
   return useQuery({
-    queryKey: ["all-time-top-posts", clientId, limit, platformFilter],
+    queryKey: ["all-time-top-posts", clientId, limit, platformFilter, periodStart, periodEnd],
     queryFn: async (): Promise<RankedTopInsight[]> => {
       if (!clientId) return [];
 
@@ -46,7 +48,11 @@ export function useAllTimeTopPosts(
         }
       }
 
-      const { data: content, error: contentError } = await query;
+            if (periodStart) query = query.gte("published_at", periodStart);
+      if (periodEnd) query = query.lte("published_at", periodEnd);
+      
+      const {
+      data: content, error: contentError } = await query;
 
       if (contentError) throw contentError;
       if (!content || content.length === 0) return [];
@@ -97,6 +103,7 @@ export function useAllTimeTopPosts(
           return {
             id: c.id,
             post_url: c.url || "",
+            title: c.title,
             platform: c.platform,
             published_at: c.published_at,
             views: primaryMetric,

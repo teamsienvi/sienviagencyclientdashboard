@@ -10,6 +10,7 @@
 export interface TopInsightContent {
   id: string;
   post_url: string;
+  title?: string | null;
   platform: string;
   published_at: string;
   views: number;

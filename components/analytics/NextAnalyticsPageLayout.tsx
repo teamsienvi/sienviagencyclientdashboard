@@ -97,94 +97,38 @@ export const NextAnalyticsPageLayout = ({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20">
       <Header />
-      <main className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href="/" className="hover:text-primary transition-colors">
-                    Home
-                  </Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator>
-                <ChevronRight className="h-4 w-4" />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbLink asChild>
-                  <Link href={`/client/${clientId}`} className="hover:text-primary transition-colors">
-                    Dashboard
-                  </Link>
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator>
-                <ChevronRight className="h-4 w-4" />
-              </BreadcrumbSeparator>
-              <BreadcrumbItem>
-                <BreadcrumbPage>{pageName}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-
-          {/* Client Switcher */}
-          {showClientSwitcher && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2 hover:bg-primary/5 hover:border-primary/30 transition-all duration-300">
-                  {clientLogo ? (
-                    <img src={clientLogo} alt={clientName || "Client"} className="h-4 w-4 rounded-sm object-cover" />
-                  ) : (
-                    <Building2 className="h-4 w-4" />
-                  )}
-                  <span className="hidden sm:inline max-w-[150px] truncate">
-                    {clientName || "Switch Client"}
-                  </span>
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[220px] max-h-[400px] overflow-y-auto">
-                <DropdownMenuLabel>Switch Client</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {clients.map((client) => (
-                  <DropdownMenuItem
-                    key={client.id}
-                    onClick={() => handleClientSelect(client.id)}
-                    className={`cursor-pointer flex items-center gap-2 ${clientId === client.id ? 'bg-accent' : ''}`}
-                  >
-                    {client.logo_url ? (
-                      <img 
-                        src={client.logo_url} 
-                        alt={client.name} 
-                        className="h-6 w-6 rounded object-cover"
-                      />
-                    ) : (
-                      <div className="h-6 w-6 rounded bg-muted flex items-center justify-center">
-                        <Building2 className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                    )}
-                    <span className="truncate">{client.name}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
+      <main className="container mx-auto px-4 sm:px-6 py-10 max-w-7xl animate-fade-in">
         
+        <div className="mb-8">
+          <Link 
+            href={`/client/${clientId}`} 
+            className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group px-2 py-1 -ml-2 rounded-md hover:bg-muted/50"
+          >
+            <ChevronRight className="h-4 w-4 rotate-180 transition-transform group-hover:-translate-x-1" />
+            Back to {clientName ? `${clientName} Overview` : 'Dashboard'}
+          </Link>
+        </div>
+
         {/* Page Header */}
-        <div className="flex items-center gap-4 mb-8">
-          {clientLogo && (
-            <img 
-              src={clientLogo} 
-              alt={clientName} 
-              className="h-12 w-12 rounded-lg object-cover"
-            />
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5 mb-10 pb-8 border-b border-border/40">
+          {clientLogo ? (
+            <div className="h-16 w-16 rounded-xl border border-border/60 shadow-sm bg-white flex-shrink-0 overflow-hidden">
+              <img 
+                src={clientLogo} 
+                alt={clientName} 
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="h-16 w-16 rounded-xl border border-border/60 shadow-sm bg-muted flex items-center justify-center flex-shrink-0">
+               <Building2 className="h-6 w-6 text-muted-foreground/50" />
+            </div>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-foreground">{clientName}</h1>
-            <p className="text-muted-foreground">{pageDescription || pageName}</p>
+            <h1 className="text-3xl font-heading font-bold text-foreground tracking-tight">{pageName}</h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">{pageDescription || `Detailed analytics for ${clientName}`}</p>
           </div>
         </div>
 

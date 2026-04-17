@@ -186,11 +186,13 @@ export const TopPerformingPosts = ({ clientId, dateRange = "7d", customDateRange
   }
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-border/60 shadow-md overflow-hidden bg-card/80 backdrop-blur-sm rounded-2xl">
+      <CardHeader className="bg-muted/30 border-b border-border/40 pb-4 pt-5">
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2.5 text-lg font-heading tracking-tight">
+            <div className="p-1.5 rounded-lg bg-primary/10 text-primary">
+              <TrendingUp className="h-4 w-4" />
+            </div>
             Top Performing Posts
           </CardTitle>
           <div className="flex items-center gap-2">

@@ -7,7 +7,8 @@ interface CacheEntry<T> {
 }
 
 const CACHE_KEY_PREFIX = 'analytics_cache_';
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+import { FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
+const CACHE_TTL_MS = FRESHNESS_POLICIES.social.cacheTtlMs; // Default 7 days render cache
 
 /**
  * Hook for caching analytics data per client + week selection.

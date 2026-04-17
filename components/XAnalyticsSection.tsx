@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { getCurrentReportingWeek, getPreviousReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 import { useAnalyticsCache, getWeekKey } from "@/hooks/useAnalyticsCache";
+import { isDataStale } from "@/lib/freshnessPolicy";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 
@@ -70,6 +71,7 @@ interface CachedData {
 const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
   const [kpis, setKpis] = useState<XKPIs | null>(null);
   const [posts, setPosts] = useState<XPost[]>([]);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -245,13 +247,13 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
   }, [clientId, currentWeek, previousWeek, updateCache]);
 
   // Fetch fresh data
-  const fetchData = useCallback(async (showToast = false) => {
+  const fetchData = useCallback(async (showToast = false, silent = false) => {
     if (!hasMetricoolConfig) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const currentStart = formatApiDate(currentWeek.start);
       const currentEnd = formatApiDate(currentWeek.end);
@@ -311,17 +313,31 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     }
   }, [clientId, currentWeek, previousWeek, hasMetricoolConfig, updateCache]);
 
-  // Initial fetch (only if no cache)
+  // Handle auto loading and background refreshing
   useEffect(() => {
-    if (!hasCachedData && hasMetricoolConfig) {
-      fetchData();
-    } else if (!hasMetricoolConfig && !hasCachedData) {
-      // Fetch uploaded CSV data from database
+    if (!hasMetricoolConfig && !hasCachedData && !autoSyncAttempted) {
+      setAutoSyncAttempted(true);
       fetchUploadedData();
+      return;
     } else if (!hasMetricoolConfig) {
       setLoading(false);
+      return;
     }
-  }, [hasCachedData, hasMetricoolConfig, fetchData, fetchUploadedData]);
+
+    if (hasMetricoolConfig && !autoSyncAttempted && !syncing) {
+        setAutoSyncAttempted(true);
+        if (!hasCachedData) {
+           // No data, blocking load
+           fetchData(false, false);
+        } else if (isDataStale(cachedData?.lastSyncAt ?? null, 'social')) {
+           // Stale data, silent loading
+           setSyncing(true);
+           fetchData(false, true);
+        } else {
+           setLoading(false);
+        }
+    }
+  }, [hasCachedData, cachedData?.lastSyncAt, hasMetricoolConfig, fetchData, fetchUploadedData, autoSyncAttempted, syncing]);
 
   const handleSync = async () => {
     setSyncing(true);

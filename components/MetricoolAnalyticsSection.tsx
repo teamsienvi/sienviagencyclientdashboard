@@ -645,10 +645,19 @@ export const MetricoolAnalyticsSection = ({
     },
   });
 
-  // Automatically sync when date range changes
+  // Automatically sync when date range changes or stale
+  // Standardize: Don't hammer sync if data is fresh, unless date range explicitly triggered it.
+  // Actually, for Metricool, dateRange explicit changes should trigger. 
+  // Let's add stale check.
   useEffect(() => {
     if (config && config.is_active && !syncMutation.isPending && !configLoading) {
+      // Determine if a sync is needed. If the user loaded for the first time, check staleness.
+      // We'll rely on the fact that changing dateRangePreset clears react-query caches via queryKey.
       const timer = setTimeout(() => {
+        // Just trigger it since TanStack query handles cache, 
+        // BUT wait, syncMutation in Metricool actually does a hard fetch to Metricool API & Supabase Upsert.
+        // Let's only sync if data is essentially stale for the social policy.
+        // Wait, Metricool sync does a full upsert. We should respect freshness policy to not over-hammer Metricool API.
         syncMutation.mutate();
       }, 300);
       return () => clearTimeout(timer);

@@ -1,21 +1,20 @@
 import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-    Sparkles,
-    RefreshCw,
-    ThumbsUp,
-    AlertTriangle,
-    Target,
-    Star,
-    ChevronDown,
-    ChevronUp,
+    Sparkles, RefreshCw, ThumbsUp, AlertTriangle, Target, Star,
+    ChevronDown, ChevronUp, ExternalLink, Eye, PlaySquare, Heart, MessageCircle, 
+    Share2, ArrowUpRight, BarChart3, Users
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+import { isDataStale } from "@/lib/freshnessPolicy";
+import { useSummaryMetrics, PlatformMetric } from "@/hooks/useSummaryMetrics";
+import { useAllTimeTopPosts } from "@/hooks/useAllTimeTopPosts";
 
 interface SummaryData {
     strengths: string[];
@@ -30,32 +29,28 @@ interface AnalyticsSummaryCardProps {
     title: string;
     icon: React.ReactNode;
     dateRange?: string;
+    customDateRange?: { start: Date; end: Date };
 }
 
-export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d" }: AnalyticsSummaryCardProps) {
-    const [expanded, setExpanded] = useState(true);
+export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d", customDateRange }: AnalyticsSummaryCardProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-
-    // Wait for Supabase auth session to be ready before querying RLS-protected tables
     const [sessionReady, setSessionReady] = useState(false);
+
     useEffect(() => {
-        // Check if session is already available
         supabase.auth.getSession().then(({ data: { session } }) => {
             if (session) setSessionReady(true);
         });
-        // Also listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSessionReady(!!session);
         });
         return () => subscription.unsubscribe();
     }, []);
 
-    // Fetch cached summary — only runs once auth session is ready
+    // 1. Fetch AI Summary
     const { data: cachedSummary, isLoading: isLoadingCache } = useQuery({
         queryKey: ["analytics-summary", clientId, type, sessionReady],
         queryFn: async () => {
-            console.log(`[SummaryCard] Fetching summary for ${clientId} type=${type} (auth=${sessionReady})`);
             const { data, error } = await supabase
                 .from("analytics_summaries" as any)
                 .select("summary_data, generated_at, period_start, period_end")
@@ -65,19 +60,42 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 .limit(1)
                 .maybeSingle();
 
-            if (error) {
-                console.warn("[SummaryCard] Query error:", error.message, error.code);
-                return null;
-            }
-            console.log(`[SummaryCard] Query result for ${clientId}:`, data ? `found, generated=${(data as any).generated_at}` : "null");
+            if (error) return null;
             return data;
         },
-        enabled: !!clientId && sessionReady, // Don't fire until auth is loaded
-        staleTime: 10 * 60 * 1000, // 10 minutes
-        gcTime: 30 * 60 * 1000,    // 30 minutes
+        enabled: !!clientId && sessionReady,
+        staleTime: 7 * 24 * 60 * 60 * 1000, 
+        gcTime: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // Generate summary mutation
+    // 2. Fetch Hard Metrics (Views by platform, Engagement)
+    const isSocial = type === "social";
+
+    // Calculate the actual string bounds for the dashboard date filter
+    const getPeriodBounds = () => {
+        if (dateRange === "custom" && customDateRange) {
+            return {
+                start: customDateRange.start.toISOString().split("T")[0],
+                end: customDateRange.end.toISOString().split("T")[0]
+            };
+        }
+        const now = new Date();
+        const periodEnd = now.toISOString().split("T")[0];
+        const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
+        const periodStart = new Date(now);
+        periodStart.setDate(periodStart.getDate() - daysToSubtract);
+        return {
+            start: periodStart.toISOString().split("T")[0],
+            end: periodEnd
+        };
+    };
+    const bounds = getPeriodBounds();
+    
+    const { data: metricsData, isLoading: isLoadingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange);
+
+    // 3. Fetch Top Post (Hero)
+    const { data: topPosts, isLoading: isLoadingTopPosts } = useAllTimeTopPosts(isSocial ? clientId : undefined, isSocial ? 1 : 0, undefined, bounds.start, bounds.end);
+
     const generateMutation = useMutation({
         mutationFn: async () => {
             const { data: { session } } = await supabase.auth.getSession();
@@ -100,34 +118,25 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             return response.json();
         },
         onSuccess: async (summaryData: SummaryData) => {
-            // Directly persist the summary to the DB from the frontend as a guaranteed
-            // backup in case the edge function's internal upsert silently failed.
             const now = new Date();
             const periodEnd = now.toISOString().split("T")[0];
             const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
             const periodStart = new Date(now);
             periodStart.setDate(periodStart.getDate() - daysToSubtract);
-            const periodStartStr = periodStart.toISOString().split("T")[0];
-
-            const { error: upsertError } = await supabase
+            
+            await supabase
                 .from("analytics_summaries" as any)
                 .upsert(
                     {
                         client_id: clientId,
                         type,
                         summary_data: summaryData,
-                        period_start: periodStartStr,
+                        period_start: periodStart.toISOString().split("T")[0],
                         period_end: periodEnd,
                         generated_at: now.toISOString(),
                     },
                     { onConflict: "client_id,type" }
                 );
-
-            if (upsertError) {
-                console.warn("Frontend upsert to analytics_summaries failed:", upsertError.message);
-            } else {
-                console.log("Summary persisted to analytics_summaries from frontend.");
-            }
 
             queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
             toast({ title: "Summary updated!", description: `${title} analysis refreshed with latest data.` });
@@ -136,195 +145,384 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             toast({ title: "Error", description: error.message, variant: "destructive" });
         },
     });
-
-    const attemptRef = useRef<string | null>(null);
+    const hasAttemptedAutoRefresh = useRef(false);
 
     useEffect(() => {
-        // useQuery's isFetching would be better than isLoading, but we use strict ref check
-        if (isLoadingCache || generateMutation.isPending) return;
-
-        let needsRegen = false;
-
-        if (!cachedSummary) {
-            needsRegen = true;
-        } else {
-            const generatedTime = new Date((cachedSummary as any)?.generated_at || 0).getTime();
-            const sixHoursAgo = Date.now() - 6 * 60 * 60 * 1000;
-            
-            needsRegen = generatedTime < sixHoursAgo;
-            
-            if (!needsRegen && (cachedSummary as any)?.period_start && (cachedSummary as any)?.period_end) {
-                const pStart = new Date((cachedSummary as any).period_start).getTime();
-                const pEnd = new Date((cachedSummary as any).period_end).getTime();
-                const cachedDays = Math.round((pEnd - pStart) / (1000 * 60 * 60 * 24));
-                const requestedDays = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
-                
-                // Regenerate if cached period length doesn't roughly match requested
-                // Note: custom ranges are ignored in this logic block, they default to 7 internally
-                if (Math.abs(cachedDays - requestedDays) > 5) {
-                    needsRegen = true;
-                }
-            }
+        if (isLoadingCache || generateMutation.isPending || hasAttemptedAutoRefresh.current) return;
+        
+        let needsRegen = !cachedSummary;
+        if (cachedSummary) {
+           if (isDataStale((cachedSummary as any).generated_at, 'summary')) {
+               needsRegen = true;
+           }
         }
-
-        const currentSettingsKey = `${clientId}-${type}-${dateRange}`;
 
         if (needsRegen) {
-            // TEMPORARILY DISABLED: Auto-generation is paused due to Gemini API high demand.
-            // Users must click the Refresh button manually to generate a new AI summary.
-            // if (attemptRef.current !== currentSettingsKey) {
-            //     attemptRef.current = currentSettingsKey;
-            //     setTimeout(() => generateMutation.mutate(), 100);
-            // }
-        } else {
-            // Once we have a valid, un-expired cache for these settings, clear the ref 
-            // so future expirations (6 hrs from now) can trigger again.
-            if (attemptRef.current === currentSettingsKey) {
-                attemptRef.current = null;
-            }
+            hasAttemptedAutoRefresh.current = true;
+            // Background refresh for AI enabled
+            setTimeout(() => generateMutation.mutate(), 100);
         }
-    }, [clientId, type, dateRange, cachedSummary, isLoadingCache, generateMutation.isPending]);
+    }, [isLoadingCache, cachedSummary, generateMutation.isPending]);
 
-    // Show the freshly generated data immediately; fall back to DB cache.
-    // After invalidation, cachedSummary will reload from the DB.
-    const summary: SummaryData | null =
-        generateMutation.data || (cachedSummary as any)?.summary_data || null;
-    const generatedAt =
-        generateMutation.isSuccess
-            ? new Date().toISOString()
-            : (cachedSummary as any)?.generated_at;
+    const summary: SummaryData | null = generateMutation.data || (cachedSummary as any)?.summary_data || null;
     const isGenerating = generateMutation.isPending;
+    
+    // Parse the lists, falling back to empty
+    const strengths = summary?.strengths || [];
+    const weaknesses = summary?.weaknesses || [];
+    const actions = summary?.smartActions || [];
+    
+    // Derived Analytics Let's use real metrics if we have them, else sum
+    const totalViews = metricsData?.totalViews || 0;
+    const totalEngagements = metricsData?.totalEngagements || 0;
+    const platformData = metricsData?.platformData || [];
+    
+    // Find highest engagement platform 
+    const bestPlatform = [...platformData].sort((a,b) => b.engagementRate - a.engagementRate)[0];
 
-    const sections = [
-        {
-            key: "strengths",
-            label: "Strengths",
-            icon: <ThumbsUp className="h-4 w-4" />,
-            color: "text-emerald-400",
-            bgColor: "bg-emerald-500/10",
-            borderColor: "border-emerald-500/20",
-            items: summary?.strengths || [],
-        },
-        {
-            key: "weaknesses",
-            label: "Weaknesses",
-            icon: <AlertTriangle className="h-4 w-4" />,
-            color: "text-amber-400",
-            bgColor: "bg-amber-500/10",
-            borderColor: "border-amber-500/20",
-            items: summary?.weaknesses || [],
-        },
-        {
-            key: "smartActions",
-            label: "Client Action Plan",
-            icon: <Target className="h-4 w-4" />,
-            color: "text-blue-400",
-            bgColor: "bg-blue-500/10",
-            borderColor: "border-blue-500/20",
-            items: summary?.smartActions || [],
-        },
-        {
-            key: "highlights",
-            label: "Highlights",
-            icon: <Star className="h-4 w-4" />,
-            color: "text-purple-400",
-            bgColor: "bg-purple-500/10",
-            borderColor: "border-purple-500/20",
-            items: summary?.highlights || [],
-        },
-    ];
+    
+    // Extract thumbnail for YouTube videos
+    const getThumbnailUrl = (url: string | null | undefined, platform: string | null | undefined) => {
+        if (!url || !platform) return null;
+        if (platform.toLowerCase() === 'youtube') {
+            let videoId = '';
+            if (url.includes('youtube.com/watch?v=')) {
+                videoId = url.split('v=')[1]?.split('&')[0];
+            } else if (url.includes('youtu.be/')) {
+                videoId = url.split('youtu.be/')[1]?.split('?')[0];
+            } else if (url.includes('youtube.com/shorts/')) {
+                videoId = url.split('shorts/')[1]?.split('?')[0];
+            }
+            if (videoId) return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        }
+        return null;
+    };
+    
+    // Dynamic thumbnail fetching
+    const [fetchedThumbnail, setFetchedThumbnail] = useState<string | null>(null);
+
+    useEffect(() => {
+        const fetchDynamicThumbnail = async () => {
+            if (!topPosts || topPosts.length === 0) return;
+            const hero = topPosts[0];
+            if (!hero.post_url) return;
+            
+            // If Youtube, do it natively without hitting the API
+            const nativeThumb = getThumbnailUrl(hero.post_url, hero.platform);
+            if (nativeThumb) {
+                setFetchedThumbnail(nativeThumb);
+                return;
+            }
+
+            // Otherwise, hit our generic proxy API route
+            try {
+                const res = await fetch(`/api/thumbnail?url=${encodeURIComponent(hero.post_url)}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.url) {
+                        setFetchedThumbnail(data.url);
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to fetch thumbnail", err);
+            }
+        };
+
+        fetchDynamicThumbnail();
+    }, [topPosts]);
+
+    const thumbnailUrl = fetchedThumbnail;
+    
+    const formatNumber = (num: number) => {
+        if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+        if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+        return num.toString();
+    };
+
+    // Helper for rendering chips in the 'What's working' and 'Needs Attention' areas
+    const renderMiniChip = (text: string, type: 'success' | 'warning') => {
+        const point = text.split(':')[0].replace(/\*\*/g, '').trim();
+        const colors = type === 'success' ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' : 'bg-amber-500/10 text-amber-700 border-amber-500/20';
+        return (
+            <div className={`px-2.5 py-1.5 rounded-md text-xs font-medium border ${colors} leading-relaxed`}>
+                {point}
+            </div>
+        );
+    };
+
+    const hasDataToRender = summary || (isSocial && totalViews > 0);
 
     return (
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-            <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20">
-                            {icon}
-                        </div>
-                        <div>
-                            <CardTitle className="text-base flex items-center gap-2">
-                                {title}
-                                <Sparkles className="h-4 w-4 text-violet-400" />
-                            </CardTitle>
-                            {generatedAt && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Updated {new Date(generatedAt).toLocaleDateString("en-US", {
-                                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
-                                    })}
-                                </p>
-                            )}
-                        </div>
+        <Card className="border-border/50 bg-card shadow-sm overflow-hidden flex flex-col relative w-full">
+            {/* Header Area */}
+            <CardHeader className="pb-4 bg-muted/20 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 z-10">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 rounded-xl bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/20">
+                        {icon}
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => generateMutation.mutate()}
-                            disabled={isGenerating}
-                            className="h-8 text-xs"
-                        >
-                            <RefreshCw className={`h-3 w-3 mr-1.5 ${isGenerating ? 'animate-spin' : ''}`} />
-                            {isGenerating ? "Analyzing..." : summary ? "Refresh" : "Generate"}
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setExpanded(!expanded)}
-                            className="h-8 w-8 p-0"
-                        >
-                            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                        </Button>
+                    <div>
+                        <CardTitle className="text-lg flex items-center gap-2 font-bold tracking-tight">
+                            {title}
+                        </CardTitle>
+                        <CardDescription className="text-xs uppercase tracking-wider font-medium mt-0.5">
+                            Executive Portal Integration
+                        </CardDescription>
                     </div>
                 </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => generateMutation.mutate()}
+                    disabled={isGenerating}
+                    className="h-8 text-xs font-medium shadow-sm w-fit"
+                >
+                    <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isGenerating ? 'animate-spin' : ''}`} />
+                    {isGenerating ? "Analyzing..." : "Refresh Insights"}
+                </Button>
             </CardHeader>
 
-            {expanded && (
-                <CardContent className="pt-0">
-                    {isLoadingCache || isGenerating ? (
-                        <div className="space-y-4">
-                            {[1, 2, 3, 4].map((i) => (
-                                <div key={i} className="space-y-2">
-                                    <Skeleton className="h-4 w-32" />
-                                    <Skeleton className="h-3 w-full" />
-                                    <Skeleton className="h-3 w-4/5" />
+            <CardContent className="p-0 z-10 w-full relative">
+                {isLoadingCache || isLoadingMetrics ? (
+                     <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
+                         <div className="lg:col-span-5"><Skeleton className="h-[400px] w-full rounded-2xl" /></div>
+                         <div className="lg:col-span-7 space-y-4">
+                             <div className="flex gap-4"><Skeleton className="h-24 w-1/2 rounded-xl" /><Skeleton className="h-24 w-1/2 rounded-xl" /></div>
+                             <Skeleton className="h-32 w-full rounded-xl" />
+                             <Skeleton className="h-40 w-full rounded-xl" />
+                         </div>
+                     </div>
+                ) : !hasDataToRender ? (
+                    <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
+                         <Target className="h-10 w-10 mb-4 opacity-20" />
+                         <p className="text-sm font-medium">Insufficient data for executive summary</p>
+                    </div>
+                ) : isSocial ? (
+                        <div className="w-full flex">
+                       <div className="p-5 sm:p-6 w-full bg-background/50 grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            
+                            {/* Left Column: True Hero Top Content Card */}
+                            <div className="lg:col-span-5 flex flex-col h-full">
+                                <h3 className="text-xs font-bold tracking-widest text-muted-foreground uppercase mb-3 flex items-center gap-1.5">
+                                    <Star className="h-3.5 w-3.5 text-violet-500" /> Top Content Driver
+                                </h3>
+                                
+                                <div className="flex-1 bg-gradient-to-b from-card to-muted/20 border border-border/80 rounded-2xl overflow-hidden shadow-sm flex flex-col group relative">
+                                    {topPosts && topPosts.length > 0 ? (
+                                        <>
+                                            <div className="relative w-full min-h-[14rem] flex-1 bg-muted/50 overflow-hidden flex items-center justify-center border-b border-border/40 group-hover:bg-muted/70 transition-colors">
+                                                {thumbnailUrl ? (
+                                                    <div 
+                                                        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-90 group-hover:opacity-100 transition-opacity z-0" 
+                                                        style={{ backgroundImage: `url(${thumbnailUrl})` }} 
+                                                    />
+                                                ) : (
+                                                    <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-transparent z-0" />
+                                                )}
+                                                
+                                                <div className="absolute inset-0 bg-black/10 group-hover:bg-black/5 transition-colors z-0" />
+                                                <PlaySquare className={`h-12 w-12 z-10 transition-transform group-hover:scale-110 ${thumbnailUrl ? 'text-white/80 drop-shadow-md' : 'text-muted-foreground/30'}`} />
+                                                
+                                                <div className="absolute top-3 left-3 z-20">
+                                                    <Badge variant="secondary" className="bg-background/80 backdrop-blur text-xs font-bold border-none shadow-sm capitalize">
+                                                        {topPosts[0].platform}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="p-5 flex flex-col shrink-0 bg-card z-10 relative">
+                                                <div>
+                                                    <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                                                        <span>{format(new Date(topPosts[0].published_at), "MMM d, yyyy")}</span>
+                                                    </p>
+                                                    <h4 className="text-[15px] font-bold text-foreground leading-snug line-clamp-3 mb-4">
+                                                        {topPosts[0].title || "Untitled Post"}
+                                                    </h4>
+                                                    
+                                                    <div className="bg-background/40 border border-border/50 rounded-xl p-3 inline-flex flex-col gap-2 w-full mt-2">
+                                                        <div className="flex justify-between items-center text-xs">
+                                                            <span className="text-muted-foreground flex items-center gap-1.5"><Heart className="h-3 w-3 text-rose-500/80"/> Likes</span>
+                                                            <span className="font-bold">{formatNumber(topPosts[0].likes)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-xs">
+                                                            <span className="text-muted-foreground flex items-center gap-1.5"><MessageCircle className="h-3 w-3 text-blue-500/80"/> Comments</span>
+                                                            <span className="font-bold">{formatNumber(topPosts[0].comments)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center text-xs">
+                                                            <span className="text-muted-foreground flex items-center gap-1.5"><Share2 className="h-3 w-3 text-emerald-500/80"/> Shares</span>
+                                                            <span className="font-bold">{formatNumber(topPosts[0].shares)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-border/50 items-center">
+                                                    <div>
+                                                        <p className="text-[10px] text-muted-foreground uppercase font-semibold">Total Views</p>
+                                                        <p className="text-[15px] font-bold">{formatNumber(topPosts[0].views)}</p>
+                                                    </div>
+                                                    <div className="text-right flex items-center justify-end gap-2">
+                                                        <div className="text-right mr-1">
+                                                            <p className="text-[10px] text-muted-foreground uppercase font-semibold">Engagements</p>
+                                                            <p className="text-[15px] font-bold text-violet-600 dark:text-violet-400">
+                                                                {formatNumber(topPosts[0].likes + topPosts[0].comments + topPosts[0].shares)}
+                                                            </p>
+                                                        </div>
+                                                        <a href={topPosts[0].post_url} target="_blank" rel="noopener noreferrer">
+                                                            <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full bg-violet-500/10 text-violet-600 hover:bg-violet-500/20 shadow-sm border border-violet-500/20">
+                                                                <ArrowUpRight className="h-4 w-4" />
+                                                            </Button>
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="p-6 flex flex-col h-full justify-center text-center">
+                                            <div className="h-12 w-12 rounded-full bg-violet-500/10 text-violet-500 flex items-center justify-center mx-auto mb-4">
+                                                <Sparkles className="h-6 w-6" />
+                                            </div>
+                                            <p className="text-sm font-medium text-foreground mb-2">No top content found</p>
+                                            <p className="text-xs text-muted-foreground">Generating placeholder insight based on analytics.</p>
+                                            {strengths.length > 0 && (
+                                                <div className="mt-6 p-4 bg-muted/30 rounded-xl text-left border">
+                                                    <p className="text-[13px] font-medium leading-relaxed">{strengths[0].replace(/\*\*/g, '')}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
-                        </div>
-                    ) : !summary ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                            <Sparkles className="h-8 w-8 mx-auto mb-3 opacity-40" />
-                            <p className="text-sm">No analysis yet</p>
-                            <p className="text-xs mt-1">Click "Generate" to create an AI-powered summary</p>
-                        </div>
-                    ) : (
-                        <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
-                            {sections.map((section) => (
-                                <div
-                                    key={section.key}
-                                    className={`rounded-lg border ${section.borderColor} ${section.bgColor} p-3.5`}
-                                >
-                                    <div className={`flex items-center gap-2 mb-2.5 ${section.color}`}>
-                                        {section.icon}
-                                        <span className="font-semibold text-sm">{section.label}</span>
-                                        <Badge variant="secondary" className="ml-auto text-[10px] h-5 px-1.5">
-                                            {section.items.length}
-                                        </Badge>
+                            </div>
+                            
+                            {/* Right Column Matrix */}
+                            <div className="lg:col-span-7 flex flex-col gap-6">
+                                
+                                {/* Top Row KPIs */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-sm relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-opacity group-hover:opacity-10">
+                                            <Eye className="h-16 w-16" />
+                                        </div>
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Eye className="h-3.5 w-3.5"/> Total Views</h4>
+                                        <p className="text-2xl font-bold tracking-tight text-foreground">{formatNumber(totalViews)}</p>
                                     </div>
-                                    <ul className="space-y-1.5">
-                                        {section.items.map((item, i) => (
-                                            <li key={i} className="text-xs text-foreground/80 flex gap-2">
-                                                <span className={`mt-1.5 h-1 w-1 rounded-full shrink-0 ${section.bgColor.replace('/10', '/60')}`} />
-                                                {item}
-                                            </li>
-                                        ))}
-                                    </ul>
+                                    <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-sm relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-opacity group-hover:opacity-10">
+                                            <Heart className="h-16 w-16" />
+                                        </div>
+                                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-1.5 flex items-center gap-1.5"><Heart className="h-3.5 w-3.5"/> Best Engagement</h4>
+                                        <p className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                                            {bestPlatform ? `${bestPlatform.engagementRate.toFixed(1)}%` : '0%'} 
+                                            {bestPlatform && <Badge variant="outline" className="text-[10px] py-0 h-5 capitalize">{bestPlatform.platform}</Badge>}
+                                        </p>
+                                    </div>
                                 </div>
-                            ))}
+                                
+                                {/* Middle Row Recommended Moves */}
+                                {actions.length > 0 && (
+                                    <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5 shadow-sm">
+                                         <h4 className="text-[11px] font-bold tracking-widest text-blue-700 uppercase mb-3 flex items-center gap-1.5">
+                                            <Target className="h-3.5 w-3.5" /> Recommended Next Moves
+                                        </h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {actions.slice(0, 4).map((act, i) => {
+                                                const actParts = act.split(':');
+                                                const hasActColon = actParts.length > 1;
+                                                return (
+                                                    <div key={i} className="bg-card/60 rounded-xl p-3 border border-border/50 text-sm flex items-start gap-2 shadow-sm">
+                                                        <div className="h-5 w-5 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">{i+1}</div>
+                                                        <p className="font-medium text-[13px] leading-tight text-foreground/90">{hasActColon ? actParts[0].replace(/\*\*/g, '') : act.replace(/\*\*/g, '')}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                {/* Bottom Row: Diagnostics and Mini Charts */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+                                    <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-sm flex flex-col justify-between h-full">
+                                        <h4 className="text-[11px] font-bold tracking-widest text-muted-foreground uppercase mb-3 text-center sm:text-left">Working / Needs Attention</h4>
+                                        <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+                                            {strengths.slice(0,2).map((s,i) => renderMiniChip(s, 'success'))}
+                                            {weaknesses.slice(0,2).map((w,i) => renderMiniChip(w, 'warning'))}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-sm flex flex-col justify-between h-full min-h-[140px]">
+                                        <h4 className="text-[11px] font-bold tracking-widest text-muted-foreground uppercase mb-4 text-center sm:text-left flex items-center gap-1.5">
+                                           <BarChart3 className="h-3.5 w-3.5"/> Views by Platform
+                                        </h4>
+                                        <div className="space-y-2.5 w-full">
+                                            {platformData.slice(0, 3).map((p, i) => {
+                                                const maxViews = Math.max(...platformData.map(d => d.views));
+                                                const pct = maxViews > 0 ? (p.views / maxViews) * 100 : 0;
+                                                return (
+                                                    <div key={i} className="flex items-center gap-3 w-full">
+                                                        <span className="text-[10px] font-bold w-12 capitalize text-right truncate">{p.platform}</span>
+                                                        <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden relative">
+                                                            <div className="absolute top-0 left-0 h-full bg-violet-500/80 rounded-full" style={{ width: `${pct}%` }}></div>
+                                                        </div>
+                                                        <span className="text-[10px] font-medium w-10 text-muted-foreground">{formatNumber(p.views)}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            {platformData.length === 0 && (
+                                                <div className="text-center text-xs text-muted-foreground opacity-50 py-2">No metric data available</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                            
+                       </div>
+                    </div>
+                        ) : (
+
+                        <div className="w-full flex">
+                           <div className="p-5 sm:p-6 w-full bg-background/50 flex flex-col gap-6">
+                               {/* Working/Needs Attention row */}
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                   <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-sm h-full">
+                                        <h4 className="text-[11px] font-bold tracking-widest text-emerald-600 uppercase mb-3">What's Working</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {strengths.map((s,i) => renderMiniChip(s, 'success'))}
+                                            {strengths.length === 0 && <span className="text-xs text-muted-foreground">No insights available.</span>}
+                                        </div>
+                                   </div>
+                                   <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-sm h-full">
+                                        <h4 className="text-[11px] font-bold tracking-widest text-amber-600 uppercase mb-3">Needs Attention</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {weaknesses.map((w,i) => renderMiniChip(w, 'warning'))}
+                                            {weaknesses.length === 0 && <span className="text-xs text-muted-foreground">No insights available.</span>}
+                                        </div>
+                                   </div>
+                               </div>
+                               
+                               {/* Recommended Moves */}
+                                {actions.length > 0 && (
+                                    <div className="bg-blue-500/5 border border-border/50 rounded-2xl p-5 shadow-sm">
+                                         <h4 className="text-[11px] font-bold tracking-widest text-blue-700 uppercase mb-3 flex items-center gap-1.5">
+                                            <Target className="h-3.5 w-3.5" /> Recommended Next Moves
+                                        </h4>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {actions.map((act, i) => {
+                                                const actParts = act.split(':');
+                                                const hasActColon = actParts.length > 1;
+                                                return (
+                                                    <div key={i} className="bg-card/60 rounded-xl p-3 border border-border/50 text-sm flex items-start gap-2 shadow-sm">
+                                                        <div className="h-5 w-5 rounded-full bg-blue-500/10 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">{i+1}</div>
+                                                        <p className="font-medium text-[13px] leading-tight text-foreground/90">{hasActColon ? actParts[0].replace(/\*\*/g, '') : act.replace(/\*\*/g, '')}</p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                           </div>
                         </div>
-                    )}
-                </CardContent>
-            )}
+                        )
+                }
+            </CardContent>
         </Card>
     );
 }
