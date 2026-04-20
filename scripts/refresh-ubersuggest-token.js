@@ -1,19 +1,4 @@
-/**
- * refresh-ubersuggest-token.js
- *
- * Runs in GitHub Actions on a daily cron (5:50 AM UTC).
- * Logs into Ubersuggest with email + password via Playwright,
- * intercepts the session bearer token from network requests,
- * and saves it to Supabase `integration_credentials` table.
- *
- * Required env vars (set as GitHub Actions Secrets):
- *   UBERSUGGEST_EMAIL
- *   UBERSUGGEST_PASSWORD
- *   SUPABASE_URL
- *   SUPABASE_SERVICE_ROLE_KEY
- */
-
-const { chromium } = require("playwright");
+import { chromium } from "playwright";
 
 async function run() {
   const email = process.env.UBERSUGGEST_EMAIL;
