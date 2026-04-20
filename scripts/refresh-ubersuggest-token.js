@@ -1,10 +1,9 @@
 import { chromium } from "playwright";
 
 /**
- * Logs into Ubersuggest via Playwright, then captures the browser SESSION COOKIES
- * (not the Authorization header — Ubersuggest uses cookie-based auth for its API).
- * Stores the cookie string in Supabase `integration_credentials` so the edge function
- * can use it as a Cookie header in server-side API calls.
+ * Logs into Ubersuggest via Playwright using the React native input value setter
+ * to properly trigger React's controlled form state (so the submit button enables).
+ * Captures session cookies after successful login and saves them to Supabase.
  */
 async function run() {
   const email = process.env.UBERSUGGEST_EMAIL;
@@ -32,52 +31,81 @@ async function run() {
       timeout: 30000,
     });
 
-    console.log("Filling login form...");
     await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
-    await page.click('input[type="email"], input[name="email"]');
-    await page.type('input[type="email"], input[name="email"]', email, { delay: 60 });
 
-    await page.click('input[type="password"], input[name="password"]');
-    await page.type('input[type="password"], input[name="password"]', password, { delay: 60 });
+    // Use React's native input value setter to properly trigger controlled input state.
+    // page.type() / page.fill() do NOT trigger React's onChange for controlled inputs.
+    // This is the only reliable method to enable a React-controlled submit button.
+    console.log("Setting form values via React native input setter...");
+    await page.evaluate(
+      ({ emailVal, passwordVal }) => {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value"
+        ).set;
+
+        const emailInput = document.querySelector('input[type="email"]') ||
+                           document.querySelector('input[name="email"]');
+        const passwordInput = document.querySelector('input[type="password"]') ||
+                              document.querySelector('input[name="password"]');
+
+        if (emailInput) {
+          nativeInputValueSetter.call(emailInput, emailVal);
+          emailInput.dispatchEvent(new Event("input", { bubbles: true }));
+          emailInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        if (passwordInput) {
+          nativeInputValueSetter.call(passwordInput, passwordVal);
+          passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
+          passwordInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      },
+      { emailVal: email, passwordVal: password }
+    );
+
+    // Give React time to process the state change and enable the button
+    await page.waitForTimeout(2000);
 
     // Wait for submit button to become enabled
     try {
       await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 8000 });
-      console.log("Submit button enabled.");
+      console.log("Submit button is now enabled.");
+      await page.click('button[type="submit"]');
     } catch (_e) {
-      console.log("Button still disabled — using keyboard Enter to submit...");
+      console.log("Button still disabled — attempting force click...");
+      await page.click('button[type="submit"]', { force: true });
     }
 
-    // Submit via keyboard Enter (bypasses disabled button state)
-    await page.focus('input[type="password"], input[name="password"]');
-    await page.keyboard.press("Enter");
-
+    // Wait for post-login redirect (up to 20 seconds)
     console.log("Waiting for post-login redirect...");
-    // Wait for URL to change away from /login, indicating successful auth
     try {
-      await page.waitForURL((url) => !url.href.includes("/login"), { timeout: 15000 });
-      console.log("✓ Login successful — redirected to:", page.url());
+      await page.waitForURL((url) => !url.href.includes("/login"), { timeout: 20000 });
+      console.log("✓ Login successful. Current URL:", page.url());
     } catch (_e) {
-      console.log("URL still on login page — login may have failed. Continuing anyway...");
+      console.log("Redirect timeout. Current URL:", page.url());
+      // Still try to proceed — session cookies might be set
     }
 
-    // Extra wait for API calls and cookies to settle
-    await page.waitForTimeout(3000);
+    // Extra settle time for session cookies to be written
+    await page.waitForTimeout(4000);
 
-    // Capture ALL cookies for neilpatel.com after login
-    const cookies = await context.cookies("https://app.neilpatel.com");
-    console.log(`Captured ${cookies.length} cookies after login.`);
+    // Capture ALL cookies (all domains) — auth cookie may be on .neilpatel.com parent domain
+    const allCookies = await context.cookies();
+    console.log(`Total cookies captured: ${allCookies.length}`);
+    console.log(`Cookie names: ${allCookies.map((c) => c.name).join(", ")}`);
 
-    if (cookies.length === 0) {
-      throw new Error("No cookies captured after login — login likely failed.");
+    // Filter to neilpatel.com cookies only (session cookies will be here)
+    const neilCookies = allCookies.filter((c) => c.domain.includes("neilpatel.com"));
+    console.log(`neilpatel.com cookies (${neilCookies.length}): ${neilCookies.map((c) => c.name).join(", ")}`);
+
+    if (neilCookies.length === 0) {
+      throw new Error("No neilpatel.com cookies captured — login likely failed. Check credentials.");
     }
 
-    // Format as Cookie header string: "name=value; name2=value2"
-    const cookieString = cookies.map((c) => `${c.name}=${c.value}`).join("; ");
-    console.log(`Cookie names: ${cookies.map((c) => c.name).join(", ")}`);
+    const cookieString = neilCookies.map((c) => `${c.name}=${c.value}`).join("; ");
 
-    // Verify the cookies work by calling the projects API
-    console.log("Verifying cookies against /api/projects...");
+    // Verify cookies work against /api/projects
+    console.log("Verifying session against /api/projects...");
     const verifyRes = await fetch("https://app.neilpatel.com/api/projects", {
       headers: { Cookie: cookieString, Accept: "application/json" },
     });
@@ -85,15 +113,16 @@ async function run() {
     const projectsArray = Array.isArray(verifyData)
       ? verifyData
       : verifyData.projects || verifyData.data || verifyData.result || [];
-    console.log(`✓ Projects API returned ${projectsArray.length} projects: ${projectsArray.map((p) => p.domain || p.url || p.name).join(", ")}`);
+
+    console.log(`✓ /api/projects returned ${projectsArray.length} project(s): ${projectsArray.map((p) => p.domain || p.url || p.name).join(", ")}`);
 
     if (projectsArray.length === 0) {
-      console.warn("⚠ Projects list is empty — token may be for a different account or login failed.");
+      console.warn("⚠ Projects list empty — login may not have completed or account has no projects.");
     }
 
-    // Save cookie string to Supabase (stored in the `token` column)
-    console.log("Saving cookie session to Supabase...");
-    const res = await fetch(
+    // Save cookie string to Supabase integration_credentials table
+    console.log("Saving session cookies to Supabase...");
+    const patchRes = await fetch(
       `${supabaseUrl}/rest/v1/integration_credentials?service_name=eq.ubersuggest`,
       {
         method: "PATCH",
@@ -103,15 +132,12 @@ async function run() {
           apikey: supabaseKey,
           Prefer: "return=minimal",
         },
-        body: JSON.stringify({
-          token: cookieString,
-          updated_at: new Date().toISOString(),
-        }),
+        body: JSON.stringify({ token: cookieString, updated_at: new Date().toISOString() }),
       }
     );
 
-    if (!res.ok) {
-      // Row doesn't exist yet — insert it
+    if (!patchRes.ok) {
+      // Insert if row doesn't exist
       const insertRes = await fetch(`${supabaseUrl}/rest/v1/integration_credentials`, {
         method: "POST",
         headers: {
@@ -131,7 +157,7 @@ async function run() {
       }
     }
 
-    console.log("✅ Ubersuggest session cookies refreshed and saved successfully.");
+    console.log("✅ Ubersuggest session cookies saved successfully.");
   } finally {
     await browser.close();
   }
