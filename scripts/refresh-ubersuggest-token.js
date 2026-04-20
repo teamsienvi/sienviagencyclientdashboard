@@ -17,7 +17,10 @@ async function run() {
   }
 
   console.log("Launching browser...");
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: false, // Non-headless bypasses Cloudflare bot detection (xvfb provides virtual display in CI)
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
