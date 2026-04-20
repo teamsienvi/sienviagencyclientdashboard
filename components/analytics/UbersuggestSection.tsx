@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface UbersuggestSectionProps {
@@ -30,8 +30,10 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
   });
 
   // Sync mutation — calls the sync-ubersuggest edge function
+  const [syncError, setSyncError] = useState<string | null>(null);
   const syncMutation = useMutation({
     mutationFn: async () => {
+      setSyncError(null);
       const { data, error } = await supabase.functions.invoke("sync-ubersuggest", {
         body: { clientId },
       });
@@ -43,7 +45,8 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
       queryClient.invalidateQueries({ queryKey: ["client-seo-metrics", clientId] });
     },
     onError: (err: Error) => {
-      console.warn("SEO auto-sync failed:", err.message);
+      console.warn("SEO sync failed:", err.message);
+      setSyncError(err.message);
     },
   });
 
@@ -74,8 +77,24 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
 
   if (!allMetrics || allMetrics.length === 0) {
     return (
-      <div className="flex flex-col justify-center items-center h-32 rounded-xl border bg-muted/30 text-muted-foreground">
-        <p className="text-sm">No SEO metrics synced yet.</p>
+      <div className="flex flex-col justify-center items-center gap-3 py-8 rounded-xl border bg-muted/30 text-muted-foreground">
+        <p className="text-sm">{syncMutation.isPending ? "Syncing SEO data..." : "No SEO metrics synced yet."}</p>
+        {syncError && (
+          <div className="flex items-center gap-2 text-xs text-red-500 max-w-xs text-center">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span>{syncError}</span>
+          </div>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          className="gap-1.5"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+          {syncMutation.isPending ? "Syncing..." : "Sync SEO Data"}
+        </Button>
       </div>
     );
   }
@@ -349,6 +368,12 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
           Sync Now
         </Button>
       </div>
+      {syncError && (
+        <div className="flex items-center gap-2 text-xs text-red-500 mt-1">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+          <span>{syncError}</span>
+        </div>
+      )}
     </div>
   );
 }
