@@ -72,13 +72,18 @@ async function run() {
       await page.waitForTimeout(1500);
     }
 
-    // Enable token capture and submit the form
+    // Enable token capture BEFORE submitting
     captureEnabled = true;
-    console.log("Submitting login form...");
-    await page.click('button[type="submit"]');
+    console.log("Submitting login form via keyboard Enter (bypasses disabled button)...");
+
+    // Press Enter in the password field — this submits the form regardless of button state
+    // Keyboard submission does NOT check if the submit button is disabled
+    await page.focus('input[type="password"], input[name="password"]');
+    await page.keyboard.press("Enter");
 
     // Wait for post-login API calls to fire
-    await page.waitForTimeout(6000);
+    await page.waitForTimeout(8000);
+
 
     // Navigate to dashboard if token still not captured
     if (!capturedToken) {
