@@ -9,6 +9,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Sienvi Agency Dashboard",
   description: "Analytics and robust tracking for Sienvi clients.",
+  icons: {
+    icon: "/sienvi-logo.jpg",
+  },
 };
 
 export default function RootLayout({
