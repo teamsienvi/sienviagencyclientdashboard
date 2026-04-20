@@ -78,7 +78,7 @@ async function run() {
         // Last resort: click via JS injection (bypasses disabled check)
         console.log("Standard click failed, trying JS click...");
         await page.evaluate(() => {
-          (document.querySelector('button[type="submit"]') as HTMLElement)?.click();
+          document.querySelector('button[type="submit"]')?.click();
         });
       }
 
