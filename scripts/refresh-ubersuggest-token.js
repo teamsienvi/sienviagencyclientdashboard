@@ -48,18 +48,34 @@ async function run() {
     await page.fill('input[type="password"], input[name="password"]', password);
 
     console.log("Submitting login form...");
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: "networkidle", timeout: 30000 }),
-      page.click('button[type="submit"]'),
-    ]);
+    // Click and wait for navigation — use 'load' not 'networkidle' (Ubersuggest never idles)
+    // If navigation times out, that's OK — we only care about capturing the token
+    await page.click('button[type="submit"]');
+    
+    try {
+      await page.waitForNavigation({ waitUntil: "load", timeout: 15000 });
+    } catch (_navErr) {
+      console.log("Navigation timed out after load — checking if token was captured anyway...");
+    }
 
-    // If token wasn't captured during login, trigger an API call by visiting projects
+    // If token still not captured, wait a few more seconds for async API calls
+    if (!capturedToken) {
+      console.log("Waiting for background API calls to fire...");
+      await page.waitForTimeout(5000);
+    }
+
+    // If still nothing, navigate to dashboard to trigger API calls
     if (!capturedToken) {
       console.log("Token not yet captured, navigating to trigger API calls...");
-      await page.goto("https://app.neilpatel.com/en/ubersuggest", {
-        waitUntil: "networkidle",
-        timeout: 20000,
-      });
+      try {
+        await page.goto("https://app.neilpatel.com/en/ubersuggest", {
+          waitUntil: "load",
+          timeout: 20000,
+        });
+        await page.waitForTimeout(3000);
+      } catch (_e) {
+        console.log("Dashboard navigation timed out, continuing...");
+      }
     }
 
     // Last resort: try extracting from localStorage
@@ -69,7 +85,6 @@ async function run() {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           const value = localStorage.getItem(key);
-          // Look for JWT-like values (long strings starting with Bearer or ey)
           if (value && (value.startsWith("Bearer ") || value.startsWith("ey")) && value.length > 50) {
             return value;
           }
