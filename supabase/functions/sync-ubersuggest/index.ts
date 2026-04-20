@@ -25,7 +25,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Fetch Ubersuggest Bearer Token
+    // 1. Fetch Ubersuggest session cookies (stored as cookie string by the Playwright refresh script)
     const { data: credentials, error: credError } = await supabase
       .from('integration_credentials')
       .select('token')
@@ -34,11 +34,12 @@ serve(async (req) => {
 
     if (credError || !credentials?.token) {
       return new Response(
-        JSON.stringify({ error: "Ubersuggest token not found. Playwright scraper must run first." }),
+        JSON.stringify({ error: "Ubersuggest session not found. Run the GitHub Actions token refresh first." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const UBERSUGGEST_TOKEN = credentials.token;
+    // The stored token is a cookie string: "name=value; name2=value2"
+    const UBERSUGGEST_COOKIE = credentials.token;
 
     // 2. Fetch SEO config for the client
     const { data: config, error: configError } = await supabase
@@ -58,7 +59,7 @@ serve(async (req) => {
 
     // 3. Fetch all projects to resolve domain to projectId
     const projectsResponse = await fetch("https://app.neilpatel.com/api/projects", {
-      headers: { "Authorization": UBERSUGGEST_TOKEN, "Accept": "application/json" }
+      headers: { "Cookie": UBERSUGGEST_COOKIE, "Accept": "application/json" }
     });
 
     if (!projectsResponse.ok) {
@@ -94,7 +95,7 @@ serve(async (req) => {
 
     // 4. Fetch the User Alerts to extract metrics
     const alertsResponse = await fetch("https://app.neilpatel.com/api/user/alerts", {
-      headers: { "Authorization": UBERSUGGEST_TOKEN, "Accept": "application/json" }
+      headers: { "Cookie": UBERSUGGEST_COOKIE, "Accept": "application/json" }
     });
 
     if (!alertsResponse.ok) {
