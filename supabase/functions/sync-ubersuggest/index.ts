@@ -66,17 +66,31 @@ serve(async (req) => {
     }
 
     const projectsData = await projectsResponse.json();
+    console.log("Raw projects API response:", JSON.stringify(projectsData).slice(0, 500));
     
-    // Safely extract projects array whether it's at the root or wrapped in .projects
-    const projectsArray = Array.isArray(projectsData) ? projectsData : projectsData.projects || [];
+    // Handle multiple possible response shapes
+    const projectsArray = Array.isArray(projectsData)
+      ? projectsData
+      : projectsData.projects || projectsData.data || projectsData.result || [];
     
-    const activeProject = projectsArray.find((p: any) => p.domain === targetDomain);
+    console.log(`Found ${projectsArray.length} projects. Domains: ${projectsArray.map((p: any) => p.domain || p.url || p.name).join(', ')}`);
+
+    // Flexible domain match: handle www prefix and trailing slashes
+    const normalize = (d: string) => d?.replace(/^www\./i, '').replace(/\/$/, '').toLowerCase();
+    const normalizedTarget = normalize(targetDomain);
+    const activeProject = projectsArray.find((p: any) =>
+      normalize(p.domain) === normalizedTarget ||
+      normalize(p.url) === normalizedTarget ||
+      normalize(p.name) === normalizedTarget
+    );
 
     if (!activeProject) {
-      throw new Error(`Domain ${targetDomain} not tracked. Tracked domains are: ${projectsArray.map((p: any) => p.domain).join(', ')}`);
+      const tracked = projectsArray.map((p: any) => p.domain || p.url || p.name).join(', ');
+      throw new Error(`Domain ${targetDomain} not tracked. Tracked domains are: ${tracked || '(none found — token may be invalid)'}`);
     }
     const projectId = activeProject.id;
     console.log(`Resolved domain ${targetDomain} to projectId ${projectId}`);
+
 
     // 4. Fetch the User Alerts to extract metrics
     const alertsResponse = await fetch("https://app.neilpatel.com/api/user/alerts", {
