@@ -115,6 +115,14 @@ serve(async (req) => {
       const shares = video.shares || video.share_count || 0;
       const interactions = likes + comments + shares;
 
+      // Delete existing metrics for this post and period to avoid duplicates
+      await supabase
+        .from("social_content_metrics")
+        .delete()
+        .eq("social_content_id", content.id)
+        .eq("period_start", periodStart)
+        .eq("period_end", periodEnd);
+
       // Insert metrics snapshot
       const { error: metricsError } = await supabase
         .from("social_content_metrics")
@@ -146,6 +154,15 @@ serve(async (req) => {
     }, 0);
     
     const engagementRate = followerCount > 0 ? (totalInteractions / followerCount) * 100 : 0;
+
+    // Delete existing account metrics for this period to avoid duplicates
+    await supabase
+      .from("social_account_metrics")
+      .delete()
+      .eq("client_id", clientId)
+      .eq("platform", "tiktok")
+      .eq("period_start", periodStart)
+      .eq("period_end", periodEnd);
 
     // Store account metrics
     const { error: accountMetricsError } = await supabase

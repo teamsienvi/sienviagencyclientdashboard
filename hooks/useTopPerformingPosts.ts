@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay, subDays } from "date-fns";
+import { startOfDay, endOfDay } from "date-fns";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
 import { getDashboardDateRange, type DateRangePreset } from "@/utils/dashboardDateRange";
 
@@ -27,38 +27,53 @@ export function useTopPerformingPosts(
         periodEndDate = endOfDay(range.end);
       }
 
-      // Fetch content with metrics for this client across all platforms
-      // Only fetch content published on or after the reporting period start
-      const { data: content, error: contentError } = await supabase
-        .from("social_content")
+      // Fetch metrics filtered by COLLECTION date (period_end), not publish date
+      // This ensures posts synced during the reporting window appear even if published earlier
+      let metricsQuery = supabase
+        .from("social_content_metrics")
         .select(`
-          id,
+          views,
+          impressions,
+          reach,
+          likes,
+          comments,
+          shares,
+          period_end,
+          collected_at,
           platform,
-          published_at,
-          url,
-          title,
-          social_content_metrics (
-            collected_at,
-            period_start,
-            period_end,
-            views,
-            reach,
-            impressions,
-            likes,
-            comments,
-            shares,
-            engagements
+          social_content!inner (
+            id,
+            client_id,
+            platform,
+            published_at,
+            url,
+            title
           )
         `)
-        .eq("client_id", clientId)
-        .order("published_at", { ascending: false })
+        .eq("social_content.client_id", clientId)
+        .gte("period_end", periodStartDate.toISOString().split("T")[0])
+        .lte("period_end", periodEndDate.toISOString().split("T")[0])
         .limit(500);
 
+      const { data: metricsRaw, error: contentError } = await metricsQuery;
+
       if (contentError) throw contentError;
-      if (!content || content.length === 0) return [];
+      if (!metricsRaw || metricsRaw.length === 0) return [];
+
+      // Deduplicate: for each post, keep only the row with the latest period_end
+      const groupedByPost: Record<string, any> = {};
+      metricsRaw.forEach((row: any) => {
+        const key = row.social_content?.id;
+        if (!key) return;
+        const existing = groupedByPost[key];
+        if (!existing || (row.period_end || "") > (existing.period_end || "")) {
+          groupedByPost[key] = row;
+        }
+      });
+
+      const dedupedRows = Object.values(groupedByPost);
 
       // Get follower counts for each platform from social_account_metrics
-      // Filter out obviously incorrect values (like static fallbacks > 1000 when actual is much lower)
       const { data: accountMetrics } = await supabase
         .from("social_account_metrics")
         .select("platform, followers, collected_at")
@@ -68,71 +83,38 @@ export function useTopPerformingPosts(
         .order("collected_at", { ascending: false });
 
       // Build platform -> followers map (latest follower count per platform)
-      // Skip suspiciously high static fallback values (>1000) if there are more recent lower values
       const platformFollowers: Record<string, number> = {};
-      const platformLatestTimestamp: Record<string, string> = {};
-      
       accountMetrics?.forEach((m) => {
         if (!m.followers) return;
-        
-        // If we haven't seen this platform yet, use this value
         if (!platformFollowers[m.platform]) {
           platformFollowers[m.platform] = m.followers;
-          platformLatestTimestamp[m.platform] = m.collected_at;
         }
       });
 
-      // Transform to TopInsightContent format
-      // Filter content strictly to the reporting period
-      const topInsightContent: TopInsightContent[] = content
-        .filter((c) => {
-          // Must have metrics
-          if (!c.social_content_metrics || c.social_content_metrics.length === 0) return false;
-          if (!c.published_at) return false;
-          
-          // Content must be published within the reporting period
-          const publishedDate = parseISO(c.published_at);
-          return isWithinInterval(publishedDate, { 
-            start: periodStartDate, 
-            end: periodEndDate 
-          });
-        })
-        .map((c) => {
-          // Get the most recent metric (by period_end, then collected_at)
-          const sortedMetrics = [...c.social_content_metrics].sort((a: any, b: any) => {
-            // First by period_end descending
-            const periodCompare = (b.period_end || "").localeCompare(a.period_end || "");
-            if (periodCompare !== 0) return periodCompare;
-            // Then by collected_at descending
-            return new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime();
-          });
-          
-          const latestMetric = sortedMetrics[0];
-
-          // Use the higher of views or impressions for proper cross-platform ranking
-          // FB/X use impressions, TikTok/YouTube use views
-          const viewsValue = latestMetric?.views || 0;
-          const impressionsValue = latestMetric?.impressions || 0;
+      // Transform deduplicated metrics to the TopInsightContent format
+      const topInsightContent: TopInsightContent[] = dedupedRows
+        .map((row: any) => {
+          const content = row.social_content;
+          const viewsValue = row.views || 0;
+          const impressionsValue = row.impressions || 0;
           const primaryMetric = Math.max(viewsValue, impressionsValue);
-          const reachValue = latestMetric?.reach || 0;
+          const reachValue = row.reach || 0;
 
           return {
-            id: c.id,
-            post_url: c.url || "",
-            platform: c.platform,
-            published_at: c.published_at,
-            views: primaryMetric, // Use higher of views/impressions for ranking
+            id: content.id,
+            post_url: content.url || "",
+            platform: content.platform,
+            published_at: content.published_at,
+            views: primaryMetric,
             reach: reachValue > 0 ? reachValue : primaryMetric,
-            likes: latestMetric?.likes || 0,
-            comments: latestMetric?.comments || 0,
-            shares: latestMetric?.shares || 0,
-            followers_at_post_time: platformFollowers[c.platform] || 0,
+            likes: row.likes || 0,
+            comments: row.comments || 0,
+            shares: row.shares || 0,
+            followers_at_post_time: platformFollowers[content.platform] || 0,
           };
         })
-        // Filter out posts with no views/impressions
         .filter((c) => c.views > 0);
 
-      // Rank by views DESC and return top posts
       return rankTopInsights(topInsightContent, limit);
     },
     enabled: !!clientId,

@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { UbersuggestSection } from "@/components/analytics/UbersuggestSection";
+import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -87,6 +88,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   // Dashboard Date Range State (for AI Summaries)
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+
+  // Realtime subscription: auto-invalidate top posts cache when background sync writes new data
+  useSocialMetricsRealtime(clientId);
 
   // Fetch client details from database
   const { data: client, isLoading: isLoadingClient } = useQuery({
@@ -396,6 +400,13 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     }
   };
 
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   // Aggregate total followers from ALL sources:
   // 1. Live Metricool API data (most accurate, real-time)
   // 2. social_account_metrics (for platforms not in Metricool)
@@ -486,8 +497,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   // Check if client only has ads (meta_ads) and no other platforms
   const isAdsOnlyClient = useMemo(() => {
     if (!metricoolPlatforms) return false;
+    const name = client?.name?.trim();
     // If client has website analytics configured, it's not ads-only
-    if (client?.supabase_url) return false;
+    if (client?.supabase_url || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency"].includes(name || "")) return false;
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
@@ -496,7 +508,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
-    if (client?.name === "Father Figure Formula") return false;
+    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && getClientAdPlatforms(client.name).includes('amazon')) return true;
@@ -611,11 +623,72 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               </TabsTrigger>
             </TabsList>
 
+            {/* Navigation Buckets Bar - Centered and Prominent */}
+            <div className="flex flex-wrap items-center justify-center gap-4 py-8 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => scrollToSection("executive-insights")}
+                className="rounded-xl bg-background hover:bg-primary/5 border-primary/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+              >
+                <TrendingUp className="h-5 w-5 mr-2 text-primary" />
+                EXECUTIVE INSIGHTS
+              </Button>
+              
+              {hasSocialMedia && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => scrollToSection("social-media")}
+                  className="rounded-xl bg-background hover:bg-violet-500/5 border-violet-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                >
+                  <Share2 className="h-5 w-5 mr-2 text-violet-500" />
+                  SOCIAL MEDIA
+                </Button>
+              )}
+
+              {hasAdsPlatform && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => scrollToSection("advertising")}
+                  className="rounded-xl bg-background hover:bg-orange-500/5 border-orange-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                >
+                  <BarChart3 className="h-5 w-5 mr-2 text-orange-500" />
+                  ADVERTISING
+                </Button>
+              )}
+
+              {((!isAdsOnlyClient && client.supabase_url) || 
+                ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
+                connectedAccounts?.substack) && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => scrollToSection("web-ecommerce")}
+                  className="rounded-xl bg-background hover:bg-emerald-500/5 border-emerald-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                >
+                  <Globe className="h-5 w-5 mr-2 text-emerald-500" />
+                  WEB & E-COMM
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => scrollToSection("seo")}
+                className="rounded-xl bg-background hover:bg-slate-500/10 border-slate-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+              >
+                 <span className="mr-2 text-xl grayscale">🔍</span>
+                SEO DASHBOARD
+              </Button>
+            </div>
+
             {/* Analytics Tab */}
             <TabsContent value="analytics" className="space-y-12 pb-12">
               
               {/* Zone 2: Executive Insight Layer */}
-              <div className="space-y-6">
+              <div className="space-y-6 scroll-mt-24" id="executive-insights">
                 <div className="flex items-center gap-3 pb-3 border-b">
                   <div className="p-2 bg-primary/10 rounded-lg">
                     <Star className="h-5 w-5 text-primary" />
@@ -635,7 +708,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     />
                   )}
 
-                  {(!isAdsOnlyClient && client.supabase_url) && (
+                  {((!isAdsOnlyClient && client.supabase_url) || 
+                    ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
+                    connectedAccounts?.substack) && (
                     <AnalyticsSummaryCard
                       clientId={clientId!}
                       type="website"
@@ -680,7 +755,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                 {/* Social Channel */}
                 {hasSocialMedia && (
-                  <div className="mt-6 mb-12">
+                  <div className="mt-6 mb-12 scroll-mt-24" id="social-media">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
                       <div className="p-2 rounded-lg bg-violet-500/10"><Share2 className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div>
                       <div>
@@ -816,8 +891,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Ads Channel */}
-                {client?.name !== "Father Figure Formula" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
-                  <div className="mt-12 mb-12">
+                {client?.name !== "Father Figure Formula" && client?.name !== "Sienvi Agency" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
+                  <div className="mt-12 mb-12 scroll-mt-24" id="advertising">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
                       <div className="p-2 rounded-lg bg-orange-500/10"><BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" /></div>
                       <div>
@@ -861,8 +936,10 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Web & E-Comm Channel */}
-                {(!isAdsOnlyClient && client.supabase_url) || (client.name === "Snarky Pets" || client.name === "Snarky Humans" || client.name === "BlingyBag") || (client.name === "Father Figure Formula") || connectedAccounts?.substack ? (
-                  <div className="mt-12 mb-12">
+                {(!isAdsOnlyClient && client.supabase_url) || 
+                  ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
+                  connectedAccounts?.substack ? (
+                  <div className="mt-12 mb-12 scroll-mt-24" id="web-ecommerce">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
                       <div className="p-2 rounded-lg bg-emerald-500/10"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
                       <div>
@@ -985,7 +1062,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 ) : null}
 
                 {/* SEO Channel (Ubersuggest) */}
-                <div className="mt-12 mb-12">
+                <div className="mt-12 mb-12 scroll-mt-24" id="seo">
                   <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
                     <div className="p-3 rounded-xl bg-slate-800 flex items-center justify-center">
                        <span className="text-xl leading-none">🔍</span>

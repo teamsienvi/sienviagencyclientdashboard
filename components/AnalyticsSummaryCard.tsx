@@ -6,7 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
     Sparkles, RefreshCw, ThumbsUp, AlertTriangle, Target, Star,
     ChevronDown, ChevronUp, ExternalLink, Eye, PlaySquare, Heart, MessageCircle, 
-    Share2, ArrowUpRight, BarChart3, Users, TrendingUp, CheckCircle2, ArrowRight, XCircle, Video, FileText
+    Share2, ArrowUpRight, BarChart3, Users, TrendingUp, CheckCircle2, ArrowRight, XCircle, Video, FileText,
+    ShoppingBag, Globe, DollarSign, Megaphone, Zap
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +39,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const queryClient = useQueryClient();
     const [sessionReady, setSessionReady] = useState(false);
     const [chartMetric, setChartMetric] = useState<'views' | 'engagement'>('views');
+    const [refreshPhase, setRefreshPhase] = useState<'idle' | 'syncing' | 'analyzing'>('idle');
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -101,6 +103,34 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const generateMutation = useMutation({
         mutationFn: async () => {
             const { data: { session } } = await supabase.auth.getSession();
+            
+            // 1. If social, trigger and AWAIT a sync first to ensure top posts are fresh
+            if (type === 'social') {
+                setRefreshPhase('syncing');
+                console.log("Triggering live social sync for client:", clientId);
+                try {
+                    const syncResponse = await fetch(
+                        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-social-analytics`,
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${session?.access_token}`,
+                                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+                            },
+                            body: JSON.stringify({ clientId, manual: true }),
+                        }
+                    );
+                    if (!syncResponse.ok) {
+                        console.error("Sync partial failure or timeout, proceeding to analysis anyway.");
+                    }
+                } catch (e) {
+                    console.error("Failed to sync platforms", e);
+                }
+            }
+
+            // 2. Generate the AI Summary
+            setRefreshPhase('analyzing');
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-analytics-summary`,
                 {
@@ -120,6 +150,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             return response.json();
         },
         onSuccess: async (summaryData: SummaryData) => {
+            setRefreshPhase('idle');
             const now = new Date();
             const periodEnd = now.toISOString().split("T")[0];
             const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
@@ -141,30 +172,20 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 );
 
             queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
+            if (type === 'social') {
+                queryClient.invalidateQueries({ queryKey: ["all-time-top-posts"] });
+                queryClient.invalidateQueries({ queryKey: ["top-performing-posts"] });
+                queryClient.invalidateQueries({ queryKey: ["summary-metrics"] });
+                queryClient.invalidateQueries({ queryKey: ["client-social-metrics", clientId] });
+            }
             toast({ title: "Summary updated!", description: `${title} analysis refreshed with latest data.` });
         },
         onError: (error: Error) => {
+            setRefreshPhase('idle');
             toast({ title: "Error", description: error.message, variant: "destructive" });
         },
     });
-    const hasAttemptedAutoRefresh = useRef(false);
 
-    useEffect(() => {
-        if (isLoadingCache || generateMutation.isPending || hasAttemptedAutoRefresh.current) return;
-        
-        let needsRegen = !cachedSummary;
-        if (cachedSummary) {
-           if (isDataStale((cachedSummary as any).generated_at, 'summary')) {
-               needsRegen = true;
-           }
-        }
-
-        if (needsRegen) {
-            hasAttemptedAutoRefresh.current = true;
-            // Background refresh for AI enabled
-            setTimeout(() => generateMutation.mutate(), 100);
-        }
-    }, [isLoadingCache, cachedSummary, generateMutation.isPending]);
 
     const summary: SummaryData | null = generateMutation.data || (cachedSummary as any)?.summary_data || null;
     const isGenerating = generateMutation.isPending;
@@ -174,15 +195,19 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const weaknesses = summary?.weaknesses || [];
     const actions = summary?.smartActions || [];
     
-    // Derived Analytics Let's use real metrics if we have them, else sum
-    const totalViews = metricsData?.totalViews || 0;
+    // Derived Analytics - fallback to ai metrics for website/lms/ads, use hook metrics for social
+    const aiMetrics = (summary as any)?.metrics || {};
+    
+    const totalViews = type === 'social' ? (metricsData?.totalViews || 0) : (aiMetrics.total_views || 0);
     const totalEngagements = metricsData?.totalEngagements || 0;
     const platformData = metricsData?.platformData || [];
-    const followersGained = metricsData?.followersGained || 0;
+    const followersGained = (aiMetrics.followers_gained !== undefined && aiMetrics.followers_gained !== null)
+        ? aiMetrics.followers_gained 
+        : (metricsData?.followersGained || 0);
     const timelineData = metricsData?.timelineData || [];
     
     // Find highest engagement platform 
-    const bestPlatform = [...platformData].sort((a,b) => b.engagementRate - a.engagementRate)[0];
+    const bestPlatform = aiMetrics.top_platform || [...platformData].sort((a,b) => b.engagementRate - a.engagementRate)[0]?.platform || "None";
 
     
     // Extract thumbnail for YouTube videos
@@ -254,8 +279,10 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         );
     };
 
-    const hasDataToRender = summary || (isSocial && totalViews > 0);
-    const engagementRate = totalViews > 0 ? (totalEngagements / totalViews) * 100 : 0;
+    const hasDataToRender = summary || (type === 'social' && totalViews > 0);
+    const engagementRate = type === 'social' 
+        ? (totalViews > 0 ? (totalEngagements / totalViews) * 100 : 0)
+        : (aiMetrics.engagement_rate || 0);
     const topInsight = summary?.highlights?.[0] || summary?.strengths?.[0];
 
     return (
@@ -276,7 +303,9 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                         className="h-9 text-xs font-medium shadow-sm w-fit"
                     >
                         <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-                        {isGenerating ? "Analyzing..." : "Refresh Insights"}
+                        {refreshPhase === 'syncing' ? "Syncing Platforms..." : 
+                         refreshPhase === 'analyzing' ? "Analyzing..." : 
+                         "Refresh Insights"}
                     </Button>
                 </div>
             </CardHeader>
@@ -302,7 +331,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                         {/* Highlights Banner */}
                         {topInsight && (
                             <div className="w-full mb-6 py-4 px-5 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 flex items-center gap-3">
-                                <PlaySquare className="h-5 w-5 text-violet-500 shrink-0" />
+                                {type === 'social' ? <PlaySquare className="h-5 w-5 text-violet-500 shrink-0" /> : <Sparkles className="h-5 w-5 text-violet-500 shrink-0" />}
                                 <p className="text-sm font-medium text-foreground/90">{topInsight.replace(/\*\*/g, '')}</p>
                             </div>
                         )}
@@ -310,63 +339,85 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                         {/* KPI Widgets */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
-                                <p className="text-sm font-semibold text-foreground mb-3">Total Views</p>
-                                <p className="text-3xl font-bold tracking-tight mb-2">{formatNumber(totalViews)}</p>
+                                <p className="text-sm font-semibold text-foreground mb-3">
+                                    {type === 'ads' ? 'Ad Spend' : 'Total Views'}
+                                </p>
+                                <p className="text-3xl font-bold tracking-tight mb-2">
+                                    {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : formatNumber(totalViews)}
+                                </p>
                                 {timelineData.length > 0 && (
                                     <div className="h-8 w-full mt-2">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={timelineData}>
                                                 <defs>
                                                     <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
-                                                        <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                                                        <stop offset="5%" stopColor={type === 'ads' ? "#10b981" : "#8b5cf6"} stopOpacity={0.2}/>
+                                                        <stop offset="95%" stopColor={type === 'ads' ? "#10b981" : "#8b5cf6"} stopOpacity={0}/>
                                                     </linearGradient>
                                                 </defs>
-                                                <Area type="monotone" dataKey="views" stroke="#8b5cf6" strokeWidth={1.5} fill="url(#colorViews)" />
+                                                <Area type="monotone" dataKey="views" stroke={type === 'ads' ? "#10b981" : "#8b5cf6"} strokeWidth={1.5} fill="url(#colorViews)" />
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     </div>
                                 )}
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
-                                <p className="text-sm font-semibold text-foreground mb-3">Engagement Rate</p>
-                                <p className="text-3xl font-bold tracking-tight mb-2">{engagementRate.toFixed(1)}%</p>
+                                <p className="text-sm font-semibold text-foreground mb-3">
+                                    {type === 'ads' ? 'ROAS' : 'Engagement Rate'}
+                                </p>
+                                <p className="text-3xl font-bold tracking-tight mb-2">
+                                    {type === 'ads' ? `${(aiMetrics.roas || 0).toFixed(2)}x` : `${engagementRate.toFixed(1)}%`}
+                                </p>
                                 {timelineData.length > 0 && (
                                     <div className="h-8 w-full mt-2">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={timelineData}>
                                                 <defs>
                                                     <linearGradient id="colorEngagement" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                                        <stop offset="5%" stopColor={type === 'ads' ? "#f59e0b" : "#3b82f6"} stopOpacity={0.2}/>
+                                                        <stop offset="95%" stopColor={type === 'ads' ? "#f59e0b" : "#3b82f6"} stopOpacity={0}/>
                                                     </linearGradient>
                                                 </defs>
-                                                <Area type="monotone" dataKey="engagement" stroke="#3b82f6" strokeWidth={1.5} fill="url(#colorEngagement)" />
+                                                <Area type="monotone" dataKey="engagement" stroke={type === 'ads' ? "#f59e0b" : "#3b82f6"} strokeWidth={1.5} fill="url(#colorEngagement)" />
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     </div>
                                 )}
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
-                                <p className="text-sm font-semibold text-foreground mb-3">Followers Gained</p>
-                                <p className="text-3xl font-bold tracking-tight mb-2">{followersGained > 0 ? `+${followersGained}` : followersGained}</p>
+                                <p className="text-sm font-semibold text-foreground mb-3">
+                                    {type === 'social' ? 'Followers Gained' : (type === 'ads' ? 'Total Conversions' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors'))}
+                                </p>
+                                <p className="text-3xl font-bold tracking-tight mb-2">
+                                    {type === 'social' 
+                                        ? (followersGained > 0 ? `+${followersGained}` : followersGained) 
+                                        : (type === 'ads' ? formatNumber(aiMetrics.total_conversions || 0) : (aiMetrics.total_sales > 0 ? `$${formatNumber(aiMetrics.total_sales)}` : formatNumber(aiMetrics.unique_visitors || 0)))
+                                    }
+                                </p>
                                 <div className="h-8 w-full mt-2 flex items-center">
-                                    <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                                        <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
-                                        {Math.abs(followersGained)} this period
-                                    </div>
+                                    {type === 'social' ? (
+                                        <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                            <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
+                                            {Math.abs(followersGained)} this period
+                                        </div>
+                                    ) : (
+                                        <div className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
+                                            {type === 'ads' ? <Target className="h-3.5 w-3.5" /> : (aiMetrics.total_sales > 0 ? <ShoppingBag className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />)}
+                                            Active results
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
-                                <p className="text-sm font-semibold text-foreground mb-3">Top Platform</p>
+                                <p className="text-sm font-semibold text-foreground mb-3">{type === 'social' ? 'Top Platform' : (type === 'ads' ? 'Top Campaign' : 'Top Source')}</p>
                                 <div className="flex items-center gap-3">
-                                    <div className="bg-rose-500/10 p-2.5 rounded-lg text-rose-500">
-                                        <PlaySquare className="h-5 w-5" />
+                                    <div className={`${type === 'social' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'} p-2.5 rounded-lg`}>
+                                        {type === 'social' ? <PlaySquare className="h-5 w-5" /> : (type === 'ads' ? <Megaphone className="h-5 w-5" /> : <Globe className="h-5 w-5" />)}
                                     </div>
                                     <div>
-                                        <p className="font-bold text-lg capitalize">{bestPlatform ? bestPlatform.platform : "None"}</p>
+                                        <p className="font-bold text-lg capitalize line-clamp-1">{typeof bestPlatform === 'string' ? bestPlatform : "None"}</p>
                                         <p className="text-xs text-muted-foreground mt-0.5">
-                                            {bestPlatform && totalViews > 0 ? `${((bestPlatform.views / totalViews) * 100).toFixed(0)}% of views` : "0% of views"}
+                                            {type === 'ads' ? 'Best Performer' : 'Primary Channel'}
                                         </p>
                                     </div>
                                 </div>
@@ -430,7 +481,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
 
                                 {/* Top Content List */}
                                 <div className="bg-transparent">
-                                    <p className="font-semibold text-lg mb-4 leading-none">Top Content</p>
+                                    <p className="font-semibold text-lg mb-4 leading-none">{type === 'social' ? 'Top Content' : (type === 'ads' ? 'Active Campaigns' : 'Top Pages')}</p>
                                     <div className="flex flex-col gap-3">
                                         {topPosts && topPosts.length > 0 ? topPosts.map((post, idx) => (
                                             <div key={idx} className="flex gap-4 p-3 bg-card border border-border/80 rounded-xl hover:bg-muted/30 transition-colors">
@@ -439,10 +490,10 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                     {(getThumbnailUrl(post.post_url, post.platform) || fetchedThumbnail) ? (
                                                         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${getThumbnailUrl(post.post_url, post.platform) || fetchedThumbnail})` }}></div>
                                                     ) : (
-                                                        <Video className="h-6 w-6 text-muted-foreground/40" />
+                                                        type === 'social' ? <Video className="h-6 w-6 text-muted-foreground/40" /> : (type === 'ads' ? <Megaphone className="h-6 w-6 text-muted-foreground/40" /> : <Eye className="h-6 w-6 text-muted-foreground/40" />)
                                                     )}
                                                     <div className="absolute inset-0 bg-black/10 flex items-center justify-center pointer-events-none">
-                                                        <PlaySquare className="h-6 w-6 text-white/80 drop-shadow-sm" />
+                                                        {type === 'social' ? <PlaySquare className="h-6 w-6 text-white/80 drop-shadow-sm" /> : (type === 'ads' ? <ArrowUpRight className="h-6 w-6 text-white/80 drop-shadow-sm" /> : <ArrowRight className="h-6 w-6 text-white/80 drop-shadow-sm" />)}
                                                     </div>
                                                 </div>
                                                 {/* Details */}
@@ -472,7 +523,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                             <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-6">
                                 {/* Platform Breakdown Table */}
                                 <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm">
-                                    <p className="font-semibold text-base mb-4">Platform Breakdown</p>
+                                    <p className="font-semibold text-base mb-4">{type === 'social' ? 'Platform Breakdown' : (type === 'ads' ? 'Spend Distribution' : 'Traffic Sources')}</p>
                                     <div className="w-full">
                                         <div className="flex text-xs font-semibold text-muted-foreground mb-3 pb-2 border-b border-border/40 px-2">
                                             <div className="w-1/3">Views</div>

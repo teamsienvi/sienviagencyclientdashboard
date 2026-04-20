@@ -59,22 +59,40 @@ serve(async (req) => {
         const endStr = periodEnd.toISOString().split("T")[0];
 
         let analyticsContext = "";
+        let collectedMetrics: any = {};
 
         if (type === "social") {
-            analyticsContext = await collectSocialData(supabase, clientId, startStr, endStr);
+            const result = await collectSocialData(supabase, clientId, startStr, endStr);
+            analyticsContext = result.context;
+            collectedMetrics = result.metrics;
         } else if (type === "website") {
-            analyticsContext = await collectWebsiteData(supabase, clientId, startStr, endStr);
+            const result = await collectWebsiteData(supabase, clientId, startStr, endStr);
+            analyticsContext = result.context;
+            collectedMetrics = result.metrics;
         } else if (type === "ads") {
-            analyticsContext = await collectAdsData(supabase, clientId, startStr, endStr);
+            const result = await collectAdsData(supabase, clientId, startStr, endStr);
+            analyticsContext = result.context;
+            collectedMetrics = result.metrics;
         }
 
-        if (!analyticsContext || analyticsContext.trim().length < 20) {
+        if (!analyticsContext || analyticsContext.trim().length < 5) {
             // Return a structured "no data" response instead of throwing
             const noDataResponse = {
                 strengths: ["Not enough data available yet to identify strengths."],
                 weaknesses: ["Insufficient analytics data collected for this period."],
-                smartActions: ["Ensure social accounts are connected and syncing data regularly."],
+                smartActions: ["Ensure web trackers or Substack GA4 integrations are correctly configured."],
                 highlights: ["Data collection is in progress — check back after more metrics are gathered."],
+                metrics: {
+                    total_views: 0,
+                    engagement_rate: 0,
+                    followers_gained: 0,
+                    unique_visitors: 0,
+                    total_sales: 0,
+                    total_spend: 0,
+                    total_conversions: 0,
+                    roas: 0,
+                    top_platform: "None"
+                }
             };
             return new Response(JSON.stringify(noDataResponse), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -87,7 +105,24 @@ serve(async (req) => {
 
         // Call Gemini API
         const prompt = buildPrompt(client.name, type, analyticsContext, startStr, endStr, detectedPlatforms);
-        const summaryData = await callGemini(googleApiKey, prompt);
+        const aiSummary = await callGemini(googleApiKey, prompt);
+
+        // Merge metrics into the AI summary
+        const summaryData = {
+            ...aiSummary,
+            metrics: {
+                total_views: collectedMetrics.total_views || 0,
+                engagement_rate: collectedMetrics.engagement_rate || 0,
+                followers_gained: collectedMetrics.followers_gained || 0,
+                unique_visitors: collectedMetrics.unique_visitors || 0,
+                total_sales: collectedMetrics.total_sales || 0,
+                total_spend: collectedMetrics.total_spend || 0,
+                total_conversions: collectedMetrics.total_conversions || 0,
+                roas: collectedMetrics.roas || 0,
+                top_platform: collectedMetrics.top_platform || (detectedPlatforms.length > 0 ? detectedPlatforms[0] : "None"),
+                ...collectedMetrics // Include any platform-specific metrics
+            }
+        };
 
         // Try to cache the result (non-blocking — if table doesn't exist, we still return data)
         try {
@@ -127,8 +162,14 @@ async function collectSocialData(
     clientId: string,
     startStr: string,
     endStr: string
-): Promise<string> {
+): Promise<{ context: string; metrics: any }> {
     const sections: string[] = [];
+    const metricsResult = {
+        total_views: 0,
+        engagement_rate: 0,
+        followers_gained: 0,
+        top_platform: "None"
+    };
 
     // First, determine which platforms are currently connected/active for this client
     const activePlatforms = new Set<string>();
@@ -234,6 +275,13 @@ async function collectSocialData(
                         if (engagement != null) parts.push(`${engagement}% engagement rate`);
                         if (postsCount != null) parts.push(`${postsCount} total posts`);
                         liveMetrics.push(parts.join(" "));
+
+                        // Update global metrics result
+                        metricsResult.total_views += (current.pageViews || 0);
+                        metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, engagement || 0);
+                        if (data.difference?.followers != null) {
+                            metricsResult.followers_gained += (data.difference.followers || 0);
+                        }
                     }
                 }
             } catch (err) {
@@ -374,18 +422,38 @@ async function collectSocialData(
         }
     }
 
-    // 3. Recent content with metrics (social_content + social_content_metrics join)
-    const { data: content } = await supabase
-        .from("social_content")
-        .select(`id, platform, content_type, published_at, url, title,
-            social_content_metrics (
-                views, reach, impressions, likes, comments, shares, engagements,
-                collected_at
-            )`)
-        .eq("client_id", clientId)
-        .gte("published_at", startStr)
-        .order("published_at", { ascending: false })
-        .limit(30);
+    // 3. Recent content with metrics - filter by metric collection date, NOT published_at
+    // This ensures posts from any date whose metrics were synced in this period are included
+    const { data: recentMetrics } = await supabase
+        .from("social_content_metrics")
+        .select(`
+            views, reach, impressions, likes, comments, shares, engagements,
+            collected_at, period_end,
+            platform,
+            social_content!inner (
+                id, platform, content_type, published_at, url, title, client_id
+            )
+        `)
+        .eq("social_content.client_id", clientId)
+        .gte("period_end", startStr)
+        .order("period_end", { ascending: false })
+        .limit(100);
+
+    // Deduplicate: keep only the freshest metric row per content item
+    const contentMetricsByPost: Record<string, any> = {};
+    recentMetrics?.forEach((row: any) => {
+        const key = row.social_content?.id || row.social_content_id;
+        if (!key) return;
+        const existing = contentMetricsByPost[key];
+        if (!existing || (row.period_end || "") > (existing.period_end || "")) {
+            contentMetricsByPost[key] = row;
+        }
+    });
+    
+    const content = Object.values(contentMetricsByPost).map((row: any) => ({
+        ...row.social_content,
+        social_content_metrics: [row]
+    }));
 
     if (content && content.length > 0) {
         const withMetrics = content
@@ -403,7 +471,7 @@ async function collectSocialData(
 
         if (withMetrics.length > 0) {
             sections.push(
-                `## Recent Content Performance (last 7 days, ranked by views)\n` +
+                `## Recent Content Performance (ranked by views)\n` +
                 withMetrics
                     .map((c: any) => {
                         const m = c.latestMetric;
@@ -476,19 +544,71 @@ async function collectSocialData(
             if (!byPlatform[f.platform]) byPlatform[f.platform] = [];
             byPlatform[f.platform].push(f);
         });
+        let timelineTotalChange = 0;
         const trendLines = Object.entries(byPlatform).map(([platform, points]) => {
             const first = points[0]?.followers ?? 0;
             const last = points[points.length - 1]?.followers ?? 0;
             const change = last - first;
+            timelineTotalChange += change;
             return `- ${platform}: ${first.toLocaleString()} → ${last.toLocaleString()} (${change >= 0 ? '+' : ''}${change})`;
         });
+        
+        // Only use timeline change if we didn't already get live Metricool data for these platforms
+        if (metricsResult.followers_gained === 0) {
+            metricsResult.followers_gained = timelineTotalChange;
+        }
+        
         sections.push("## Follower Trend (7 days)\n" + trendLines.join("\n"));
+    }
+    
+    // Fallback: if no Metricool follower timeline data, derive followers_gained from
+    // social_account_metrics.new_followers (populated by direct API syncs)
+    if (metricsResult.followers_gained === 0 && metrics && metrics.length > 0) {
+        let totalNewFollowers = 0;
+        const seenPlatforms = new Set<string>();
+        metrics.forEach((m: any) => {
+            if (!isPlatformActive(m.platform)) return;
+            if (seenPlatforms.has(m.platform)) return;
+            seenPlatforms.add(m.platform);
+            if (m.new_followers != null && m.new_followers !== 0) {
+                totalNewFollowers += m.new_followers;
+            }
+        });
+        if (totalNewFollowers !== 0) {
+            metricsResult.followers_gained = totalNewFollowers;
+        }
+    }
+
+    // 6. Identify Top Platform based on views/engagements
+    const platformStats: Record<string, { views: number, engagements: number }> = {};
+    
+    // Aggregate from content data
+    if (content && content.length > 0) {
+        content.forEach((c: any) => {
+            if (!c.social_content_metrics || c.social_content_metrics.length === 0) return;
+            const m = [...c.social_content_metrics].sort((a: any, b: any) => 
+                new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+            )[0];
+            const views = Math.max(m.views || 0, m.impressions || 0);
+            const engagements = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+            
+            if (!platformStats[c.platform]) platformStats[c.platform] = { views: 0, engagements: 0 };
+            platformStats[c.platform].views += views;
+            platformStats[c.platform].engagements += engagements;
+        });
+    }
+
+    const topPlatformEntry = Object.entries(platformStats).sort((a, b) => b[1].views - a[1].views)[0];
+    if (topPlatformEntry) {
+        metricsResult.top_platform = topPlatformEntry[0];
+    } else if (activePlatforms.size > 0) {
+        metricsResult.top_platform = [...activePlatforms][0];
     }
 
     // Log what data we collected for debugging
-    console.log(`Social data sections collected for client ${clientId}: ${sections.length} sections`);
+    console.log(`Social data sections collected for client ${clientId}: ${sections.length} sections. Top Platform: ${metricsResult.top_platform}`);
 
-    return sections.join("\n\n");
+    return { context: sections.join("\n\n"), metrics: metricsResult };
 }
 
 async function collectWebsiteData(
@@ -496,146 +616,203 @@ async function collectWebsiteData(
     clientId: string,
     startStr: string,
     endStr: string
-): Promise<string> {
+): Promise<{ context: string; metrics: any }> {
     const sections: string[] = [];
+    const metricsResult = {
+        total_views: 0,
+        engagement_rate: 0,
+        followers_gained: 0,
+        unique_visitors: 0,
+        total_sales: 0,
+        top_platform: "Website"
+    };
 
-    // 0. Check for Substack GA4 integration
-    const { data: substackConfig } = await supabase
-        .from('client_substack_config')
-        .select('*')
-        .eq('client_id', clientId)
-        .eq('is_active', true)
-        .maybeSingle();
+    try {
+        // 0. Check for Substack GA4 integration
+        const { data: substackConfig } = await supabase
+            .from('client_substack_config')
+            .select('*')
+            .eq('client_id', clientId)
+            .eq('is_active', true)
+            .maybeSingle();
 
-    if (substackConfig) {
-        try {
-            const { data: ga4Data, error: ga4Err } = await supabase.functions.invoke("fetch-substack-ga4", {
-                body: { clientId, startDate: startStr, endDate: endStr }
-            });
-            
-            if (!ga4Err && ga4Data && ga4Data.ok !== false && ga4Data.analytics) {
-                const a = ga4Data.analytics;
-                let subOutput = `## Substack Newsletter Performance (${startStr} to ${endStr})\n` +
-                    `- Total Page Views: ${a.pageViews}\n` +
-                    `- Unique Readers: ${a.visitors}\n` +
-                    `- Total Sessions: ${a.totalSessions}\n` +
-                    `- Avg Read Time: ${a.avgDuration} seconds\n` +
-                    `- Bounce Rate: ${a.bounceRate}%\n`;
+        if (substackConfig) {
+            try {
+                const { data: ga4Data, error: ga4Err } = await supabase.functions.invoke("fetch-substack-ga4", {
+                    body: { clientId, startDate: startStr, endDate: endStr }
+                });
                 
-                if (a.topPages && a.topPages.length > 0) {
-                    subOutput += `- Top Read Articles:\n` + 
-                        a.topPages.slice(0, 5).map((p: any) => `  - ${p.title || p.url}: ${p.views} views`).join('\n') + `\n`;
-                }
-                
-                if (a.trafficSources && a.trafficSources.length > 0) {
-                    subOutput += `- Traffic Sources: ` +
-                        a.trafficSources.slice(0, 5).map((t: any) => `${t.source}: ${t.sessions} sessions`).join(', ') + `\n`;
+                if (!ga4Err && ga4Data && ga4Data.ok !== false && (ga4Data.analytics || ga4Data.summary)) {
+                    // Handle various response shapes from fetch-substack-ga4
+                    const a = ga4Data.analytics?.analytics || ga4Data.analytics || ga4Data.summary || ga4Data;
+                    
+                    console.log(`Substack data found for ${clientId}: views=${a.pageViews || a.totalPageViews}, visitors=${a.visitors || a.uniqueVisitors}`);
+
+                    let subOutput = `## Substack Newsletter Performance (${startStr} to ${endStr})\n` +
+                        `- Total Page Views: ${a.pageViews ?? a.totalPageViews ?? 0}\n` +
+                        `- Unique Readers: ${a.visitors ?? a.uniqueVisitors ?? 0}\n` +
+                        `- Total Sessions: ${a.totalSessions ?? a.sessions ?? 0}\n` +
+                        `- Avg Read Time: ${a.avgDuration ?? a.avgSessionDuration ?? 0} seconds\n` +
+                        `- Bounce Rate: ${a.bounceRate ?? 0}%\n`;
+                    
+                    if (a.topPages && Array.isArray(a.topPages) && a.topPages.length > 0) {
+                        subOutput += `- Top Read Articles:\n` + 
+                            a.topPages.slice(0, 5).map((p: any) => `  - ${p.title || p.url}: ${p.views} views`).join('\n') + `\n`;
+                    }
+                    
+                    if (a.trafficSources && Array.isArray(a.trafficSources) && a.trafficSources.length > 0) {
+                        subOutput += `- Traffic Sources: ` +
+                            a.trafficSources.slice(0, 5).map((t: any) => `${t.source}: ${t.sessions} sessions`).join(', ') + `\n`;
+                    }
+
+                    // Update metrics for the return object
+                metricsResult.total_views += (a.pageViews ?? a.totalPageViews ?? 0);
+                metricsResult.unique_visitors += (a.visitors ?? a.uniqueVisitors ?? 0);
+                if (a.bounceRate !== undefined) {
+                    metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, 100 - (a.bounceRate ?? 0));
                 }
 
                 sections.push(subOutput);
-            }
-        } catch (e) {
-            console.error("Failed to fetch Substack GA4 data for summary", e);
-        }
-    }
-
-    // Website analytics data is stored in the agency's own Supabase
-    // (the track-analytics edge function inserts into web_analytics_page_views
-    //  and web_analytics_sessions using the agency's client_id)
-
-    // 1. Page views — filtered by client_id
-    const { data: pageViews } = await supabase
-        .from("web_analytics_page_views")
-        .select("page_url, page_title, visitor_id, device_type, country, referrer, viewed_at, utm_source, utm_medium, utm_campaign")
-        .eq("client_id", clientId)
-        .gte("viewed_at", startStr)
-        .lte("viewed_at", endStr + "T23:59:59Z")
-        .limit(500);
-
-    if (pageViews && pageViews.length > 0) {
-        const uniqueVisitors = new Set(pageViews.map((pv: any) => pv.visitor_id)).size;
-        const devices: Record<string, number> = {};
-        const countries: Record<string, number> = {};
-        const referrers: Record<string, number> = {};
-        const pageCounts: Record<string, number> = {};
-        const utmSources: Record<string, number> = {};
-
-        pageViews.forEach((pv: any) => {
-            if (pv.device_type) devices[pv.device_type] = (devices[pv.device_type] || 0) + 1;
-            if (pv.country) countries[pv.country] = (countries[pv.country] || 0) + 1;
-            if (pv.referrer) {
-                try {
-                    const host = new URL(pv.referrer).hostname;
-                    referrers[host] = (referrers[host] || 0) + 1;
-                } catch {
-                    referrers[pv.referrer] = (referrers[pv.referrer] || 0) + 1;
+                } else {
+                    console.warn(`Substack invoke for ${clientId} returned no analytics or error:`, ga4Err);
                 }
+            } catch (e) {
+                console.error("Failed to fetch Substack GA4 data for summary", e);
             }
-            const path = pv.page_url || pv.page_title || "unknown";
-            pageCounts[path] = (pageCounts[path] || 0) + 1;
-            if (pv.utm_source) {
-                const src = pv.utm_medium ? `${pv.utm_source}/${pv.utm_medium}` : pv.utm_source;
-                utmSources[src] = (utmSources[src] || 0) + 1;
-            }
-        });
-
-        const topPages = Object.entries(pageCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10);
-
-        let output =
-            `## Website Analytics (${startStr} to ${endStr})\n` +
-            `- Total Page Views: ${pageViews.length}\n` +
-            `- Unique Visitors: ${uniqueVisitors}\n` +
-            `- Devices: ${Object.entries(devices).sort((a, b) => b[1] - a[1]).map(([d, c]) => `${d}: ${c}`).join(", ")}\n` +
-            `- Top Countries: ${Object.entries(countries).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, n]) => `${c}: ${n}`).join(", ")}\n` +
-            `- Top Referrers: ${Object.entries(referrers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([r, n]) => `${r}: ${n}`).join(", ")}\n` +
-            `- Top Pages:\n${topPages.map(([path, count]) => `  - ${path}: ${count} views`).join("\n")}`;
-
-        if (Object.keys(utmSources).length > 0) {
-            output += `\n- Traffic Sources (UTM): ${Object.entries(utmSources).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${s}: ${n}`).join(", ")}`;
         }
 
-        sections.push(output);
-    }
+        // 0b. Check for Shopify integration
+        const { data: shopifyConn } = await supabase
+            .from('shopify_oauth_connections')
+            .select('*')
+            .eq('client_id', clientId)
+            .eq('is_active', true)
+            .maybeSingle();
 
-    // 2. Sessions — filtered by client_id, with duration and page count
-    const { data: sessions } = await supabase
-        .from("web_analytics_sessions")
-        .select("visitor_id, device_type, country, referrer, created_at, bounce, page_count, started_at, ended_at, utm_source, utm_medium")
-        .eq("client_id", clientId)
-        .gte("created_at", startStr)
-        .lte("created_at", endStr + "T23:59:59Z")
-        .limit(500);
-
-    if (sessions && sessions.length > 0) {
-        const bounceCount = sessions.filter((s: any) => s.bounce).length;
-        const bounceRate = ((bounceCount / sessions.length) * 100).toFixed(1);
-
-        // Calculate avg pages per session
-        const pagesPerSession = sessions.reduce((sum: number, s: any) => sum + (s.page_count || 1), 0) / sessions.length;
-
-        // Calculate avg session duration
-        let avgDurationStr = "N/A";
-        const durations = sessions
-            .filter((s: any) => s.started_at && s.ended_at)
-            .map((s: any) => new Date(s.ended_at).getTime() - new Date(s.started_at).getTime());
-        if (durations.length > 0) {
-            const avgMs = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
-            const avgSec = Math.round(avgMs / 1000);
-            avgDurationStr = avgSec >= 60 ? `${Math.floor(avgSec / 60)}m ${avgSec % 60}s` : `${avgSec}s`;
+        if (shopifyConn) {
+            try {
+                const { data: shopifyData, error: shopifyErr } = await supabase.functions.invoke("shopify-analytics", {
+                    body: { clientId, endpoint: "summary", start: startStr, end: endStr }
+                });
+                if (!shopifyErr && shopifyData && shopifyData.success) {
+                    const s = shopifyData.data;
+                    console.log(`Shopify data found for ${clientId}: sales=${s.totalSales}, orders=${s.orders}`);
+                    metricsResult.total_sales += (s.totalSales || 0);
+                    
+                    sections.push(`## Shopify E-Commerce Performance (${startStr} to ${endStr})\n` +
+                        `- Total Sales: $${s.totalSales.toLocaleString()}\n` +
+                        `- Net Sales: $${s.netSales.toLocaleString()}\n` +
+                        `- Total Orders: ${s.orders}\n` +
+                        `- Avg Order Value: $${s.averageOrderValue.toLocaleString()}\n` +
+                        `- New Customers: ${s.newCustomers}\n`);
+                }
+            } catch (e) {
+                console.error("Failed to fetch Shopify data for summary", e);
+            }
         }
 
-        sections.push(
-            `## Sessions\n` +
-            `- Total Sessions: ${sessions.length}\n` +
-            `- Bounce Rate: ${bounceRate}%\n` +
-            `- Avg Pages/Session: ${pagesPerSession.toFixed(1)}\n` +
-            `- Avg Session Duration: ${avgDurationStr}`
-        );
+        // Website analytics data is stored in the agency's own Supabase
+        // (the track-analytics edge function inserts into web_analytics_page_views
+        //  and web_analytics_sessions using the agency's client_id)
+
+        // 1. Page views — filtered by client_id
+        const { data: pageViews } = await supabase
+            .from("web_analytics_page_views")
+            .select("page_url, page_title, visitor_id, device_type, country, referrer, viewed_at, utm_source, utm_medium, utm_campaign")
+            .eq("client_id", clientId)
+            .gte("viewed_at", startStr)
+            .lte("viewed_at", endStr + "T23:59:59Z")
+            .limit(500);
+
+        if (pageViews && pageViews.length > 0) {
+            const uniqueVisitors = new Set(pageViews.map((pv: any) => pv.visitor_id)).size;
+            const devices: Record<string, number> = {};
+            const countries: Record<string, number> = {};
+            const referrers: Record<string, number> = {};
+            const pageCounts: Record<string, number> = {};
+            const utmSources: Record<string, number> = {};
+
+            pageViews.forEach((pv: any) => {
+                if (pv.device_type) devices[pv.device_type] = (devices[pv.device_type] || 0) + 1;
+                if (pv.country) countries[pv.country] = (countries[pv.country] || 0) + 1;
+                if (pv.referrer) {
+                    try {
+                        const host = new URL(pv.referrer).hostname;
+                        referrers[host] = (referrers[host] || 0) + 1;
+                    } catch {
+                        referrers[pv.referrer] = (referrers[pv.referrer] || 0) + 1;
+                    }
+                }
+                const path = pv.page_url || pv.page_title || "unknown";
+                pageCounts[path] = (pageCounts[path] || 0) + 1;
+                if (pv.utm_source) {
+                    const src = pv.utm_medium ? `${pv.utm_source}/${pv.utm_medium}` : pv.utm_source;
+                    utmSources[src] = (utmSources[src] || 0) + 1;
+                }
+            });
+
+            const topPages = Object.entries(pageCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            let output =
+                `## Website Analytics (${startStr} to ${endStr})\n` +
+                `- Total Page Views: ${pageViews.length}\n` +
+                `- Unique Visitors: ${uniqueVisitors || 0}\n` +
+                `- Devices: ${Object.entries(devices).sort((a, b) => b[1] - a[1]).map(([d, c]) => `${d}: ${c}`).join(", ")}\n` +
+                `- Top Countries: ${Object.entries(countries).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, n]) => `${c}: ${n}`).join(", ")}\n` +
+                `- Top Referrers: ${Object.entries(referrers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([r, n]) => `${r}: ${n}`).join(", ")}\n` +
+                `- Top Pages:\n${topPages.map(([path, count]) => `  - ${path}: ${count} views`).join("\n")}`;
+
+            if (Object.keys(utmSources).length > 0) {
+                output += `\n- Traffic Sources (UTM): ${Object.entries(utmSources).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${s}: ${n}`).join(", ")}`;
+            }
+
+            metricsResult.total_views += pageViews.length;
+            metricsResult.unique_visitors += uniqueVisitors;
+            sections.push(output);
+        }
+
+        // 2. Sessions — filtered by client_id, with duration and page count
+        const { data: sessions } = await supabase
+            .from("web_analytics_sessions")
+            .select("visitor_id, device_type, country, referrer, created_at, bounce, page_count, started_at, ended_at, utm_source, utm_medium")
+            .eq("client_id", clientId)
+            .gte("created_at", startStr)
+            .lte("created_at", endStr + "T23:59:59Z")
+            .limit(500);
+
+        if (sessions && sessions.length > 0) {
+            const bounceCount = sessions.filter((s: any) => s.bounce).length;
+            const bounceRate = ((bounceCount / sessions.length) * 100).toFixed(1);
+
+            // Calculate avg pages per session
+            const pagesPerSession = sessions.reduce((sum: number, s: any) => sum + (s.page_count || 1), 0) / sessions.length;
+
+            // Calculate avg session duration
+            let avgDurationStr = "N/A";
+            const durations = sessions
+                .filter((s: any) => s.started_at && s.ended_at)
+                .map((s: any) => new Date(s.ended_at).getTime() - new Date(s.started_at).getTime());
+            if (durations.length > 0) {
+                const avgMs = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
+                const avgSec = Math.round(avgMs / 1000);
+                avgDurationStr = avgSec >= 60 ? `${Math.floor(avgSec / 60)}m ${avgSec % 60}s` : `${avgSec}s`;
+            }
+
+            sections.push(
+                `## Website Visitor Metrics\n` +
+                `- Total Sessions: ${sessions.length}\n` +
+                `- Bounce Rate: ${bounceRate}%\n` +
+                `- Avg Pages/Session: ${pagesPerSession.toFixed(1)}\n` +
+                `- Avg Session Duration: ${avgDurationStr}`
+            );
+        }
+    } catch (webErr) {
+        console.error("Error in website data collection:", webErr);
     }
 
-    return sections.join("\n\n");
+    return { context: sections.join("\n\n"), metrics: metricsResult };
 }
 
 async function collectAdsData(
@@ -643,8 +820,19 @@ async function collectAdsData(
     clientId: string,
     startStr: string,
     endStr: string
-): Promise<string> {
+): Promise<{ context: string; metrics: any }> {
     const sections: string[] = [];
+    const metricsResult = {
+        total_views: 0,
+        engagement_rate: 0,
+        followers_gained: 0,
+        total_spend: 0,
+        total_conversions: 0,
+        total_clicks: 0,
+        total_conv_value: 0,
+        roas: 0,
+        top_platform: "Ads"
+    };
 
     const prevStart = new Date(startStr);
     prevStart.setDate(prevStart.getDate() - 7);
@@ -666,28 +854,67 @@ async function collectAdsData(
 
     if (error || !adsData || !adsData.success) {
         console.error("Failed to fetch metricool-ads:", error || adsData?.error);
-        return "No ads data available or failed to fetch.";
+        return { context: "No ads data available or failed to fetch.", metrics: metricsResult };
     }
 
     const report = adsData.data;
+    const allCampaigns: any[] = [];
+
     if (report?.metaAds) {
         const current = report.metaAds.current;
+        metricsResult.total_views += current.impressions;
+        metricsResult.total_spend += current.spend;
+        metricsResult.total_clicks += current.clicks;
+        metricsResult.total_conversions += current.conversions;
+        metricsResult.total_conv_value += current.conversionValue;
+        
+        if (current.campaigns) allCampaigns.push(...current.campaigns.map((c: any) => ({ ...c, platform: 'Meta' })));
+
         sections.push(`## Meta Ads (Facebook/Instagram)\n- Spend: $${current.spend.toFixed(2)}\n- Impressions: ${current.impressions}\n- Clicks: ${current.clicks}\n- Conversions: ${current.conversions}\n- Conv. Value: $${current.conversionValue.toFixed(2)}\n- ROAS: ${current.roas.toFixed(2)}x\n- Top Campaigns by spend:\n` + current.campaigns.slice(0, 5).map((c: any) => `  - ${c.name}: Spend $${c.spent.toFixed(2)}, Conversions: ${c.conversions}, ROAS: ${c.purchaseRoas.toFixed(2)}x`).join("\n"));
     }
     if (report?.googleAds) {
         const current = report.googleAds.current;
+        metricsResult.total_views += current.impressions;
+        metricsResult.total_spend += current.spend;
+        metricsResult.total_clicks += current.clicks;
+        metricsResult.total_conversions += current.conversions;
+        metricsResult.total_conv_value += current.allConversionsValue;
+
+        if (current.campaigns) allCampaigns.push(...current.campaigns.map((c: any) => ({ ...c, name: c.name, spent: c.spent, conversions: c.conversions, platform: 'Google' })));
+
         sections.push(`## Google Ads\n- Spend: $${current.spend.toFixed(2)}\n- Impressions: ${current.impressions}\n- Clicks: ${current.clicks}\n- Conversions: ${current.conversions}\n- Conv. Value: $${current.allConversionsValue.toFixed(2)}\n- ROAS: ${current.roas.toFixed(2)}x\n- Top Campaigns by spend:\n` + current.campaigns.slice(0, 5).map((c: any) => `  - ${c.name}: Spend $${c.spent.toFixed(2)}, Conversions: ${c.conversions}, ROAS: ${c.purchaseROAS.toFixed(2)}x`).join("\n"));
     }
     if (report?.tiktokAds) {
         const current = report.tiktokAds.current;
+        metricsResult.total_views += current.impressions;
+        metricsResult.total_spend += current.spend;
+        metricsResult.total_clicks += current.clicks;
+        metricsResult.total_conversions += current.conversions;
+        metricsResult.total_conv_value += current.conversionValue;
+
+        if (current.campaigns) allCampaigns.push(...current.campaigns.map((c: any) => ({ ...c, spent: c.spent, platform: 'TikTok' })));
+
         sections.push(`## TikTok Ads\n- Spend: $${current.spend.toFixed(2)}\n- Impressions: ${current.impressions}\n- Clicks: ${current.clicks}\n- Conversions: ${current.conversions}\n- Conv. Value: $${current.conversionValue.toFixed(2)}\n- ROAS: ${current.roas.toFixed(2)}x\n- Top Campaigns by spend:\n` + current.campaigns.slice(0, 5).map((c: any) => `  - ${c.name}: Spend $${c.spent.toFixed(2)}, Conversions: ${c.conversions}`).join("\n"));
     }
 
-    if (sections.length === 0) {
-        return "No ad campaigns were active during this period.";
+    // Calculate aggregate ROAS
+    if (metricsResult.total_spend > 0) {
+        metricsResult.roas = metricsResult.total_conv_value / metricsResult.total_spend;
+        // Use ROAS as a proxy for engagement rate in the primary box
+        metricsResult.engagement_rate = metricsResult.roas * 10;
     }
 
-    return sections.join("\n\n");
+    // Identify top platform/campaign
+    const topCampaign = allCampaigns.sort((a, b) => (b.spent || 0) - (a.spent || 0))[0];
+    if (topCampaign) {
+        metricsResult.top_platform = topCampaign.name || topCampaign.platform || "Ads";
+    }
+
+    if (sections.length === 0) {
+        return { context: "No ad campaigns were active during this period.", metrics: metricsResult };
+    }
+
+    return { context: sections.join("\n\n"), metrics: metricsResult };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -740,10 +967,10 @@ For each category, write 2-4 bullet points. Each bullet should:
 - Be actionable — don't just describe, explain what it means and what to do about it
 
 Category definitions:
-- "strengths": What's performing well. IMPORTANT: Analyze which campaign, copy, or content format is the strongest performer. Cite specific content pieces or campaigns and their numbers (e.g., ROAS or Conversion values). Example for ads: "The Retargeting Campaign delivered a 4.5x ROAS, driving the majority of purchases this period."
-- "weaknesses": What's underperforming or missing. Be honest but constructive. Identify campaigns, content formats, or platforms that are lagging or wasting spend.
-- "smartActions": 2-4 highly specific, actionable steps for a "Client Action Plan" this week. Tailor these explicitly to ${clientName}'s actual metrics and performance data. Give them direct execution instructions based ONLY on what their numbers show. Example: "For ${clientName}'s next 3 TikToks, double down on the 'behind-the-scenes' format that drove 800 views yesterday, and pause static image posts which flatlined at 1% engagement." Avoid ANY generic advice like 'improve engagement' or 'post consistently'.
-- "highlights": Key milestones, trending content, or notable changes worth celebrating or flagging.
+- "strengths": What's performing well. IMPORTANT: Analyze which page, campaign, copy, or content format is the strongest performer. Cite specific metrics. Example for web: "The 'New Home Collection' page drove 45% of all traffic this week with an impressive 2-minute average read time."
+- "weaknesses": What's underperforming or missing. Identify pages with high bounce rates, underperforming ad sets, or low-engagement social formats.
+- "smartActions": 2-4 highly specific, actionable steps. Example for Shopify: "Since the 'Bestsellers' page has a high exit rate, consider adding a limited-time discount pop-up or improving the mobile checkout flow to capture the 60% of users currently bouncing."
+- "highlights": Key milestones, trending content, or notable changes.
 
 CRITICAL RULES:
 - ONLY reference data that is actually present above. Do NOT invent or assume any numbers.

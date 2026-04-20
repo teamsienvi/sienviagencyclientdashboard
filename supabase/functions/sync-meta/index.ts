@@ -352,6 +352,14 @@ serve(async (req) => {
       if (interactions === 0) {
         interactions = likes + comments + shares;
       }
+      
+      // Delete existing metrics for this post and period to avoid duplicates
+      await supabase
+        .from("social_content_metrics")
+        .delete()
+        .eq("social_content_id", content.id)
+        .eq("period_start", periodStart)
+        .eq("period_end", periodEnd);
 
       const { error: metricsError } = await supabase
         .from("social_content_metrics")
