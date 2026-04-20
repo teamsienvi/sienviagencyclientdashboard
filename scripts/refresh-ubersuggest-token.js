@@ -40,66 +40,89 @@ async function run() {
       timeout: 30000,
     });
 
-    // Fill in email
-    await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
-    await page.fill('input[type="email"], input[name="email"]', email);
+    // Give page a moment for initial API calls to fire
+    await page.waitForTimeout(2000);
 
-    // Fill in password
-    await page.fill('input[type="password"], input[name="password"]', password);
+    // ✅ SHORT-CIRCUIT: token is often captured from a pre-auth session check
+    // on page load — no need to fill or submit the form in that case
+    if (capturedToken) {
+      console.log("Token captured on page load — skipping login form.");
+    } else {
+      console.log("No token yet, filling login form...");
 
-    console.log("Submitting login form...");
-    // Click and wait for navigation — use 'load' not 'networkidle' (Ubersuggest never idles)
-    // If navigation times out, that's OK — we only care about capturing the token
-    await page.click('button[type="submit"]');
-    
-    try {
-      await page.waitForNavigation({ waitUntil: "load", timeout: 15000 });
-    } catch (_navErr) {
-      console.log("Navigation timed out after load — checking if token was captured anyway...");
-    }
+      // Fill in email
+      await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
+      await page.fill('input[type="email"], input[name="email"]', email);
 
-    // If token still not captured, wait a few more seconds for async API calls
-    if (!capturedToken) {
-      console.log("Waiting for background API calls to fire...");
-      await page.waitForTimeout(5000);
-    }
+      // Fill in password
+      await page.fill('input[type="password"], input[name="password"]', password);
 
-    // If still nothing, navigate to dashboard to trigger API calls
-    if (!capturedToken) {
-      console.log("Token not yet captured, navigating to trigger API calls...");
+      // Wait for the submit button to become enabled (form validation completes)
+      // Ubersuggest disables the button until both fields have valid input
       try {
-        await page.goto("https://app.neilpatel.com/en/ubersuggest", {
-          waitUntil: "load",
-          timeout: 20000,
-        });
-        await page.waitForTimeout(3000);
+        await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 10000 });
       } catch (_e) {
-        console.log("Dashboard navigation timed out, continuing...");
+        console.log("Button didn't enable via selector, trying JS dispatch...");
+        // Trigger input events manually to force form validation
+        await page.evaluate(() => {
+          document.querySelector('input[type="email"]')?.dispatchEvent(new Event("input", { bubbles: true }));
+          document.querySelector('input[type="password"]')?.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        await page.waitForTimeout(1000);
       }
-    }
 
-    // Last resort: try extracting from localStorage
-    if (!capturedToken) {
-      console.log("Attempting to extract token from localStorage...");
-      const stored = await page.evaluate(() => {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          const value = localStorage.getItem(key);
-          if (value && (value.startsWith("Bearer ") || value.startsWith("ey")) && value.length > 50) {
-            return value;
-          }
+      console.log("Submitting login form...");
+      try {
+        await page.click('button[type="submit"]', { timeout: 10000 });
+      } catch (_e) {
+        // Last resort: click via JS injection (bypasses disabled check)
+        console.log("Standard click failed, trying JS click...");
+        await page.evaluate(() => {
+          (document.querySelector('button[type="submit"]') as HTMLElement)?.click();
+        });
+      }
+
+      // Wait for post-login API calls
+      await page.waitForTimeout(5000);
+
+      // If still no token, navigate to dashboard to trigger authenticated API calls
+      if (!capturedToken) {
+        console.log("Navigating to dashboard to trigger API calls...");
+        try {
+          await page.goto("https://app.neilpatel.com/en/ubersuggest", {
+            waitUntil: "load",
+            timeout: 20000,
+          });
+          await page.waitForTimeout(3000);
+        } catch (_e) {
+          console.log("Dashboard navigation timed out, continuing...");
         }
-        return null;
-      });
-      if (stored) {
-        capturedToken = stored.startsWith("Bearer ") ? stored : `Bearer ${stored}`;
-        console.log("✓ Token extracted from localStorage.");
+      }
+
+      // Last resort: check localStorage for JWT tokens
+      if (!capturedToken) {
+        console.log("Attempting to extract token from localStorage...");
+        const stored = await page.evaluate(() => {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const value = localStorage.getItem(key);
+            if (value && (value.startsWith("Bearer ") || value.startsWith("ey")) && value.length > 50) {
+              return value;
+            }
+          }
+          return null;
+        });
+        if (stored) {
+          capturedToken = stored.startsWith("Bearer ") ? stored : `Bearer ${stored}`;
+          console.log("✓ Token extracted from localStorage.");
+        }
       }
     }
 
   } finally {
     await browser.close();
   }
+
 
   if (!capturedToken) {
     console.error("❌ Failed to capture Ubersuggest token. Check login credentials or page structure.");
