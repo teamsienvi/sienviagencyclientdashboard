@@ -37,7 +37,15 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
       const { data, error } = await supabase.functions.invoke("sync-ubersuggest", {
         body: { clientId },
       });
-      if (error) throw error;
+      if (error) {
+        // Extract the real error from the edge function response body
+        let errMsg = error.message;
+        try {
+          const body = await (error as any).context?.json?.();
+          if (body?.error) errMsg = body.error;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       if (data?.error) throw new Error(data.error);
       return data;
     },
