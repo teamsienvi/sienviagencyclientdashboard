@@ -1,9 +1,13 @@
 import { chromium } from "playwright";
 
 /**
- * Logs into Ubersuggest via Playwright using the React native input value setter
- * to properly trigger React's controlled form state (so the submit button enables).
- * Captures session cookies after successful login and saves them to Supabase.
+ * APPROACH: Intercept real API responses while navigating the authenticated dashboard.
+ * Instead of trying to extract cookies/tokens for server-side use, we:
+ * 1. Log in (with xvfb providing a display so Cloudflare doesn't block us)
+ * 2. Navigate to the Ubersuggest dashboard
+ * 3. Intercept the browser's own /api/projects and /api/user/alerts responses
+ * 4. Store the raw response data directly in Supabase
+ * 5. The edge function reads from the cached data instead of calling Ubersuggest API
  */
 async function run() {
   const email = process.env.UBERSUGGEST_EMAIL;
@@ -16,9 +20,12 @@ async function run() {
     process.exit(1);
   }
 
+  let capturedProjects = null;
+  let capturedAlerts = null;
+
   console.log("Launching browser...");
   const browser = await chromium.launch({
-    headless: false, // Non-headless bypasses Cloudflare bot detection (xvfb provides virtual display in CI)
+    headless: false,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const context = await browser.newContext({
@@ -27,8 +34,28 @@ async function run() {
   });
   const page = await context.newPage();
 
+  // Intercept actual API responses from the dashboard's own requests
+  page.on("response", async (response) => {
+    const url = response.url();
+    const status = response.status();
+    try {
+      if (url.includes("neilpatel.com/api/projects") && status === 200 && !capturedProjects) {
+        capturedProjects = await response.json();
+        const count = Array.isArray(capturedProjects) ? capturedProjects.length
+          : capturedProjects?.projects?.length || 0;
+        console.log(`✓ Intercepted /api/projects — ${count} project(s)`);
+      }
+      if (url.includes("neilpatel.com/api/user/alerts") && status === 200 && !capturedAlerts) {
+        capturedAlerts = await response.json();
+        console.log(`✓ Intercepted /api/user/alerts`);
+      }
+    } catch (_e) {
+      // Response already consumed or not JSON
+    }
+  });
+
   try {
-    console.log("Navigating to Ubersuggest login page...");
+    console.log("Navigating to login page...");
     await page.goto("https://app.neilpatel.com/en/login", {
       waitUntil: "domcontentloaded",
       timeout: 30000,
@@ -36,133 +63,137 @@ async function run() {
 
     await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
 
-    // Use React's native input value setter to properly trigger controlled input state.
-    // page.type() / page.fill() do NOT trigger React's onChange for controlled inputs.
-    // This is the only reliable method to enable a React-controlled submit button.
-    console.log("Setting form values via React native input setter...");
+    // Use React native input setter to properly trigger controlled form state
+    console.log("Filling login form with React-compatible input setter...");
     await page.evaluate(
       ({ emailVal, passwordVal }) => {
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          "value"
-        ).set;
-
-        const emailInput = document.querySelector('input[type="email"]') ||
-                           document.querySelector('input[name="email"]');
-        const passwordInput = document.querySelector('input[type="password"]') ||
-                              document.querySelector('input[name="password"]');
-
-        if (emailInput) {
-          nativeInputValueSetter.call(emailInput, emailVal);
-          emailInput.dispatchEvent(new Event("input", { bubbles: true }));
-          emailInput.dispatchEvent(new Event("change", { bubbles: true }));
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+        const emailEl = document.querySelector('input[type="email"]') || document.querySelector('input[name="email"]');
+        const passEl = document.querySelector('input[type="password"]') || document.querySelector('input[name="password"]');
+        if (emailEl) {
+          setter.call(emailEl, emailVal);
+          emailEl.dispatchEvent(new Event("input", { bubbles: true }));
+          emailEl.dispatchEvent(new Event("change", { bubbles: true }));
         }
-        if (passwordInput) {
-          nativeInputValueSetter.call(passwordInput, passwordVal);
-          passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
-          passwordInput.dispatchEvent(new Event("change", { bubbles: true }));
+        if (passEl) {
+          setter.call(passEl, passwordVal);
+          passEl.dispatchEvent(new Event("input", { bubbles: true }));
+          passEl.dispatchEvent(new Event("change", { bubbles: true }));
         }
       },
       { emailVal: email, passwordVal: password }
     );
 
-    // Give React time to process the state change and enable the button
     await page.waitForTimeout(2000);
 
-    // Wait for submit button to become enabled
+    // Try normal click first; fall back to force click if button is still disabled
     try {
-      await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 8000 });
-      console.log("Submit button is now enabled.");
+      await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 5000 });
       await page.click('button[type="submit"]');
     } catch (_e) {
-      console.log("Button still disabled — attempting force click...");
+      console.log("Submit button disabled — force clicking...");
       await page.click('button[type="submit"]', { force: true });
     }
 
-    // Wait for post-login redirect (up to 20 seconds)
-    console.log("Waiting for post-login redirect...");
+    // Wait for redirect away from login
+    console.log("Waiting for login redirect...");
     try {
       await page.waitForURL((url) => !url.href.includes("/login"), { timeout: 20000 });
-      console.log("✓ Login successful. Current URL:", page.url());
+      console.log("✓ Login redirect detected. URL:", page.url());
     } catch (_e) {
-      console.log("Redirect timeout. Current URL:", page.url());
-      // Still try to proceed — session cookies might be set
+      console.log("No redirect detected. URL:", page.url());
     }
 
-    // Extra settle time for session cookies to be written
-    await page.waitForTimeout(4000);
-
-    // Capture ALL cookies (all domains) — auth cookie may be on .neilpatel.com parent domain
-    const allCookies = await context.cookies();
-    console.log(`Total cookies captured: ${allCookies.length}`);
-    console.log(`Cookie names: ${allCookies.map((c) => c.name).join(", ")}`);
-
-    // Filter to neilpatel.com cookies only (session cookies will be here)
-    const neilCookies = allCookies.filter((c) => c.domain.includes("neilpatel.com"));
-    console.log(`neilpatel.com cookies (${neilCookies.length}): ${neilCookies.map((c) => c.name).join(", ")}`);
-
-    if (neilCookies.length === 0) {
-      throw new Error("No neilpatel.com cookies captured — login likely failed. Check credentials.");
-    }
-
-    const cookieString = neilCookies.map((c) => `${c.name}=${c.value}`).join("; ");
-
-    // Verify cookies work against /api/projects
-    console.log("Verifying session against /api/projects...");
-    const verifyRes = await fetch("https://app.neilpatel.com/api/projects", {
-      headers: { Cookie: cookieString, Accept: "application/json" },
-    });
-    const verifyData = await verifyRes.json();
-    const projectsArray = Array.isArray(verifyData)
-      ? verifyData
-      : verifyData.projects || verifyData.data || verifyData.result || [];
-
-    console.log(`✓ /api/projects returned ${projectsArray.length} project(s): ${projectsArray.map((p) => p.domain || p.url || p.name).join(", ")}`);
-
-    if (projectsArray.length === 0) {
-      console.warn("⚠ Projects list empty — login may not have completed or account has no projects.");
-    }
-
-    // Save cookie string to Supabase integration_credentials table
-    console.log("Saving session cookies to Supabase...");
-    const patchRes = await fetch(
-      `${supabaseUrl}/rest/v1/integration_credentials?service_name=eq.ubersuggest`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${supabaseKey}`,
-          apikey: supabaseKey,
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify({ token: cookieString, updated_at: new Date().toISOString() }),
-      }
-    );
-
-    if (!patchRes.ok) {
-      // Insert if row doesn't exist
-      const insertRes = await fetch(`${supabaseUrl}/rest/v1/integration_credentials`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${supabaseKey}`,
-          apikey: supabaseKey,
-          Prefer: "return=minimal",
-        },
-        body: JSON.stringify({
-          service_name: "ubersuggest",
-          token: cookieString,
-          updated_at: new Date().toISOString(),
-        }),
+    // Navigate to projects page to trigger the /api/projects call
+    if (!capturedProjects) {
+      console.log("Navigating to projects to trigger API calls...");
+      await page.goto("https://app.neilpatel.com/en/ubersuggest", {
+        waitUntil: "domcontentloaded",
+        timeout: 20000,
       });
-      if (!insertRes.ok) {
-        throw new Error(`Insert failed: ${await insertRes.text()}`);
+      await page.waitForTimeout(5000);
+    }
+
+    // If /api/user/alerts not yet triggered, navigate to alerts page
+    if (!capturedAlerts) {
+      console.log("Navigating to alerts to trigger /api/user/alerts...");
+      await page.goto("https://app.neilpatel.com/en/user_alerts", {
+        waitUntil: "domcontentloaded",
+        timeout: 20000,
+      }).catch(() => {});
+      await page.waitForTimeout(5000);
+    }
+
+    // Last resort: try page.evaluate() fetch from the authenticated browser context
+    if (!capturedProjects) {
+      console.log("Attempting in-browser fetch of /api/projects...");
+      capturedProjects = await page.evaluate(async () => {
+        try {
+          const res = await fetch("https://app.neilpatel.com/api/projects", { credentials: "include" });
+          return res.ok ? await res.json() : null;
+        } catch (_e) { return null; }
+      });
+      if (capturedProjects) {
+        const count = Array.isArray(capturedProjects) ? capturedProjects.length : 0;
+        console.log(`✓ In-browser fetch got ${count} project(s)`);
       }
     }
 
-    console.log("✅ Ubersuggest session cookies saved successfully.");
+    if (!capturedAlerts) {
+      console.log("Attempting in-browser fetch of /api/user/alerts...");
+      capturedAlerts = await page.evaluate(async () => {
+        try {
+          const res = await fetch("https://app.neilpatel.com/api/user/alerts", { credentials: "include" });
+          return res.ok ? await res.json() : null;
+        } catch (_e) { return null; }
+      });
+      if (capturedAlerts) console.log("✓ In-browser fetch got alerts data.");
+    }
+
   } finally {
     await browser.close();
+  }
+
+  if (!capturedProjects) {
+    console.error("❌ Failed to capture projects data — login may have failed.");
+    process.exit(1);
+  }
+
+  // Save projects data to Supabase (edge function will read this instead of calling API)
+  console.log("Saving captured data to Supabase...");
+  await upsertCredential(supabaseUrl, supabaseKey, "ubersuggest_projects", JSON.stringify(capturedProjects));
+  if (capturedAlerts) {
+    await upsertCredential(supabaseUrl, supabaseKey, "ubersuggest_alerts", JSON.stringify(capturedAlerts));
+  }
+
+  console.log("✅ Ubersuggest data captured and cached in Supabase successfully.");
+}
+
+async function upsertCredential(supabaseUrl, supabaseKey, serviceName, data) {
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${supabaseKey}`,
+    apikey: supabaseKey,
+    Prefer: "resolution=merge-duplicates,return=minimal",
+  };
+
+  const res = await fetch(`${supabaseUrl}/rest/v1/integration_credentials`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ service_name: serviceName, token: data, updated_at: new Date().toISOString() }),
+  });
+
+  if (!res.ok) {
+    // Try PATCH as fallback
+    const patchRes = await fetch(
+      `${supabaseUrl}/rest/v1/integration_credentials?service_name=eq.${serviceName}`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ token: data, updated_at: new Date().toISOString() }),
+      }
+    );
+    if (!patchRes.ok) throw new Error(`Failed to save ${serviceName}: ${await patchRes.text()}`);
   }
 }
 
