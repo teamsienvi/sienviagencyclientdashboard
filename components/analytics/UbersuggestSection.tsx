@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 
 interface UbersuggestSectionProps {
   clientId: string;
+  dateRange?: "7d" | "30d" | "60d" | "custom";
+  customDateRange?: { start: Date; end: Date };
 }
 
 import { isDataStale } from "@/lib/freshnessPolicy";
 
-export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
+export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange }: UbersuggestSectionProps) {
   const queryClient = useQueryClient();
   const autoSyncAttemptedRef = useRef<string | null>(null);
 
@@ -127,7 +129,18 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
   const allTrackedKeywords = issues?.all_tracked_keywords || [];
   const keywordQuota = issues?.keyword_quota || { used: 0, limit: 150 };
 
-  const issuesTrend = allMetrics
+  // Derive start/end of the reporting period
+  const periodEnd = customDateRange?.end ?? new Date();
+  const periodDays = dateRange === "7d" ? 7 : dateRange === "60d" ? 60 : 30;
+  const periodStart = customDateRange?.start ?? new Date(periodEnd.getTime() - periodDays * 86400000);
+
+  // Filter metrics to the selected reporting period for charts/history
+  const periodMetrics = (allMetrics ?? []).filter(m => {
+    const d = new Date(m.collected_at);
+    return d >= periodStart && d <= periodEnd;
+  });
+
+  const issuesTrend = periodMetrics
     .filter(m => m.site_audit_score !== null)
     .map(m => {
       const iss = typeof m.site_audit_issues === 'string' ? JSON.parse(m.site_audit_issues) : m.site_audit_issues;
@@ -135,7 +148,7 @@ export function UbersuggestSection({ clientId }: UbersuggestSectionProps) {
     });
 
   const keywordHistory: Record<string, { date: string; position: number | null }[]> = {};
-  for (const row of allMetrics) {
+  for (const row of periodMetrics) {
     const kws = typeof row.tracked_keywords === 'string' ? JSON.parse(row.tracked_keywords) : (row.tracked_keywords || []);
     for (const kw of kws) {
       if (!keywordHistory[kw.keyword]) keywordHistory[kw.keyword] = [];

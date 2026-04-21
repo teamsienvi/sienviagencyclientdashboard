@@ -1074,7 +1074,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                   
                   <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
-                    <UbersuggestSection clientId={clientId!} />
+                    <UbersuggestSection clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
                   </div>
                 </div>
 
