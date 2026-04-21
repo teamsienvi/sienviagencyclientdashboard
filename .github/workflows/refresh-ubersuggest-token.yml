@@ -22,7 +22,7 @@ jobs:
 
       - name: Save Ubersuggest session to Supabase
         env:
-          UBERSUGGEST_COOKIE: ${{ secrets.UBERSUGGEST_COOKIE }}
+          UBERSUGGEST_TOKEN: ${{ secrets.UBERSUGGEST_TOKEN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: node scripts/refresh-ubersuggest-token.js

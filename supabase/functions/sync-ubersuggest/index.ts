@@ -34,15 +34,16 @@ serve(async (req) => {
 
     if (credError || !credentials?.token) {
       return new Response(
-        JSON.stringify({ error: "Ubersuggest session not found. Add UBERSUGGEST_COOKIE to GitHub Secrets and run the workflow." }),
+        JSON.stringify({ error: "Ubersuggest token not found. Add UBERSUGGEST_TOKEN to GitHub Secrets and run the workflow." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const cookieAge = credentials.updated_at
-      ? Math.round((Date.now() - new Date(credentials.updated_at).getTime()) / 86400000)
-      : null;
-    console.log(`Using Ubersuggest cookie (saved ${cookieAge ?? "?"} day(s) ago)`);
+    const authHeaders = {
+      Authorization: credentials.token,
+      Accept: "application/json",
+      ts: String(Math.floor(Date.now() / 1000)),
+    };
 
     // 2. Load SEO config for the client
     const { data: config, error: configError } = await supabase
@@ -64,7 +65,7 @@ serve(async (req) => {
 
     // 3. Fetch projects using stored cookie
     const projectsRes = await fetch("https://app.neilpatel.com/api/projects", {
-      headers: { Cookie: credentials.token, Accept: "application/json" },
+      headers: authHeaders,
     });
 
     if (!projectsRes.ok) {
@@ -95,7 +96,7 @@ serve(async (req) => {
 
     // 4. Fetch alerts
     const alertsRes = await fetch("https://app.neilpatel.com/api/user/alerts", {
-      headers: { Cookie: credentials.token, Accept: "application/json" },
+      headers: authHeaders,
     });
 
     if (!alertsRes.ok) {
