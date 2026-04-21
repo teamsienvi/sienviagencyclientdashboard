@@ -19,6 +19,7 @@ import {
     Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { FRESHNESS_POLICIES, isDataStale } from "@/lib/freshnessPolicy";

@@ -14,11 +14,17 @@ import { toast } from "sonner";
 import { format, subDays, startOfDay, endOfDay, parseISO, formatDistanceToNow } from "date-fns";
 import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
+import { cn } from "@/lib/utils";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { Checkbox } from "@/components/ui/checkbox";
 
+interface MetricoolAnalyticsSectionProps {
+  clientId: string;
+  clientName: string;
+  dateRangePreset?: "7d" | "30d" | "60d" | "custom";
+  customDateRange?: { start: Date; end: Date };
   platform: "tiktok" | "linkedin";
   platformIcon: React.ReactNode;
   platformColor: string;
@@ -371,7 +377,7 @@ export const MetricoolAnalyticsSection = ({
   });
 
   // Fetch latest account metrics with date range
-  const { data: accountMetrics, isLoading: metricsLoading, refetch: refetchMetrics } = useQuery({
+  const { data: accountMetrics, isLoading: metricsLoading, isFetching: isFetchingAccount, refetch: refetchMetrics } = useQuery({
     queryKey: ["metricool-account-metrics", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
       const { start, end } = getDateRange();
@@ -435,7 +441,7 @@ export const MetricoolAnalyticsSection = ({
   });
 
   // Fetch content with metrics (filtered to reporting period)
-  const { data: contentData, isLoading: contentLoading } = useQuery({
+  const { data: contentData, isLoading: contentLoading, isFetching: isFetchingMetrics } = useQuery({
     queryKey: ["metricool-content", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
       const { start, end } = getDateRange();
@@ -1466,6 +1472,7 @@ export const MetricoolAnalyticsSection = ({
     );
   };
 
+    return (
     <div className="space-y-6">
       {/* Header with date range and sync button */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1497,7 +1504,7 @@ export const MetricoolAnalyticsSection = ({
           )}
           <Button
             onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending || (accountLoading && !accountMetrics)}
+            disabled={syncMutation.isPending || (metricsLoading && !accountMetrics)}
             size="sm"
             className="gap-2"
           >

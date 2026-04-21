@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 
 interface UbersuggestSectionProps {
   clientId: string;
@@ -11,7 +12,7 @@ interface UbersuggestSectionProps {
   isActive?: boolean;
 }
 
-import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
+
 
 export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange, isActive = true }: UbersuggestSectionProps) {
   const queryClient = useQueryClient();
@@ -80,7 +81,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
     }
   }, [clientId, allMetrics, isLoading, syncMutation.isPending, isActive]);
 
-  if (isLoading && (!allMetrics || allMetrics.length === 0)) {
+  if (isLoading && (!allMetrics || (allMetrics as any[]).length === 0)) {
     return (
       <div className="flex justify-center items-center h-32 rounded-xl border bg-muted/30">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -392,6 +393,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
         </div>
       )}
 
+      <div className="flex items-center justify-between pt-2 mt-4 border-t border-border/40">
         <div className="text-[10px] text-muted-foreground/60 flex items-center gap-1.5">
           {syncMutation.isPending || isFetching ? (
             <span className="flex items-center gap-1.5 bg-primary/5 px-2 py-0.5 rounded-full text-primary/80 font-medium animate-pulse">
