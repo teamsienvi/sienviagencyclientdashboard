@@ -169,8 +169,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
 
         {/* Score Circle */}
         <div
-          className="col-span-12 sm:col-span-3 lg:col-span-2 bg-card rounded-xl border p-4 flex flex-col items-center justify-center cursor-help"
-          title="Site Audit Score (0–100): measures the overall SEO health of the website. 80+ is healthy, 60–79 needs attention, below 60 has critical issues."
+          className="col-span-12 sm:col-span-3 lg:col-span-2 bg-card rounded-xl border p-4 flex flex-col items-center justify-center"
         >
           <div className="relative w-20 h-20">
             <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
@@ -192,22 +191,28 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
               {scoreChange > 0 ? '+' : ''}{scoreChange} pts
             </div>
           )}
-          <div className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">Audit Score</div>
+          <div className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider font-semibold">Audit Score</div>
+          <div className="text-[9px] text-muted-foreground/70 text-center mt-2 leading-tight">
+            80+ is healthy<br />&lt;60 critical
+          </div>
         </div>
 
         {/* Quick Stats */}
         <div className="col-span-12 sm:col-span-5 lg:col-span-4 grid grid-cols-3 gap-2">
-          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center cursor-help" title="Total SEO issues found during the last site audit — includes errors, warnings, and notices across all crawled pages.">
+          <div className="bg-card rounded-xl border p-2 flex flex-col items-center justify-center text-center">
             <span className="text-xl font-bold text-red-500">{totalIssues}</span>
-            <span className="text-[10px] text-muted-foreground uppercase mt-0.5">Total</span>
+            <span className="text-[10px] text-muted-foreground uppercase mt-0.5 font-semibold">Total</span>
+            <span className="text-[9px] text-muted-foreground/70 mt-1 leading-tight">All issues</span>
           </div>
-          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center cursor-help" title="New issues detected since the previous audit that weren't present before — these need immediate attention.">
+          <div className="bg-card rounded-xl border p-2 flex flex-col items-center justify-center text-center">
             <span className="text-xl font-bold text-amber-500">{issues?.new ?? 0}</span>
-            <span className="text-[10px] text-muted-foreground uppercase mt-0.5">New</span>
+            <span className="text-[10px] text-muted-foreground uppercase mt-0.5 font-semibold">New</span>
+            <span className="text-[9px] text-muted-foreground/70 mt-1 leading-tight">Need attention</span>
           </div>
-          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center cursor-help" title="Issues that were resolved since the last audit — a higher number here means the site is improving.">
+          <div className="bg-card rounded-xl border p-2 flex flex-col items-center justify-center text-center">
             <span className="text-xl font-bold text-emerald-500">{issues?.fixed ?? 0}</span>
-            <span className="text-[10px] text-muted-foreground uppercase mt-0.5">Fixed</span>
+            <span className="text-[10px] text-muted-foreground uppercase mt-0.5 font-semibold">Fixed</span>
+            <span className="text-[9px] text-muted-foreground/70 mt-1 leading-tight">Resolved</span>
           </div>
           {fromDate && toDate && (
             <div className="col-span-3 bg-muted/30 rounded-lg px-3 py-1.5 flex items-center gap-2">
