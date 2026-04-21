@@ -271,10 +271,19 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
       </div>
 
       {/* Row 2: Keywords */}
-      {(keywords.length > 0 || Object.keys(keywordHistory).length > 0) && (
-        <div className="grid grid-cols-12 gap-3">
-          {keywords.length > 0 && (
-            <div className="col-span-12 lg:col-span-6 bg-card rounded-xl border p-4">
+      <div className="grid grid-cols-12 gap-3">
+        {keywords.length === 0 && Object.keys(keywordHistory).length === 0 ? (
+          <div className="col-span-12 bg-card rounded-xl border p-6 flex flex-col justify-center items-center text-center">
+            <span className="text-xl mb-2">📊</span>
+            <h4 className="text-sm font-semibold text-foreground">No Keyword Tracking Data</h4>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+              We couldn't find any tracked keywords for this site. Add keywords to the project in Ubersuggest to see ranking alerts and position history here.
+            </p>
+          </div>
+        ) : (
+          <>
+            {keywords.length > 0 && (
+              <div className="col-span-12 lg:col-span-6 bg-card rounded-xl border p-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Keyword Alerts</span>
                 {kwReportType && (
@@ -352,8 +361,9 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
               </div>
             </div>
           )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* Row 3: Tracked Keywords */}
       {allTrackedKeywords.length > 0 && (
