@@ -14,7 +14,7 @@ export interface TimelineDataPoint {
     engagement: number;
 }
 
-export function useSummaryMetrics(clientId: string, dateRange: string = "7d", customDateRange?: { start: Date; end: Date }) {
+export function useSummaryMetrics(clientId: string, dateRange: string = "7d", customDateRange?: { start: Date; end: Date }, isActive: boolean = true) {
     return useQuery({
         queryKey: ["summary-metrics", clientId, dateRange, customDateRange?.start, customDateRange?.end],
         queryFn: async (): Promise<{ totalViews: number; totalEngagements: number; platformData: PlatformMetric[]; followersGained: number; timelineData: TimelineDataPoint[] }> => {
@@ -107,7 +107,10 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
             return computeMetrics(normalizedPosts, dateRange, periodStartStr, clientId);
         },
         enabled: !!clientId,
-        staleTime: 5 * 60 * 1000 // 5 min
+        staleTime: 5 * 60 * 1000, // 5 min
+        gcTime: 7 * 24 * 60 * 60 * 1000,
+        refetchOnWindowFocus: isActive,
+        refetchOnMount: isActive,
     });
 }
 

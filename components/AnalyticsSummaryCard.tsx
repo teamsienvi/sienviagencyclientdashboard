@@ -68,9 +68,11 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             if (error) return null;
             return data;
         },
-        enabled: !!clientId && sessionReady && isActive,
+        enabled: !!clientId && sessionReady,
         staleTime: FRESHNESS_POLICIES.summary.staleThresholdMs,
-        gcTime: 7 * 24 * 60 * 60 * 1000, 
+        gcTime: 7 * 24 * 60 * 60 * 1000,
+        refetchOnWindowFocus: isActive,
+        refetchOnMount: isActive,
     });
 
     // 2. Fetch Hard Metrics (Views by platform, Engagement)
@@ -96,7 +98,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     };
     const bounds = getPeriodBounds();
     
-    const { data: metricsData, isLoading: isLoadingMetrics, isFetching: isFetchingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange);
+    const { data: metricsData, isLoading: isLoadingMetrics, isFetching: isFetchingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange, isActive);
 
     // 3. Fetch Top Posts
     const { data: topPosts, isLoading: isLoadingTopPosts } = useAllTimeTopPosts(isSocial ? clientId : undefined, isSocial ? 4 : 0, undefined, bounds.start, bounds.end);

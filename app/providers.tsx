@@ -39,9 +39,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
           "client-seo-metrics",
           "metricool-account-metrics",
           "summary-metrics",
-          "client-social-metrics"
+          "client-social-metrics",
+          "all-time-top-posts",
         ];
-        return whitelist.includes(key);
+        return whitelist.includes(key) && query.state.status === "success";
       }
     }
   };
