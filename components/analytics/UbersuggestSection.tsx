@@ -168,7 +168,10 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
       <div className="grid grid-cols-12 gap-3">
 
         {/* Score Circle */}
-        <div className="col-span-12 sm:col-span-3 lg:col-span-2 bg-card rounded-xl border p-4 flex flex-col items-center justify-center">
+        <div
+          className="col-span-12 sm:col-span-3 lg:col-span-2 bg-card rounded-xl border p-4 flex flex-col items-center justify-center cursor-help"
+          title="Site Audit Score (0–100): measures the overall SEO health of the website. 80+ is healthy, 60–79 needs attention, below 60 has critical issues."
+        >
           <div className="relative w-20 h-20">
             <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
               <circle cx="40" cy="40" r="36" fill="none" strokeWidth="6" className="stroke-muted" />
@@ -194,15 +197,15 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
 
         {/* Quick Stats */}
         <div className="col-span-12 sm:col-span-5 lg:col-span-4 grid grid-cols-3 gap-2">
-          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center">
+          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center cursor-help" title="Total SEO issues found during the last site audit — includes errors, warnings, and notices across all crawled pages.">
             <span className="text-xl font-bold text-red-500">{totalIssues}</span>
             <span className="text-[10px] text-muted-foreground uppercase mt-0.5">Total</span>
           </div>
-          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center">
+          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center cursor-help" title="New issues detected since the previous audit that weren't present before — these need immediate attention.">
             <span className="text-xl font-bold text-amber-500">{issues?.new ?? 0}</span>
             <span className="text-[10px] text-muted-foreground uppercase mt-0.5">New</span>
           </div>
-          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center">
+          <div className="bg-card rounded-xl border p-3 flex flex-col items-center justify-center cursor-help" title="Issues that were resolved since the last audit — a higher number here means the site is improving.">
             <span className="text-xl font-bold text-emerald-500">{issues?.fixed ?? 0}</span>
             <span className="text-[10px] text-muted-foreground uppercase mt-0.5">Fixed</span>
           </div>
@@ -266,7 +269,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
         <div className="grid grid-cols-12 gap-3">
           {keywords.length > 0 && (
             <div className="col-span-12 lg:col-span-6 bg-card rounded-xl border p-4">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Keyword Alerts</span>
                 {kwReportType && (
                   <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${kwReportType === 'improved' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'}`}>
@@ -274,6 +277,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                   </span>
                 )}
               </div>
+              <p className="text-[11px] text-muted-foreground mb-3">Google search ranking positions — <span className="font-medium text-emerald-600 dark:text-emerald-400">#1 is best</span>. A lower number means a higher position on the results page.</p>
               <div className="space-y-0.5">
                 {keywords.map((kw: any, idx: number) => {
                   const improved = kw.desktop_change > 0 || (!kw.desktop_old && kw.desktop_new);
