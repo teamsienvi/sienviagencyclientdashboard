@@ -112,13 +112,7 @@ serve(async (req) => {
       console.warn(`Alerts API returned ${alertsRes.status} — proceeding without alert data`);
     }
 
-    const allAlerts: any[] = alertsRes.ok
-      ? (() => {
-          try { return alertsRes.json() as any; } catch { return []; }
-        })()
-      : [];
-
-    // Wait for the json() promise
+    // Parse alerts once (calling .json() twice causes "Body already consumed" error)
     const allAlertsData: any[] = alertsRes.ok ? await alertsRes.json() : [];
     const projectAlerts = Array.isArray(allAlertsData)
       ? allAlertsData.filter((a: any) => a.projectId === projectId || a.project_id === projectId)
