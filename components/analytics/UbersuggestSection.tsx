@@ -225,7 +225,8 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
         {/* Issues Trend */}
         {issuesTrend.length > 1 && (
           <div className="col-span-12 sm:col-span-4 lg:col-span-3 bg-card rounded-xl border p-4">
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-semibold">Issues Over Time</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Issues Over Time</div>
+            <p className="text-[11px] text-muted-foreground mb-3 mt-1">Total SEO issues found in past audits. A decreasing trend is good.</p>
             <div className="h-16 flex items-end gap-[3px]">
               {(() => {
                 const vals = issuesTrend.map(t => t.total);
@@ -313,7 +314,8 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
 
           {Object.keys(keywordHistory).length > 0 && (
             <div className={`col-span-12 ${keywords.length > 0 ? 'lg:col-span-6' : ''} bg-card rounded-xl border p-4`}>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-3">Position History</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Position History</div>
+              <p className="text-[11px] text-muted-foreground mb-3 mt-1">Ranking over time for tracked keywords. Taller bars mean a better rank (closer to #1).</p>
               <div className="space-y-2.5">
                 {Object.entries(keywordHistory).slice(0, 5).map(([kw, history]) => {
                   const positions = history.map(h => h.position).filter(p => p !== null) as number[];
