@@ -8,15 +8,16 @@ interface UbersuggestSectionProps {
   clientId: string;
   dateRange?: "7d" | "30d" | "60d" | "custom";
   customDateRange?: { start: Date; end: Date };
+  isActive?: boolean;
 }
 
-import { isDataStale } from "@/lib/freshnessPolicy";
+import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 
-export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange }: UbersuggestSectionProps) {
+export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange, isActive = true }: UbersuggestSectionProps) {
   const queryClient = useQueryClient();
   const autoSyncAttemptedRef = useRef<string | null>(null);
 
-  const { data: allMetrics, isLoading } = useQuery({
+  const { data: allMetrics, isLoading, isFetching } = useQuery({
     queryKey: ["client-seo-metrics", clientId],
     queryFn: async () => {
       if (!clientId) return null;
@@ -28,7 +29,9 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
       if (error) throw error;
       return data as any[];
     },
-    enabled: !!clientId,
+    enabled: !!clientId && isActive,
+    staleTime: FRESHNESS_POLICIES.seo.staleThresholdMs,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Sync mutation — calls the sync-ubersuggest edge function
@@ -62,7 +65,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
 
   // Auto-sync: trigger when data is stale (>24h) or missing
   useEffect(() => {
-    if (isLoading || syncMutation.isPending) return;
+    if (isLoading || syncMutation.isPending || !isActive) return;
 
     const latestEntry = allMetrics && allMetrics.length > 0
       ? allMetrics[allMetrics.length - 1]
@@ -75,9 +78,9 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
       console.log(`SEO data stale for ${clientId}, auto-syncing...`);
       syncMutation.mutate();
     }
-  }, [clientId, allMetrics, isLoading, syncMutation.isPending]);
+  }, [clientId, allMetrics, isLoading, syncMutation.isPending, isActive]);
 
-  if (isLoading) {
+  if (isLoading && (!allMetrics || allMetrics.length === 0)) {
     return (
       <div className="flex justify-center items-center h-32 rounded-xl border bg-muted/30">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -389,14 +392,16 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <div className="text-[10px] text-muted-foreground/60">
-          {syncMutation.isPending ? (
-            <span className="flex items-center gap-1">
-              <Loader2 className="h-3 w-3 animate-spin" /> Syncing SEO data...
+        <div className="text-[10px] text-muted-foreground/60 flex items-center gap-1.5">
+          {syncMutation.isPending || isFetching ? (
+            <span className="flex items-center gap-1.5 bg-primary/5 px-2 py-0.5 rounded-full text-primary/80 font-medium animate-pulse">
+              <RefreshCw className="h-2.5 w-2.5 animate-spin" /> 
+              {syncMutation.isPending ? "Syncing live data..." : "Checking for SEO updates..."}
             </span>
           ) : (
-            <>Last synced {new Date(latest.collected_at).toLocaleDateString()}</>
+            <span className="bg-muted/50 px-2 py-0.5 rounded-full font-medium">
+              Data as of {new Date(latest.collected_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
           )}
         </div>
         <Button

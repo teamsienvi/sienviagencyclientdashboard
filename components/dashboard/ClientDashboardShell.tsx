@@ -88,6 +88,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   // Dashboard Date Range State (for AI Summaries)
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
+  const [activeTab, setActiveTab] = useState<string>("analytics");
 
   // Realtime subscription: auto-invalidate top posts cache when background sync writes new data
   useSocialMetricsRealtime(clientId);
@@ -611,7 +612,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
           </div>
 
           {/* Main Content Tabs */}
-          <Tabs defaultValue="analytics" className="space-y-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid w-full max-w-md grid-cols-2">
               <TabsTrigger value="analytics" className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
@@ -685,7 +686,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
             </div>
 
             {/* Analytics Tab */}
-            <TabsContent value="analytics" className="space-y-12 pb-12">
+            <TabsContent value="analytics" forceMount className={activeTab === "analytics" ? "space-y-12 pb-12" : "hidden"}>
               
               {/* Zone 2: Executive Insight Layer */}
               <div className="space-y-6 scroll-mt-24" id="executive-insights">
@@ -705,6 +706,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       icon={<Share2 className="h-5 w-5 text-violet-500" />}
                       dateRange={dateRange}
                       customDateRange={customDateRange}
+                      isActive={activeTab === "analytics"}
                     />
                   )}
 
@@ -718,10 +720,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       icon={<Globe className="h-5 w-5 text-emerald-500" />}
                       dateRange={dateRange}
                       customDateRange={customDateRange}
+                      isActive={activeTab === "analytics"}
                     />
                   )}
 
-                  {hasAdsPlatform && (
+                    {hasAdsPlatform && (
                     <AnalyticsSummaryCard
                       clientId={clientId!}
                       type="ads"
@@ -729,6 +732,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       icon={<Target className="h-5 w-5 text-amber-500" />}
                       dateRange={dateRange}
                       customDateRange={customDateRange}
+                      isActive={activeTab === "analytics"}
                     />
                   )}
 
@@ -902,16 +906,36 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     </div>
                     <div className="space-y-4">
                         {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
-                          <AdsShredderCard clientId={clientId!} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
+                          <AdsShredderCard 
+                            clientId={clientId!} 
+                            adPlatform="meta" 
+                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} 
+                            isActive={activeTab === "analytics"}
+                          />
                         )}
                         {metricoolPlatforms?.some(p => p.platform === 'google_ads') && (
-                          <AdsShredderCard clientId={clientId!} adPlatform="google" title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} />
+                          <AdsShredderCard 
+                            clientId={clientId!} 
+                            adPlatform="google" 
+                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} 
+                            isActive={activeTab === "analytics"}
+                          />
                         )}
                         {metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') && (
-                          <AdsShredderCard clientId={clientId!} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
+                          <AdsShredderCard 
+                            clientId={clientId!} 
+                            adPlatform="tiktok" 
+                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} 
+                            isActive={activeTab === "analytics"}
+                          />
                         )}
                         {getClientAdPlatforms(client.name).includes('amazon') && (
-                          <AdsShredderCard clientId={clientId!} adPlatform="amazon" title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`} />
+                          <AdsShredderCard 
+                            clientId={clientId!} 
+                            adPlatform="amazon" 
+                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`} 
+                            isActive={activeTab === "analytics"}
+                          />
                         )}
                       </div>
 
@@ -1074,7 +1098,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                   
                   <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
-                    <UbersuggestSection clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
+                    <UbersuggestSection 
+                      clientId={clientId!} 
+                      dateRange={dateRange} 
+                      customDateRange={customDateRange} 
+                      isActive={activeTab === "analytics"}
+                    />
                   </div>
                 </div>
 

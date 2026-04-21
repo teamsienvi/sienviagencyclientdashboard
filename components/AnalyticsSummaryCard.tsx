@@ -13,8 +13,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { format } from "date-fns";
-import { isDataStale } from "@/lib/freshnessPolicy";
+import { format, formatDistanceToNow } from "date-fns";
+import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSummaryMetrics, PlatformMetric } from "@/hooks/useSummaryMetrics";
 import { useAllTimeTopPosts } from "@/hooks/useAllTimeTopPosts";
 
@@ -32,9 +32,10 @@ interface AnalyticsSummaryCardProps {
     icon: React.ReactNode;
     dateRange?: string;
     customDateRange?: { start: Date; end: Date };
+    isActive?: boolean;
 }
 
-export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d", customDateRange }: AnalyticsSummaryCardProps) {
+export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d", customDateRange, isActive = true }: AnalyticsSummaryCardProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [sessionReady, setSessionReady] = useState(false);
@@ -52,8 +53,8 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     }, []);
 
     // 1. Fetch AI Summary
-    const { data: cachedSummary, isLoading: isLoadingCache } = useQuery({
-        queryKey: ["analytics-summary", clientId, type, sessionReady],
+    const { data: cachedSummary, isLoading: isLoadingCache, isFetching: isFetchingCache } = useQuery({
+        queryKey: ["analytics-summary", clientId, type],
         queryFn: async () => {
             const { data, error } = await supabase
                 .from("analytics_summaries" as any)
@@ -67,9 +68,9 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
             if (error) return null;
             return data;
         },
-        enabled: !!clientId && sessionReady,
-        staleTime: 7 * 24 * 60 * 60 * 1000, 
-        gcTime: 7 * 24 * 60 * 60 * 1000,
+        enabled: !!clientId && sessionReady && isActive,
+        staleTime: FRESHNESS_POLICIES.summary.staleThresholdMs,
+        gcTime: 7 * 24 * 60 * 60 * 1000, 
     });
 
     // 2. Fetch Hard Metrics (Views by platform, Engagement)
@@ -95,7 +96,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     };
     const bounds = getPeriodBounds();
     
-    const { data: metricsData, isLoading: isLoadingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange);
+    const { data: metricsData, isLoading: isLoadingMetrics, isFetching: isFetchingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange);
 
     // 3. Fetch Top Posts
     const { data: topPosts, isLoading: isLoadingTopPosts } = useAllTimeTopPosts(isSocial ? clientId : undefined, isSocial ? 4 : 0, undefined, bounds.start, bounds.end);
@@ -292,26 +293,39 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                 <div className="flex items-center gap-3">
                     <CardTitle className="text-xl flex items-center gap-2 font-bold tracking-tight">
                         {title}
+                        {(isFetchingCache || isFetchingMetrics || refreshPhase !== 'idle') && (
+                            <RefreshCw className="h-4 w-4 animate-spin text-primary/40 ml-1" />
+                        )}
                     </CardTitle>
                 </div>
                 <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-end gap-1 mr-2">
+                        {(cachedSummary as any)?.generated_at && (
+                            <div className="text-[10px] text-muted-foreground/60 flex items-center gap-1 font-medium bg-muted/40 px-2 py-0.5 rounded-full">
+                                <Sparkles className="h-2.5 w-2.5" />
+                                Generated {formatDistanceToNow(new Date((cachedSummary as any).generated_at), { addSuffix: true })}
+                            </div>
+                        )}
+                    </div>
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={() => generateMutation.mutate()}
-                        disabled={isGenerating}
-                        className="h-9 text-xs font-medium shadow-sm w-fit"
+                        disabled={isGenerating || !isActive}
+                        className="h-9 text-xs font-medium shadow-sm w-fit gap-2"
                     >
-                        <RefreshCw className={`h-4 w-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
-                        {refreshPhase === 'syncing' ? "Syncing Platforms..." : 
+                        {refreshPhase === 'syncing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : 
+                         refreshPhase === 'analyzing' ? <Sparkles className="h-4 w-4 animate-spin" /> : 
+                         <RefreshCw className="h-4 w-4" />}
+                        {refreshPhase === 'syncing' ? "Syncing..." : 
                          refreshPhase === 'analyzing' ? "Analyzing..." : 
-                         "Refresh Insights"}
+                         "Refresh Analysis"}
                     </Button>
                 </div>
             </CardHeader>
 
             <CardContent className="p-0 z-10 w-full relative">
-                {isLoadingCache || isLoadingMetrics ? (
+                {(isLoadingCache || isLoadingMetrics) && !hasDataToRender ? (
                      <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
                          <div className="lg:col-span-5"><Skeleton className="h-[400px] w-full rounded-2xl" /></div>
                          <div className="lg:col-span-7 space-y-4">
@@ -320,7 +334,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                              <Skeleton className="h-40 w-full rounded-xl" />
                          </div>
                      </div>
-                ) : !hasDataToRender ? (
+                ) : !hasDataToRender && !isLoadingCache && !isLoadingMetrics ? (
                     <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center">
                          <Target className="h-10 w-10 mb-4 opacity-20" />
                          <p className="text-sm font-medium">Insufficient data for executive summary</p>

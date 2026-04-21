@@ -19,8 +19,9 @@ import {
     Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { formatDistanceToNow } from "date-fns";
+import { FRESHNESS_POLICIES, isDataStale } from "@/lib/freshnessPolicy";
 
 interface AdsSummaryData {
     strengths: string[];
@@ -34,9 +35,10 @@ interface AdsShredderCardProps {
     clientId: string;
     adPlatform: string; // "meta" | "google" | "tiktok" | "all"
     title?: string;
+    isActive?: boolean;
 }
 
-export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCardProps) {
+export function AdsShredderCard({ clientId, adPlatform, title, isActive = true }: AdsShredderCardProps) {
     const [expanded, setExpanded] = useState(true);
     const [file, setFile] = useState<File | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -65,6 +67,9 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
             }
             return data;
         },
+        enabled: !!clientId && isActive,
+        staleTime: FRESHNESS_POLICIES.ecommerce.staleThresholdMs,
+        gcTime: 7 * 24 * 60 * 60 * 1000,
     });
 
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -211,10 +216,8 @@ export function AdsShredderCard({ clientId, adPlatform, title }: AdsShredderCard
                                 <Skull className="h-4 w-4 text-red-400" />
                             </CardTitle>
                             {generatedAt && (
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    Updated {new Date(generatedAt).toLocaleDateString("en-US", {
-                                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit"
-                                    })}
+                                <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                    Updated {formatDistanceToNow(new Date(generatedAt), { addSuffix: true })}
                                     {cachedFileName && ` • ${cachedFileName}`}
                                 </p>
                             )}

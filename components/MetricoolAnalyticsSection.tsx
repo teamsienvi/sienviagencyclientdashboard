@@ -11,20 +11,18 @@ import { Badge } from "@/components/ui/badge";
 import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus, Globe, User } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import { toast } from "sonner";
-import { format, subDays, startOfDay, endOfDay, parseISO } from "date-fns";
+import { format, subDays, startOfDay, endOfDay, parseISO, formatDistanceToNow } from "date-fns";
 import { getCurrentReportingWeek, formatDateRange } from "@/utils/weeklyDateRange";
-import { cn } from "@/lib/utils";
+import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { Checkbox } from "@/components/ui/checkbox";
 
-interface MetricoolAnalyticsSectionProps {
-  clientId: string;
-  clientName: string;
   platform: "tiktok" | "linkedin";
   platformIcon: React.ReactNode;
   platformColor: string;
+  isActive?: boolean;
 }
 
 interface MetricoolConfig {
@@ -113,6 +111,7 @@ export const MetricoolAnalyticsSection = ({
   platform,
   platformIcon,
   platformColor,
+  isActive = true,
 }: MetricoolAnalyticsSectionProps) => {
   const queryClient = useQueryClient();
   const [showConfig, setShowConfig] = useState(false);
@@ -286,8 +285,9 @@ export const MetricoolAnalyticsSection = ({
 
       return data;
     },
-    enabled: !!config && platform === "tiktok",
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!config && platform === "tiktok" && isActive,
+    staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Automatically fetch live followers for LinkedIn using metricool-social-weekly
@@ -365,8 +365,9 @@ export const MetricoolAnalyticsSection = ({
 
       return data;
     },
-    enabled: !!config && platform === "linkedin",
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!config && platform === "linkedin" && isActive,
+    staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Fetch latest account metrics with date range
@@ -428,7 +429,9 @@ export const MetricoolAnalyticsSection = ({
 
       return data as AccountMetric | null;
     },
-    enabled: !!config,
+    enabled: !!config && isActive,
+    staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Fetch content with metrics (filtered to reporting period)
@@ -484,7 +487,9 @@ export const MetricoolAnalyticsSection = ({
 
       return contentWithMetrics;
     },
-    enabled: !!config,
+    enabled: !!config && isActive,
+    staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Auto-fetch live posts on load for TikTok using metricool-tiktok-posts
@@ -601,7 +606,9 @@ export const MetricoolAnalyticsSection = ({
 
       return result;
     },
-    enabled: !!config && platform === "tiktok",
+    enabled: !!config && platform === "tiktok" && isActive,
+    staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
+    gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
   // Set demographics from persisted data on load
@@ -647,22 +654,19 @@ export const MetricoolAnalyticsSection = ({
 
   // Automatically sync when date range changes or stale
   // Standardize: Don't hammer sync if data is fresh, unless date range explicitly triggered it.
-  // Actually, for Metricool, dateRange explicit changes should trigger. 
-  // Let's add stale check.
   useEffect(() => {
-    if (config && config.is_active && !syncMutation.isPending && !configLoading) {
-      // Determine if a sync is needed. If the user loaded for the first time, check staleness.
-      // We'll rely on the fact that changing dateRangePreset clears react-query caches via queryKey.
+    if (config && config.is_active && !syncMutation.isPending && !configLoading && isActive) {
+      // Determine if a sync is needed.
       const timer = setTimeout(() => {
-        // Just trigger it since TanStack query handles cache, 
-        // BUT wait, syncMutation in Metricool actually does a hard fetch to Metricool API & Supabase Upsert.
-        // Let's only sync if data is essentially stale for the social policy.
-        // Wait, Metricool sync does a full upsert. We should respect freshness policy to not over-hammer Metricool API.
-        syncMutation.mutate();
+        // Only trigger if data is stale according to our policy
+        const isStale = !accountMetrics || isDataStale(accountMetrics.collected_at, 'social');
+        if (isStale) {
+          syncMutation.mutate();
+        }
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [dateRangePreset, customDateRange, config?.is_active, configLoading]);
+  }, [dateRangePreset, customDateRange, config?.is_active, configLoading, isActive, accountMetrics]);
 
   // Sync mutation - uses metricool-tiktok-posts edge function to fetch CSV data
   const syncMutation = useMutation({
@@ -1462,7 +1466,6 @@ export const MetricoolAnalyticsSection = ({
     );
   };
 
-  return (
     <div className="space-y-6">
       {/* Header with date range and sync button */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1484,14 +1487,27 @@ export const MetricoolAnalyticsSection = ({
             <Settings className="h-4 w-4" />
           </Button>
         </div>
-        <Button
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
-          size="sm"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-          Sync Now
-        </Button>
+        <div className="flex items-center gap-3">
+          {accountMetrics?.collected_at && (
+            <div className="text-[10px] text-muted-foreground/60 flex flex-col items-end">
+              <span className="font-medium bg-muted/40 px-2 py-0.5 rounded-full">
+                Last synced {formatDistanceToNow(new Date(accountMetrics.collected_at), { addSuffix: true })}
+              </span>
+            </div>
+          )}
+          <Button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending || (accountLoading && !accountMetrics)}
+            size="sm"
+            className="gap-2"
+          >
+            {(syncMutation.isPending || isFetchingAccount || isFetchingMetrics) ? 
+              <RefreshCw className="h-4 w-4 animate-spin" /> : 
+              <RefreshCw className="h-4 w-4" />
+            }
+            {syncMutation.isPending ? "Syncing..." : "Sync Now"}
+          </Button>
+        </div>
       </div>
 
       {/* Config editor */}
