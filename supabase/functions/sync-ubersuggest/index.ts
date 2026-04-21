@@ -25,25 +25,34 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Load session cookie saved by the GitHub Actions workflow
-    const { data: credentials, error: credError } = await supabase
+    // 1. Load the app-level auth token
+    const { data: tokenCred } = await supabase
       .from("integration_credentials")
-      .select("token, updated_at")
-      .eq("service_name", "ubersuggest")
+      .select("token")
+      .eq("service_name", "ubersuggest_token")
       .single();
 
-    if (credError || !credentials?.token) {
+    // 2. Load the user session JWT (id cookie)
+    const { data: sessionCred } = await supabase
+      .from("integration_credentials")
+      .select("token, updated_at")
+      .eq("service_name", "ubersuggest_session")
+      .single();
+
+    if (!tokenCred?.token || !sessionCred?.token) {
       return new Response(
-        JSON.stringify({ error: "Ubersuggest token not found. Add UBERSUGGEST_TOKEN to GitHub Secrets and run the workflow." }),
+        JSON.stringify({ error: "Ubersuggest credentials not found. Run the GitHub Actions 'Refresh Ubersuggest Token' workflow." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const authHeaders = {
-      Authorization: credentials.token,
+      Authorization: tokenCred.token,
+      Cookie: `id=${sessionCred.token}`,
       Accept: "application/json",
       ts: String(Math.floor(Date.now() / 1000)),
     };
+    console.log(`Credentials loaded. Session updated: ${sessionCred.updated_at}`);
 
     // 2. Load SEO config for the client
     const { data: config, error: configError } = await supabase
