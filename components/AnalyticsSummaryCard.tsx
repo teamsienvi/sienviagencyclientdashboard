@@ -498,7 +498,13 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                     <p className="font-semibold text-lg mb-4 leading-none">{type === 'social' ? 'Top Content' : (type === 'ads' ? 'Active Campaigns' : 'Top Pages')}</p>
                                     <div className="flex flex-col gap-3">
                                         {topPosts && topPosts.length > 0 ? topPosts.map((post, idx) => (
-                                            <div key={idx} className="flex gap-4 p-3 bg-card border border-border/80 rounded-xl hover:bg-muted/30 transition-colors">
+                                            <a 
+                                                key={idx} 
+                                                href={post.post_url} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="flex gap-4 p-3 bg-card border border-border/80 rounded-xl hover:bg-muted/30 hover:border-primary/30 transition-all group block hover:shadow-sm"
+                                            >
                                                 {/* Mini Thumbnail */}
                                                 <div className="h-16 w-16 sm:h-20 sm:w-24 rounded-lg bg-muted flex-shrink-0 relative overflow-hidden flex items-center justify-center">
                                                     {(getThumbnailUrl(post.post_url, post.platform) || fetchedThumbnail) ? (
@@ -506,13 +512,18 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                     ) : (
                                                         type === 'social' ? <Video className="h-6 w-6 text-muted-foreground/40" /> : (type === 'ads' ? <Megaphone className="h-6 w-6 text-muted-foreground/40" /> : <Eye className="h-6 w-6 text-muted-foreground/40" />)
                                                     )}
-                                                    <div className="absolute inset-0 bg-black/10 flex items-center justify-center pointer-events-none">
+                                                    <div className="absolute inset-0 bg-black/10 flex items-center justify-center group-hover:bg-black/20 transition-colors">
                                                         {type === 'social' ? <PlaySquare className="h-6 w-6 text-white/80 drop-shadow-sm" /> : (type === 'ads' ? <ArrowUpRight className="h-6 w-6 text-white/80 drop-shadow-sm" /> : <ArrowRight className="h-6 w-6 text-white/80 drop-shadow-sm" />)}
                                                     </div>
                                                 </div>
                                                 {/* Details */}
                                                 <div className="flex-1 min-w-0 pr-2">
-                                                    <h5 className="font-semibold text-sm line-clamp-1 mb-1" title={post.title || 'Untitled Post'}>{post.title || 'Untitled Post'}</h5>
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <h5 className="font-semibold text-sm line-clamp-1 group-hover:text-primary transition-colors" title={post.title || 'Untitled Post'}>
+                                                            {post.title || 'Untitled Post'}
+                                                        </h5>
+                                                        <ExternalLink className="h-3 w-3 text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                    </div>
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <Badge variant="secondary" className="text-[10px] h-5 py-0 px-1.5 capitalize font-medium">{post.platform}</Badge>
                                                         <span className="text-[11px] text-muted-foreground">{post.published_at ? format(new Date(post.published_at), "MMM d") : ""}</span>
@@ -522,7 +533,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                         <span className="flex items-center gap-1 shrink-0"><Heart className="h-3.5 w-3.5"/> {formatNumber(post.likes + post.comments + post.shares)} eng</span>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </a>
                                         )) : (
                                             <div className="p-8 border border-border/80 border-dashed rounded-xl text-center flex flex-col items-center">
                                                 <FileText className="h-8 w-8 text-muted-foreground/30 mb-2" />
