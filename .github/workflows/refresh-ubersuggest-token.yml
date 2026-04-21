@@ -9,7 +9,7 @@ on:
 jobs:
   refresh-token:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository
@@ -20,26 +20,17 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Install Xvfb (virtual display for non-headless browser)
-        run: sudo apt-get install -y xvfb
-
-      - name: Install Playwright and Chromium
-        run: |
-          npm install playwright
-          npx playwright install chromium --with-deps
-
-      - name: Run token refresh script
+      - name: Save Ubersuggest session to Supabase
         env:
-          UBERSUGGEST_EMAIL: ${{ secrets.UBERSUGGEST_EMAIL }}
-          UBERSUGGEST_PASSWORD: ${{ secrets.UBERSUGGEST_PASSWORD }}
+          UBERSUGGEST_COOKIE: ${{ secrets.UBERSUGGEST_COOKIE }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x720x24" node scripts/refresh-ubersuggest-token.js
+        run: node scripts/refresh-ubersuggest-token.js
 
       - name: Report success
         if: success()
-        run: echo "✅ Ubersuggest token refreshed successfully at $(date -u)"
+        run: echo "✅ Ubersuggest session saved to Supabase at $(date -u)"
 
       - name: Report failure
         if: failure()
-        run: echo "❌ Ubersuggest token refresh failed — check logs above"
+        run: echo "❌ Failed — UBERSUGGEST_COOKIE may be expired. Update it in GitHub Secrets."

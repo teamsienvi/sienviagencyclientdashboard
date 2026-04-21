@@ -25,42 +25,26 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Load cached projects data (intercepted by Playwright during dashboard navigation)
-    const { data: projectsCache } = await supabase
+    // 1. Load session cookie saved by the GitHub Actions workflow
+    const { data: credentials, error: credError } = await supabase
       .from("integration_credentials")
       .select("token, updated_at")
-      .eq("service_name", "ubersuggest_projects")
+      .eq("service_name", "ubersuggest")
       .single();
 
-    if (!projectsCache?.token) {
+    if (credError || !credentials?.token) {
       return new Response(
-        JSON.stringify({ error: "No Ubersuggest project cache found. Run the GitHub Actions 'Refresh Ubersuggest Token' workflow first." }),
+        JSON.stringify({ error: "Ubersuggest session not found. Add UBERSUGGEST_COOKIE to GitHub Secrets and run the workflow." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 2. Load cached alerts data
-    const { data: alertsCache } = await supabase
-      .from("integration_credentials")
-      .select("token")
-      .eq("service_name", "ubersuggest_alerts")
-      .single();
+    const cookieAge = credentials.updated_at
+      ? Math.round((Date.now() - new Date(credentials.updated_at).getTime()) / 86400000)
+      : null;
+    console.log(`Using Ubersuggest cookie (saved ${cookieAge ?? "?"} day(s) ago)`);
 
-    // 3. Parse cached data
-    let projectsArray: any[] = [];
-    try {
-      const parsed = JSON.parse(projectsCache.token);
-      projectsArray = Array.isArray(parsed)
-        ? parsed
-        : parsed.projects || parsed.data || parsed.result || [];
-    } catch (_e) {
-      throw new Error("Failed to parse cached projects data.");
-    }
-
-    console.log(`Loaded ${projectsArray.length} projects from cache. Updated: ${projectsCache.updated_at}`);
-    console.log(`Project domains: ${projectsArray.map((p: any) => p.domain || p.url || p.name).join(", ")}`);
-
-    // 4. Load SEO config for the client
+    // 2. Load SEO config for the client
     const { data: config, error: configError } = await supabase
       .from("client_seo_config")
       .select("domain")
@@ -70,15 +54,30 @@ serve(async (req) => {
 
     if (configError || !config?.domain) {
       return new Response(
-        JSON.stringify({ error: `No active SEO config mapped for client ${clientId}` }),
+        JSON.stringify({ error: `No active SEO config found for client ${clientId}` }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     const targetDomain = config.domain;
-
-    // 5. Find the project for this client's domain (flexible matching)
     const normalize = (d: string) => d?.replace(/^www\./i, "").replace(/\/$/, "").toLowerCase();
     const normalizedTarget = normalize(targetDomain);
+
+    // 3. Fetch projects using stored cookie
+    const projectsRes = await fetch("https://app.neilpatel.com/api/projects", {
+      headers: { Cookie: credentials.token, Accept: "application/json" },
+    });
+
+    if (!projectsRes.ok) {
+      throw new Error(`Ubersuggest /api/projects returned ${projectsRes.status} — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets.`);
+    }
+
+    const projectsRaw = await projectsRes.json();
+    const projectsArray: any[] = Array.isArray(projectsRaw)
+      ? projectsRaw
+      : projectsRaw.projects || projectsRaw.data || projectsRaw.result || [];
+
+    console.log(`Found ${projectsArray.length} project(s): ${projectsArray.map((p: any) => p.domain || p.url || p.name).join(", ")}`);
+
     const activeProject = projectsArray.find(
       (p: any) =>
         normalize(p.domain) === normalizedTarget ||
@@ -88,60 +87,65 @@ serve(async (req) => {
 
     if (!activeProject) {
       const tracked = projectsArray.map((p: any) => p.domain || p.url || p.name).join(", ");
-      throw new Error(`Domain ${targetDomain} not found in cached projects. Available: ${tracked || "(none)"}`);
+      throw new Error(`Domain ${targetDomain} not found in Ubersuggest projects. Tracked: ${tracked || "(none)"}`);
     }
+
     const projectId = activeProject.id;
-    console.log(`Resolved domain ${targetDomain} → projectId ${projectId}`);
+    console.log(`Resolved ${targetDomain} → projectId ${projectId}`);
 
-    // 6. Parse alerts from cache
-    let allAlerts: any[] = [];
-    if (alertsCache?.token) {
-      try {
-        const parsed = JSON.parse(alertsCache.token);
-        allAlerts = Array.isArray(parsed) ? parsed : parsed.alerts || parsed.data || [];
-      } catch (_e) {
-        console.warn("Could not parse alerts cache — proceeding with empty alerts.");
-      }
+    // 4. Fetch alerts
+    const alertsRes = await fetch("https://app.neilpatel.com/api/user/alerts", {
+      headers: { Cookie: credentials.token, Accept: "application/json" },
+    });
+
+    if (!alertsRes.ok) {
+      console.warn(`Alerts API returned ${alertsRes.status} — proceeding without alert data`);
     }
 
-    // Filter alerts for our specific project
-    const projectAlerts = allAlerts.filter((a: any) => a.projectId === projectId || a.project_id === projectId);
+    const allAlerts: any[] = alertsRes.ok
+      ? (() => {
+          try { return alertsRes.json() as any; } catch { return []; }
+        })()
+      : [];
 
-    // Extract newest site audit score
+    // Wait for the json() promise
+    const allAlertsData: any[] = alertsRes.ok ? await alertsRes.json() : [];
+    const projectAlerts = Array.isArray(allAlertsData)
+      ? allAlertsData.filter((a: any) => a.projectId === projectId || a.project_id === projectId)
+      : [];
+
+    // Extract metrics
     const siteAudits = projectAlerts.filter((a: any) => a.alertType === "site_audit" || a.alert_type === "site_audit");
-    const latestAudit = siteAudits.length > 0 ? siteAudits[0] : null;
+    const latestAudit = siteAudits[0] ?? null;
     const siteAuditScore = latestAudit?.content?.score?.new ?? activeProject.score ?? null;
 
-    // Extract keyword position tracking
     const positionTrackings = projectAlerts.filter(
       (a: any) => a.alertType === "position_tracking" || a.alert_type === "position_tracking"
     );
-    const latestTracking = positionTrackings.length > 0 ? positionTrackings[0] : null;
-    const trackedKeywords = latestTracking?.content?.keywords || [];
+    const trackedKeywords = positionTrackings[0]?.content?.keywords || [];
 
     console.log(`Metrics: score=${siteAuditScore}, keywords=${trackedKeywords.length}`);
 
-    // 7. Insert into report_seo_metrics
+    // 5. Insert into report_seo_metrics
     const { error: insertError } = await supabase.from("report_seo_metrics").insert({
       client_id: clientId,
       site_audit_score: siteAuditScore,
-      site_audit_issues: latestAudit?.content?.issues || null,
+      site_audit_issues: latestAudit?.content?.issues ?? null,
       tracked_keywords: trackedKeywords,
       collected_at: new Date().toISOString(),
     });
 
-    if (insertError) {
-      throw new Error(`Failed to insert SEO metrics: ${insertError.message}`);
-    }
+    if (insertError) throw new Error(`Failed to insert SEO metrics: ${insertError.message}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: "SEO data synced from cache",
+        message: "SEO data synced",
         data: { domain: targetDomain, siteAuditScore, trackedKeywordsCount: trackedKeywords.length },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : String(error);
     console.error("Edge function error:", errMsg);
