@@ -1,13 +1,12 @@
 import { chromium } from "playwright";
 
 /**
- * APPROACH: Intercept real API responses while navigating the authenticated dashboard.
- * Instead of trying to extract cookies/tokens for server-side use, we:
- * 1. Log in (with xvfb providing a display so Cloudflare doesn't block us)
- * 2. Navigate to the Ubersuggest dashboard
- * 3. Intercept the browser's own /api/projects and /api/user/alerts responses
- * 4. Store the raw response data directly in Supabase
- * 5. The edge function reads from the cached data instead of calling Ubersuggest API
+ * Logs into Ubersuggest and intercepts the authenticated /api/projects and
+ * /api/user/alerts responses. Stores them in Supabase for the edge function to use.
+ *
+ * Key fixes:
+ * - isLoggedIn flag: only capture responses AFTER login redirect (ignores pre-auth session checks)
+ * - form.requestSubmit(): the only method that submits a React form without requiring the button to be enabled
  */
 async function run() {
   const email = process.env.UBERSUGGEST_EMAIL;
@@ -22,6 +21,7 @@ async function run() {
 
   let capturedProjects = null;
   let capturedAlerts = null;
+  let isLoggedIn = false; // Guard: only intercept responses AFTER successful login
 
   console.log("Launching browser...");
   const browser = await chromium.launch({
@@ -34,24 +34,25 @@ async function run() {
   });
   const page = await context.newPage();
 
-  // Intercept actual API responses from the dashboard's own requests
+  // Only capture responses AFTER we're confirmed logged in
   page.on("response", async (response) => {
+    if (!isLoggedIn) return; // Skip ALL pre-login API calls
     const url = response.url();
     const status = response.status();
     try {
       if (url.includes("neilpatel.com/api/projects") && status === 200 && !capturedProjects) {
-        capturedProjects = await response.json();
-        const count = Array.isArray(capturedProjects) ? capturedProjects.length
-          : capturedProjects?.projects?.length || 0;
-        console.log(`✓ Intercepted /api/projects — ${count} project(s)`);
+        const data = await response.json();
+        const arr = Array.isArray(data) ? data : data.projects || data.data || data.result || [];
+        if (arr.length > 0) {
+          capturedProjects = data;
+          console.log(`✓ Intercepted /api/projects — ${arr.length} project(s): ${arr.map((p: any) => p.domain || p.url).join(", ")}`);
+        }
       }
       if (url.includes("neilpatel.com/api/user/alerts") && status === 200 && !capturedAlerts) {
         capturedAlerts = await response.json();
         console.log(`✓ Intercepted /api/user/alerts`);
       }
-    } catch (_e) {
-      // Response already consumed or not JSON
-    }
+    } catch (_e) {}
   });
 
   try {
@@ -62,9 +63,10 @@ async function run() {
     });
 
     await page.waitForSelector('input[type="email"], input[name="email"]', { timeout: 10000 });
+    await page.waitForTimeout(1000); // Let React initialize
 
-    // Use React native input setter to properly trigger controlled form state
-    console.log("Filling login form with React-compatible input setter...");
+    // Set input values using React's native setter (triggers controlled input onChange)
+    console.log("Setting form values...");
     await page.evaluate(
       ({ emailVal, passwordVal }) => {
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
@@ -74,49 +76,68 @@ async function run() {
           setter.call(emailEl, emailVal);
           emailEl.dispatchEvent(new Event("input", { bubbles: true }));
           emailEl.dispatchEvent(new Event("change", { bubbles: true }));
+          emailEl.dispatchEvent(new Event("blur", { bubbles: true }));
         }
         if (passEl) {
           setter.call(passEl, passwordVal);
           passEl.dispatchEvent(new Event("input", { bubbles: true }));
           passEl.dispatchEvent(new Event("change", { bubbles: true }));
+          passEl.dispatchEvent(new Event("blur", { bubbles: true }));
         }
       },
       { emailVal: email, passwordVal: password }
     );
 
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2000); // Let React process state change
 
-    // Try normal click first; fall back to force click if button is still disabled
-    try {
-      await page.waitForSelector('button[type="submit"]:not([disabled])', { timeout: 5000 });
-      await page.click('button[type="submit"]');
-    } catch (_e) {
-      console.log("Submit button disabled — force clicking...");
+    // Submit the form — use requestSubmit() which triggers browser validation + submit event
+    // This works even when the submit button has a disabled attribute
+    console.log("Submitting form via requestSubmit()...");
+    const submitted = await page.evaluate(() => {
+      const form = document.querySelector("form");
+      if (form) {
+        form.requestSubmit();
+        return true;
+      }
+      return false;
+    });
+
+    if (!submitted) {
+      // Last resort: force click the submit button
+      console.log("No form found — force clicking submit button...");
       await page.click('button[type="submit"]', { force: true });
     }
 
-    // Wait for redirect away from login
-    console.log("Waiting for login redirect...");
+    // Wait for redirect away from login (up to 25 seconds)
+    console.log("Waiting for post-login redirect...");
     try {
-      await page.waitForURL((url) => !url.href.includes("/login"), { timeout: 20000 });
-      console.log("✓ Login redirect detected. URL:", page.url());
+      await page.waitForURL((url) => !url.href.includes("/login"), { timeout: 25000 });
+      console.log("✓ Login successful! URL:", page.url());
+      isLoggedIn = true; // NOW start capturing API responses
     } catch (_e) {
-      console.log("No redirect detected. URL:", page.url());
+      console.log("Redirect timeout — checking current URL:", page.url());
+      // If we're no longer on /login, consider it success
+      if (!page.url().includes("/login")) {
+        console.log("✓ Actually redirected successfully.");
+        isLoggedIn = true;
+      } else {
+        throw new Error("Login failed — still on login page. Check credentials or Cloudflare is blocking.");
+      }
     }
 
-    // Navigate to projects page to trigger the /api/projects call
+    // Navigate to dashboard to trigger authenticated API calls
     if (!capturedProjects) {
-      console.log("Navigating to projects to trigger API calls...");
+      console.log("Navigating to dashboard to trigger /api/projects...");
       await page.goto("https://app.neilpatel.com/en/ubersuggest", {
         waitUntil: "domcontentloaded",
         timeout: 20000,
       });
-      await page.waitForTimeout(5000);
+      await page.waitForTimeout(6000);
     }
 
-    // If /api/user/alerts not yet triggered, navigate to alerts page
+    // Navigate to alerts page if not yet captured
     if (!capturedAlerts) {
-      console.log("Navigating to alerts to trigger /api/user/alerts...");
+      console.log("Navigating to trigger /api/user/alerts...");
       await page.goto("https://app.neilpatel.com/en/user_alerts", {
         waitUntil: "domcontentloaded",
         timeout: 20000,
@@ -124,30 +145,29 @@ async function run() {
       await page.waitForTimeout(5000);
     }
 
-    // Last resort: try page.evaluate() fetch from the authenticated browser context
+    // Final fallback: in-browser fetch (uses authenticated session cookies)
     if (!capturedProjects) {
-      console.log("Attempting in-browser fetch of /api/projects...");
-      capturedProjects = await page.evaluate(async () => {
+      console.log("Attempting in-browser authenticated fetch of /api/projects...");
+      const result = await page.evaluate(async () => {
         try {
           const res = await fetch("https://app.neilpatel.com/api/projects", { credentials: "include" });
-          return res.ok ? await res.json() : null;
-        } catch (_e) { return null; }
+          return { ok: res.ok, status: res.status, data: await res.json() };
+        } catch (e) { return { error: String(e) }; }
       });
-      if (capturedProjects) {
-        const count = Array.isArray(capturedProjects) ? capturedProjects.length : 0;
-        console.log(`✓ In-browser fetch got ${count} project(s)`);
-      }
+      console.log("In-browser /api/projects result:", JSON.stringify(result).slice(0, 300));
+      if (result.ok && result.data) capturedProjects = result.data;
     }
 
     if (!capturedAlerts) {
-      console.log("Attempting in-browser fetch of /api/user/alerts...");
-      capturedAlerts = await page.evaluate(async () => {
+      console.log("Attempting in-browser authenticated fetch of /api/user/alerts...");
+      const result = await page.evaluate(async () => {
         try {
           const res = await fetch("https://app.neilpatel.com/api/user/alerts", { credentials: "include" });
-          return res.ok ? await res.json() : null;
-        } catch (_e) { return null; }
+          return { ok: res.ok, status: res.status, data: await res.json() };
+        } catch (e) { return { error: String(e) }; }
       });
-      if (capturedAlerts) console.log("✓ In-browser fetch got alerts data.");
+      console.log("In-browser /api/user/alerts result:", JSON.stringify(result).slice(0, 300));
+      if (result.ok && result.data) capturedAlerts = result.data;
     }
 
   } finally {
@@ -155,18 +175,20 @@ async function run() {
   }
 
   if (!capturedProjects) {
-    console.error("❌ Failed to capture projects data — login may have failed.");
+    console.error("❌ Failed to capture projects data — login failed or account has no projects.");
     process.exit(1);
   }
 
-  // Save projects data to Supabase (edge function will read this instead of calling API)
-  console.log("Saving captured data to Supabase...");
+  const projectCount = Array.isArray(capturedProjects) ? capturedProjects.length
+    : capturedProjects.projects?.length || 0;
+  console.log(`Saving ${projectCount} project(s) to Supabase cache...`);
+
   await upsertCredential(supabaseUrl, supabaseKey, "ubersuggest_projects", JSON.stringify(capturedProjects));
   if (capturedAlerts) {
     await upsertCredential(supabaseUrl, supabaseKey, "ubersuggest_alerts", JSON.stringify(capturedAlerts));
   }
 
-  console.log("✅ Ubersuggest data captured and cached in Supabase successfully.");
+  console.log("✅ Ubersuggest data cached in Supabase successfully.");
 }
 
 async function upsertCredential(supabaseUrl, supabaseKey, serviceName, data) {
@@ -176,22 +198,15 @@ async function upsertCredential(supabaseUrl, supabaseKey, serviceName, data) {
     apikey: supabaseKey,
     Prefer: "resolution=merge-duplicates,return=minimal",
   };
-
   const res = await fetch(`${supabaseUrl}/rest/v1/integration_credentials`, {
     method: "POST",
     headers,
     body: JSON.stringify({ service_name: serviceName, token: data, updated_at: new Date().toISOString() }),
   });
-
   if (!res.ok) {
-    // Try PATCH as fallback
     const patchRes = await fetch(
       `${supabaseUrl}/rest/v1/integration_credentials?service_name=eq.${serviceName}`,
-      {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ token: data, updated_at: new Date().toISOString() }),
-      }
+      { method: "PATCH", headers, body: JSON.stringify({ token: data, updated_at: new Date().toISOString() }) }
     );
     if (!patchRes.ok) throw new Error(`Failed to save ${serviceName}: ${await patchRes.text()}`);
   }
