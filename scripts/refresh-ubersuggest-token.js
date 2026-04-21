@@ -45,7 +45,7 @@ async function run() {
         const arr = Array.isArray(data) ? data : data.projects || data.data || data.result || [];
         if (arr.length > 0) {
           capturedProjects = data;
-          console.log(`✓ Intercepted /api/projects — ${arr.length} project(s): ${arr.map((p: any) => p.domain || p.url).join(", ")}`);
+          console.log(`✓ Intercepted /api/projects — ${arr.length} project(s): ${arr.map((p) => p.domain || p.url).join(", ")}`);
         }
       }
       if (url.includes("neilpatel.com/api/user/alerts") && status === 200 && !capturedAlerts) {
