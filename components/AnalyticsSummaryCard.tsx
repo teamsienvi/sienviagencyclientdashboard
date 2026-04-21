@@ -230,40 +230,43 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
         return null;
     };
     
-    // Dynamic thumbnail fetching
-    const [fetchedThumbnail, setFetchedThumbnail] = useState<string | null>(null);
+    // Dynamic thumbnail fetching for all top posts
+    const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
 
     useEffect(() => {
-        const fetchDynamicThumbnail = async () => {
+        const fetchAllThumbnails = async () => {
             if (!topPosts || topPosts.length === 0) return;
-            const hero = topPosts[0];
-            if (!hero.post_url) return;
             
-            // If Youtube, do it natively without hitting the API
-            const nativeThumb = getThumbnailUrl(hero.post_url, hero.platform);
-            if (nativeThumb) {
-                setFetchedThumbnail(nativeThumb);
-                return;
-            }
-
-            // Otherwise, hit our generic proxy API route
-            try {
-                const res = await fetch(`/api/thumbnail?url=${encodeURIComponent(hero.post_url)}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.url) {
-                        setFetchedThumbnail(data.url);
-                    }
+            await Promise.all(topPosts.map(async (post) => {
+                if (!post.post_url) return;
+                
+                // If Youtube, do it natively without hitting the API
+                const nativeThumb = getThumbnailUrl(post.post_url, post.platform);
+                if (nativeThumb) {
+                    setThumbnails(prev => ({ ...prev, [post.id]: nativeThumb }));
+                    return;
                 }
-            } catch (err) {
-                console.error("Failed to fetch thumbnail", err);
-            }
+
+                // Skip if we already have it
+                if (thumbnails[post.id]) return;
+
+                // Otherwise, hit our generic proxy API route
+                try {
+                    const res = await fetch(`/api/thumbnail?url=${encodeURIComponent(post.post_url)}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.url) {
+                            setThumbnails(prev => ({ ...prev, [post.id]: data.url }));
+                        }
+                    }
+                } catch (err) {
+                    // silently fail for individual thumbnails
+                }
+            }));
         };
 
-        fetchDynamicThumbnail();
+        fetchAllThumbnails();
     }, [topPosts]);
-
-    const thumbnailUrl = fetchedThumbnail;
     
     const formatNumber = (num: number) => {
         if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
@@ -356,7 +359,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'ads' ? 'Ad Spend' : 'Total Views'}
+                                    {type === 'ads' ? 'Ad Spend' : 'Total Views (All Platforms)'}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : formatNumber(totalViews)}
@@ -379,7 +382,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'ads' ? 'ROAS' : 'Engagement Rate'}
+                                    {type === 'ads' ? 'ROAS' : 'Avg. Engagement Rate'}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'ads' ? `${(aiMetrics.roas || 0).toFixed(2)}x` : `${engagementRate.toFixed(1)}%`}
@@ -509,8 +512,8 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                             >
                                                 {/* Mini Thumbnail */}
                                                 <div className="h-16 w-16 sm:h-20 sm:w-24 rounded-lg bg-muted flex-shrink-0 relative overflow-hidden flex items-center justify-center">
-                                                    {(getThumbnailUrl(post.post_url, post.platform) || fetchedThumbnail) ? (
-                                                        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${getThumbnailUrl(post.post_url, post.platform) || fetchedThumbnail})` }}></div>
+                                                    {(getThumbnailUrl(post.post_url, post.platform) || thumbnails[post.id]) ? (
+                                                        <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${getThumbnailUrl(post.post_url, post.platform) || thumbnails[post.id]})` }}></div>
                                                     ) : (
                                                         type === 'social' ? <Video className="h-6 w-6 text-muted-foreground/40" /> : (type === 'ads' ? <Megaphone className="h-6 w-6 text-muted-foreground/40" /> : <Eye className="h-6 w-6 text-muted-foreground/40" />)
                                                     )}
