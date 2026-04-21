@@ -1038,6 +1038,7 @@ async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promi
                 generationConfig: {
                     temperature: 0.7,
                     maxOutputTokens: 8192,
+                    responseMimeType: "application/json",
                 },
             }),
         });
