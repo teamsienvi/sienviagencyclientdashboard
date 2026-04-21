@@ -31,7 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
-import { TopPerformingPosts } from "@/components/TopPerformingPosts";
+// import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
@@ -736,7 +736,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     />
                   )}
 
-                  {hasSocialMedia && (
+                  {/* {hasSocialMedia && (
                     <div className="space-y-4 pt-2">
                       <div className="flex justify-between flex-col sm:flex-row sm:items-center gap-4">
                         <h3 className="text-lg font-semibold flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Top Performing Posts</h3>
@@ -744,7 +744,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       </div>
                       <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
                     </div>
-                  )}
+                  )} */}
                 </div>
               </div>
 
