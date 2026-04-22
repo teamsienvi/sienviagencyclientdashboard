@@ -38,7 +38,7 @@ interface AnalyticsSummaryCardProps {
 export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d", customDateRange, isActive = true }: AnalyticsSummaryCardProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const [sessionReady, setSessionReady] = useState(false);
+    const [sessionReady, setSessionReady] = useState(true); // start true so query runs on mount
     const [chartMetric, setChartMetric] = useState<'views' | 'engagement'>('views');
     const [refreshPhase, setRefreshPhase] = useState<'idle' | 'syncing' | 'analyzing'>('idle');
 
@@ -204,9 +204,10 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const totalViews = type === 'social' ? (metricsData?.totalViews || 0) : (aiMetrics.total_views || 0);
     const totalEngagements = metricsData?.totalEngagements || 0;
     const platformData = metricsData?.platformData || [];
-    const followersGained = (aiMetrics.followers_gained !== undefined && aiMetrics.followers_gained !== null)
-        ? aiMetrics.followers_gained 
-        : (metricsData?.followersGained || 0);
+    // For social, prefer live metricsData when AI metric is 0 or absent (AI often returns 0 as default)
+    const followersGained = type === 'social'
+        ? (metricsData?.followersGained || aiMetrics.followers_gained || 0)
+        : (aiMetrics.followers_gained || 0);
     const timelineData = metricsData?.timelineData || [];
     
     // Find highest engagement platform 
@@ -586,9 +587,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                 <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
                                                 <p className="text-sm font-medium leading-snug">{s.replace(/\*\*/g, '')}</p>
                                             </div>
-                                        )) : (
-                                            <p className="text-xs text-muted-foreground">No strength insights available.</p>
-                                        )}
+                                        )) : null}
                                     </div>
                                 </div>
 
@@ -601,9 +600,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                 <XCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                                                 <p className="text-sm font-medium leading-snug text-foreground/90">{w.replace(/\*\*/g, '')}</p>
                                             </div>
-                                        )) : (
-                                            <p className="text-xs text-muted-foreground">No weakness insights available.</p>
-                                        )}
+                                        )) : null}
                                     </div>
                                 </div>
 

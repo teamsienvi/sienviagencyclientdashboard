@@ -34,6 +34,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 // import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
+import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { Globe, Share2, Star } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
@@ -930,11 +931,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           />
                         )}
                         {getClientAdPlatforms(client.name).includes('amazon') && (
-                          <AdsShredderCard 
-                            clientId={clientId!} 
-                            adPlatform="amazon" 
-                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`} 
-                            isActive={activeTab === "analytics"}
+                          <AmazonAdsReportCard
+                            clientId={clientId!}
+                            clientName={client.name}
                           />
                         )}
                       </div>
