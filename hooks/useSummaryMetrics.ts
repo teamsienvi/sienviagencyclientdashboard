@@ -6,6 +6,7 @@ export interface PlatformMetric {
     views: number;
     engagements: number;
     engagementRate: number;
+    followersGained: number;
 }
 
 export interface TimelineDataPoint {
@@ -132,6 +133,8 @@ async function computeMetrics(
         .order("date", { ascending: true });
 
     let followersGained = 0;
+    const platformFollowers: Record<string, number> = {};
+    
     if (timelineDataRaw && timelineDataRaw.length > 0) {
         const byPlatform: Record<string, any[]> = {};
         timelineDataRaw.forEach((f) => {
@@ -141,7 +144,11 @@ async function computeMetrics(
         Object.values(byPlatform).forEach((points) => {
             const first = points[0]?.followers || 0;
             const last = points[points.length - 1]?.followers || 0;
-            followersGained += (last - first);
+            const diff = last - first;
+            followersGained += diff;
+            if (points[0]?.platform) {
+                platformFollowers[points[0].platform] = diff;
+            }
         });
     }
 
@@ -186,9 +193,20 @@ async function computeMetrics(
         }
     });
 
+    // Also include platforms that have follower data but no posts
+    Object.keys(platformFollowers).forEach(plat => {
+        if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0 };
+    });
+
     const platformData: PlatformMetric[] = Object.entries(pMap).map(([platform, stats]) => {
         const engagementRate = stats.views > 0 ? (stats.engagements / stats.views) * 100 : 0;
-        return { platform, views: stats.views, engagements: stats.engagements, engagementRate };
+        return { 
+            platform, 
+            views: stats.views, 
+            engagements: stats.engagements, 
+            engagementRate,
+            followersGained: platformFollowers[platform] || 0
+        };
     }).sort((a, b) => b.views - a.views);
 
     const timelineData = Object.values(timelineMap);

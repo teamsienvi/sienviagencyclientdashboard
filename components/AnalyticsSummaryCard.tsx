@@ -563,18 +563,26 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                     <p className="font-semibold text-base mb-4">{type === 'social' ? 'Platform Breakdown' : (type === 'ads' ? 'Spend Distribution' : 'Traffic Sources')}</p>
                                     <div className="w-full">
                                         <div className="flex text-xs font-semibold text-muted-foreground mb-3 pb-2 border-b border-border/40 px-2">
-                                            <div className="w-1/3">Views</div>
-                                            <div className="w-1/3 text-center">Engagement rate</div>
-                                            <div className="w-1/3 text-right">Engagements</div>
+                                            <div className={type === 'social' ? "w-1/4" : "w-1/3"}>Platform</div>
+                                            {type === 'social' && <div className="w-1/4 text-center">Followers</div>}
+                                            <div className={type === 'social' ? "w-1/4 text-center" : "w-1/3 text-center"}>Engagement rate</div>
+                                            <div className={type === 'social' ? "w-1/4 text-right" : "w-1/3 text-right"}>Engagements</div>
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             {platformData.map((plat, idx) => (
                                                 <div key={idx} className="flex items-center text-sm py-2 px-2 hover:bg-muted/40 rounded-lg group">
-                                                    <div className="w-1/3 flex items-center gap-2">
+                                                    <div className={type === 'social' ? "w-1/4 flex items-center gap-2" : "w-1/3 flex items-center gap-2"}>
                                                         <Badge variant="outline" className="text-[10px] capitalize h-5">{plat.platform}</Badge>
                                                     </div>
-                                                    <div className="w-1/3 text-center font-medium">{plat.engagementRate.toFixed(1)}%</div>
-                                                    <div className="w-1/3 text-right font-medium text-muted-foreground">{formatNumber(plat.engagements)}</div>
+                                                    {type === 'social' && (
+                                                        <div className="w-1/4 text-center font-medium">
+                                                            <span className={plat.followersGained > 0 ? "text-emerald-500" : (plat.followersGained < 0 ? "text-rose-500" : "text-muted-foreground")}>
+                                                                {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : formatNumber(plat.followersGained)}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                    <div className={type === 'social' ? "w-1/4 text-center font-medium" : "w-1/3 text-center font-medium"}>{plat.engagementRate.toFixed(1)}%</div>
+                                                    <div className={type === 'social' ? "w-1/4 text-right font-medium text-muted-foreground" : "w-1/3 text-right font-medium text-muted-foreground"}>{formatNumber(plat.engagements)}</div>
                                                 </div>
                                             ))}
                                             {platformData.length === 0 && (
