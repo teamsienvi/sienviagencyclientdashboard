@@ -576,8 +576,8 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                     </div>
                                                     {type === 'social' && (
                                                         <div className="w-1/4 text-center font-medium">
-                                                            <span className={plat.followersGained > 0 ? "text-emerald-500" : (plat.followersGained < 0 ? "text-rose-500" : "text-muted-foreground")}>
-                                                                {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : formatNumber(plat.followersGained)}
+                                                            <span className={(plat.followersGained || 0) > 0 ? "text-emerald-500" : ((plat.followersGained || 0) < 0 ? "text-rose-500" : "text-muted-foreground")}>
+                                                                {(plat.followersGained || 0) > 0 ? `+${formatNumber(plat.followersGained || 0)}` : formatNumber(plat.followersGained || 0)}
                                                             </span>
                                                         </div>
                                                     )}
