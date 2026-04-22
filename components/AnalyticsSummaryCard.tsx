@@ -34,9 +34,21 @@ interface AnalyticsSummaryCardProps {
     dateRange?: string;
     customDateRange?: { start: Date; end: Date };
     isActive?: boolean;
+    liveFollowers?: Record<string, number> | null;
+    socialMetrics?: Record<string, any> | null;
 }
 
-export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = "7d", customDateRange, isActive = true }: AnalyticsSummaryCardProps) {
+export function AnalyticsSummaryCard({ 
+    clientId, 
+    type, 
+    title, 
+    icon, 
+    dateRange = "7d", 
+    customDateRange, 
+    isActive = true,
+    liveFollowers,
+    socialMetrics
+}: AnalyticsSummaryCardProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const [sessionReady, setSessionReady] = useState(true); // start true so query runs on mount
@@ -209,11 +221,34 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const followersGained = type === 'social'
         ? (metricsData?.followersGained || aiMetrics.followers_gained || 0)
         : (aiMetrics.followers_gained || 0);
-    const totalCurrentFollowers = type === 'social' ? (metricsData?.totalCurrentFollowers || aiMetrics.total_followers || 0) : 0;
+        
+    // Calculate accurate total current followers directly from live props if available
+    let totalCurrentFollowers = type === 'social' ? (metricsData?.totalCurrentFollowers || aiMetrics.total_followers || 0) : 0;
+    if (type === 'social' && (liveFollowers || socialMetrics)) {
+        let accurateTotal = 0;
+        platformData.forEach(plat => {
+            const plToLower = String(plat.platform).toLowerCase();
+            const liveCount = liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || plat.followers || 0;
+            accurateTotal += liveCount;
+        });
+        if (accurateTotal > 0) {
+            totalCurrentFollowers = accurateTotal;
+        }
+    }
+    
+    // Process platformData to inject live followers directly so the Platform Breakdown table is perfect
+    const optimizedPlatformData = platformData.map(plat => {
+        const plToLower = String(plat.platform).toLowerCase();
+        return {
+            ...plat,
+            followers: liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || plat.followers || 0
+        };
+    });
+
     const timelineData = metricsData?.timelineData || [];
     
     // Find highest engagement platform 
-    const bestPlatform = aiMetrics.top_platform || [...platformData].sort((a,b) => b.engagementRate - a.engagementRate)[0]?.platform || "None";
+    const bestPlatform = aiMetrics.top_platform || [...optimizedPlatformData].sort((a,b) => b.engagementRate - a.engagementRate)[0]?.platform || "None";
 
     
     // Extract thumbnail for YouTube videos
@@ -570,7 +605,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                             <div className={type === 'social' ? "w-1/4 text-right" : "w-1/3 text-right"}>Engagements</div>
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            {platformData.map((plat, idx) => (
+                                            {optimizedPlatformData.map((plat, idx) => (
                                                 <div key={idx} className="flex items-center text-sm py-2 px-2 hover:bg-muted/40 rounded-lg group">
                                                     <div className={type === 'social' ? "w-1/4 flex items-center gap-2" : "w-1/3 flex items-center gap-2"}>
                                                         <Badge variant="outline" className="text-[10px] capitalize h-5">{plat.platform}</Badge>
@@ -589,7 +624,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                     <div className={type === 'social' ? "w-1/4 text-right font-medium text-muted-foreground" : "w-1/3 text-right font-medium text-muted-foreground"}>{formatNumber(plat.engagements)}</div>
                                                 </div>
                                             ))}
-                                            {platformData.length === 0 && (
+                                            {optimizedPlatformData.length === 0 && (
                                                 <p className="text-xs text-center text-muted-foreground py-4">No platform data available.</p>
                                             )}
                                         </div>

@@ -708,6 +708,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       dateRange={dateRange}
                       customDateRange={customDateRange}
                       isActive={activeTab === "analytics"}
+                      liveFollowers={metricoolFollowers}
+                      socialMetrics={socialMetrics}
                     />
                   )}
 
