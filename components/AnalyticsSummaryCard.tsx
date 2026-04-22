@@ -17,6 +17,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSummaryMetrics, PlatformMetric } from "@/hooks/useSummaryMetrics";
 import { useAllTimeTopPosts } from "@/hooks/useAllTimeTopPosts";
+import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 
 interface SummaryData {
     strengths: string[];
@@ -501,7 +502,12 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
 
                                 {/* Top Content List */}
                                 <div className="bg-transparent">
-                                    <p className="font-semibold text-lg mb-4 leading-none">{type === 'social' ? 'Top Content' : (type === 'ads' ? 'Active Campaigns' : 'Top Pages')}</p>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <p className="font-semibold text-lg leading-none">{type === 'social' ? 'Top Content' : (type === 'ads' ? 'Active Campaigns' : 'Top Pages')}</p>
+                                        {type === 'social' && (
+                                            <AllTimeTopPostsModal clientId={clientId} buttonLabel="🏆 View Hall of Fame" buttonSize="sm" buttonVariant="outline" />
+                                        )}
+                                    </div>
                                     <div className="flex flex-col gap-3">
                                         {topPosts && topPosts.length > 0 ? topPosts.map((post, idx) => (
                                             <a 
