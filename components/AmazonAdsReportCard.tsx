@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +56,7 @@ interface WastefulTerm {
 }
 
 interface AmazonReportData {
+    sourceFileName?: string;
     kpis: AmazonKPIs;
     executiveSummary: string[];
     clientNeedsToKnow: string;
@@ -102,6 +104,7 @@ const roasClass = (roas: number | null) => {
 // ─── PDF print helper ─────────────────────────────────────────────────────────
 function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: string): string {
     const today = format(new Date(), "MMMM d, yyyy");
+    const displayFileName = data.sourceFileName || fileName;
 
     const kpiRow = (label: string, value: string) =>
         `<div class="kpi-cell"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
@@ -166,7 +169,7 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
 </head>
 <body>
   <h1>Amazon Ads Report — ${clientName}</h1>
-  <p class="subtitle">Source file: ${fileName} &nbsp;|&nbsp; Generated: ${today}</p>
+  <p class="subtitle">Source file: ${displayFileName} &nbsp;|&nbsp; Generated: ${today}</p>
 
   <div class="kpi-bar">
     ${kpiRow("Ad Sales", fmt$(data.kpis.adSales))}
@@ -241,6 +244,39 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
     const { toast } = useToast();
     const printFrameRef = useRef<HTMLIFrameElement | null>(null);
+    const queryClient = useQueryClient();
+
+    // ─── Cache Loading ───────────────────────────────────────────────────────
+    const { data: cachedData, isLoading: isFetchingCache } = useQuery({
+        queryKey: ["amazon-ads-report", clientId],
+        queryFn: async () => {
+            const { data, error } = await supabase
+                .from("analytics_summaries" as any)
+                .select("summary_data, generated_at")
+                .eq("client_id", clientId)
+                .eq("type", "amazon_ads")
+                .maybeSingle();
+
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!clientId
+    });
+
+    useEffect(() => {
+        const cd = cachedData as any;
+        if (cd?.summary_data && !report && !isAnalyzing) {
+            const cachedReport = cd.summary_data as AmazonReportData;
+            setReport(cachedReport);
+            if (cd.generated_at) {
+                setGeneratedAt(new Date(cd.generated_at));
+            }
+            if (cachedReport.sourceFileName && !file) {
+                // Give it a dummy file so the UI shows the filename
+                setFile(new File([""], cachedReport.sourceFileName, { type: "text/csv" }));
+            }
+        }
+    }, [cachedData, report, isAnalyzing, file]);
 
     // ─── File handling ───────────────────────────────────────────────────────
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -294,9 +330,26 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             }
 
             const result: AmazonReportData = await response.json();
+            result.sourceFileName = file.name;
+            const now = new Date();
+
+            await supabase
+                .from("analytics_summaries" as any)
+                .upsert(
+                    {
+                        client_id: clientId,
+                        type: "amazon_ads",
+                        summary_data: result as any,
+                        generated_at: now.toISOString(),
+                    },
+                    { onConflict: "client_id,type" }
+                );
+
+            queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
+
             setReport(result);
-            setGeneratedAt(new Date());
-            toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated." });
+            setGeneratedAt(now);
+            toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated and saved." });
         } catch (err: any) {
             toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
         } finally {
@@ -306,9 +359,9 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
     // ─── PDF Download ─────────────────────────────────────────────────────────
     const handleDownloadPDF = () => {
-        if (!report || !file) return;
+        if (!report) return;
 
-        const html = buildPrintHTML(report, clientName, file.name);
+        const html = buildPrintHTML(report, clientName, file?.name || report.sourceFileName || "Cached Report");
 
         // Open in a new window and trigger print
         const win = window.open("", "_blank", "width=960,height=800");
@@ -417,7 +470,12 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => { setReport(null); setFile(null); }}
+                                    onClick={async () => { 
+                                        setReport(null); 
+                                        setFile(null); 
+                                        await supabase.from("analytics_summaries" as any).delete().eq("client_id", clientId).eq("type", "amazon_ads");
+                                        queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
+                                    }}
                                     className="h-8 text-xs text-muted-foreground"
                                 >
                                     Clear
