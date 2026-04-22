@@ -209,6 +209,7 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
     const followersGained = type === 'social'
         ? (metricsData?.followersGained || aiMetrics.followers_gained || 0)
         : (aiMetrics.followers_gained || 0);
+    const totalCurrentFollowers = type === 'social' ? (metricsData?.totalCurrentFollowers || aiMetrics.total_followers || 0) : 0;
     const timelineData = metricsData?.timelineData || [];
     
     // Find highest engagement platform 
@@ -407,11 +408,11 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'social' ? 'Followers Gained' : (type === 'ads' ? 'Total Conversions' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors'))}
+                                    {type === 'social' ? 'Total Followers' : (type === 'ads' ? 'Total Conversions' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors'))}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'social' 
-                                        ? (followersGained > 0 ? `+${followersGained}` : followersGained) 
+                                        ? formatNumber(totalCurrentFollowers || 0) 
                                         : (type === 'ads' ? formatNumber(aiMetrics.total_conversions || 0) : (aiMetrics.total_sales > 0 ? `$${formatNumber(aiMetrics.total_sales)}` : formatNumber(aiMetrics.unique_visitors || 0)))
                                     }
                                 </p>
@@ -575,8 +576,11 @@ export function AnalyticsSummaryCard({ clientId, type, title, icon, dateRange = 
                                                         <Badge variant="outline" className="text-[10px] capitalize h-5">{plat.platform}</Badge>
                                                     </div>
                                                     {type === 'social' && (
-                                                        <div className="w-1/4 text-center font-medium">
-                                                            <span className={(plat.followersGained || 0) > 0 ? "text-emerald-500" : ((plat.followersGained || 0) < 0 ? "text-rose-500" : "text-muted-foreground")}>
+                                                        <div className="w-1/4 text-center font-medium flex items-center justify-center gap-1.5 flex-wrap">
+                                                            <span className="text-foreground">
+                                                                {formatNumber(plat.followers || 0)}
+                                                            </span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${(plat.followersGained || 0) > 0 ? "text-emerald-500" : ((plat.followersGained || 0) < 0 ? "text-rose-500" : "text-muted-foreground")}`}>
                                                                 {(plat.followersGained || 0) > 0 ? `+${formatNumber(plat.followersGained || 0)}` : formatNumber(plat.followersGained || 0)}
                                                             </span>
                                                         </div>

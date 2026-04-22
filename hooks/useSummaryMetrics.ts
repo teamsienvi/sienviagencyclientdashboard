@@ -7,6 +7,7 @@ export interface PlatformMetric {
     engagements: number;
     engagementRate: number;
     followersGained: number;
+    followers: number;
 }
 
 export interface TimelineDataPoint {
@@ -18,8 +19,8 @@ export interface TimelineDataPoint {
 export function useSummaryMetrics(clientId: string, dateRange: string = "7d", customDateRange?: { start: Date; end: Date }, isActive: boolean = true) {
     return useQuery({
         queryKey: ["summary-metrics", clientId, dateRange, customDateRange?.start, customDateRange?.end],
-        queryFn: async (): Promise<{ totalViews: number; totalEngagements: number; platformData: PlatformMetric[]; followersGained: number; timelineData: TimelineDataPoint[] }> => {
-            if (!clientId) return { totalViews: 0, totalEngagements: 0, platformData: [], followersGained: 0, timelineData: [] };
+        queryFn: async (): Promise<{ totalViews: number; totalEngagements: number; platformData: PlatformMetric[]; followersGained: number; totalCurrentFollowers: number; timelineData: TimelineDataPoint[] }> => {
+            if (!clientId) return { totalViews: 0, totalEngagements: 0, platformData: [], followersGained: 0, totalCurrentFollowers: 0, timelineData: [] };
 
             let periodStartStr: string;
             let periodEndStr: string;
@@ -132,6 +133,7 @@ async function computeMetrics(
         .order("date", { ascending: true });
 
     const platformFollowers: Record<string, number> = {};
+    const platformCurrentFollowers: Record<string, number> = {};
     
     if (timelineDataRaw && timelineDataRaw.length > 0) {
         const byPlatform: Record<string, any[]> = {};
@@ -161,6 +163,8 @@ async function computeMetrics(
             } else {
                 platformFollowers[platform] = 0;
             }
+            // Always set current followers to the absolute latest point we have
+            platformCurrentFollowers[platform] = points[points.length - 1].followers;
         });
     }
 
@@ -218,12 +222,14 @@ async function computeMetrics(
             views: stats.views, 
             engagements: stats.engagements, 
             engagementRate,
-            followersGained: platformFollowers[plToLower] || 0
+            followersGained: platformFollowers[plToLower] || 0,
+            followers: platformCurrentFollowers[plToLower] || 0
         };
     }).sort((a, b) => b.views - a.views);
 
     const timelineData = Object.values(timelineMap);
     const totalFollowersGained = Object.values(platformFollowers).reduce((sum, val) => sum + val, 0);
+    const totalCurrentFollowers = Object.values(platformCurrentFollowers).reduce((sum, val) => sum + val, 0);
 
-    return { totalViews, totalEngagements, platformData, followersGained: totalFollowersGained, timelineData };
+    return { totalViews, totalEngagements, platformData, followersGained: totalFollowersGained, totalCurrentFollowers, timelineData };
 }
