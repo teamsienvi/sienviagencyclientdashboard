@@ -223,6 +223,7 @@ async function computeMetrics(
     }).sort((a, b) => b.views - a.views);
 
     const timelineData = Object.values(timelineMap);
+    const totalFollowersGained = Object.values(platformFollowers).reduce((sum, val) => sum + val, 0);
 
-    return { totalViews, totalEngagements, platformData, followersGained, timelineData };
+    return { totalViews, totalEngagements, platformData, followersGained: totalFollowersGained, timelineData };
 }
