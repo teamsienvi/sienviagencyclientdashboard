@@ -124,15 +124,13 @@ async function computeMetrics(
 ) {
     const days = dateRange === "30d" ? 30 : dateRange === "60d" ? 60 : 7;
 
-    // Fetch Follower Timeline
+    // Fetch Follower Timeline (fetch all to get accurate baseline before period)
     const { data: timelineDataRaw } = await supabase
         .from("social_follower_timeline")
         .select("platform, date, followers")
         .eq("client_id", clientId)
-        .gte("date", periodStartStr)
         .order("date", { ascending: true });
 
-    let followersGained = 0;
     const platformFollowers: Record<string, number> = {};
     
     if (timelineDataRaw && timelineDataRaw.length > 0) {
@@ -142,12 +140,26 @@ async function computeMetrics(
             byPlatform[f.platform].push(f);
         });
         Object.values(byPlatform).forEach((points) => {
-            const first = points[0]?.followers || 0;
-            const last = points[points.length - 1]?.followers || 0;
-            const diff = last - first;
-            followersGained += diff;
-            if (points[0]?.platform) {
-                platformFollowers[points[0].platform] = diff;
+            if (points.length === 0) return;
+            const platform = points[0].platform;
+
+            // Split into points before the period and points within the period
+            const beforePoints = points.filter(p => p.date < periodStartStr);
+            const periodPoints = points.filter(p => p.date >= periodStartStr);
+            
+            if (periodPoints.length > 0) {
+                // Baseline is the last known follower count BEFORE the period,
+                // or if none exists, the first count inside the period.
+                const baseline = beforePoints.length > 0 
+                    ? beforePoints[beforePoints.length - 1].followers 
+                    : periodPoints[0].followers;
+                    
+                const last = periodPoints[periodPoints.length - 1].followers;
+                const diff = last - baseline;
+                
+                platformFollowers[platform] = diff;
+            } else {
+                platformFollowers[platform] = 0;
             }
         });
     }
