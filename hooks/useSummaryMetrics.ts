@@ -140,8 +140,8 @@ async function computeMetrics(
             byPlatform[f.platform].push(f);
         });
         Object.values(byPlatform).forEach((points) => {
-            if (points.length === 0) return;
-            const platform = points[0].platform;
+            // Ensure platform matching is case-insensitive
+            const platform = String(points[0].platform || "").toLowerCase();
 
             // Split into points before the period and points within the period
             const beforePoints = points.filter(p => p.date < periodStartStr);
@@ -212,12 +212,13 @@ async function computeMetrics(
 
     const platformData: PlatformMetric[] = Object.entries(pMap).map(([platform, stats]) => {
         const engagementRate = stats.views > 0 ? (stats.engagements / stats.views) * 100 : 0;
+        const plToLower = String(platform).toLowerCase();
         return { 
             platform, 
             views: stats.views, 
             engagements: stats.engagements, 
             engagementRate,
-            followersGained: platformFollowers[platform] || 0
+            followersGained: platformFollowers[plToLower] || 0
         };
     }).sort((a, b) => b.views - a.views);
 
