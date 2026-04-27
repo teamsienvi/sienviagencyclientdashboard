@@ -7,10 +7,12 @@ import {
     Sparkles, RefreshCw, ThumbsUp, AlertTriangle, Target, Star,
     ChevronDown, ChevronUp, ExternalLink, Eye, PlaySquare, Heart, MessageCircle, 
     Share2, ArrowUpRight, BarChart3, Users, TrendingUp, CheckCircle2, ArrowRight, XCircle, Video, FileText,
-    ShoppingBag, Globe, DollarSign, Megaphone, Zap
+    ShoppingBag, Globe, DollarSign, Megaphone, Zap, Loader2
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
+import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { format, formatDistanceToNow } from "date-fns";
@@ -18,6 +20,7 @@ import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSummaryMetrics, PlatformMetric } from "@/hooks/useSummaryMetrics";
 import { useAllTimeTopPosts } from "@/hooks/useAllTimeTopPosts";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
+import { useSyncState } from "@/hooks/useSyncState";
 
 interface SummaryData {
     strengths: string[];
@@ -51,25 +54,45 @@ export function AnalyticsSummaryCard({
 }: AnalyticsSummaryCardProps) {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const [sessionReady, setSessionReady] = useState(true); // start true so query runs on mount
+    
+    // Note: sessionReady removed — Supabase client handles auth internally.
+    // Gating on sessionReady caused auth-state events to briefly set it false,
+    // which dropped React Query cached data mid-session.
     const [chartMetric, setChartMetric] = useState<'views' | 'engagement'>('views');
     const [refreshPhase, setRefreshPhase] = useState<'idle' | 'syncing' | 'analyzing'>('idle');
 
+    // sessionConfirmed logic removed to prevent dropping cache and gating requests
+
+    const { status: syncStatus, isSyncing, isDegraded, retry } = useSyncState(clientId, type, `${type}_summary`);
+
+    const prevSyncing = useRef(isSyncing);
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) setSessionReady(true);
-        });
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSessionReady(!!session);
-        });
-        return () => subscription.unsubscribe();
-    }, []);
+        if (prevSyncing.current && !isSyncing) {
+            queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
+        }
+        prevSyncing.current = isSyncing;
+    }, [isSyncing, queryClient, clientId, type]);
 
     // 1. Fetch AI Summary
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
     const { data: cachedSummary, isLoading: isLoadingCache, isFetching: isFetchingCache } = useQuery({
         queryKey: ["analytics-summary", clientId, type],
         queryFn: async () => {
-            const { data, error } = await supabase
+            // Use the Next.js @supabase/ssr client which uses cookies and bypasses localStorage locks!
+            const { createClient } = await import("@/lib/supabase/browser");
+            const browserSupabase = createClient();
+
+            // Verify session from cookies quickly
+            const { data: { session } } = await browserSupabase.auth.getSession();
+            if (!session) {
+                console.log(`[AnalyticsSummaryCard] No session from cookies, cannot fetch`);
+                return null;
+            }
+
+            console.log(`[AnalyticsSummaryCard] Starting fetch with Next.js SSR client for client_id=${clientId}, type=${type}`);
+            
+            const { data, error } = await browserSupabase
                 .from("analytics_summaries" as any)
                 .select("summary_data, generated_at, period_start, period_end")
                 .eq("client_id", clientId)
@@ -78,14 +101,20 @@ export function AnalyticsSummaryCard({
                 .limit(1)
                 .maybeSingle();
 
-            if (error) return null;
+            if (error) {
+                console.error('[AnalyticsSummaryCard] analytics_summaries fetch error:', error);
+                setFetchError(JSON.stringify(error));
+                return null;
+            }
+            
+            setFetchError(null);
+            console.log('[AnalyticsSummaryCard] Fetched summary:', data?.generated_at, 'keys:', data ? Object.keys((data as any)?.summary_data || {}) : 'null');
             return data;
         },
-        enabled: !!clientId && sessionReady,
-        staleTime: FRESHNESS_POLICIES.summary.staleThresholdMs,
-        gcTime: 7 * 24 * 60 * 60 * 1000,
-        refetchOnWindowFocus: isActive,
-        refetchOnMount: isActive,
+        enabled: !!clientId,
+        staleTime: 0, // Force fetch on mount/focus to bypass bad caches
+        retry: 3,
+        retryDelay: 1000
     });
 
     // 2. Fetch Hard Metrics (Views by platform, Engagement)
@@ -116,95 +145,8 @@ export function AnalyticsSummaryCard({
     // 3. Fetch Top Posts
     const { data: topPosts, isLoading: isLoadingTopPosts } = useAllTimeTopPosts(isSocial ? clientId : undefined, isSocial ? 4 : 0, undefined, bounds.start, bounds.end);
 
-    const generateMutation = useMutation({
-        mutationFn: async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            
-            // 1. If social, trigger and AWAIT a sync first to ensure top posts are fresh
-            if (type === 'social') {
-                setRefreshPhase('syncing');
-                console.log("Triggering live social sync for client:", clientId);
-                try {
-                    const syncResponse = await fetch(
-                        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/sync-social-analytics`,
-                        {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${session?.access_token}`,
-                                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-                            },
-                            body: JSON.stringify({ clientId, manual: true }),
-                        }
-                    );
-                    if (!syncResponse.ok) {
-                        console.error("Sync partial failure or timeout, proceeding to analysis anyway.");
-                    }
-                } catch (e) {
-                    console.error("Failed to sync platforms", e);
-                }
-            }
-
-            // 2. Generate the AI Summary
-            setRefreshPhase('analyzing');
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-analytics-summary`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${session?.access_token}`,
-                        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-                    },
-                    body: JSON.stringify({ clientId, type, dateRange }),
-                }
-            );
-            if (!response.ok) {
-                const err = await response.json();
-                throw new Error(err.error || "Failed to generate summary");
-            }
-            return response.json();
-        },
-        onSuccess: async (summaryData: SummaryData) => {
-            setRefreshPhase('idle');
-            const now = new Date();
-            const periodEnd = now.toISOString().split("T")[0];
-            const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
-            const periodStart = new Date(now);
-            periodStart.setDate(periodStart.getDate() - daysToSubtract);
-            
-            await supabase
-                .from("analytics_summaries" as any)
-                .upsert(
-                    {
-                        client_id: clientId,
-                        type,
-                        summary_data: summaryData,
-                        period_start: periodStart.toISOString().split("T")[0],
-                        period_end: periodEnd,
-                        generated_at: now.toISOString(),
-                    },
-                    { onConflict: "client_id,type" }
-                );
-
-            queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
-            if (type === 'social') {
-                queryClient.invalidateQueries({ queryKey: ["all-time-top-posts"] });
-                queryClient.invalidateQueries({ queryKey: ["top-performing-posts"] });
-                queryClient.invalidateQueries({ queryKey: ["summary-metrics"] });
-                queryClient.invalidateQueries({ queryKey: ["client-social-metrics", clientId] });
-            }
-            toast({ title: "Summary updated!", description: `${title} analysis refreshed with latest data.` });
-        },
-        onError: (error: Error) => {
-            setRefreshPhase('idle');
-            toast({ title: "Error", description: error.message, variant: "destructive" });
-        },
-    });
-
-
-    const summary: SummaryData | null = generateMutation.data || (cachedSummary as any)?.summary_data || null;
-    const isGenerating = generateMutation.isPending;
+    const summary: SummaryData | null = (cachedSummary as any)?.summary_data || null;
+    const isGenerating = isSyncing;
     
     // Parse the lists, falling back to empty
     const strengths = summary?.strengths || [];
@@ -217,38 +159,45 @@ export function AnalyticsSummaryCard({
     const totalViews = type === 'social' ? (metricsData?.totalViews || 0) : (aiMetrics.total_views || 0);
     const totalEngagements = metricsData?.totalEngagements || 0;
     const platformData = metricsData?.platformData || [];
-    // For social, prefer live metricsData when AI metric is 0 or absent (AI often returns 0 as default)
-    const followersGained = type === 'social'
-        ? (metricsData?.followersGained || aiMetrics.followers_gained || 0)
-        : (aiMetrics.followers_gained || 0);
-        
-    // Calculate accurate total current followers directly from live props if available
-    let totalCurrentFollowers = type === 'social' ? (metricsData?.totalCurrentFollowers || aiMetrics.total_followers || 0) : 0;
-    if (type === 'social' && (liveFollowers || socialMetrics)) {
-        let accurateTotal = 0;
-        platformData.forEach(plat => {
-            const plToLower = String(plat.platform).toLowerCase();
-            const liveCount = liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || plat.followers || 0;
-            accurateTotal += liveCount;
-        });
-        if (accurateTotal > 0) {
-            totalCurrentFollowers = accurateTotal;
-        }
-    }
-    
     // Process platformData to inject live followers directly so the Platform Breakdown table is perfect
     const optimizedPlatformData = platformData.map(plat => {
         const plToLower = String(plat.platform).toLowerCase();
         return {
             ...plat,
-            followers: liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || plat.followers || 0
+            followers: liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || plat.followers || 0,
+            followersGained: socialMetrics?.[plToLower]?.new_followers ?? plat.followersGained ?? 0
         };
     });
 
+    // Also recalculate total followers gained using the more accurate optimized platform data
+    let optimizedTotalFollowersGained = 0;
+    if (type === 'social') {
+        optimizedPlatformData.forEach(plat => {
+            optimizedTotalFollowersGained += (plat.followersGained || 0);
+        });
+    }
+
+    const followersGained = type === 'social'
+        ? (optimizedTotalFollowersGained || aiMetrics.followers_gained || 0)
+        : (aiMetrics.followers_gained || 0);
+
+    // Calculate accurate total current followers directly from live props if available
+    let totalCurrentFollowers = type === 'social' ? (metricsData?.totalCurrentFollowers || aiMetrics.total_followers || 0) : 0;
+    if (type === 'social' && (liveFollowers || socialMetrics)) {
+        let accurateTotal = 0;
+        optimizedPlatformData.forEach(plat => {
+            accurateTotal += plat.followers;
+        });
+        if (accurateTotal > 0) {
+            totalCurrentFollowers = accurateTotal;
+        }
+    }
+
     const timelineData = metricsData?.timelineData || [];
     
-    // Find highest engagement platform 
-    const bestPlatform = aiMetrics.top_platform || [...optimizedPlatformData].sort((a,b) => b.engagementRate - a.engagementRate)[0]?.platform || "None";
+    // Find highest platform by views (most intuitive for 'Primary Channel')
+    const validTopPlatform = aiMetrics.top_platform && aiMetrics.top_platform !== "None" ? aiMetrics.top_platform : null;
+    const bestPlatform = validTopPlatform || [...optimizedPlatformData].sort((a,b) => b.views - a.views)[0]?.platform || "None";
 
     
     // Extract thumbnail for YouTube videos
@@ -323,7 +272,7 @@ export function AnalyticsSummaryCard({
         );
     };
 
-    const hasDataToRender = summary || (type === 'social' && totalViews > 0);
+    const hasDataToRender = summary || (type === 'social' && totalViews > 0) || isGenerating;
     const engagementRate = type === 'social' 
         ? (totalViews > 0 ? (totalEngagements / totalViews) * 100 : 0)
         : (aiMetrics.engagement_rate || 0);
@@ -343,7 +292,13 @@ export function AnalyticsSummaryCard({
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="flex flex-col items-end gap-1 mr-2">
-                        {(cachedSummary as any)?.generated_at && (
+                        {isDegraded && (
+                            <div className="text-[10px] text-amber-500 flex items-center gap-1 font-medium bg-amber-500/10 px-2 py-0.5 rounded-full">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                Degraded (Showing Stale Data)
+                            </div>
+                        )}
+                        {!isDegraded && (cachedSummary as any)?.generated_at && (
                             <div className="text-[10px] text-muted-foreground/60 flex items-center gap-1 font-medium bg-muted/40 px-2 py-0.5 rounded-full">
                                 <Sparkles className="h-2.5 w-2.5" />
                                 Generated {formatDistanceToNow(new Date((cachedSummary as any).generated_at), { addSuffix: true })}
@@ -353,15 +308,13 @@ export function AnalyticsSummaryCard({
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => generateMutation.mutate()}
+                        onClick={() => retry()}
                         disabled={isGenerating || !isActive}
                         className="h-9 text-xs font-medium shadow-sm w-fit gap-2"
                     >
-                        {refreshPhase === 'syncing' ? <RefreshCw className="h-4 w-4 animate-spin" /> : 
-                         refreshPhase === 'analyzing' ? <Sparkles className="h-4 w-4 animate-spin" /> : 
+                        {isSyncing ? <Sparkles className="h-4 w-4 animate-spin" /> : 
                          <RefreshCw className="h-4 w-4" />}
-                        {refreshPhase === 'syncing' ? "Syncing..." : 
-                         refreshPhase === 'analyzing' ? "Analyzing..." : 
+                        {isSyncing ? "Analyzing..." : 
                          "Refresh Analysis"}
                     </Button>
                 </div>
@@ -632,15 +585,27 @@ export function AnalyticsSummaryCard({
                                 </div>
 
                                 {/* What's Working */}
+                                {fetchError && (
+                                    <div className="bg-red-500/10 border border-red-500/50 p-2 text-xs font-mono break-all mb-4">
+                                        FETCH ERROR: {fetchError}
+                                    </div>
+                                )}
                                 <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm">
                                     <p className="font-semibold text-base mb-3">What's Working</p>
                                     <div className="flex flex-col gap-3">
-                                        {strengths.length > 0 ? strengths.map((s, i) => (
+                                        {isGenerating && strengths.length === 0 ? (
+                                            <div className="flex items-center gap-2 text-muted-foreground text-sm py-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Generating insights...
+                                            </div>
+                                        ) : strengths.length > 0 ? strengths.map((s, i) => (
                                             <div key={i} className="flex gap-3 items-start">
                                                 <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
                                                 <p className="text-sm font-medium leading-snug">{s.replace(/\*\*/g, '')}</p>
                                             </div>
-                                        )) : null}
+                                        )) : (
+                                            <p className="text-xs text-muted-foreground py-2">No strengths identified yet.</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -648,12 +613,19 @@ export function AnalyticsSummaryCard({
                                 <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm">
                                     <p className="font-semibold text-base mb-3">Needs Fixing</p>
                                     <div className="flex flex-col gap-3">
-                                        {weaknesses.length > 0 ? weaknesses.map((w, i) => (
+                                        {isGenerating && weaknesses.length === 0 ? (
+                                            <div className="flex items-center gap-2 text-muted-foreground text-sm py-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Analyzing performance...
+                                            </div>
+                                        ) : weaknesses.length > 0 ? weaknesses.map((w, i) => (
                                             <div key={i} className="flex gap-3 items-start">
                                                 <XCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                                                 <p className="text-sm font-medium leading-snug text-foreground/90">{w.replace(/\*\*/g, '')}</p>
                                             </div>
-                                        )) : null}
+                                        )) : (
+                                            <p className="text-xs text-muted-foreground py-2">No areas needing fixing identified yet.</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -663,7 +635,12 @@ export function AnalyticsSummaryCard({
                                         Recommended Actions
                                     </p>
                                     <div className="flex flex-col gap-4 text-sm font-medium">
-                                        {actions.length > 0 ? actions.map((act, i) => {
+                                        {isGenerating && actions.length === 0 ? (
+                                            <div className="flex items-center gap-2 text-blue-700/70 dark:text-blue-300/70 text-sm py-2">
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                Formulating recommendations...
+                                            </div>
+                                        ) : actions.length > 0 ? actions.map((act, i) => {
                                             const parts = act.split(':');
                                             const hasColon = parts.length > 1;
                                             return (
@@ -675,7 +652,7 @@ export function AnalyticsSummaryCard({
                                                 </div>
                                             );
                                         }) : (
-                                            <p className="text-xs text-blue-700/60 dark:text-blue-300/60">No recommended actions available.</p>
+                                            <p className="text-xs text-blue-700/60 dark:text-blue-300/60 py-2">No recommended actions available.</p>
                                         )}
                                     </div>
                                 </div>
