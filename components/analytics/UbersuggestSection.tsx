@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
+import { useSyncState } from "@/hooks/useSyncState";
+import { Button } from "@/components/ui/button";
 
 interface UbersuggestSectionProps {
   clientId: string;
@@ -15,8 +16,7 @@ interface UbersuggestSectionProps {
 
 
 export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange, isActive = true }: UbersuggestSectionProps) {
-  const queryClient = useQueryClient();
-  const autoSyncAttemptedRef = useRef<string | null>(null);
+  const syncState = useSyncState(clientId, "seo", "ubersuggest");
 
   const { data: allMetrics, isLoading, isFetching } = useQuery({
     queryKey: ["client-seo-metrics", clientId],
@@ -30,56 +30,8 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
       if (error) throw error;
       return data as any[];
     },
-    enabled: !!clientId && isActive,
-    staleTime: FRESHNESS_POLICIES.seo.staleThresholdMs,
-    gcTime: 7 * 24 * 60 * 60 * 1000,
+    enabled: !!clientId && isActive && (!syncState.isSyncing || syncState.isDegraded),
   });
-
-  // Sync mutation — calls the sync-ubersuggest edge function
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      setSyncError(null);
-      const { data, error } = await supabase.functions.invoke("sync-ubersuggest", {
-        body: { clientId },
-      });
-      if (error) {
-        // Extract the real error from the edge function response body
-        let errMsg = error.message;
-        try {
-          const body = await (error as any).context?.json?.();
-          if (body?.error) errMsg = body.error;
-        } catch (_) {}
-        throw new Error(errMsg);
-      }
-      if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-seo-metrics", clientId] });
-    },
-    onError: (err: Error) => {
-      console.warn("SEO sync failed:", err.message);
-      setSyncError(err.message);
-    },
-  });
-
-  // Auto-sync: trigger when data is stale (>24h) or missing
-  useEffect(() => {
-    if (isLoading || syncMutation.isPending || !isActive) return;
-
-    const latestEntry = allMetrics && allMetrics.length > 0
-      ? allMetrics[allMetrics.length - 1]
-      : null;
-
-    const isStale = !latestEntry || isDataStale(latestEntry.collected_at, 'seo');
-
-    if (isStale && autoSyncAttemptedRef.current !== clientId) {
-      autoSyncAttemptedRef.current = clientId;
-      console.log(`SEO data stale for ${clientId}, auto-syncing...`);
-      syncMutation.mutate();
-    }
-  }, [clientId, allMetrics, isLoading, syncMutation.isPending, isActive]);
 
   if (isLoading && (!allMetrics || (allMetrics as any[]).length === 0)) {
     return (
@@ -92,22 +44,16 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
   if (!allMetrics || allMetrics.length === 0) {
     return (
       <div className="flex flex-col justify-center items-center gap-3 py-8 rounded-xl border bg-muted/30 text-muted-foreground">
-        <p className="text-sm">{syncMutation.isPending ? "Syncing SEO data..." : "No SEO metrics synced yet."}</p>
-        {syncError && (
-          <div className="flex items-center gap-2 text-xs text-red-500 max-w-xs text-center">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            <span>{syncError}</span>
-          </div>
-        )}
+        <p className="text-sm">{syncState.isSyncing ? "Syncing SEO data..." : "No SEO metrics synced yet."}</p>
         <Button
           size="sm"
           variant="outline"
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
+          onClick={() => syncState.retry()}
+          disabled={syncState.isSyncing}
           className="gap-1.5"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-          {syncMutation.isPending ? "Syncing..." : "Sync SEO Data"}
+          <RefreshCw className={`h-3.5 w-3.5 ${syncState.isSyncing ? "animate-spin" : ""}`} />
+          {syncState.isSyncing ? "Syncing..." : "Sync SEO Data"}
         </Button>
       </div>
     );
@@ -395,10 +341,10 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
 
       <div className="flex items-center justify-between pt-2 mt-4 border-t border-border/40">
         <div className="text-[10px] text-muted-foreground/60 flex items-center gap-1.5">
-          {syncMutation.isPending || isFetching ? (
+          {syncState.isSyncing || isFetching ? (
             <span className="flex items-center gap-1.5 bg-primary/5 px-2 py-0.5 rounded-full text-primary/80 font-medium animate-pulse">
               <RefreshCw className="h-2.5 w-2.5 animate-spin" /> 
-              {syncMutation.isPending ? "Syncing live data..." : "Checking for SEO updates..."}
+              {syncState.isSyncing ? "Syncing live data..." : "Checking for SEO updates..."}
             </span>
           ) : (
             <span className="bg-muted/50 px-2 py-0.5 rounded-full font-medium">
@@ -410,17 +356,17 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
           variant="ghost"
           size="sm"
           className="h-6 text-[10px] px-2 gap-1"
-          onClick={() => syncMutation.mutate()}
-          disabled={syncMutation.isPending}
+          onClick={() => syncState.retry()}
+          disabled={syncState.isSyncing}
         >
-          <RefreshCw className={`h-3 w-3 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-3 w-3 ${syncState.isSyncing ? 'animate-spin' : ''}`} />
           Sync Now
         </Button>
       </div>
-      {syncError && (
-        <div className="flex items-center gap-2 text-xs text-red-500 mt-1">
+      {syncState.isDegraded && (
+        <div className="flex items-center gap-2 text-xs text-amber-500 mt-1">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-          <span>{syncError}</span>
+          <span>Last known good data (Sync currently unavailable)</span>
         </div>
       )}
     </div>

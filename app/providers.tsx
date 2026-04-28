@@ -20,7 +20,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   const persister = useMemo(() => {
     if (typeof window === "undefined") return undefined;
-    
+
     return createSyncStoragePersister({
       storage: window.localStorage,
       key: "SIENVI_DASHBOARD_CACHE",

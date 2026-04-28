@@ -25,7 +25,7 @@ CREATE POLICY "Allow users to select their client's summaries"
     EXISTS (
       SELECT 1 FROM user_roles
       WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'superadmin')
+      AND user_roles.role IN ('admin')
     )
   );
 
@@ -42,7 +42,7 @@ CREATE POLICY "Allow users to insert their client's summaries"
     EXISTS (
       SELECT 1 FROM user_roles
       WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'superadmin')
+      AND user_roles.role IN ('admin')
     )
   );
 
@@ -59,7 +59,7 @@ CREATE POLICY "Allow users to update their client's summaries"
     EXISTS (
       SELECT 1 FROM user_roles
       WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'superadmin')
+      AND user_roles.role IN ('admin')
     )
   )
   WITH CHECK (
@@ -71,7 +71,7 @@ CREATE POLICY "Allow users to update their client's summaries"
     EXISTS (
       SELECT 1 FROM user_roles
       WHERE user_roles.user_id = auth.uid()
-      AND user_roles.role IN ('admin', 'superadmin')
+      AND user_roles.role IN ('admin')
     )
   );
 

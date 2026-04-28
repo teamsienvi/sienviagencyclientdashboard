@@ -17,6 +17,8 @@ import { format } from "date-fns";
 import { ShopifyOAuthConnect } from "./ShopifyOAuthConnect";
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { isDataStale } from "@/lib/freshnessPolicy";
+import { useQuery } from "@tanstack/react-query";
+import { useSyncState } from "@/hooks/useSyncState";
 import {
   LineChart,
   Line,
@@ -273,9 +275,8 @@ const ProductBarChart = ({
 
 const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSectionProps) => {
   // State
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
+  const [hasData, setHasData] = useState(false);
+  const [channelBreakdown, setChannelBreakdown] = useState<any>(null);
 
   // Data state
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
@@ -285,6 +286,42 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const [ordersTimeseries, setOrdersTimeseries] = useState<TimeseriesPoint[]>([]);
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [orderSources, setOrderSources] = useState<OrderSource[]>([]);
+  const syncState = useSyncState(clientId, "shopify", "analytics");
+
+  const { data: cachedData, isLoading: isCacheLoading } = useQuery({
+    queryKey: ["platform-analytics-cache", clientId, "shopify", "analytics"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_analytics_cache" as any)
+        .select("data")
+        .eq("client_id", clientId)
+        .eq("platform", "shopify")
+        .eq("module", "analytics")
+        .maybeSingle();
+
+      if (error) throw error;
+      return (data as any)?.data as any;
+    },
+    enabled: !!clientId && (!syncState.isSyncing || syncState.isDegraded),
+  });
+
+  // Assign cached data to local variables
+  useEffect(() => {
+    if (cachedData) {
+      setSummary(cachedData.summary || null);
+      setTotalSalesTimeseries(cachedData.timeseries?.totalSales || []);
+      setAovTimeseries(cachedData.timeseries?.aov || []);
+      setOrdersTimeseries(cachedData.timeseries?.orders || []);
+      setTopProducts(cachedData.topProducts || []);
+      setOrderSources(cachedData.sources || []);
+      setChannelBreakdown(cachedData.channelBreakdown || null);
+      setOrders(cachedData.recentOrders || []);
+      setHasData(true);
+    }
+  }, [cachedData]);
+
+  const loading = isCacheLoading || (syncState.isSyncing && !cachedData);
+  const refreshing = syncState.isSyncing;
 
   // Orders list state
   const [orders, setOrders] = useState<OrderItem[]>([]);
@@ -349,158 +386,17 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
     }
   };
 
-  // Fetch all data - batched to avoid rate limiting
-  const fetchData = async (showLoading = true, silent = false) => {
-    if (!silent && showLoading) setLoading(true);
-    setRefreshing(true);
-
-    try {
-      const isConnected = await fetchConnectionStatus();
-      if (!isConnected) {
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-
-      // Batch 1: Summary and main timeseries (these are the most important)
-      const [summaryRes, totalSalesRes] = await Promise.all([
-        supabase.functions.invoke("shopify-analytics", {
-          body: {
-            clientId,
-            endpoint: "summary",
-            start: dateRange.start,
-            end: dateRange.end,
-          },
-        }),
-        supabase.functions.invoke("shopify-analytics", {
-          body: {
-            clientId,
-            endpoint: "timeseries",
-            metric: "total_sales",
-            start: dateRange.start,
-            end: dateRange.end,
-          },
-        }),
-      ]);
-
-      if (summaryRes.data?.success) {
-        setSummary(summaryRes.data.data);
-      }
-      if (totalSalesRes.data?.success) {
-        setTotalSalesTimeseries(totalSalesRes.data.data);
-      }
-
-      // Batch 2: Secondary data (with small delay to avoid rate limit)
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const [aovRes, ordersRes, productsRes] = await Promise.all([
-        supabase.functions.invoke("shopify-analytics", {
-          body: {
-            clientId,
-            endpoint: "timeseries",
-            metric: "average_order_value",
-            start: dateRange.start,
-            end: dateRange.end,
-          },
-        }),
-        supabase.functions.invoke("shopify-analytics", {
-          body: {
-            clientId,
-            endpoint: "timeseries",
-            metric: "orders",
-            start: dateRange.start,
-            end: dateRange.end,
-          },
-        }),
-        supabase.functions.invoke("shopify-analytics", {
-          body: {
-            clientId,
-            endpoint: "top-products",
-            page: 1,
-            pageSize: 10,
-            start: dateRange.start,
-            end: dateRange.end,
-          },
-        }),
-      ]);
-
-      if (aovRes.data?.success) {
-        setAovTimeseries(aovRes.data.data);
-      }
-      if (ordersRes.data?.success) {
-        setOrdersTimeseries(ordersRes.data.data);
-      }
-      if (productsRes.data?.success) {
-        setTopProducts(productsRes.data.data);
-      }
-
-      // Batch 3: Order sources and orders list
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const sourcesRes = await supabase.functions.invoke("shopify-analytics", {
-        body: {
-          clientId,
-          endpoint: "order-sources",
-          start: dateRange.start,
-          end: dateRange.end,
-        },
-      });
-
-      if (sourcesRes.data?.success) {
-        setOrderSources(sourcesRes.data.data);
-      }
-
-      // Fetch orders list
-      await fetchOrders();
-    } catch (err) {
-      console.error("Error fetching Shopify data:", err);
-      toast.error("Failed to load Shopify analytics");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const fetchData = async () => {
+    const isConnected = await fetchConnectionStatus();
+    if (isConnected && !hasData && !syncState.isSyncing) {
+      // Force initial sync if connected but no data
+      await syncState.retry();
     }
   };
 
-  // Initial load & stale check
   useEffect(() => {
-    const handleInitialLoad = async () => {
-      // Fetch status first to see if we're even connected and check staleness
-      try {
-        const { data } = await supabase.functions.invoke("shopify-analytics", {
-          body: { clientId, endpoint: "status" },
-        });
-        
-        const isConnected = data?.data?.connected;
-        const lastSync = data?.data?.lastSyncedAt;
-        
-        if (isConnected) {
-            // We assume backend handles caching Shopify. If it's stale we refresh.
-            // Wait, ShopifyAnalyticsSection doesn't use local cache, it uses backend. 
-            // We'll just fetch data. But we shouldn't block UI if we can avoid it.
-            // Actually, Shopify UI doesn't have a cache right now, so it always skeletons.
-            // Let's keep it simple for now and just fetch.
-            fetchData(true, false);
-        } else {
-            setConnectionStatus(data?.data);
-            setLoading(false);
-        }
-      } catch(e) {
-          setLoading(false);
-      }
-    };
-    
-    if (!autoSyncAttempted) {
-        setAutoSyncAttempted(true);
-        handleInitialLoad();
-    }
-  }, [clientId, autoSyncAttempted]);
-
-  // Refetch when date range changes
-  useEffect(() => {
-    if (!loading) {
-      fetchData(false);
-    }
-  }, [dateRange.start, dateRange.end]);
+    fetchData();
+  }, [clientId, dateRange.start, dateRange.end]);
 
   // Format currency
   const formatCurrency = (value: number) => {
@@ -608,42 +504,30 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Sync Status */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {connectionStatus?.syncStatus === "synced" && (
-              <>
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                <span>Synced</span>
-              </>
-            )}
-            {connectionStatus?.syncStatus === "syncing" && (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Syncing...</span>
-              </>
-            )}
-            {connectionStatus?.syncStatus === "error" && (
-              <>
-                <AlertCircle className="h-4 w-4 text-destructive" />
-                <span>Sync Error</span>
-              </>
-            )}
-          </div>
-
           {/* Reporting Period Badge */}
           <Badge variant="outline" className="text-sm px-3 py-1">
             {reportingWeek.dateRange}
           </Badge>
 
           {/* Refresh Button */}
+          <div className="flex gap-2">
+          {syncState.isDegraded && (
+            <Badge variant="outline" className="text-amber-500 border-amber-200 bg-amber-50">
+              <AlertCircle className="h-3 w-3 mr-1" />
+              Showing last known good data
+            </Badge>
+          )}
           <Button
             variant="outline"
-            size="icon"
-            onClick={() => fetchData(false)}
+            size="sm"
+            onClick={() => syncState.retry()}
             disabled={refreshing}
+            className="gap-2 bg-background/50 backdrop-blur-sm"
           >
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+            {refreshing ? "Syncing..." : "Refresh Data"}
           </Button>
+        </div>
         </div>
       </div>
 

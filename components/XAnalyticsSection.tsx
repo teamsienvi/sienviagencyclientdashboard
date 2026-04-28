@@ -24,6 +24,7 @@ import { useAnalyticsCache, getWeekKey } from "@/hooks/useAnalyticsCache";
 import { isDataStale } from "@/lib/freshnessPolicy";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
+import { useSyncState } from "@/hooks/useSyncState";
 
 interface XAnalyticsSectionProps {
   clientId: string;
@@ -70,11 +71,9 @@ interface CachedData {
 
 const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => {
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [autoSyncAttempted, setAutoSyncAttempted] = useState(false);
   const [kpis, setKpis] = useState<XKPIs | null>(null);
   const [posts, setPosts] = useState<XPost[]>([]);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const syncState = useSyncState(clientId, "x", "x");
   const [hasMetricoolConfig, setHasMetricoolConfig] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [hasUploadedData, setHasUploadedData] = useState(false);
@@ -119,7 +118,6 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     if (hasCachedData && cachedData) {
       setKpis(cachedData.kpis);
       setPosts(cachedData.posts);
-      setLastSyncAt(cachedData.lastSyncAt);
       setLoading(false);
     }
   }, [hasCachedData, cachedData]);
@@ -159,12 +157,14 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         .limit(1)
         .maybeSingle();
 
-      // Fetch content for current period
+      // Fetch content for current period only
       const { data: content } = await supabase
         .from("social_content")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", "x")
+        .gte("published_at", currentStart)
+        .lte("published_at", currentEnd)
         .order("published_at", { ascending: false });
 
       // Fetch content metrics
@@ -217,7 +217,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
           },
         });
         setPosts(postsData);
-        setLastSyncAt(currentMetrics?.collected_at || new Date().toISOString());
+        setPosts(postsData);
 
         // Update cache
         updateCache({
@@ -236,7 +236,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             },
           },
           posts: postsData,
-          lastSyncAt: currentMetrics?.collected_at || new Date().toISOString(),
+          lastSyncAt: new Date().toISOString(),
         });
       }
     } catch (error) {
@@ -246,102 +246,24 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
     }
   }, [clientId, currentWeek, previousWeek, updateCache]);
 
-  // Fetch fresh data
-  const fetchData = useCallback(async (showToast = false, silent = false) => {
-    if (!hasMetricoolConfig) {
-      setLoading(false);
-      return;
-    }
-
-    if (!silent) setLoading(true);
-    try {
-      const currentStart = formatApiDate(currentWeek.start);
-      const currentEnd = formatApiDate(currentWeek.end);
-      const previousStart = formatApiDate(previousWeek.start);
-      const previousEnd = formatApiDate(previousWeek.end);
-
-      // Fetch KPIs and posts in parallel
-      const [kpisResponse, postsResponse] = await Promise.all([
-        supabase.functions.invoke("metricool-x-kpis", {
-          body: { clientId, currentStart, currentEnd, previousStart, previousEnd },
-        }),
-        supabase.functions.invoke("metricool-x-posts", {
-          body: { clientId, periodStart: currentStart, periodEnd: currentEnd },
-        }),
-      ]);
-
-      if (kpisResponse.error) {
-        console.error("KPIs fetch error:", kpisResponse.error);
-        toast.error("Failed to fetch X KPIs");
-      } else if (kpisResponse.data?.success) {
-        setKpis({
-          current: kpisResponse.data.current,
-          previous: kpisResponse.data.previous,
-          debug: kpisResponse.data.debug,
-        });
-      }
-
-      if (postsResponse.error) {
-        console.error("Posts fetch error:", postsResponse.error);
-        toast.error("Failed to fetch X posts");
-      } else if (postsResponse.data?.success) {
-        setPosts(postsResponse.data.posts || []);
-      }
-
-      const syncTime = new Date().toISOString();
-      setLastSyncAt(syncTime);
-
-      // Update cache
-      updateCache({
-        kpis: kpisResponse.data?.success ? {
-          current: kpisResponse.data.current,
-          previous: kpisResponse.data.previous,
-        } : null,
-        posts: postsResponse.data?.posts || [],
-        lastSyncAt: syncTime,
-      });
-
-      if (showToast) {
-        toast.success(`Synced ${postsResponse.data?.recordsSynced || 0} X posts`);
-      }
-    } catch (error) {
-      console.error("Error fetching X analytics:", error);
-      toast.error("Failed to fetch X analytics");
-    } finally {
-      setLoading(false);
-      setSyncing(false);
-    }
-  }, [clientId, currentWeek, previousWeek, hasMetricoolConfig, updateCache]);
-
-  // Handle auto loading and background refreshing
+  // Handle auto loading when no metricool config
   useEffect(() => {
-    if (!hasMetricoolConfig && !hasCachedData && !autoSyncAttempted) {
-      setAutoSyncAttempted(true);
+    if (!hasMetricoolConfig && !hasCachedData) {
       fetchUploadedData();
-      return;
     } else if (!hasMetricoolConfig) {
       setLoading(false);
-      return;
     }
+  }, [hasCachedData, hasMetricoolConfig, fetchUploadedData]);
 
-    if (hasMetricoolConfig && !autoSyncAttempted && !syncing) {
-        setAutoSyncAttempted(true);
-        if (!hasCachedData) {
-           // No data, blocking load
-           fetchData(false, false);
-        } else if (isDataStale(cachedData?.lastSyncAt ?? null, 'social')) {
-           // Stale data, silent loading
-           setSyncing(true);
-           fetchData(false, true);
-        } else {
-           setLoading(false);
-        }
+  // Sync is handled by useSyncState, but we still need to fetch DB data
+  useEffect(() => {
+    if (hasMetricoolConfig && (!syncState.isSyncing || syncState.isDegraded)) {
+      fetchUploadedData(); // read from db directly
     }
-  }, [hasCachedData, cachedData?.lastSyncAt, hasMetricoolConfig, fetchData, fetchUploadedData, autoSyncAttempted, syncing]);
+  }, [hasMetricoolConfig, syncState.isSyncing, syncState.isDegraded, fetchUploadedData]);
 
   const handleSync = async () => {
-    setSyncing(true);
-    await fetchData(true);
+    syncState.retry();
   };
 
   const formatDate = (dateString: string | null) => {
@@ -479,9 +401,9 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
         </div>
         <div className="flex items-center gap-2">
           <AllTimeTopPostsModal clientId={clientId} platformFilter="x" buttonLabel="All-Time Top 3" />
-          {lastSyncAt && (
+          {syncState.lastSyncedAt && (
             <span className="text-xs text-muted-foreground">
-              Last sync: {formatDate(lastSyncAt)}
+              Last sync: {formatDate(syncState.lastSyncedAt)}
             </span>
           )}
           <XCSVUploadDialog
@@ -493,17 +415,17 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
                 Upload CSV
               </Button>
             }
-            onUploadComplete={() => isManualMode ? fetchUploadedData() : fetchData(true)}
+            onUploadComplete={() => isManualMode ? fetchUploadedData() : syncState.retry()}
           />
           {!isManualMode && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleSync}
-              disabled={syncing}
+              disabled={syncState.isSyncing}
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
-              {syncing ? "Syncing..." : "Sync Data"}
+              <RefreshCw className={`h-4 w-4 mr-2 ${syncState.isSyncing ? "animate-spin" : ""}`} />
+              {syncState.isSyncing ? "Syncing..." : "Sync Data"}
             </Button>
           )}
         </div>

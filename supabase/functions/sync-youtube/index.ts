@@ -26,16 +26,32 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { clientId, accountId, channelId: inputChannelId, channelHandle, periodStart, periodEnd } = await req.json();
+    const { clientId, accountId, channelId: inputChannelId, channelHandle: inputChannelHandle, periodStart, periodEnd, resolveFromConfig } = await req.json();
 
-    if (!inputChannelId && !channelHandle) {
+    let channelHandle = inputChannelHandle;
+    let channelId = inputChannelId;
+
+    // Auto-resolve channel handle from client_metricool_config if not explicitly provided
+    if (!channelId && !channelHandle && resolveFromConfig) {
+      const { data: ytConfig } = await supabase
+        .from("client_metricool_config")
+        .select("channel_handle, channel_id, blog_id")
+        .eq("client_id", clientId)
+        .eq("platform", "youtube")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      channelHandle = ytConfig?.channel_handle || ytConfig?.channel_id || null;
+      channelId = ytConfig?.channel_id || null;
+      console.log("Resolved YouTube config from DB:", { channelHandle, channelId, blog_id: ytConfig?.blog_id });
+    }
+
+    if (!channelId && !channelHandle) {
       return new Response(
-        JSON.stringify({ success: false, error: "Missing channel ID or handle" }),
+        JSON.stringify({ success: false, error: "Missing channel ID or handle. Configure YouTube in Metricool config." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    let channelId = inputChannelId;
 
     // If handle provided, resolve to channel ID
     if (!channelId && channelHandle) {

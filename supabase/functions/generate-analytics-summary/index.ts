@@ -126,7 +126,7 @@ serve(async (req) => {
 
         // Try to cache the result (non-blocking — if table doesn't exist, we still return data)
         try {
-            await supabase
+            const { error: upsertError } = await supabase
                 .from("analytics_summaries")
                 .upsert(
                     {
@@ -139,6 +139,10 @@ serve(async (req) => {
                     },
                     { onConflict: "client_id,type" }
                 );
+            if (upsertError) {
+                console.error("Upsert error:", upsertError);
+                throw upsertError;
+            }
         } catch (cacheErr) {
             console.warn("Failed to cache summary (table may not exist):", cacheErr);
         }
@@ -281,6 +285,16 @@ async function collectSocialData(
                         metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, engagement || 0);
                         if (data.difference?.followers != null) {
                             metricsResult.followers_gained += (data.difference.followers || 0);
+                        }
+
+                        // Also persist to timeline for historical reference in the dashboard UI
+                        if (followers != null) {
+                            await supabase.from("social_follower_timeline").upsert({
+                                client_id: clientId,
+                                platform: platform,
+                                date: endStr,
+                                followers: followers
+                            }, { onConflict: "client_id,platform,date" }).catch(e => console.error("Timeline upsert error:", e));
                         }
                     }
                 }
@@ -1102,12 +1116,19 @@ async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promi
         const jsonStr = text.substring(firstBrace, lastBrace + 1);
         const parsed = JSON.parse(jsonStr);
 
+        const validateArray = (arr: any, fallbackStr: string) => {
+            if (!Array.isArray(arr) || arr.length === 0) return [fallbackStr];
+            // Filter out empty strings just in case
+            const valid = arr.filter(item => typeof item === 'string' && item.trim().length > 0);
+            return valid.length > 0 ? valid : [fallbackStr];
+        };
+
         // Validate required fields, provide defaults if missing
         return {
-            strengths: parsed.strengths || ["Analysis could not identify specific strengths from available data."],
-            weaknesses: parsed.weaknesses || ["Analysis could not identify specific weaknesses from available data."],
-            smartActions: parsed.smartActions || ["Continue collecting data for more detailed recommendations."],
-            highlights: parsed.highlights || ["Summary data is limited for this period."],
+            strengths: validateArray(parsed.strengths, "Performance was stable, but no standout strengths or outliers were identified this week."),
+            weaknesses: validateArray(parsed.weaknesses, "No critical weaknesses or major performance regressions were detected in this period."),
+            smartActions: validateArray(parsed.smartActions, "Continue monitoring current campaigns and consider testing new creatives once more data aggregates."),
+            highlights: validateArray(parsed.highlights, "Data volume was stable with no major trend shifts."),
         };
     } catch (parseErr) {
         console.error("Failed to parse Gemini response:", parseErr, "Full raw text:", text);

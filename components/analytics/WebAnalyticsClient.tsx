@@ -461,7 +461,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                     </Button>
                                   </div>
                                   <code className="text-xs break-all block p-2 bg-background rounded border">
-                                    {`<script src="${getTrackingEndpoint()}" data-client-id="${clientId}"></script>`}
+                                    {`\u003cscript src="${getTrackingEndpoint()}" data-client-id="${clientId}"\u003e\u003c/script\u003e`}
                                   </code>
                                   <p className="text-xs text-muted-foreground mt-2">
                                     Add this script to your website's HTML header.

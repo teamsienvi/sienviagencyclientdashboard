@@ -8,7 +8,8 @@ import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/ana
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
-import { AD_PLATFORM_LABELS } from "@/config/adPlatforms";
+import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
+import { AD_PLATFORM_LABELS, getClientAdPlatforms } from "@/config/adPlatforms";
 
 export default function AdsAnalyticsPage({ clientId }: { clientId: string }) {
   const { data: client, isLoading } = useQuery({
@@ -81,11 +82,18 @@ export default function AdsAnalyticsPage({ clientId }: { clientId: string }) {
             <AdsShredderCard clientId={clientId} adPlatform="meta" title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} />
             <AdsShredderCard clientId={clientId} adPlatform="google" title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} />
             <AdsShredderCard clientId={clientId} adPlatform="tiktok" title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} />
-            <AdsShredderCard clientId={clientId} adPlatform="amazon" title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`} />
           </div>
         </>
       ) : (
         <AdsAnalyticsSection clientId={clientId} clientName={client?.name || ""} />
+      )}
+
+      {/* Amazon Ads Report — standalone section, outside Meta/Google analytics */}
+      {client && getClientAdPlatforms(client.name).includes('amazon') && (
+        <AmazonAdsReportCard
+          clientId={clientId}
+          clientName={client.name}
+        />
       )}
     </AnalyticsPageLayout>
   );

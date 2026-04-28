@@ -631,6 +631,93 @@ serve(async (req) => {
     const { shop_domain: shopDomain, access_token: accessToken } = connection;
 
     switch (endpoint) {
+      case "sync": {
+        const start = body.start || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        const end = body.end || new Date().toISOString().split("T")[0];
+
+        // Calculate previous period for comparison
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+        const periodLength = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const prevStart = new Date(startDate);
+        prevStart.setDate(prevStart.getDate() - periodLength);
+        const prevEnd = new Date(startDate);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+
+        const prevStartStr = prevStart.toISOString().split("T")[0];
+        const prevEndStr = prevEnd.toISOString().split("T")[0];
+
+        // Fetch ALL required data once
+        const [orders, customers, prevOrders, prevCustomers, products] = await Promise.all([
+          fetchOrders(shopDomain, accessToken, start, end),
+          fetchCustomers(shopDomain, accessToken, start, end),
+          fetchOrders(shopDomain, accessToken, prevStartStr, prevEndStr),
+          fetchCustomers(shopDomain, accessToken, prevStartStr, prevEndStr),
+          fetchProducts(shopDomain, accessToken, 100),
+        ]);
+
+        const summary = calculateSummary(orders, customers);
+        const prevSummary = calculateSummary(prevOrders, prevCustomers);
+        const fullSummary = {
+          ...summary,
+          prevGrossSales: prevSummary.grossSales,
+          prevNetSales: prevSummary.netSales,
+          prevTotalSales: prevSummary.totalSales,
+          prevOrders: prevSummary.orders,
+          prevOrdersFulfilled: prevSummary.ordersFulfilled,
+          prevAverageOrderValue: prevSummary.averageOrderValue,
+          prevReturningCustomerRate: prevSummary.returningCustomerRate,
+        };
+
+        const totalSalesTimeseries = calculateTimeseries(orders, start, end, "total_sales");
+        const aovTimeseries = calculateTimeseries(orders, start, end, "average_order_value");
+        const ordersTimeseries = calculateTimeseries(orders, start, end, "orders");
+
+        const { products: topProducts } = calculateTopProducts(orders, products);
+
+        const sourceData: Record<string, { orders: number; revenue: number; channel: string }> = {};
+        let totalOrganic = 0; let totalPaid = 0; let revenueOrganic = 0; let revenuePaid = 0;
+        for (const order of orders) {
+          if (order.financial_status === "refunded") continue;
+          const { source, channel } = classifyOrderSource(order);
+          const revenue = parseFloat(order.total_price || "0");
+          if (!sourceData[source]) sourceData[source] = { orders: 0, revenue: 0, channel };
+          sourceData[source].orders += 1;
+          sourceData[source].revenue += revenue;
+          if (channel === "paid") { totalPaid++; revenuePaid += revenue; } else { totalOrganic++; revenueOrganic += revenue; }
+        }
+        const sources = Object.entries(sourceData).map(([name, stats]) => ({ name, orders: stats.orders, revenue: Math.round(stats.revenue * 100) / 100, channel: stats.channel })).sort((a, b) => b.revenue - a.revenue);
+
+        const recentOrders = transformOrders(orders).slice(0, 20);
+
+        const responsePayload = {
+          summary: fullSummary,
+          timeseries: { totalSales: totalSalesTimeseries, aov: aovTimeseries, orders: ordersTimeseries },
+          topProducts: topProducts.slice(0, 10),
+          sources,
+          channelBreakdown: { organic: { orders: totalOrganic, revenue: Math.round(revenueOrganic * 100) / 100 }, paid: { orders: totalPaid, revenue: Math.round(revenuePaid * 100) / 100 } },
+          recentOrders,
+          period: { start, end }
+        };
+
+        const { error: upsertError } = await supabase
+          .from('platform_analytics_cache')
+          .upsert({
+            client_id: clientId,
+            platform: 'shopify',
+            module: 'analytics',
+            data: responsePayload,
+            collected_at: new Date().toISOString()
+          }, { onConflict: 'client_id,platform,module' });
+          
+        if (upsertError) console.error("Failed to cache shopify data:", upsertError);
+
+        return new Response(
+          JSON.stringify({ success: true, data: responsePayload }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       case "summary": {
         const start = body.start || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
         const end = body.end || new Date().toISOString().split("T")[0];

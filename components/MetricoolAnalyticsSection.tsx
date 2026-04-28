@@ -19,6 +19,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSyncState } from "@/hooks/useSyncState";
 
 interface MetricoolAnalyticsSectionProps {
   clientId: string;
@@ -128,6 +129,7 @@ export const MetricoolAnalyticsSection = ({
 
   // Store live data from Metricool API
   const [liveEngagement, setLiveEngagement] = useState<number | null>(null);
+  const syncState = useSyncState(clientId, platform, "metricool");
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [livePosts, setLivePosts] = useState<TikTokPost[]>([]);
   const [liveFollowers, setLiveFollowers] = useState<number | null>(null);
@@ -661,17 +663,8 @@ export const MetricoolAnalyticsSection = ({
   // Automatically sync when date range changes or stale
   // Standardize: Don't hammer sync if data is fresh, unless date range explicitly triggered it.
   useEffect(() => {
-    if (config && config.is_active && !syncMutation.isPending && !configLoading && isActive) {
-      // Determine if a sync is needed.
-      const timer = setTimeout(() => {
-        // Only trigger if data is stale according to our policy
-        const isStale = !accountMetrics || isDataStale(accountMetrics.collected_at, 'social');
-        if (isStale) {
-          syncMutation.mutate();
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    }
+    // Auto-sync is now handled entirely by backend cron and useSyncState orchestration.
+    // The frontend should strictly read from the database, not trigger massive API syncs.
   }, [dateRangePreset, customDateRange, config?.is_active, configLoading, isActive, accountMetrics]);
 
   // Sync mutation - uses metricool-tiktok-posts edge function to fetch CSV data
@@ -1503,16 +1496,16 @@ export const MetricoolAnalyticsSection = ({
             </div>
           )}
           <Button
-            onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending || (metricsLoading && !accountMetrics)}
+            onClick={() => syncState.retry()}
+            disabled={syncState.isSyncing || (metricsLoading && !accountMetrics)}
             size="sm"
             className="gap-2"
           >
-            {(syncMutation.isPending || isFetchingAccount || isFetchingMetrics) ? 
+            {(syncState.isSyncing || isFetchingAccount || isFetchingMetrics) ? 
               <RefreshCw className="h-4 w-4 animate-spin" /> : 
               <RefreshCw className="h-4 w-4" />
             }
-            {syncMutation.isPending ? "Syncing..." : "Sync Now"}
+            {syncState.isSyncing ? "Syncing..." : "Sync Now"}
           </Button>
         </div>
       </div>

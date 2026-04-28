@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useSyncState } from "@/hooks/useSyncState";
+import { supabase } from "@/integrations/supabase/client";
 import {
     ArrowLeft, Users, BookOpen, Eye, MousePointerClick,
     FlaskConical, Loader2, AlertTriangle, Monitor, RefreshCw,
@@ -60,17 +62,32 @@ interface LmsApiResponse {
 const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
     const router = useRouter();
 
-    const { data, isLoading, error, refetch, isFetching } = useQuery<LmsApiResponse>({
-        queryKey: ["fff-lms-analytics"],
+    const syncState = useSyncState(clientId, "lms", "analytics");
+
+    const { data: cachedData, isLoading: isCacheLoading, error } = useQuery<{ data: LmsApiResponse }>({
+        queryKey: ["platform-analytics-cache", clientId, "lms", "analytics"],
         queryFn: async () => {
-            const res = await fetch("https://ouxnqgwdwccjipmplure.supabase.co/functions/v1/beta-count", {
-                headers: { "x-api-key": "Iydknyk1@#$%" },
-            });
-            if (!res.ok) throw new Error("Failed to fetch LMS data");
-            return res.json();
+            const { data, error } = await supabase
+                .from("platform_analytics_cache" as any)
+                .select("data")
+                .eq("client_id", clientId)
+                .eq("platform", "lms")
+                .eq("module", "analytics")
+                .maybeSingle();
+            
+            if (error) throw error;
+            return (data as any) as { data: LmsApiResponse };
         },
-        staleTime: 5 * 60 * 1000,
+        enabled: !!clientId && (!syncState.isSyncing || syncState.isDegraded),
     });
+
+    const data = cachedData?.data;
+    const isLoading = isCacheLoading || (syncState.isSyncing && !data);
+    const isFetching = syncState.isSyncing;
+    
+    const refetch = async () => {
+        await syncState.retry();
+    };
 
     const summary = data?.summary;
     const testers = data?.beta_testers || [];
@@ -159,6 +176,14 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             <div>
                                 <h1 className="text-xl font-bold text-foreground">FFF LMS Analytics</h1>
                                 <p className="text-sm text-muted-foreground">Father Figure Formula Course</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {syncState.isDegraded && (
+                                    <Badge variant="outline" className="text-amber-500 border-amber-200 bg-amber-50">
+                                        <AlertTriangle className="h-3 w-3 mr-1" />
+                                        Showing last known good data
+                                    </Badge>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center gap-3">

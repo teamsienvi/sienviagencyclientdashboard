@@ -1,0 +1,79 @@
+Snarky Pets Campaign Report
+Reporting window: last 7 days from the uploaded file. This report focuses on performance, waste, winners, 
+and next moves.
+Ad Sales
+$299.92
+Ad Spend
+$243.98
+ACoS
+81.3%
+ROAS
+1.23x
+Orders
+11
+CTR
+0.6%
+CVR
+3.2%
+Avg CPC
+$0.72
+Executive Summary
+• Sales came in at $299.92 on $243.98 in spend. Efficiency was weak at 81.3% ACoS and 1.23x ROAS.
+• Traffic volume was fine, but quality was not. The account generated 340 clicks from 52,647 impressions. 
+CTR was only 0.6%, and CVR landed at 3.2%.
+• Sales were concentrated. The top 3 campaigns drove 62.7% of total ad sales.
+• Waste is the main issue. Campaigns that spent money but drove zero sales consumed $175.37, or 71.9% of 
+total spend.
+What the client needs to know
+The account is not healthy yet. Revenue is coming from a small cluster of campaigns, while too much 
+budget is leaking into auto and broad traffic that is not converting. There are real winners worth scaling, 
+but the overall account is still carrying too much waste to call this efficient.
+Channel Snapshot
+Sponsored Products drove effectively all activity with $299.92 in sales on $243.98 spend. Sponsored 
+Brands had 29 impressions, 0 clicks, and no spend or sales.
+Bottom line: this account is being decided almost entirely by Sponsored Products.
+Top Revenue Drivers
+Campaign Spend Sales ACoS Orders ROAS
+SP - Tunnel & 
+Tent Bundle - VB 
+- B0DZ449831
+$3.74 $98.00 3.8% 4 26.20x
+SP - Cat Cube - 
+EXACT - mesh 
+cube for cats
+$4.14 $59.98 6.9% 1 14.49x
+SP - Cat Cube - 
+B0DPXTJHRH
+$35.58 $29.99 118.6% 1 0.84x
+SP - Cat Cube - 
+B07KKLQ2PK
+$3.46 $29.99 11.5% 1 8.67x
+SP - Cat Cube - 
+B00KHUXS3O
+$2.72 $29.99 9.1% 1 11.03x
+Highest Spend Search Terms With No Sales
+The top 6 non-converting search terms burned $26.64 with zero attributed sales.
+Search term Clicks Spend Sales Action
+cat tunnel for large 
+cats
+9 $6.08 $0.00 Negate or cut bid
+cat tent 8 $5.42 $0.00 Negate or cut bid
+b0bnkpwn5c 8 $4.47 $0.00 Negate or cut bid
+outdoor cat cube 4 $3.84 $0.00 Negate or cut bid
+small cat tent 3 $3.55 $0.00 Negate or cut bid
+mr and mrs mugs 1 $3.28 $0.00 Negate or cut bid
+Action Plan for the Next 7 Days
+• Cut waste first. Reduce or pause campaigns with spend and no sales, starting with Cat Cube Auto 
+Substitutes, Tunnel Auto Close Match, and Tunnel Auto Substitutes.
+• Harvest proven search terms into exact match campaigns. The clearest signals in this file are b0dz449831, 
+mesh cube for cats, cat cube, and the converting ASIN terms.
+• Lower bids on weak auto and broad traffic. The account cannot afford to keep buying clicks at current 
+conversion levels.
+• Protect the winners. Keep budget flowing to the bundle campaign and the exact cat cube campaign since 
+those are carrying the account right now.
+• Treat Sponsored Brands as a low priority until Sponsored Products is efficient enough to support 
+expansion.
+Final Recommendation
+Do not scale this account broadly yet. Tighten search term control, shift spend into the few campaigns 
+that are already converting, and stop paying for curiosity clicks. This account has upside, but right now 
+efficiency discipline matters more than expansion.

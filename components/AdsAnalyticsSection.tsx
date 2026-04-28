@@ -8,11 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
+import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, eachDayOfInterval } from "date-fns";
 import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
+import { useQuery } from "@tanstack/react-query";
+import { useSyncState } from "@/hooks/useSyncState";
 import {
   AreaChart,
   Area,
@@ -138,7 +141,7 @@ interface TimelineDataPoint {
 }
 
 interface MetaTimelines {
-  cpm: TimelineDataPoint[];
+  spend: TimelineDataPoint[];
   clicks: TimelineDataPoint[];
   impressions: TimelineDataPoint[];
 }
@@ -159,12 +162,7 @@ interface GoogleAdsData {
 }
 
 const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps) => {
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [metaAds, setMetaAds] = useState<MetaAdsData | null>(null);
-  const [googleAds, setGoogleAds] = useState<GoogleAdsData | null>(null);
-  const [tiktokAds, setTiktokAds] = useState<TikTokAdsData | null>(null);
-  const [metaTimelines, setMetaTimelines] = useState<MetaTimelines | null>(null);
+  const syncState = useSyncState(clientId, "ads", "metricool");
 
   const reportingWeek = useMemo(() => getCurrentReportingWeek(), []);
   const previousWeek = useMemo(() => getPreviousReportingWeek(), []);
@@ -179,43 +177,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     to: previousWeek.end,
   });
 
-  const parseTimelineResponse = (data: unknown): TimelineDataPoint[] => {
-    if (!Array.isArray(data)) return [];
-    return data
-      .map((item: unknown) => {
-        if (Array.isArray(item) && item.length >= 2) {
-          return { ts: Number(item[0]), value: Number(item[1]) || 0 };
-        }
-        return null;
-      })
-      .filter((item): item is TimelineDataPoint => item !== null)
-      .sort((a, b) => a.ts - b.ts);
-  };
-
-  const fetchTimeline = async (
-    metricKey: string,
-    startDate: Date,
-    endDate: Date,
-    userId: string,
-    blogId: string
-  ): Promise<TimelineDataPoint[]> => {
-    const startStr = format(startDate, "yyyyMMdd");
-    const endStr = format(endDate, "yyyyMMdd");
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-    const { data, error } = await supabase.functions.invoke("metricool-json", {
-      body: {
-        path: `/api/stats/timeline/${metricKey}`,
-        params: { start: startStr, end: endStr, timezone, userId, blogId },
-      },
-    });
-
-    if (error || !data?.success) return [];
-    return parseTimelineResponse(data.data);
-  };
+  // Removed redundant fetchTimeline as metricool-ads now provides it in the payload
 
   const buildChartData = (timelines: MetaTimelines | null, aggregated: MetaAggregatedData | null, range: DateRange) => {
-    if (!timelines || (timelines.cpm.length === 0 && timelines.clicks.length === 0 && timelines.impressions.length === 0)) {
+    if (!timelines || (timelines.spend.length === 0 && timelines.clicks.length === 0 && timelines.impressions.length === 0)) {
       // Fallback to distribute aggregated data
       if (!aggregated) return [];
       const days = eachDayOfInterval({ start: range.from, end: range.to });
@@ -247,11 +212,10 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       existing.clicks = value;
       tsMap.set(ts, existing);
     });
-    timelines.cpm.forEach(({ ts, value }) => {
-      const existing = tsMap.get(ts);
-      if (existing && existing.impressions > 0) {
-        existing.spend = Number(((value * existing.impressions) / 1000).toFixed(2));
-      }
+    timelines.spend.forEach(({ ts, value }) => {
+      const existing = tsMap.get(ts) || { ts, impressions: 0, clicks: 0, spend: 0 };
+      existing.spend = value;
+      tsMap.set(ts, existing);
     });
 
     return Array.from(tsMap.values())
@@ -263,54 +227,35 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       }));
   };
 
-  const fetchAdsData = async () => {
-    try {
-      const prevRange = getPreviousRange();
-      const { data, error } = await supabase.functions.invoke("metricool-ads", {
-        body: {
-          clientId,
-          from: format(dateRange.from, "yyyy-MM-dd"),
-          to: format(dateRange.to, "yyyy-MM-dd"),
-          prevFrom: format(prevRange.from, "yyyy-MM-dd"),
-          prevTo: format(prevRange.to, "yyyy-MM-dd"),
-        },
-      });
+  const { data: cachedData, isLoading } = useQuery({
+    queryKey: ["platform-analytics-cache", clientId, "ads", "metricool"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_analytics_cache" as any)
+        .select("data")
+        .eq("client_id", clientId)
+        .eq("platform", "ads")
+        .eq("module", "metricool")
+        .maybeSingle();
 
       if (error) throw error;
+      return (data as any)?.data as any;
+    },
+    enabled: !!clientId && (!syncState.isSyncing || syncState.isDegraded),
+  });
 
-      if (data?.success) {
-        setMetaAds(data.data?.metaAds || null);
-        setGoogleAds(data.data?.googleAds || null);
-        setTiktokAds(data.data?.tiktokAds || null);
+  const metaAds = cachedData?.metaAds || null;
+  const googleAds = cachedData?.googleAds || null;
+  const tiktokAds = cachedData?.tiktokAds || null;
+  const metaTimelines = metaAds?.timeline ? {
+    cpm: metaAds.timeline.spend || [],
+    spend: metaAds.timeline.spend || [],
+    clicks: metaAds.timeline.clicks || [],
+    impressions: metaAds.timeline.impressions || []
+  } : null;
 
-        if (data.debug?.userId && data.debug?.blogId) {
-          const userId = data.debug.userId;
-          const blogId = data.debug.blogId;
-          const [cpm, clicks, impressions] = await Promise.all([
-            fetchTimeline("cpm", dateRange.from, dateRange.to, userId, blogId),
-            fetchTimeline("clicks", dateRange.from, dateRange.to, userId, blogId),
-            fetchTimeline("impressions", dateRange.from, dateRange.to, userId, blogId),
-          ]);
-          setMetaTimelines({ cpm, clicks, impressions });
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching ads data:", error);
-      toast.error("Failed to load ads analytics");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    fetchAdsData();
-  }, [clientId]);
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchAdsData();
+  const handleRefresh = async () => {
+    await syncState.retry();
   };
 
   // Formatters
@@ -372,7 +317,6 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
           )}
         </div>
         <p className="text-2xl font-bold">{formatFn(value)}</p>
-        {/* WoW comparison hidden for now */}
       </div>
     );
   };
@@ -397,18 +341,6 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     }
     return null;
   };
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24" />)}
-        </div>
-        <Skeleton className="h-64" />
-      </div>
-    );
-  }
 
   const hasMetaData = metaAds !== null;
   const hasGoogleData = googleAds !== null;
@@ -446,36 +378,45 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header Actions */}
+      <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Ads Analytics</h2>
-          <p className="text-sm text-muted-foreground">{clientName}</p>
+          <h2 className="text-xl font-semibold tracking-tight">Advertising Analytics</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Performance metrics across all connected ad accounts.
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          {clientAdsLinks.map((link, i) => (
-            <a
-              key={i}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <ExternalLink className="h-3.5 w-3.5" />
-                {link.label}
-              </Button>
-            </a>
-          ))}
-          <Badge variant="outline" className="text-sm px-3 py-1">
-            {reportingWeek.dateRange}
-          </Badge>
-          <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing}>
-            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+        <div className="flex gap-2">
+          {syncState.isDegraded && (
+            <Badge variant="outline" className="text-amber-500 border-amber-200 bg-amber-50">
+              <Info className="h-3 w-3 mr-1" />
+              Showing last known good data
+            </Badge>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={syncState.isSyncing}
+            className="gap-2 bg-background/50 backdrop-blur-sm"
+          >
+            <RefreshCw className={cn("h-4 w-4", syncState.isSyncing && "animate-spin")} />
+            {syncState.isSyncing ? "Syncing..." : "Refresh Data"}
           </Button>
         </div>
       </div>
 
-      {!hasAnyData && (
+      {isLoading && !cachedData && syncState.isSyncing ? (
+        <div className="space-y-4">
+          <Skeleton className="h-32 w-full" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        </div>
+      ) : !hasAnyData && !getClientAdPlatforms(clientName).includes('amazon') ? (
         <Card className="border-dashed">
           <CardHeader className="text-center py-12">
             <CardTitle className="text-lg text-muted-foreground">No Ads Data</CardTitle>
@@ -484,7 +425,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
             </CardDescription>
           </CardHeader>
         </Card>
-      )}
+      ) : null}
 
       {hasAnyData && (
         <>
@@ -846,15 +787,16 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                 title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`}
               />
             )}
-            {getClientAdPlatforms(clientName).includes('amazon') && (
-              <AdsShredderCard
-                clientId={clientId}
-                adPlatform="amazon"
-                title={`Ads Shredder — ${AD_PLATFORM_LABELS.amazon}`}
-              />
-            )}
           </div>
         </>
+      )}
+
+      {/* Amazon Ads Report — always shown for Amazon clients, independent of Metricool data */}
+      {getClientAdPlatforms(clientName).includes('amazon') && (
+        <AmazonAdsReportCard
+          clientId={clientId}
+          clientName={clientName}
+        />
       )}
     </div>
   );

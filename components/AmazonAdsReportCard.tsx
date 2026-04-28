@@ -246,37 +246,43 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     const printFrameRef = useRef<HTMLIFrameElement | null>(null);
     const queryClient = useQueryClient();
 
-    // ─── Cache Loading ───────────────────────────────────────────────────────
-    const { data: cachedData, isLoading: isFetchingCache } = useQuery({
+    const { data: cachedData, isLoading: isFetchingCache, refetch: refetchReport } = useQuery({
         queryKey: ["amazon-ads-report", clientId],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from("analytics_summaries" as any)
-                .select("summary_data, generated_at")
+                .from("amazon_ads_reports" as any)
+                .select("parsed_data, generated_at, source_file_name, generation_status")
                 .eq("client_id", clientId)
-                .eq("type", "amazon_ads")
+                .order("report_period", { ascending: false })
+                .limit(1)
                 .maybeSingle();
 
             if (error) throw error;
-            return data;
+            return data as any;
         },
-        enabled: !!clientId
+        enabled: !!clientId,
+        refetchInterval: (query) => (query.state.data as any)?.generation_status === 'pending' ? 5000 : false // poll if pending
     });
 
     useEffect(() => {
-        const cd = cachedData as any;
-        if (cd?.summary_data && !report && !isAnalyzing) {
-            const cachedReport = cd.summary_data as AmazonReportData;
-            setReport(cachedReport);
-            if (cd.generated_at) {
-                setGeneratedAt(new Date(cd.generated_at));
-            }
-            if (cachedReport.sourceFileName && !file) {
-                // Give it a dummy file so the UI shows the filename
-                setFile(new File([""], cachedReport.sourceFileName, { type: "text/csv" }));
+        if (cachedData) {
+            if (cachedData.generation_status === 'pending') {
+                setIsAnalyzing(true);
+            } else if (cachedData.generation_status === 'complete' && cachedData.parsed_data) {
+                setIsAnalyzing(false);
+                setReport(cachedData.parsed_data as AmazonReportData);
+                if (cachedData.generated_at) {
+                    setGeneratedAt(new Date(cachedData.generated_at));
+                }
+                if (cachedData.source_file_name && !file) {
+                    setFile(new File([""], cachedData.source_file_name, { type: "text/csv" }));
+                }
+            } else if (cachedData.generation_status === 'failed') {
+                setIsAnalyzing(false);
+                toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
             }
         }
-    }, [cachedData, report, isAnalyzing, file]);
+    }, [cachedData, file, toast]);
 
     // ─── File handling ───────────────────────────────────────────────────────
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -329,30 +335,22 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 throw new Error(errPayload.error || `HTTP ${response.status}`);
             }
 
-            const result: AmazonReportData = await response.json();
-            result.sourceFileName = file.name;
-            const now = new Date();
-
-            await supabase
-                .from("analytics_summaries" as any)
-                .upsert(
-                    {
-                        client_id: clientId,
-                        type: "amazon_ads",
-                        summary_data: result as any,
-                        generated_at: now.toISOString(),
-                    },
-                    { onConflict: "client_id,type" }
-                );
-
+            const result = await response.json();
+            
+            // Note: If Cloud Run is slow, the edge function might return status: 'pending' immediately.
+            // Our polling in useQuery will catch the update.
+            if (result.status === 'complete') {
+                setReport(result.data);
+                setGeneratedAt(new Date());
+                toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated and saved." });
+            } else {
+                toast({ title: "Processing", description: "Report is being processed in the background." });
+            }
+            
             queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
 
-            setReport(result);
-            setGeneratedAt(now);
-            toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated and saved." });
         } catch (err: any) {
             toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
-        } finally {
             setIsAnalyzing(false);
         }
     };
@@ -473,7 +471,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                     onClick={async () => { 
                                         setReport(null); 
                                         setFile(null); 
-                                        await supabase.from("analytics_summaries" as any).delete().eq("client_id", clientId).eq("type", "amazon_ads");
+                                        await supabase.from("amazon_ads_reports" as any).delete().eq("client_id", clientId);
                                         queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
                                     }}
                                     className="h-8 text-xs text-muted-foreground"

@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
 import { format as formatDate } from "date-fns";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
+import { useSyncState } from "@/hooks/useSyncState";
 
 interface YouTubeStats {
   followers: number;
@@ -96,7 +97,8 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     from: Date | undefined;
     to: Date | undefined;
   }>({ from: undefined, to: undefined });
-  const [useMetricool, setUseMetricool] = useState(false);
+  
+  const syncState = useSyncState(clientId, "youtube", "youtube");
   const [reportingPeriodLabel, setReportingPeriodLabel] = useState<string>("");
 
   const computeEngagementRate = (
@@ -132,201 +134,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     return "prev week";
   };
 
-  // Fetch from Metricool edge function
-  const fetchMetricoolData = async () => {
-    try {
-      // Use last completed week for 7d range (Monday-Sunday)
-      const currentWeek = getCurrentReportingWeek();
-      const previousWeek = getPreviousReportingWeek();
-
-      let startStr: string;
-      let endStr: string;
-      let prevStartStr: string;
-      let prevEndStr: string;
-
-      if (dateRange === "7d") {
-        startStr = formatDate(currentWeek.start, 'yyyy-MM-dd');
-        endStr = formatDate(currentWeek.end, 'yyyy-MM-dd');
-        prevStartStr = formatDate(previousWeek.start, 'yyyy-MM-dd');
-        prevEndStr = formatDate(previousWeek.end, 'yyyy-MM-dd');
-        setReportingPeriodLabel(currentWeek.dateRange);
-      } else {
-        const { start, end } = getDateRangeFilter();
-        startStr = format(start, 'yyyy-MM-dd');
-        endStr = format(end, 'yyyy-MM-dd');
-        setReportingPeriodLabel(`${format(start, 'MMM d')} - ${format(end, 'MMM d')}`);
-
-        const periodDuration = end.getTime() - start.getTime();
-        const prevStart = new Date(start.getTime() - periodDuration);
-        const prevEnd = new Date(start.getTime() - 1);
-        prevStartStr = format(prevStart, 'yyyy-MM-dd');
-        prevEndStr = format(prevEnd, 'yyyy-MM-dd');
-      }
-
-      const { data, error } = await supabase.functions.invoke("metricool-youtube", {
-        body: {
-          clientId,
-          from: startStr,
-          to: endStr,
-          prevFrom: prevStartStr,
-          prevTo: prevEndStr,
-          timezone: "America/Chicago",
-        },
-      });
-
-      if (error) throw error;
-
-      if (!data?.success) {
-        if (data?.notConfigured) {
-          // Fall back to database method
-          return false;
-        }
-        throw new Error(data?.error || "Failed to fetch YouTube data");
-      }
-
-      const currentData = data.data.current;
-      const prevData = data.data.previous;
-
-      // If Metricool returns 0 subscribers and no videos, supplement with DB data
-      let subscriberCount = currentData.totalSubscribers;
-      let prevSubscriberCount = prevData.totalSubscribers;
-      let subscribersDelta = currentData.subscribersGained;
-      let videoList: VideoData[] = [];
-      let totalViews = currentData.totalViews;
-      let totalLikes = currentData.totalLikes;
-      let totalComments = currentData.totalComments;
-      let totalShares = currentData.totalShares;
-      let videosCount = currentData.videosCount;
-      let engagementPct = currentData.engagementPct || 0;
-      let avgViewDuration = currentData.avgViewDuration;
-      let prevTotalViews = prevData.totalViews;
-      let prevTotalLikes = prevData.totalLikes;
-      let prevTotalComments = prevData.totalComments;
-      let prevTotalShares = prevData.totalShares;
-      let prevVideosCount = prevData.videosCount;
-      let prevEngagementPct = prevData.engagementPct || 0;
-      let prevAvgViewDuration = prevData.avgViewDuration;
-
-      const metricoolHasNoData = subscriberCount === 0 && videosCount === 0;
-
-      if (metricoolHasNoData) {
-        // Fall back to DB for subscriber counts
-        const { data: latestMetrics } = await supabase
-          .from("social_account_metrics")
-          .select("*")
-          .eq("client_id", clientId)
-          .eq("platform", "youtube")
-          .order("collected_at", { ascending: false })
-          .limit(2);
-
-        if (latestMetrics && latestMetrics.length > 0) {
-          subscriberCount = latestMetrics[0]?.followers || 0;
-          prevSubscriberCount = latestMetrics[1]?.followers || latestMetrics[0]?.followers || 0;
-          subscribersDelta = subscriberCount - prevSubscriberCount;
-        }
-
-        // Fall back to DB for video content
-        const { data: contentData } = await supabase
-          .from("social_content")
-          .select(`
-            id, title, url, content_type, published_at,
-            social_content_metrics (views, likes, comments, shares, watch_time_hours, period_start, period_end, collected_at)
-          `)
-          .eq("client_id", clientId)
-          .eq("platform", "youtube")
-          .order("published_at", { ascending: false });
-
-        if (contentData && contentData.length > 0) {
-          let dbViews = 0, dbLikes = 0, dbComments = 0, dbShares = 0;
-
-          contentData.forEach((content: any) => {
-            const metrics = content.social_content_metrics;
-            if (!metrics || metrics.length === 0) return;
-            const sorted = [...metrics].sort((a: any, b: any) =>
-              new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
-            );
-            const m = sorted[0];
-            const views = m?.views || 0;
-            const likes = m?.likes || 0;
-            const comments = m?.comments || 0;
-            const shares = m?.shares || 0;
-
-            if (views > 0 || likes > 0 || comments > 0 || shares > 0) {
-              dbViews += views;
-              dbLikes += likes;
-              dbComments += comments;
-              dbShares += shares;
-              videoList.push({
-                id: content.id,
-                title: content.title,
-                url: content.url,
-                content_type: content.content_type || "video",
-                published_at: content.published_at,
-                views, likes, comments, shares,
-                avg_view_duration: 0,
-                watch_time_hours: m?.watch_time_hours || 0,
-                engagement_rate: views > 0 ? ((likes + comments + shares) / views) * 100 : 0,
-              });
-            }
-          });
-
-          totalViews = dbViews;
-          totalLikes = dbLikes;
-          totalComments = dbComments;
-          totalShares = dbShares;
-          videosCount = videoList.length;
-          engagementPct = totalViews > 0 ? ((totalLikes + totalComments + totalShares) / totalViews) * 100 : 0;
-        }
-      } else {
-        // Transform Metricool videos to component format
-        videoList = currentData.videos.map((v: any, idx: number) => ({
-          id: `metricool-${idx}`,
-          title: v.title,
-          url: v.url,
-          content_type: "video",
-          published_at: v.publishedAt || new Date().toISOString(),
-          views: v.views,
-          likes: v.likes,
-          comments: v.comments,
-          shares: v.shares,
-          avg_view_duration: v.averageViewDuration,
-          watch_time_hours: v.watchTimeHours,
-          engagement_rate: v.views > 0 ? ((v.likes + v.comments + v.shares) / v.views) * 100 : 0,
-        }));
-      }
-
-      const subscribersPercent = prevSubscriberCount > 0
-        ? (subscribersDelta / prevSubscriberCount) * 100
-        : 0;
-
-      setVideos(videoList);
-      setStats({
-        followers: subscriberCount,
-        newFollowers: subscribersDelta,
-        prevFollowers: prevSubscriberCount,
-        followerChangePercent: subscribersPercent,
-        totalVideos: videosCount,
-        totalViews: totalViews,
-        totalLikes: totalLikes,
-        totalComments: totalComments,
-        totalShares: totalShares,
-        avgViewDuration: avgViewDuration,
-        engagementRate: engagementPct,
-        prevTotalViews: prevTotalViews,
-        prevTotalLikes: prevTotalLikes,
-        prevTotalComments: prevTotalComments,
-        prevTotalShares: prevTotalShares,
-        prevTotalVideos: prevVideosCount,
-        prevEngagementRate: prevEngagementPct,
-        prevAvgViewDuration: prevAvgViewDuration,
-      });
-
-      return true;
-    } catch (err) {
-      console.error("Metricool YouTube fetch error:", err);
-      return false;
-    }
-  };
+  // Custom metricool fetch logic removed. useSyncState orchestrates this on backend.
 
   // Fetch from database (fallback)
   const fetchDatabaseData = async () => {
@@ -449,6 +257,9 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       totalComments += comments;
       totalShares += shares;
 
+      // Only include videos published within the reporting period
+      if (content.published_at && content.published_at < startStr) return;
+
       videoList.push({
         id: content.id,
         title: content.title,
@@ -506,16 +317,6 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
     try {
       setIsLoading(true);
-
-      // Try Metricool first
-      const metricoolSuccess = await fetchMetricoolData();
-      if (metricoolSuccess) {
-        setUseMetricool(true);
-        return;
-      }
-
-      // Fall back to database
-      setUseMetricool(false);
       await fetchDatabaseData();
     } catch (err: any) {
       console.error("Error fetching YouTube data:", err);
@@ -526,21 +327,13 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
   };
 
   useEffect(() => {
-    fetchYouTubeData();
-  }, [clientId, dateRange, customDateRange.from, customDateRange.to]);
+    if (!syncState.isSyncing || syncState.isDegraded) {
+      fetchYouTubeData();
+    }
+  }, [clientId, dateRange, customDateRange.from, customDateRange.to, syncState.isSyncing, syncState.isDegraded]);
 
   const handleSyncYouTube = async () => {
-    setIsSyncing(true);
-    try {
-      // Just refresh data from Metricool
-      await fetchYouTubeData();
-      toast.success("YouTube data refreshed");
-    } catch (error: any) {
-      console.error("YouTube sync error:", error);
-      toast.error(error.message || "Failed to sync");
-    } finally {
-      setIsSyncing(false);
-    }
+    syncState.retry();
   };
 
   const getTypeBadgeColor = (type: string) => {
@@ -619,13 +412,8 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
 
         <div className="flex items-center gap-2">
           <AllTimeTopPostsModal clientId={clientId} platformFilter="youtube" buttonLabel="All-Time Top 3" />
-          {useMetricool && (
-            <Badge variant="secondary" className="text-xs">
-              Metricool
-            </Badge>
-          )}
-          <Button onClick={handleSyncYouTube} disabled={isSyncing} size="sm">
-            {isSyncing ? (
+          <Button onClick={handleSyncYouTube} disabled={syncState.isSyncing} size="sm">
+            {syncState.isSyncing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <>

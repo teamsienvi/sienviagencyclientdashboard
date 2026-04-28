@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { format, subDays, startOfWeek, endOfWeek } from "date-fns";
 import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
@@ -90,6 +90,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
   const [activeTab, setActiveTab] = useState<string>("analytics");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Realtime subscription: auto-invalidate top posts cache when background sync writes new data
   useSocialMetricsRealtime(clientId);
@@ -521,7 +526,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     ? clientReports.reports[clientReports.reports.length - 1] 
     : null;
 
-  if (isLoadingClient) {
+  if (!mounted || isLoadingClient) {
     return (
       <div className="min-h-screen bg-background">
         <ClientHeader />
@@ -625,65 +630,57 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               </TabsTrigger>
             </TabsList>
 
-            {/* Navigation Buckets Bar - Centered and Prominent */}
-            <div className="flex flex-wrap items-center justify-center gap-4 py-8 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl">
-              <Button
-                variant="outline"
-                size="lg"
+            {/* Navigation Buckets Bar - Full width, fills row */}
+            <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
+              style={{ gridTemplateColumns: `repeat(${[true, hasSocialMedia, hasAdsPlatform, ((!isAdsOnlyClient && client.supabase_url) || ['Snarky Pets','Snarky Humans','BlingyBag','Father Figure Formula'].includes(client?.name?.trim() || '') || connectedAccounts?.substack), true].filter(Boolean).length}, 1fr)` }}
+            >
+              <button
                 onClick={() => scrollToSection("executive-insights")}
-                className="rounded-xl bg-background hover:bg-primary/5 border-primary/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-primary/5 border-r border-primary/10 last:border-r-0 group"
               >
-                <TrendingUp className="h-5 w-5 mr-2 text-primary" />
-                EXECUTIVE INSIGHTS
-              </Button>
+                <TrendingUp className="h-4 w-4 text-primary group-hover:scale-110 transition-transform" />
+                <span>EXECUTIVE INSIGHTS</span>
+              </button>
               
               {hasSocialMedia && (
-                <Button
-                  variant="outline"
-                  size="lg"
+                <button
                   onClick={() => scrollToSection("social-media")}
-                  className="rounded-xl bg-background hover:bg-violet-500/5 border-violet-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-violet-500/5 border-r border-primary/10 last:border-r-0 group"
                 >
-                  <Share2 className="h-5 w-5 mr-2 text-violet-500" />
-                  SOCIAL MEDIA
-                </Button>
+                  <Share2 className="h-4 w-4 text-violet-500 group-hover:scale-110 transition-transform" />
+                  <span>SOCIAL MEDIA</span>
+                </button>
               )}
 
               {hasAdsPlatform && (
-                <Button
-                  variant="outline"
-                  size="lg"
+                <button
                   onClick={() => scrollToSection("advertising")}
-                  className="rounded-xl bg-background hover:bg-orange-500/5 border-orange-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-orange-500/5 border-r border-primary/10 last:border-r-0 group"
                 >
-                  <BarChart3 className="h-5 w-5 mr-2 text-orange-500" />
-                  ADVERTISING
-                </Button>
+                  <BarChart3 className="h-4 w-4 text-orange-500 group-hover:scale-110 transition-transform" />
+                  <span>ADVERTISING</span>
+                </button>
               )}
 
               {((!isAdsOnlyClient && client.supabase_url) || 
                 ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
                 connectedAccounts?.substack) && (
-                <Button
-                  variant="outline"
-                  size="lg"
+                <button
                   onClick={() => scrollToSection("web-ecommerce")}
-                  className="rounded-xl bg-background hover:bg-emerald-500/5 border-emerald-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-emerald-500/5 border-r border-primary/10 last:border-r-0 group"
                 >
-                  <Globe className="h-5 w-5 mr-2 text-emerald-500" />
-                  WEB & E-COMM
-                </Button>
+                  <Globe className="h-4 w-4 text-emerald-500 group-hover:scale-110 transition-transform" />
+                  <span>WEB & E-COMM</span>
+                </button>
               )}
 
-              <Button
-                variant="outline"
-                size="lg"
+              <button
                 onClick={() => scrollToSection("seo")}
-                className="rounded-xl bg-background hover:bg-slate-500/10 border-slate-500/20 text-sm font-bold px-6 h-12 shadow-sm transition-all hover:scale-105 active:scale-95 animate-fade-in"
+                className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-slate-500/10 border-r border-primary/10 last:border-r-0 group"
               >
-                 <span className="mr-2 text-xl grayscale">🔍</span>
-                SEO DASHBOARD
-              </Button>
+                <span className="text-base grayscale group-hover:scale-110 transition-transform">🔍</span>
+                <span>SEO DASHBOARD</span>
+              </button>
             </div>
 
             {/* Analytics Tab */}

@@ -151,7 +151,21 @@ serve(async (req) => {
   }
 
   try {
-    const { clientId, from, to, prevFrom, prevTo } = await req.json();
+    let { clientId, from, to, prevFrom, prevTo, endpoint } = await req.json();
+
+    if (endpoint === "sync") {
+      // Auto-compute 30 days for sync caching
+      const end = new Date();
+      const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const prevEnd = new Date(start.getTime() - 1);
+      const prevStart = new Date(prevEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      const formatApiDate = (d: Date) => d.toISOString().split('T')[0];
+      from = from || formatApiDate(start);
+      to = to || formatApiDate(end);
+      prevFrom = prevFrom || formatApiDate(prevStart);
+      prevTo = prevTo || formatApiDate(prevEnd);
+    }
 
     if (!clientId || !from || !to || !prevFrom || !prevTo) {
       return new Response(
@@ -698,6 +712,24 @@ serve(async (req) => {
     };
 
     if (Object.keys(upstreamDebug).length > 0) response.upstreamDebug = upstreamDebug;
+
+    if (endpoint === "sync") {
+      const { error: upsertError } = await supabase
+        .from('platform_analytics_cache')
+        .upsert({
+          client_id: clientId,
+          platform: 'ads',
+          module: 'metricool',
+          data: response,
+          collected_at: new Date().toISOString()
+        }, { onConflict: 'client_id,platform,module' });
+
+      if (upsertError) {
+        console.error("[metricool-ads] Failed to cache data:", upsertError);
+      } else {
+        console.log(`[metricool-ads] Successfully cached data for ${clientId}`);
+      }
+    }
 
     return new Response(
       JSON.stringify({

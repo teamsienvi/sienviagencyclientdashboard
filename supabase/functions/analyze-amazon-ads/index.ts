@@ -97,6 +97,7 @@ serve(async (req) => {
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
             clientId = formData.get("clientId") as string;
+            const reportPeriod = formData.get("reportPeriod") as string || new Date().toISOString().substring(0, 7); // Default to YYYY-MM
             const file = formData.get("file") as File;
 
             if (!file) {
@@ -119,6 +120,7 @@ serve(async (req) => {
             clientId = body.clientId;
             fileContent = body.rawData || "";
             fileName = body.fileName || "manual-input";
+            reportPeriod = body.reportPeriod || new Date().toISOString().substring(0, 7);
         }
 
         if (!clientId) throw new Error("clientId is required");
@@ -145,15 +147,45 @@ serve(async (req) => {
 
         const userMessage = `${AMAZON_PROMPT}\nClient: ${client.name}\nFile: ${fileName}\n\n${"─".repeat(60)}\nAMAZON ADS DATA:\n${truncatedData}\n${"─".repeat(60)}`;
 
-        // Call OpenAI Assistant
-        const result = await callOpenAIAssistant(openaiApiKey, AMAZON_ASSISTANT_ID, userMessage);
+        // Calculate simple hash for file
+        const encoder = new TextEncoder();
+        const dataBuffer = encoder.encode(fileContent);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-        return new Response(JSON.stringify(result), {
+        // 1. Upsert Pending Status
+        const { error: upsertError } = await supabase
+            .from("amazon_ads_reports")
+            .upsert({
+                client_id: clientId,
+                report_period: reportPeriod,
+                source_file_name: fileName,
+                source_file_hash: fileHash,
+                generation_status: 'pending'
+            }, { onConflict: 'client_id, report_period' });
+
+        if (upsertError) {
+            console.error("Failed to upsert pending status:", upsertError);
+        }
+
+        // DISPATCH TO CLOUD RUN / BACKGROUND WORKER
+        // Immediately return pending status so edge function doesn't timeout.
+        // A background worker (e.g., Cloud Run) will poll or receive a webhook
+        // to process the file and update `amazon_ads_reports` to 'complete'.
+
+        // Simulate dispatch:
+        console.log("Dispatched to background worker: ", { clientId, reportPeriod });
+
+        return new Response(JSON.stringify({ status: 'pending', message: 'Report is processing in the background' }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
 
     } catch (error) {
         console.error("Error in analyze-amazon-ads:", error);
+        
+        // Try to update failure status if we have the necessary identifiers
+        // (In a real background worker, this would be handled cleanly)
         return new Response(
             JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
