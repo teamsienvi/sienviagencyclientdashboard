@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.87.1";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -245,7 +246,6 @@ serve(async (req) => {
 // ─── Excel Parser ─────────────────────────────────────────────────────────────
 async function parseExcelToText(fileBytes: Uint8Array): Promise<string> {
     try {
-        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
         const workbook = XLSX.read(fileBytes, { type: "array" });
         const allSheetData: string[] = [];
         for (const sheetName of workbook.SheetNames) {
