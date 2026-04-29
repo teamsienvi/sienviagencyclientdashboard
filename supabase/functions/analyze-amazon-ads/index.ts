@@ -295,6 +295,7 @@ async function callOpenAIAssistant(apiKey: string, assistantId: string, userMess
 
     const run = await openaiRequest(apiKey, `/threads/${threadId}/runs`, "POST", {
         assistant_id: assistantId,
+        response_format: { type: "json_object" }
     });
     const runId = run.id;
 
@@ -307,7 +308,7 @@ async function callOpenAIAssistant(apiKey: string, assistantId: string, userMess
         const runStatus = await openaiRequest(apiKey, `/threads/${threadId}/runs/${runId}`, "GET");
 
         if (runStatus.status === "completed") break;
-        if (["failed", "cancelled", "expired"].includes(runStatus.status)) {
+        if (["failed", "cancelled", "expired", "incomplete"].includes(runStatus.status)) {
             throw new Error(`OpenAI run ${runStatus.status}: ${runStatus.last_error?.message || runStatus.status}`);
         }
         await new Promise((r) => setTimeout(r, pollInterval));
