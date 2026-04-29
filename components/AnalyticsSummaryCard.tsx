@@ -7,7 +7,7 @@ import {
     Sparkles, RefreshCw, ThumbsUp, AlertTriangle, Target, Star,
     ChevronDown, ChevronUp, ExternalLink, Eye, PlaySquare, Heart, MessageCircle, 
     Share2, ArrowUpRight, BarChart3, Users, TrendingUp, CheckCircle2, ArrowRight, XCircle, Video, FileText,
-    ShoppingBag, Globe, DollarSign, Megaphone, Zap, Loader2
+    ShoppingBag, Globe, DollarSign, Megaphone, Zap, Loader2, Lightbulb
 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
@@ -318,7 +318,7 @@ export function AnalyticsSummaryCard({
                            "Custom Range";
 
     return (
-        <Card className="border-border/50 bg-card shadow-sm overflow-hidden flex flex-col relative w-full">
+        <Card className="border-border/50 bg-card shadow-sm overflow-hidden flex flex-col relative w-full h-[850px] md:h-[750px]">
             {/* Header Area */}
             <CardHeader className="pb-4 bg-background border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 z-10 pt-6">
                 <div className="flex items-center gap-3">
@@ -359,7 +359,7 @@ export function AnalyticsSummaryCard({
                 </div>
             </CardHeader>
 
-            <CardContent className="p-0 z-10 w-full relative">
+            <CardContent className="p-0 z-10 w-full relative flex-1 overflow-y-auto min-h-0">
                 {(isLoadingCache || isLoadingMetrics) && !hasDataToRender ? (
                      <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 w-full">
                          <div className="lg:col-span-5"><Skeleton className="h-[400px] w-full rounded-2xl" /></div>
@@ -531,6 +531,7 @@ export function AnalyticsSummaryCard({
                                 )}
 
                                 {/* Top Content List */}
+                                {type !== 'website' && (
                                 <div className="bg-transparent">
                                     <div className="flex items-center justify-between mb-4">
                                         <p className="font-semibold text-lg leading-none">{type === 'social' ? 'Top Content' : (type === 'ads' ? 'Active Campaigns' : 'Top Pages')}</p>
@@ -584,9 +585,11 @@ export function AnalyticsSummaryCard({
                                         )}
                                     </div>
                                 </div>
+                                )}
                             </div>
 
                             {/* Right Column (Approx 40%) */}
+                            {type !== 'website' && (
                             <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-6">
                                 {/* Platform Breakdown Table */}
                                 <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm">
@@ -700,6 +703,69 @@ export function AnalyticsSummaryCard({
                                     </div>
                                 </div>
                             </div>
+                            )}
+
+                            {/* Horizontal AI Insights for Website Type */}
+                            {type === 'website' && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 col-span-full">
+                                    {/* What's Working */}
+                                    <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm h-full">
+                                        <p className="font-semibold text-base mb-4 flex items-center gap-2">
+                                            <CheckCircle2 className="h-4 w-4 text-emerald-500" /> What's Working
+                                        </p>
+                                        <div className="space-y-4">
+                                            {strengths.map((s, i) => (
+                                                <div key={i} className="flex gap-3 items-start">
+                                                    <div className="h-5 w-5 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                                        <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground leading-relaxed">{s.replace(/\*\*/g, '')}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Needs Fixing */}
+                                    <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm h-full">
+                                        <p className="font-semibold text-base mb-4 flex items-center gap-2">
+                                            <AlertTriangle className="h-4 w-4 text-rose-500" /> Needs Fixing
+                                        </p>
+                                        <div className="space-y-4">
+                                            {weaknesses.map((w, i) => (
+                                                <div key={i} className="flex gap-3 items-start">
+                                                    <div className="h-5 w-5 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                                                        <div className="h-2 w-2 rounded-full bg-rose-500"></div>
+                                                    </div>
+                                                    <p className="text-sm text-muted-foreground leading-relaxed">{w.replace(/\*\*/g, '')}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Recommended Actions */}
+                                    <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 shadow-sm h-full">
+                                        <p className="font-semibold text-base mb-4 flex items-center gap-2 text-primary">
+                                            <Lightbulb className="h-4 w-4" /> Recommended Actions
+                                        </p>
+                                        <div className="space-y-4">
+                                            {actions.map((act, i) => {
+                                                const parts = act.split(':');
+                                                const hasColon = parts.length > 1;
+                                                return (
+                                                    <div key={i} className="flex gap-3 items-start">
+                                                        <div className="h-6 w-6 rounded-md bg-background border border-primary/20 shadow-sm flex items-center justify-center shrink-0 text-primary font-bold text-xs mt-0.5">
+                                                            {i + 1}
+                                                        </div>
+                                                        <div className="text-sm text-foreground leading-relaxed font-medium">
+                                                            {hasColon ? parts[0].replace(/\*\*/g, '') : act.replace(/\*\*/g, '')}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
