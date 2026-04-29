@@ -21,6 +21,7 @@ import {
     Crosshair,
     ChevronDown,
     ChevronUp,
+    Target,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -183,7 +184,7 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
     ${kpiRow("Avg CPC", fmt$(data.kpis.avgCpc))}
   </div>
 
-  ${data.executiveSummary.length > 0 ? `
+  ${(data.executiveSummary?.length || 0) > 0 ? `
   <div class="section">
     <div class="section-title">Executive Summary</div>
     <ul>${execBullets}</ul>
@@ -201,7 +202,7 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
     <p>${data.channelSnapshot}</p>
   </div>` : ""}
 
-  ${data.topRevenueCampaigns.length > 0 ? `
+  ${(data.topRevenueCampaigns?.length || 0) > 0 ? `
   <div class="section">
     <div class="section-title">Top Revenue Drivers</div>
     <table>
@@ -210,7 +211,7 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
     </table>
   </div>` : ""}
 
-  ${data.wastefulSearchTerms.length > 0 ? `
+  ${(data.wastefulSearchTerms?.length || 0) > 0 ? `
   <div class="section">
     <div class="section-title waste-header">Highest Spend Search Terms With No Sales</div>
     <table>
@@ -219,7 +220,7 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
     </table>
   </div>` : ""}
 
-  ${data.actionPlan.length > 0 ? `
+  ${(data.actionPlan?.length || 0) > 0 ? `
   <div class="section">
     <div class="section-title">Action Plan for the Next 7 Days</div>
     <ul>${actionBullets}</ul>
@@ -544,14 +545,14 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         </div>
 
                         {/* Executive Summary */}
-                        {report.executiveSummary.length > 0 && (
+                        {(report.executiveSummary?.length || 0) > 0 && (
                             <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
                                 <div className="flex items-center gap-2 mb-3 text-blue-400">
                                     <Lightbulb className="h-4 w-4" />
                                     <span className="font-semibold text-sm">Executive Summary</span>
                                 </div>
                                 <ul className="space-y-1.5">
-                                    {report.executiveSummary.map((b, i) => (
+                                    {report.executiveSummary?.map((b, i) => (
                                         <li key={i} className="text-xs text-foreground/80 flex gap-2">
                                             <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-blue-500/70" />
                                             {b}
@@ -584,7 +585,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         </div>
 
                         {/* Top Revenue Drivers Table */}
-                        {report.topRevenueCampaigns.length > 0 && (
+                        {(report.topRevenueCampaigns?.length || 0) > 0 && (
                             <div>
                                 <div className="flex items-center gap-2 mb-2 text-emerald-400">
                                     <CheckCircle2 className="h-4 w-4" />
@@ -603,7 +604,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {report.topRevenueCampaigns.map((c, i) => (
+                                            {report.topRevenueCampaigns?.map((c, i) => (
                                                 <TableRow key={i} className="hover:bg-muted/20">
                                                     <TableCell className="pl-4 text-xs font-medium max-w-[220px]">
                                                         <span className="truncate block" title={c.name}>{c.name}</span>
@@ -626,7 +627,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         )}
 
                         {/* Wasteful Search Terms Table */}
-                        {report.wastefulSearchTerms.length > 0 && (
+                        {(report.wastefulSearchTerms?.length || 0) > 0 && (
                             <div>
                                 <div className="flex items-center gap-2 mb-2 text-red-400">
                                     <TrendingDown className="h-4 w-4" />
@@ -644,7 +645,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {report.wastefulSearchTerms.map((t, i) => (
+                                            {report.wastefulSearchTerms?.map((t, i) => (
                                                 <TableRow key={i} className="hover:bg-red-500/5">
                                                     <TableCell className="pl-4 text-xs font-medium">{t.term}</TableCell>
                                                     <TableCell className="text-right text-xs">{t.clicks}</TableCell>
@@ -664,14 +665,14 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         )}
 
                         {/* Action Plan */}
-                        {report.actionPlan.length > 0 && (
+                        {(report.actionPlan?.length || 0) > 0 && (
                             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
                                 <div className="flex items-center gap-2 mb-3 text-emerald-400">
                                     <Target className="h-4 w-4" />
                                     <span className="font-semibold text-sm">Action Plan for the Next 7 Days</span>
                                 </div>
                                 <ol className="space-y-2">
-                                    {report.actionPlan.map((action, i) => (
+                                    {report.actionPlan?.map((action, i) => (
                                         <li key={i} className="text-xs text-foreground/80 flex gap-2">
                                             <span className="shrink-0 font-bold text-emerald-400 w-4">{i + 1}.</span>
                                             {action}
