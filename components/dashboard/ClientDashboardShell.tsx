@@ -1114,8 +1114,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                       </div>
                       
-                      {/* Embedded GA4 Website Traffic Section */}
-                      <WebsiteAnalyticsSection clientId={clientId!} />
+
                   </div>
                 ) : null}
 
