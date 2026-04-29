@@ -57,9 +57,14 @@ export function useSyncState(clientId: string, platform: string, module: string)
             if (status === 'stale' || status === 'empty_failed') {
                 setOptimisticSyncing(true);
                 // Silently dispatch background sync
-                await supabase.functions.invoke('orchestrate-sync', {
+                const { data } = await supabase.functions.invoke('orchestrate-sync', {
                     body: { clientId, platform, module }
                 });
+                
+                if (data?.status === 'skipped') {
+                    setOptimisticSyncing(false);
+                }
+
                 // Optimistically refetch state to show 'syncing'
                 refetch();
             }

@@ -27,10 +27,10 @@ const getCountryLabel = (code: string) => COUNTRY_NAMES[code] || code;
 
 // Country flag emoji from code
 const getFlag = (code: string) => {
-  if (code === "XX") return "🌐";
+  if (!code || code === "XX" || code.length !== 2 || code === "Unknown") return "🌐";
   try {
     return String.fromCodePoint(
-      ...code.split("").map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)
+      ...code.toUpperCase().split("").map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)
     );
   } catch {
     return "🌐";
@@ -55,9 +55,10 @@ const getDateRange = (preset: DateRangePreset) => {
 interface TopCountriesWidgetProps {
   clientId: string;
   dateRange: DateRangePreset;
+  countriesData?: any[];
 }
 
-export const TopCountriesWidget = ({ clientId, dateRange }: TopCountriesWidgetProps) => {
+export const TopCountriesWidget = ({ clientId, dateRange, countriesData }: TopCountriesWidgetProps) => {
   const [metric, setMetric] = useState<"pageviews" | "sessions" | "visitors">("pageviews");
   const dates = getDateRange(dateRange);
 
@@ -75,11 +76,16 @@ export const TopCountriesWidget = ({ clientId, dateRange }: TopCountriesWidgetPr
       if (error) throw error;
       return data as { items: { country: string; value: number }[] };
     },
-    enabled: !!clientId,
+    enabled: !!clientId && (!countriesData || countriesData.length === 0),
     staleTime: 5 * 60 * 1000,
   });
 
-  const items = data?.items || [];
+  const items = countriesData && countriesData.length > 0
+    ? countriesData.map(c => ({ 
+        country: c.country || c.key || 'XX', 
+        value: c.count || c.value || 0 
+      })).sort((a,b) => b.value - a.value)
+    : (data?.items || []);
   const total = items.reduce((sum, i) => sum + i.value, 0);
   const top = items.slice(0, 10);
 
@@ -121,6 +127,10 @@ export const TopCountriesWidget = ({ clientId, dateRange }: TopCountriesWidgetPr
             <p className="text-xs text-muted-foreground mt-1">
               Data will appear once visitors with country info arrive
             </p>
+            <div className="mt-4 text-xs text-left bg-black/50 p-2 rounded overflow-auto max-h-32">
+              Debug countriesData: {JSON.stringify(countriesData)}
+              <br/>Debug items: {JSON.stringify(items)}
+            </div>
           </div>
         ) : (
           <div className="space-y-3">

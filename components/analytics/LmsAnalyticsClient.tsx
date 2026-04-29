@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useSyncState } from "@/hooks/useSyncState";
@@ -53,35 +54,62 @@ interface LmsApiResponse {
     beta_testers: BetaTester[];
     traffic: {
         top_pages: { page: string; views: number }[];
-        top_referrers: { referrer: string; sessions: number }[];
-        device_breakdown: Record<string, number>;
     };
     timestamp: string;
 }
 
 const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
     const router = useRouter();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const syncState = useSyncState(clientId, "lms", "analytics");
 
     const { data: cachedData, isLoading: isCacheLoading, error } = useQuery<{ data: LmsApiResponse }>({
         queryKey: ["platform-analytics-cache", clientId, "lms", "analytics"],
         queryFn: async () => {
+            console.log('Fetching LMS analytics cache...');
             const { data, error } = await supabase
-                .from("platform_analytics_cache" as any)
-                .select("data")
-                .eq("client_id", clientId)
-                .eq("platform", "lms")
-                .eq("module", "analytics")
+                .from('platform_analytics_cache')
+                .select('data')
+                .eq('client_id', clientId)
+                .eq('platform', 'lms')
+                .eq('module', 'analytics')
                 .maybeSingle();
+
+            if (error) {
+                console.error("Supabase cache error:", error);
+                throw error;
+            }
             
-            if (error) throw error;
-            return (data as any) as { data: LmsApiResponse };
+            if (data && data.data) {
+                return data as { data: LmsApiResponse };
+            }
+            
+            // If cache is completely empty, fetch directly from FFF project as fallback
+            console.log("Cache empty, fetching directly from FFF edge function...");
+            try {
+                const res = await fetch("https://ouxnqgwdwccjipmplure.supabase.co/functions/v1/beta-count", {
+                    headers: { "x-api-key": "Iydknyk1@#$%" },
+                });
+                if (res.ok) {
+                    const freshData = await res.json();
+                    return { data: freshData } as { data: LmsApiResponse };
+                }
+            } catch (err) {
+                console.error("Direct fallback fetch failed:", err);
+            }
+
+            return null;
         },
         enabled: !!clientId && (!syncState.isSyncing || syncState.isDegraded),
     });
 
     const data = cachedData?.data;
+    console.log("cachedData from DB:", cachedData);
     const isLoading = isCacheLoading || (syncState.isSyncing && !data);
     const isFetching = syncState.isSyncing;
     
@@ -136,7 +164,7 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 
-    if (isLoading) {
+    if (!mounted || isLoading) {
         return (
             <div className="min-h-screen bg-background flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -409,7 +437,7 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
                 </Card>
 
                 {/* Traffic Section */}
-                <div className="grid gap-6 md:grid-cols-2">
+                <div className="grid gap-6">
                     {/* Top Pages */}
                     <Card>
                         <CardHeader>
@@ -437,57 +465,7 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
                         </CardContent>
                     </Card>
 
-                    {/* Referrers & Devices */}
-                    <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <TrendingUp className="h-4 w-4 text-blue-500" />
-                                    Top Referrers
-                                </CardTitle>
-                                <CardDescription>Traffic sources (last 30 days)</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {(traffic?.top_referrers || []).length === 0 ? (
-                                    <p className="text-sm text-muted-foreground py-4 text-center">No referrer data</p>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {traffic!.top_referrers.map((ref, i) => (
-                                            <div key={i} className="flex items-center justify-between">
-                                                <span className="text-sm truncate max-w-[200px]" title={ref.referrer}>
-                                                    {ref.referrer}
-                                                </span>
-                                                <Badge variant="outline">{ref.sessions} session{ref.sessions !== 1 ? "s" : ""}</Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <Monitor className="h-4 w-4 text-purple-500" />
-                                    Device Breakdown
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {!traffic?.device_breakdown || Object.keys(traffic.device_breakdown).length === 0 ? (
-                                    <p className="text-sm text-muted-foreground py-4 text-center">No device data</p>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {Object.entries(traffic.device_breakdown).map(([device, count], i) => (
-                                            <div key={i} className="flex items-center justify-between">
-                                                <span className="text-sm capitalize">{device}</span>
-                                                <Badge variant="outline">{count} session{count !== 1 ? "s" : ""}</Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
                 </div>
             </main>
         </div>

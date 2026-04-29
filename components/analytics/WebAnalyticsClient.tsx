@@ -211,6 +211,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
       })) : undefined),
       topPages: normalizedTopPages,
       browsers: analytics.browsers,
+      countries: analytics.countries,
+      breakdowns: analytics.breakdowns,
       airbnbClicks: analytics.airbnbClicks,
       amazonClicks: analytics.amazonClicks,
     }
@@ -864,8 +866,12 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           </CardContent>
                         </Card>
 
-                        {/* Top Countries (Temporarily hidden) */}
-                        {/* <TopCountriesWidget clientId={clientId!} dateRange={dateRange} /> */}
+                        {/* Top Countries */}
+                        <TopCountriesWidget 
+                          clientId={clientId!} 
+                          dateRange={dateRange} 
+                          countriesData={normalizedAnalytics?.countries || normalizedAnalytics?.breakdowns?.countries || undefined}
+                        />
 
                         {/* Browser Breakdown */}
                         {normalizedAnalytics?.browsers && normalizedAnalytics.browsers.length > 0 && (

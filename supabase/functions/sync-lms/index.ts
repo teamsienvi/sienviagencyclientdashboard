@@ -24,10 +24,25 @@ serve(async (req) => {
 
     console.log(`[sync-lms] Fetching LMS data for client: ${clientId}`);
 
+    const { data: clientData, error: clientError } = await supabase
+      .from('clients')
+      .select('supabase_url, api_key')
+      .eq('id', clientId)
+      .single();
+
+    if (clientError || !clientData) {
+      throw new Error(`Failed to fetch client details: ${clientError?.message}`);
+    }
+
+    const { supabase_url, api_key } = clientData;
+    const targetUrl = supabase_url || "https://ouxnqgwdwccjipmplure.supabase.co";
+
     // Fetch LMS data from external project (FFF Lovable Project)
-    // We use the same hardcoded URL that was previously in the frontend component
-    const res = await fetch("https://ouxnqgwdwccjipmplure.supabase.co/functions/v1/beta-count", {
-        headers: { "x-api-key": "Iydknyk1@#$%" },
+    const res = await fetch(`${targetUrl}/functions/v1/beta-count`, {
+        headers: { 
+          "x-api-key": "Iydknyk1@#$%",
+          ...(api_key ? { "Authorization": `Bearer ${api_key}`, "apikey": api_key } : {})
+        },
     });
 
     if (!res.ok) {

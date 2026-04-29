@@ -106,7 +106,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       if (!clientId) return null;
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, logo_url, supabase_url")
+        .select("id, name, logo_url, supabase_url, api_key")
         .eq("id", clientId)
         .maybeSingle();
       if (error) throw error;
@@ -323,8 +323,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   const { data: betaCount, isLoading: isLoadingBeta } = useQuery({
     queryKey: ["fff-beta-count"],
     queryFn: async () => {
-      const res = await fetch("https://ouxnqgwdwccjipmplure.supabase.co/functions/v1/beta-count", {
-        headers: { "x-api-key": "Iydknyk1@#$%" },
+      const targetUrl = client?.supabase_url || "https://ouxnqgwdwccjipmplure.supabase.co";
+      const res = await fetch(`${targetUrl}/functions/v1/beta-count`, {
+        headers: { 
+          "x-api-key": "Iydknyk1@#$%",
+          ...(client?.api_key ? { "Authorization": `Bearer ${client.api_key}`, "apikey": client.api_key } : {})
+        },
       });
       if (!res.ok) throw new Error("Failed to fetch beta count");
       const data = await res.json();
