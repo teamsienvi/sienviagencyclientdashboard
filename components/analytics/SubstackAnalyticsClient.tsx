@@ -21,7 +21,7 @@ const SubstackAnalyticsClient = ({ clientId }: { clientId: string }) => {
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
 
   // Fetch client details
-  const { data: client, isLoading: isLoadingClient } = useQuery({
+  const { data: client, isPending: isLoadingClient } = useQuery({
     queryKey: ["client", clientId],
     queryFn: async () => {
       if (!clientId) return null;

@@ -12,7 +12,7 @@ import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { AD_PLATFORM_LABELS, getClientAdPlatforms } from "@/config/adPlatforms";
 
 export default function AdsAnalyticsPage({ clientId }: { clientId: string }) {
-  const { data: client, isLoading } = useQuery({
+  const { data: client, isPending: isLoading } = useQuery({
     queryKey: ["client", clientId],
     queryFn: async () => {
       if (!clientId) return null;

@@ -6,7 +6,7 @@ import ShopifyAnalyticsSection from "@/components/ShopifyAnalyticsSection";
 import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/analytics/NextAnalyticsPageLayout";
 
 export default function ShopifyAnalyticsPage({ clientId }: { clientId: string }) {
-  const { data: client, isLoading } = useQuery({
+  const { data: client, isPending } = useQuery({
     queryKey: ["client", clientId],
     queryFn: async () => {
       if (!clientId) return null;
@@ -28,7 +28,7 @@ export default function ShopifyAnalyticsPage({ clientId }: { clientId: string })
       clientLogo={client?.logo_url}
       pageName="Shopify"
       pageDescription="E-commerce performance and insights"
-      isLoading={isLoading}
+      isLoading={isPending}
     >
       <div className="space-y-6">
         <ShopifyAnalyticsSection

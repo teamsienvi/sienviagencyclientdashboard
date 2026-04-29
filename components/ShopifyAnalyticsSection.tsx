@@ -300,7 +300,7 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
         .maybeSingle();
 
       if (error) throw error;
-      return (data as any)?.data as any;
+      return ((data as any)?.data as any) ?? null;
     },
     enabled: !!clientId && (!syncState.isSyncing || syncState.isDegraded),
   });

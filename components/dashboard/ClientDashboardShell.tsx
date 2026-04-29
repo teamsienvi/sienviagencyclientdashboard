@@ -36,6 +36,7 @@ import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
+import { WebsiteAnalyticsSection } from "@/components/analytics/WebsiteAnalyticsSection";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { Globe, Share2, Star } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
@@ -1101,6 +1102,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </>
                         )}
                       </div>
+                      
+                      {/* Embedded GA4 Website Traffic Section */}
+                      <WebsiteAnalyticsSection clientId={clientId!} />
                   </div>
                 ) : null}
 

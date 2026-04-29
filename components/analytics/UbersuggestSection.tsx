@@ -101,23 +101,31 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
   const issuesTrendData = Array.from(issuesTrendDataMap.values());
 
   // Consolidate Keyword History for Line Chart
-  const keywordHistoryData: any[] = [];
+  const keywordHistoryDataMap = new Map();
   const trackedKeywordNames = keywords.map((k: any) => k.keyword);
   
   periodMetrics.forEach(row => {
     const kws = typeof row.tracked_keywords === 'string' ? JSON.parse(row.tracked_keywords) : (row.tracked_keywords || []);
-    const dataPoint: any = { date: fmtDate(row.collected_at) };
+    const dateStr = fmtDate(row.collected_at);
+    
+    // Start with existing data point for this day, or create a new one
+    const dataPoint: any = keywordHistoryDataMap.get(dateStr) || { date: dateStr };
     let hasPositions = false;
+    
     kws.forEach((kw: any) => {
       if (trackedKeywordNames.includes(kw.keyword) && kw.desktop_new !== null) {
         dataPoint[kw.keyword] = kw.desktop_new;
         hasPositions = true;
       }
     });
-    if (hasPositions) {
-      keywordHistoryData.push(dataPoint);
+    
+    // Only update if we actually have ranking positions
+    if (hasPositions || keywordHistoryDataMap.has(dateStr)) {
+      keywordHistoryDataMap.set(dateStr, dataPoint);
     }
   });
+  
+  const keywordHistoryData = Array.from(keywordHistoryDataMap.values());
 
   const scoreColor = score >= 80 ? 'text-emerald-500' : score >= 60 ? 'text-amber-500' : 'text-red-500';
   const scoreStroke = score >= 80 ? 'stroke-emerald-500' : score >= 60 ? 'stroke-amber-500' : 'stroke-red-500';

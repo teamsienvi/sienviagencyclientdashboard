@@ -28,7 +28,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
   const [isTesting, setIsTesting] = useState(false);
 
   // Fetch client details
-  const { data: client, isLoading: isLoadingClient } = useQuery({
+  const { data: client, isPending: isLoadingClient } = useQuery({
     queryKey: ["client", clientId],
     queryFn: async () => {
       if (!clientId) return null;
