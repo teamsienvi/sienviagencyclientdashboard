@@ -514,7 +514,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     if (!metricoolPlatforms) return false;
     const name = client?.name?.trim();
     // If client has website analytics configured, it's not ads-only
-    if (client?.supabase_url || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency"].includes(name || "")) return false;
+    const hasGa4 = client?.client_ga4_config?.[0]?.ga4_property_id || client?.client_ga4_config?.ga4_property_id;
+    if (client?.supabase_url || hasGa4 || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency"].includes(name || "")) return false;
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
