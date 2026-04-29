@@ -110,7 +110,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       if (!clientId) return null;
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, logo_url, supabase_url, api_key")
+        .select("id, name, logo_url, supabase_url, api_key, client_ga4_config(ga4_property_id)")
         .eq("id", clientId)
         .maybeSingle();
       if (error) throw error;
@@ -983,7 +983,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Web & E-Comm Channel */}
-                {(!isAdsOnlyClient && client.supabase_url) || 
+                {(!isAdsOnlyClient && (client.supabase_url || client.client_ga4_config?.[0]?.ga4_property_id || client.client_ga4_config?.ga4_property_id)) || 
                   ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
                   connectedAccounts?.substack ? (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="web-ecommerce">
@@ -997,7 +997,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* Website specific */}
-                        {!isAdsOnlyClient && client.supabase_url && (
+                        {!isAdsOnlyClient && (client.supabase_url || client.client_ga4_config?.[0]?.ga4_property_id || client.client_ga4_config?.ga4_property_id) && (
                           <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/web-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
