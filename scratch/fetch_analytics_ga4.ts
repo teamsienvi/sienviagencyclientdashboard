@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Base64Url encoder helper for JWT
+// Base64Url encoder helper
 function encodeBase64Url(str: string): string {
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -19,7 +19,6 @@ function encodeBase64UrlBuffer(buffer: ArrayBuffer): string {
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// Generate Google Access Token using Service Account JSON via WebCrypto
 async function getGoogleAccessToken(serviceAccountJson: any, scopes: string[]): Promise<string> {
   const header = { alg: 'RS256', typ: 'JWT' };
   const now = Math.floor(Date.now() / 1000);
@@ -59,7 +58,6 @@ async function getGoogleAccessToken(serviceAccountJson: any, scopes: string[]): 
   return data.access_token;
 }
 
-// Helper to run a single GA4 report
 async function runGA4Report(propertyId: string, accessToken: string, requestBody: any) {
   const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
   const response = await fetch(url, {
@@ -130,7 +128,7 @@ serve(async (req) => {
     const cleanPropertyId = propertyId.replace('properties/', '');
     const dateRanges = [{ startDate, endDate }];
 
-    // Parallel GA4 queries for different breakdown dimensions
+    // Parallel GA4 queries
     const [
       overviewData,
       trafficData,
@@ -140,7 +138,7 @@ serve(async (req) => {
       countriesData,
       outboundData
     ] = await Promise.all([
-      // 1. Overview Metrics
+      // 1. Overview
       runGA4Report(cleanPropertyId, accessToken, {
         dateRanges,
         metrics: [{ name: 'sessions' }, { name: 'screenPageViews' }, { name: 'totalUsers' }, { name: 'bounceRate' }, { name: 'averageSessionDuration' }]
@@ -157,7 +155,7 @@ serve(async (req) => {
         dimensions: [{ name: 'deviceCategory' }],
         metrics: [{ name: 'sessions' }]
       }),
-      // 4. Daily Breakdown
+      // 4. Daily
       runGA4Report(cleanPropertyId, accessToken, {
         dateRanges,
         dimensions: [{ name: 'date' }],
@@ -176,10 +174,9 @@ serve(async (req) => {
         dateRanges,
         dimensions: [{ name: 'country' }],
         metrics: [{ name: 'sessions' }],
-        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
-        limit: 20
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }]
       }),
-      // 7. Outbound (Airbnb) Clicks tracked via Enhanced Measurement
+      // 7. Outbound (Airbnb)
       runGA4Report(cleanPropertyId, accessToken, {
         dateRanges,
         dimensionFilter: {
@@ -191,9 +188,6 @@ serve(async (req) => {
            }
         },
         metrics: [{ name: 'eventCount' }]
-      }).catch(e => {
-        console.error("Outbound clicks query failed (this is non-fatal):", e);
-        return { rows: [] };
       })
     ]);
 
@@ -228,7 +222,7 @@ serve(async (req) => {
 
     // Parse Daily
     const dailyBreakdown = (dailyData.rows || []).map((row: any) => {
-      const d = row.dimensionValues[0].value; // Format: YYYYMMDD
+      const d = row.dimensionValues[0].value; // YYYYMMDD
       const dateStr = `${d.substring(0,4)}-${d.substring(4,6)}-${d.substring(6,8)}`;
       return {
         date: dateStr,

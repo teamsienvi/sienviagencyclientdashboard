@@ -31,6 +31,8 @@ interface ClientFormData {
   supabase_url: string;
   api_key: string;
   is_active: boolean;
+  ga4_property_id: string;
+  website_url: string;
 }
 
 const defaultFormData: ClientFormData = {
@@ -39,6 +41,8 @@ const defaultFormData: ClientFormData = {
   supabase_url: "",
   api_key: "",
   is_active: true,
+  ga4_property_id: "",
+  website_url: "",
 };
 
 export const ClientManagement = () => {
@@ -52,7 +56,7 @@ export const ClientManagement = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("*")
+        .select("*, client_ga4_config(ga4_property_id, website_url)")
         .order("name");
 
       if (error) throw error;
@@ -62,8 +66,18 @@ export const ClientManagement = () => {
 
   const createMutation = useMutation({
     mutationFn: async (data: ClientFormData) => {
-      const { error } = await supabase.from("clients").insert([data]);
+      const { ga4_property_id, website_url, ...clientData } = data;
+      const { data: newClient, error } = await supabase.from("clients").insert([clientData]).select().single();
       if (error) throw error;
+      
+      if (ga4_property_id || website_url) {
+        const { error: ga4Error } = await supabase.from("client_ga4_config").insert([{
+          client_id: newClient.id,
+          ga4_property_id: ga4_property_id || "",
+          website_url: website_url || ""
+        }]);
+        if (ga4Error) throw ga4Error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
@@ -77,8 +91,19 @@ export const ClientManagement = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<ClientFormData> }) => {
-      const { error } = await supabase.from("clients").update(data).eq("id", id);
+      const { ga4_property_id, website_url, ...clientData } = data;
+      const { error } = await supabase.from("clients").update(clientData).eq("id", id);
       if (error) throw error;
+      
+      if (ga4_property_id !== undefined || website_url !== undefined) {
+        const { error: ga4Error } = await supabase.from("client_ga4_config").upsert({
+          client_id: id,
+          ga4_property_id: ga4_property_id || "",
+          website_url: website_url || "",
+          is_active: true
+        }, { onConflict: "client_id" });
+        if (ga4Error) throw ga4Error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
@@ -118,6 +143,8 @@ export const ClientManagement = () => {
       supabase_url: client.supabase_url || "",
       api_key: client.api_key || "",
       is_active: client.is_active ?? true,
+      ga4_property_id: client.client_ga4_config?.[0]?.ga4_property_id || client.client_ga4_config?.ga4_property_id || "",
+      website_url: client.client_ga4_config?.[0]?.website_url || client.client_ga4_config?.website_url || "",
     });
     setIsOpen(true);
   };
@@ -192,7 +219,24 @@ export const ClientManagement = () => {
                   value={formData.api_key}
                   onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
                   placeholder="Your analytics API key"
-                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ga4_property_id">GA4 Property ID</Label>
+                <Input
+                  id="ga4_property_id"
+                  value={formData.ga4_property_id}
+                  onChange={(e) => setFormData({ ...formData, ga4_property_id: e.target.value })}
+                  placeholder="e.g. 123456789"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="website_url">Website URL (GA4)</Label>
+                <Input
+                  id="website_url"
+                  value={formData.website_url}
+                  onChange={(e) => setFormData({ ...formData, website_url: e.target.value })}
+                  placeholder="https://example.com"
                 />
               </div>
               <div className="flex items-center space-x-2">
@@ -224,6 +268,7 @@ export const ClientManagement = () => {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Supabase URL</TableHead>
+              <TableHead>GA4 Property</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -234,6 +279,9 @@ export const ClientManagement = () => {
                 <TableCell className="font-medium">{client.name}</TableCell>
                 <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">
                   {client.supabase_url || "Not configured"}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {client.client_ga4_config?.[0]?.ga4_property_id || client.client_ga4_config?.ga4_property_id || "Not configured"}
                 </TableCell>
                 <TableCell>
                   <span
