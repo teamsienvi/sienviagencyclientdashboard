@@ -130,7 +130,7 @@ export function AnalyticsSummaryCard({
         }
         const now = new Date();
         const periodEnd = now.toISOString().split("T")[0];
-        const daysToSubtract = dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : 7;
+        const daysToSubtract = dateRange === "90d" ? 90 : dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : dateRange === "14d" ? 14 : 7;
         const periodStart = new Date(now);
         periodStart.setDate(periodStart.getDate() - daysToSubtract);
         return {
@@ -155,27 +155,59 @@ export function AnalyticsSummaryCard({
     
     // Derived Analytics - fallback to ai metrics for website/lms/ads, use hook metrics for social
     const aiMetrics = (summary as any)?.metrics || {};
-    
-    const totalViews = type === 'social' ? (metricsData?.totalViews || 0) : (aiMetrics.total_views || 0);
-    const totalEngagements = metricsData?.totalEngagements || 0;
     const platformData = metricsData?.platformData || [];
+    
+    // We want to combine platformData with any other platforms present in liveFollowers or socialMetrics.
+    const allPlatforms = new Set<string>();
+    platformData.forEach(p => allPlatforms.add(String(p.platform).toLowerCase()));
+    
+    if (liveFollowers) {
+        Object.keys(liveFollowers).forEach(p => allPlatforms.add(p.toLowerCase()));
+    }
+    if (socialMetrics) {
+        Object.keys(socialMetrics).forEach(p => allPlatforms.add(p.toLowerCase()));
+    }
+
     // Process platformData to inject live followers directly so the Platform Breakdown table is perfect
-    const optimizedPlatformData = platformData.map(plat => {
-        const plToLower = String(plat.platform).toLowerCase();
+    const optimizedPlatformData = Array.from(allPlatforms).map(plToLower => {
+        const existingData = platformData.find(p => String(p.platform).toLowerCase() === plToLower);
+        const fallbackViews = socialMetrics?.[plToLower]?.page_views || socialMetrics?.[plToLower]?.impressions || socialMetrics?.[plToLower]?.views || 0;
+        const fallbackEngagements = socialMetrics?.[plToLower]?.engagements || 0;
+        
+        const finalViews = existingData?.views || fallbackViews;
+        const finalEngagements = existingData?.engagements || fallbackEngagements;
+
         return {
-            ...plat,
-            followers: liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || plat.followers || 0,
-            followersGained: socialMetrics?.[plToLower]?.new_followers ?? plat.followersGained ?? 0
+            platform: plToLower,
+            views: finalViews,
+            engagementRate: existingData?.engagementRate || (finalViews > 0 ? (finalEngagements / finalViews) * 100 : 0),
+            engagements: finalEngagements,
+            followers: liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || existingData?.followers || 0,
+            followersGained: (existingData?.followersGained || 0) !== 0 
+                ? existingData.followersGained 
+                : (socialMetrics?.[plToLower]?.new_followers ?? 0)
         };
     });
 
-    // Also recalculate total followers gained using the more accurate optimized platform data
+    let optimizedTotalViews = 0;
+    let optimizedTotalEngagements = 0;
     let optimizedTotalFollowersGained = 0;
+
     if (type === 'social') {
         optimizedPlatformData.forEach(plat => {
+            optimizedTotalViews += plat.views;
+            optimizedTotalEngagements += plat.engagements;
             optimizedTotalFollowersGained += (plat.followersGained || 0);
         });
     }
+
+    const totalViews = type === 'social' 
+        ? (optimizedTotalViews || metricsData?.totalViews || aiMetrics.total_views || 0) 
+        : (aiMetrics.total_views || 0);
+        
+    const totalEngagements = type === 'social'
+        ? (optimizedTotalEngagements || metricsData?.totalEngagements || 0)
+        : (metricsData?.totalEngagements || 0);
 
     const followersGained = type === 'social'
         ? (optimizedTotalFollowersGained || aiMetrics.followers_gained || 0)
@@ -278,6 +310,13 @@ export function AnalyticsSummaryCard({
         : (aiMetrics.engagement_rate || 0);
     const topInsight = summary?.highlights?.[0] || summary?.strengths?.[0];
 
+    const dateRangeLabel = dateRange === "7d" ? "Last 7 Days" :
+                           dateRange === "14d" ? "Last 14 Days" :
+                           dateRange === "30d" ? "Last 30 Days" :
+                           dateRange === "60d" ? "Last 60 Days" :
+                           dateRange === "90d" ? "Last 90 Days" :
+                           "Custom Range";
+
     return (
         <Card className="border-border/50 bg-card shadow-sm overflow-hidden flex flex-col relative w-full">
             {/* Header Area */}
@@ -350,7 +389,7 @@ export function AnalyticsSummaryCard({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'ads' ? 'Ad Spend' : 'Total Views (All Platforms)'}
+                                    {type === 'ads' ? `Ad Spend (${dateRangeLabel})` : `Total Views (${dateRangeLabel})`}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : formatNumber(totalViews)}
@@ -406,10 +445,12 @@ export function AnalyticsSummaryCard({
                                 </p>
                                 <div className="h-8 w-full mt-2 flex items-center">
                                     {type === 'social' ? (
-                                        <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                                            <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
-                                            {Math.abs(followersGained)} this period
-                                        </div>
+                                        followersGained !== 0 ? (
+                                            <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                                <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
+                                                {followersGained > 0 ? `+${formatNumber(followersGained)}` : formatNumber(followersGained)} this period
+                                            </div>
+                                        ) : null
                                     ) : (
                                         <div className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
                                             {type === 'ads' ? <Target className="h-3.5 w-3.5" /> : (aiMetrics.total_sales > 0 ? <ShoppingBag className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />)}
@@ -568,9 +609,11 @@ export function AnalyticsSummaryCard({
                                                             <span className="text-foreground">
                                                                 {formatNumber(plat.followers || 0)}
                                                             </span>
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${(plat.followersGained || 0) > 0 ? "text-emerald-500" : ((plat.followersGained || 0) < 0 ? "text-rose-500" : "text-muted-foreground")}`}>
-                                                                {(plat.followersGained || 0) > 0 ? `+${formatNumber(plat.followersGained || 0)}` : formatNumber(plat.followersGained || 0)}
-                                                            </span>
+                                                            {plat.followersGained !== 0 && (
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                                                                    {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : formatNumber(plat.followersGained)}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className={type === 'social' ? "w-1/4 text-center font-medium" : "w-1/3 text-center font-medium"}>{plat.engagementRate.toFixed(1)}%</div>

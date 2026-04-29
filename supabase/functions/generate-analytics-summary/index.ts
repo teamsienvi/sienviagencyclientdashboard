@@ -576,20 +576,46 @@ async function collectSocialData(
     }
     
     // Fallback: if no Metricool follower timeline data, derive followers_gained from
-    // social_account_metrics.new_followers (populated by direct API syncs)
+    // social_account_metrics (calculating difference between newest and oldest records in the window)
     if (metricsResult.followers_gained === 0 && metrics && metrics.length > 0) {
-        let totalNewFollowers = 0;
-        const seenPlatforms = new Set<string>();
+        let calculatedNewFollowers = 0;
+        
+        // Group metrics by platform
+        const metricsByPlatform: Record<string, any[]> = {};
         metrics.forEach((m: any) => {
             if (!isPlatformActive(m.platform)) return;
-            if (seenPlatforms.has(m.platform)) return;
-            seenPlatforms.add(m.platform);
-            if (m.new_followers != null && m.new_followers !== 0) {
-                totalNewFollowers += m.new_followers;
-            }
+            if (!metricsByPlatform[m.platform]) metricsByPlatform[m.platform] = [];
+            metricsByPlatform[m.platform].push(m);
         });
-        if (totalNewFollowers !== 0) {
-            metricsResult.followers_gained = totalNewFollowers;
+
+        // For each platform, find the oldest and newest follower count in the recent metrics
+        for (const [platform, platformMetrics] of Object.entries(metricsByPlatform)) {
+            // Sort ascending by date to easily find first and last
+            const sorted = [...platformMetrics].sort((a, b) => 
+                new Date(a.collected_at || 0).getTime() - new Date(b.collected_at || 0).getTime()
+            );
+            
+            // First look for explicit new_followers (if Metricool provided it reliably)
+            const sumNewFollowers = sorted.reduce((sum, m) => sum + (m.new_followers || 0), 0);
+            
+            if (sumNewFollowers > 0) {
+                calculatedNewFollowers += sumNewFollowers;
+            } else {
+                // Otherwise calculate absolute difference between oldest and newest known followers
+                const validFollowerPoints = sorted.filter(m => m.followers != null && m.followers > 0);
+                if (validFollowerPoints.length >= 2) {
+                    const first = validFollowerPoints[0].followers;
+                    const last = validFollowerPoints[validFollowerPoints.length - 1].followers;
+                    const diff = last - first;
+                    if (diff > 0) {
+                        calculatedNewFollowers += diff;
+                    }
+                }
+            }
+        }
+        
+        if (calculatedNewFollowers > 0) {
+            metricsResult.followers_gained = calculatedNewFollowers;
         }
     }
 

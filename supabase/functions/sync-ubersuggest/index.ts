@@ -128,24 +128,99 @@ serve(async (req) => {
     );
     const trackedKeywords = positionTrackings[0]?.content?.keywords || [];
 
-    console.log(`Metrics: score=${siteAuditScore}, keywords=${trackedKeywords.length}`);
+    // 4.5 Fetch recent SEO metrics to fall back to if no new alerts
+    const { data: previousRows } = await supabase
+      .from("report_seo_metrics")
+      .select("site_audit_score, site_audit_issues, tracked_keywords")
+      .eq("client_id", clientId)
+      .order("collected_at", { ascending: false })
+      .limit(10);
+
+    let lastValidScore = null;
+    let lastValidIssues = null;
+    let lastValidKeywords = [];
+
+    if (previousRows) {
+      for (const row of previousRows) {
+        if (lastValidScore === null && row.site_audit_score !== null) lastValidScore = row.site_audit_score;
+        if (lastValidIssues === null && row.site_audit_issues !== null) lastValidIssues = row.site_audit_issues;
+        if (lastValidKeywords.length === 0 && row.tracked_keywords && row.tracked_keywords.length > 0) lastValidKeywords = row.tracked_keywords;
+      }
+    }
+
+    const finalAuditScore = siteAuditScore ?? lastValidScore ?? null;
+    let finalAuditIssues = lastValidIssues ?? null;
+    if (latestAudit?.content?.issues) {
+      finalAuditIssues = {
+        ...latestAudit.content.issues,
+        highest_impact: latestAudit.content.highest_impact || []
+      };
+    }
+    let finalTrackedKeywords = trackedKeywords.length > 0 ? trackedKeywords : lastValidKeywords;
+
+    // 4.6 If we STILL have no keywords tracked (e.g. brand new project), pull the pending keywords from activeProject
+    if (finalTrackedKeywords.length === 0 && activeProject?.keywords) {
+      finalTrackedKeywords = Object.keys(activeProject.keywords).map((kw) => ({
+        keyword: kw,
+        volume: null,
+        desktop_new: null,
+        desktop_old: null,
+        focus_device: "desktop",
+      }));
+    }
+
+    console.log(`Final Metrics: score=${finalAuditScore}, keywords=${finalTrackedKeywords.length}`);
+
+    let fullProjectData = null;
+    try {
+      const pRes = await fetch("https://app.neilpatel.com/api/projects/" + projectId, { headers: authHeaders });
+      if (pRes.ok) fullProjectData = await pRes.json();
+    } catch(e) {
+      console.error(`Failed to fetch full project data for ${projectId}:`, e);
+    }
+
+    let domainOverview = null;
+    let oStatus = null;
+    let oData = null;
+    try {
+      const locId = activeProject?.locations?.[0]?.loc_id || 2840;
+      const lang = activeProject?.locations?.[0]?.lang || "en";
+      const overviewUrl = `https://app.neilpatel.com/api/domain_overview?domain=${targetDomain}&locId=${locId}&lang=${lang}`;
+      const oRes = await fetch(overviewUrl, { headers: authHeaders });
+      oStatus = oRes.status;
+      if (oRes.ok) {
+        oData = await oRes.json();
+        domainOverview = oData.result || oData;
+      }
+    } catch(e) {
+      console.error(`Failed to fetch domain overview for ${targetDomain}:`, e);
+    }
+
+    const mergedProjectData = {
+      ...(fullProjectData?.project || activeProject),
+      domain_overview: domainOverview
+    };
 
     // 5. Insert into report_seo_metrics
     const { error: insertError } = await supabase.from("report_seo_metrics").insert({
       client_id: clientId,
-      site_audit_score: siteAuditScore,
-      site_audit_issues: latestAudit?.content?.issues ?? null,
-      tracked_keywords: trackedKeywords,
-      collected_at: new Date().toISOString(),
+      site_audit_score: finalAuditScore,
+      site_audit_issues: finalAuditIssues,
+      tracked_keywords: finalTrackedKeywords,
+      raw_project_data: mergedProjectData,
+      collected_at: new Date().toISOString()
     });
 
-    if (insertError) throw new Error(`Failed to insert SEO metrics: ${insertError.message}`);
+    if (insertError) {
+      console.error(`DB Insert Error for ${targetDomain}:`, insertError);
+      throw insertError;
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
         message: "SEO data synced",
-        data: { domain: targetDomain, siteAuditScore, trackedKeywordsCount: trackedKeywords.length },
+        data: { synced: true },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

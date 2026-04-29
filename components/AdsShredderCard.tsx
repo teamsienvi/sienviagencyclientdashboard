@@ -24,12 +24,33 @@ import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { FRESHNESS_POLICIES, isDataStale } from "@/lib/freshnessPolicy";
 
+interface WinningProduct {
+    name: string;
+    revenue: number;
+    spend: number;
+    roas: number;
+    orders: number;
+}
+
 interface AdsSummaryData {
-    strengths: string[];
-    weaknesses: string[];
-    smartActions: string[];
-    highlights: string[];
-    hardTruths: string[];
+    strengths?: string[];
+    weaknesses?: string[];
+    smartActions?: string[];
+    highlights?: string[];
+    hardTruths?: string[];
+    performanceSnapshot?: {
+        spend: number;
+        revenue: number;
+        orders: number;
+        roas: number;
+    };
+    summary?: string;
+    mainTakeaway?: string;
+    spendSplit?: {
+        convertingProductsSpend: number;
+        nonConvertingProductsSpend: number;
+    };
+    winningProducts?: WinningProduct[];
 }
 
 interface AdsShredderCardProps {
@@ -381,7 +402,8 @@ export function AdsShredderCard({ clientId, adPlatform, title, isActive = true }
                             )}
 
                             {/* Four Analysis Sections */}
-                            <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
+                            {adPlatform === "tiktok" && summary.performanceSnapshot ? renderTikTokLayout(summary) : (
+                                <div className="grid gap-4 grid-cols-1 md:grid-cols-4">
                                 {sections.map((section) => (
                                     <div
                                         key={section.key}
@@ -405,10 +427,112 @@ export function AdsShredderCard({ clientId, adPlatform, title, isActive = true }
                                     </div>
                                 ))}
                             </div>
+                            )}
                         </div>
                     )}
                 </CardContent>
             )}
         </Card>
     );
+
+    function renderTikTokLayout(summary: AdsSummaryData) {
+        if (!summary.performanceSnapshot) return null;
+        
+        return (
+            <div className="space-y-6">
+                {/* Top line summary */}
+                {summary.summary && (
+                    <div className="bg-primary/5 border border-primary/10 rounded-lg p-4">
+                        <h3 className="font-semibold text-lg text-primary mb-1">Campaign Summary</h3>
+                        <p className="text-foreground/80">{summary.summary}</p>
+                    </div>
+                )}
+                
+                {/* Performance Snapshot */}
+                <div>
+                    <h3 className="font-bold text-lg mb-3">Performance Snapshot</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-card border rounded-lg p-4">
+                            <p className="text-sm text-muted-foreground mb-1">Spend</p>
+                            <p className="text-2xl font-bold">${summary.performanceSnapshot.spend.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-card border rounded-lg p-4">
+                            <p className="text-sm text-muted-foreground mb-1">Revenue</p>
+                            <p className="text-2xl font-bold text-emerald-500">${summary.performanceSnapshot.revenue.toFixed(2)}</p>
+                        </div>
+                        <div className="bg-card border rounded-lg p-4">
+                            <p className="text-sm text-muted-foreground mb-1">Orders</p>
+                            <p className="text-2xl font-bold text-blue-500">{summary.performanceSnapshot.orders}</p>
+                        </div>
+                        <div className="bg-card border rounded-lg p-4">
+                            <p className="text-sm text-muted-foreground mb-1">ROAS</p>
+                            <p className="text-2xl font-bold text-purple-500">{summary.performanceSnapshot.roas.toFixed(2)}x</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Main Takeaway */}
+                {summary.mainTakeaway && (
+                    <div className="bg-card border rounded-lg p-4">
+                        <h3 className="font-bold mb-2">Main Takeaway</h3>
+                        <p className="text-foreground/80">{summary.mainTakeaway}</p>
+                        
+                        {/* Spend Split */}
+                        {summary.spendSplit && (
+                            <div className="mt-4 pt-4 border-t">
+                                <p className="text-sm font-semibold mb-2">Spend Split</p>
+                                <div className="flex h-4 rounded-full overflow-hidden mb-2">
+                                    <div 
+                                        className="bg-emerald-500" 
+                                        style={{ width: `${(summary.spendSplit.convertingProductsSpend / (summary.spendSplit.convertingProductsSpend + summary.spendSplit.nonConvertingProductsSpend)) * 100}%` }}
+                                    ></div>
+                                    <div 
+                                        className="bg-red-400" 
+                                        style={{ width: `${(summary.spendSplit.nonConvertingProductsSpend / (summary.spendSplit.convertingProductsSpend + summary.spendSplit.nonConvertingProductsSpend)) * 100}%` }}
+                                    ></div>
+                                </div>
+                                <div className="flex justify-between text-xs text-muted-foreground">
+                                    <span>Converting: ${summary.spendSplit.convertingProductsSpend.toFixed(2)}</span>
+                                    <span>No Orders: ${summary.spendSplit.nonConvertingProductsSpend.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Winning Products */}
+                {summary.winningProducts && summary.winningProducts.length > 0 && (
+                    <div>
+                        <h3 className="font-bold text-lg mb-3">Winning Products</h3>
+                        <div className="bg-card border rounded-lg overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-muted/50 text-muted-foreground text-xs uppercase">
+                                        <tr>
+                                            <th className="px-4 py-3 font-semibold">Product</th>
+                                            <th className="px-4 py-3 font-semibold text-right">Orders</th>
+                                            <th className="px-4 py-3 font-semibold text-right">Revenue</th>
+                                            <th className="px-4 py-3 font-semibold text-right">Spend</th>
+                                            <th className="px-4 py-3 font-semibold text-right">ROAS</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {summary.winningProducts.map((p, i) => (
+                                            <tr key={i} className="hover:bg-muted/20">
+                                                <td className="px-4 py-3 font-medium">{p.name}</td>
+                                                <td className="px-4 py-3 text-right">{p.orders}</td>
+                                                <td className="px-4 py-3 text-right text-emerald-500">${p.revenue.toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right text-red-500">${p.spend.toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right font-bold text-purple-500">{p.roas.toFixed(2)}x</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
 }

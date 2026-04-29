@@ -61,8 +61,8 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 .lte("period_end", periodEndStr)
                 .limit(2000);
 
-            if (error || !metricsRaw) {
-                // Fallback: query via social_content.published_at if the join fails
+        if (error || !metricsRaw || metricsRaw.length === 0) {
+            // Fallback: query via social_content.published_at if the join fails or returns empty
                 console.warn("Metrics primary query failed, using published_at fallback:", error?.message);
                 const { data: fallbackContent } = await supabase
                     .from("social_content")
@@ -166,6 +166,39 @@ async function computeMetrics(
             // Always set current followers to the absolute latest point we have
             platformCurrentFollowers[platform] = points[points.length - 1].followers;
         });
+    } else {
+        // Fallback to social_account_metrics if timeline is empty
+        const { data: accountMetrics } = await supabase
+            .from("social_account_metrics")
+            .select("platform, followers, collected_at")
+            .eq("client_id", clientId)
+            .gte("collected_at", periodStartStr)
+            .order("collected_at", { ascending: true });
+
+        if (accountMetrics && accountMetrics.length > 0) {
+            const byPlatform: Record<string, any[]> = {};
+            accountMetrics.forEach((m) => {
+                if (!byPlatform[m.platform]) byPlatform[m.platform] = [];
+                byPlatform[m.platform].push(m);
+            });
+            
+            Object.values(byPlatform).forEach((points) => {
+                const platform = String(points[0].platform || "").toLowerCase();
+                const validPoints = points.filter(p => p.followers != null && p.followers > 0);
+                
+                if (validPoints.length >= 2) {
+                    const first = validPoints[0].followers;
+                    const last = validPoints[validPoints.length - 1].followers;
+                    platformFollowers[platform] = last - first;
+                } else {
+                    platformFollowers[platform] = 0;
+                }
+                
+                if (validPoints.length > 0) {
+                    platformCurrentFollowers[platform] = validPoints[validPoints.length - 1].followers;
+                }
+            });
+        }
     }
 
     let totalViews = 0;

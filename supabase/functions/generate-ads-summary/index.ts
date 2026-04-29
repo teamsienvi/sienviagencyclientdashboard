@@ -15,17 +15,33 @@ const ASSISTANT_IDS: Record<string, string> = {
     all: "asst_417YSXWwLtO5paLn3mVTR71c",         // fallback to general
 };
 
-// Special TikTok GMV Max preamble
-const TIKTOK_PREAMBLE = `Give me the strength, weakness and smart action plan and highlights. For this tiktok gmv max campaign, remember that I can't move any budget since gmv max has campaign budget not budget per sku. Also I can't choose sku I can't manually choose sku the gmv max campaign is set for all sku.
+// Special TikTok GMV Max preamble - Quantitative Campaign Report
+const TIKTOK_PREAMBLE = `Analyze the following TikTok Ads data. Provide a campaign report focusing on spend, revenue, ROAS, and winning products. For this tiktok gmv max campaign, remember that budget is controlled at the campaign level, not per sku, and sku selection is automated.
 
-Respond with ONLY a valid JSON object (no markdown, no code fences):
+Respond with ONLY a valid JSON object matching this structure exactly (no markdown, no code fences):
 {
-  "strengths": ["3-5 things working well with specific numbers from the data"],
-  "weaknesses": ["3-5 critical gaps or underperforming areas with specific numbers"],
-  "smartActions": ["3-5 highly specific, step-by-step actions for a Client Action Plan, tailored exactly to the client's actual data — only using controllable levers"],
-  "highlights": ["2-4 key observations, milestones, or urgent flags worth noting"],
-  "hardTruths": ["2-4 uncomfortable truths — state what is controllable vs blocked"]
+  "performanceSnapshot": {
+    "spend": number,
+    "revenue": number,
+    "orders": number,
+    "roas": number
+  },
+  "summary": "Short top line summary: e.g., 'Only X of Y products generated all revenue...'",
+  "mainTakeaway": "Main takeaway...",
+  "spendSplit": {
+    "convertingProductsSpend": number,
+    "nonConvertingProductsSpend": number
+  },
+  "winningProducts": [
+    { "name": "Product Name", "revenue": number, "spend": number, "roas": number, "orders": number }
+  ]
 }
+
+RULES:
+- ONLY reference numbers actually present in the data. Do NOT invent metrics.
+- Calculate ROAS as revenue / spend if not explicitly provided.
+- Identify 'winning products' as those with orders > 0.
+- Your response must start with { and end with } — nothing else.
 
 `;
 
@@ -391,6 +407,12 @@ function parseAssistantResponse(text: string): any {
                      "hardtruth", "hard_truth"],
                     ["Insufficient data to deliver hard truths. Upload more comprehensive ad metrics."]
                 ),
+                // TikTok Quantitative fields
+                performanceSnapshot: parsed.performanceSnapshot || null,
+                summary: parsed.summary || "",
+                mainTakeaway: parsed.mainTakeaway || "",
+                spendSplit: parsed.spendSplit || null,
+                winningProducts: parsed.winningProducts || [],
             };
         } catch (jsonErr) {
             console.warn("JSON parse failed, falling back to text extraction:", jsonErr);

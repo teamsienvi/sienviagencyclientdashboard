@@ -28,47 +28,34 @@ import { format } from "date-fns";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface AmazonKPIs {
-    adSales: number | null;
-    adSpend: number | null;
-    acos: number | null;
-    roas: number | null;
-    orders: number | null;
-    ctr: number | null;
-    cvr: number | null;
-    avgCpc: number | null;
-}
-
-interface TopCampaign {
+interface WinningProduct {
     name: string;
+    revenue: number;
     spend: number;
-    sales: number;
-    acos: number;
-    orders: number;
     roas: number;
+    orders: number;
 }
 
-interface WastefulTerm {
-    term: string;
-    clicks: number;
-    spend: number;
-    sales: number;
-    action: string;
+interface TikTokKPIs {
+    spend: number | null;
+    revenue: number | null;
+    orders: number | null;
+    roas: number | null;
 }
 
-interface AmazonReportData {
+interface TikTokReportData {
     sourceFileName?: string;
-    kpis: AmazonKPIs;
-    executiveSummary: string[];
-    clientNeedsToKnow: string;
-    channelSnapshot: string;
-    topRevenueCampaigns: TopCampaign[];
-    wastefulSearchTerms: WastefulTerm[];
-    actionPlan: string[];
-    finalRecommendation: string;
+    performanceSnapshot: TikTokKPIs;
+    summary: string;
+    mainTakeaway: string;
+    spendSplit?: {
+        convertingProductsSpend: number;
+        nonConvertingProductsSpend: number;
+    };
+    winningProducts: WinningProduct[];
 }
 
-interface AmazonAdsReportCardProps {
+interface TikTokAdsReportCardProps {
     clientId: string;
     clientName: string;
 }
@@ -103,53 +90,38 @@ const roasClass = (roas: number | null) => {
 };
 
 // ─── PDF print helper ─────────────────────────────────────────────────────────
-function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: string): string {
+function buildPrintHTML(data: TikTokReportData, clientName: string, fileName: string): string {
     const today = format(new Date(), "MMMM d, yyyy");
     const displayFileName = data.sourceFileName || fileName;
 
     const kpiRow = (label: string, value: string) =>
         `<div class="kpi-cell"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
 
-    const campaignRows = data.topRevenueCampaigns.map((c) => `
+    const productRows = data.winningProducts.map((c) => `
         <tr>
             <td>${c.name}</td>
             <td class="num">$${c.spend.toFixed(2)}</td>
-            <td class="num">$${c.sales.toFixed(2)}</td>
-            <td class="num ${c.acos <= 25 ? "green" : c.acos <= 50 ? "amber" : "red"}">${c.acos.toFixed(1)}%</td>
+            <td class="num">$${c.revenue.toFixed(2)}</td>
             <td class="num">${c.orders}</td>
             <td class="num ${c.roas >= 4 ? "green" : c.roas >= 2 ? "amber" : "red"}">${c.roas.toFixed(2)}x</td>
         </tr>`).join("");
-
-    const wasteRows = data.wastefulSearchTerms.map((t) => `
-        <tr>
-            <td>${t.term}</td>
-            <td class="num">${t.clicks}</td>
-            <td class="num red">$${t.spend.toFixed(2)}</td>
-            <td class="num">$${t.sales.toFixed(2)}</td>
-            <td>${t.action}</td>
-        </tr>`).join("");
-
-    const execBullets = data.executiveSummary.map((b) => `<li>${b}</li>`).join("");
-    const actionBullets = data.actionPlan.map((b) => `<li>${b}</li>`).join("");
 
     return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
-<title>Amazon Ads Report — ${clientName}</title>
+<title>TikTok Ads Report — ${clientName}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 11px; color: #1a1a1a; background: #fff; padding: 32px; max-width: 900px; }
   h1 { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
   .subtitle { font-size: 11px; color: #555; margin-bottom: 20px; }
-  .kpi-bar { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; background: #f4f4f8; border-radius: 8px; padding: 14px; margin-bottom: 20px; }
+  .kpi-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #f4f4f8; border-radius: 8px; padding: 14px; margin-bottom: 20px; }
   .kpi-cell { text-align: center; }
   .kpi-label { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: #666; margin-bottom: 3px; }
   .kpi-value { font-size: 15px; font-weight: 700; color: #111; }
   .section { margin-bottom: 18px; }
   .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1.5px solid #e2e2e2; padding-bottom: 4px; margin-bottom: 8px; color: #333; }
-  ul { padding-left: 16px; }
-  li { margin-bottom: 4px; line-height: 1.5; }
   p { line-height: 1.6; }
   table { width: 100%; border-collapse: collapse; font-size: 10px; }
   th { background: #f4f4f8; text-align: left; padding: 5px 8px; font-weight: 600; font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: #555; }
@@ -160,7 +132,6 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
   .amber { color: #d97706; font-weight: 600; }
   .red { color: #dc2626; font-weight: 600; }
   .final-box { background: #fafafa; border: 1px solid #e2e2e2; border-left: 3px solid #111; border-radius: 4px; padding: 12px 14px; }
-  .waste-header { color: #dc2626; }
   footer { margin-top: 24px; font-size: 9px; color: #999; border-top: 1px solid #e2e2e2; padding-top: 8px; }
   @media print {
     body { padding: 20px; }
@@ -169,66 +140,35 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
 </style>
 </head>
 <body>
-  <h1>Amazon Ads Report — ${clientName}</h1>
+  <h1>TikTok Ads Report — ${clientName}</h1>
   <p class="subtitle">Source file: ${displayFileName} &nbsp;|&nbsp; Generated: ${today}</p>
 
   <div class="kpi-bar">
-    ${kpiRow("Ad Sales", fmt$(data.kpis.adSales))}
-    ${kpiRow("Ad Spend", fmt$(data.kpis.adSpend))}
-    ${kpiRow("ACoS", fmtPct(data.kpis.acos))}
-    ${kpiRow("ROAS", fmtX(data.kpis.roas))}
-    ${kpiRow("Orders", fmtN(data.kpis.orders))}
-    ${kpiRow("CTR", fmtPct(data.kpis.ctr))}
-    ${kpiRow("CVR", fmtPct(data.kpis.cvr))}
-    ${kpiRow("Avg CPC", fmt$(data.kpis.avgCpc))}
+    ${kpiRow("Revenue", fmt$(data.performanceSnapshot.revenue))}
+    ${kpiRow("Spend", fmt$(data.performanceSnapshot.spend))}
+    ${kpiRow("ROAS", fmtX(data.performanceSnapshot.roas))}
+    ${kpiRow("Orders", fmtN(data.performanceSnapshot.orders))}
   </div>
 
-  ${data.executiveSummary.length > 0 ? `
+  ${data.summary ? `
   <div class="section">
-    <div class="section-title">Executive Summary</div>
-    <ul>${execBullets}</ul>
+    <div class="section-title">Summary</div>
+    <p>${data.summary}</p>
   </div>` : ""}
 
-  ${data.clientNeedsToKnow ? `
+  ${data.mainTakeaway ? `
   <div class="section">
-    <div class="section-title">What the Client Needs to Know</div>
-    <p>${data.clientNeedsToKnow}</p>
+    <div class="section-title">Main Takeaway</div>
+    <div class="final-box"><p>${data.mainTakeaway}</p></div>
   </div>` : ""}
 
-  ${data.channelSnapshot ? `
+  ${data.winningProducts && data.winningProducts.length > 0 ? `
   <div class="section">
-    <div class="section-title">Channel Snapshot</div>
-    <p>${data.channelSnapshot}</p>
-  </div>` : ""}
-
-  ${data.topRevenueCampaigns.length > 0 ? `
-  <div class="section">
-    <div class="section-title">Top Revenue Drivers</div>
+    <div class="section-title">Winning Products</div>
     <table>
-      <thead><tr><th>Campaign</th><th class="num">Spend</th><th class="num">Sales</th><th class="num">ACoS</th><th class="num">Orders</th><th class="num">ROAS</th></tr></thead>
-      <tbody>${campaignRows}</tbody>
+      <thead><tr><th>Product Name</th><th class="num">Spend</th><th class="num">Revenue</th><th class="num">Orders</th><th class="num">ROAS</th></tr></thead>
+      <tbody>${productRows}</tbody>
     </table>
-  </div>` : ""}
-
-  ${data.wastefulSearchTerms.length > 0 ? `
-  <div class="section">
-    <div class="section-title waste-header">Highest Spend Search Terms With No Sales</div>
-    <table>
-      <thead><tr><th>Search Term</th><th class="num">Clicks</th><th class="num">Spend</th><th class="num">Sales</th><th>Action</th></tr></thead>
-      <tbody>${wasteRows}</tbody>
-    </table>
-  </div>` : ""}
-
-  ${data.actionPlan.length > 0 ? `
-  <div class="section">
-    <div class="section-title">Action Plan for the Next 7 Days</div>
-    <ul>${actionBullets}</ul>
-  </div>` : ""}
-
-  ${data.finalRecommendation ? `
-  <div class="section">
-    <div class="section-title">Final Recommendation</div>
-    <div class="final-box"><p>${data.finalRecommendation}</p></div>
   </div>` : ""}
 
   <footer>Generated by Sienvi Agency Dashboard &nbsp;|&nbsp; ${today}</footer>
@@ -238,24 +178,24 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCardProps) {
+export function TikTokAdsReportCard({ clientId, clientName }: TikTokAdsReportCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [file, setFile] = useState<File | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
-    const [report, setReport] = useState<AmazonReportData | null>(null);
+    const [report, setReport] = useState<TikTokReportData | null>(null);
     const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
     const { toast } = useToast();
-    const printFrameRef = useRef<HTMLIFrameElement | null>(null);
     const queryClient = useQueryClient();
 
     const { data: cachedData, isLoading: isFetchingCache, refetch: refetchReport } = useQuery({
-        queryKey: ["amazon-ads-report", clientId],
+        queryKey: ["tiktok-ads-report", clientId],
         queryFn: async () => {
             const { data, error } = await supabase
-                .from("amazon_ads_reports" as any)
-                .select("parsed_data, generated_at, source_file_name, generation_status")
+                .from("ads_analytics_summaries" as any)
+                .select("summary_data, generated_at, file_name")
                 .eq("client_id", clientId)
-                .order("report_period", { ascending: false })
+                .eq("type", "tiktok")
+                .order("generated_at", { ascending: false })
                 .limit(1)
                 .maybeSingle();
 
@@ -263,25 +203,17 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             return data as any;
         },
         enabled: !!clientId,
-        refetchInterval: (query) => (query.state.data as any)?.generation_status === 'pending' ? 5000 : false // poll if pending
     });
 
     useEffect(() => {
-        if (cachedData) {
-            if (cachedData.generation_status === 'pending') {
-                setIsAnalyzing(true);
-            } else if (cachedData.generation_status === 'complete' && cachedData.parsed_data) {
-                setIsAnalyzing(false);
-                setReport(cachedData.parsed_data as AmazonReportData);
-                if (cachedData.generated_at) {
-                    setGeneratedAt(new Date(cachedData.generated_at));
-                }
-                if (cachedData.source_file_name && !file) {
-                    setFile(new File([""], cachedData.source_file_name, { type: "text/csv" }));
-                }
-            } else if (cachedData.generation_status === 'failed') {
-                setIsAnalyzing(false);
-                toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
+        if (cachedData && cachedData.summary_data && cachedData.summary_data.performanceSnapshot) {
+            setIsAnalyzing(false);
+            setReport(cachedData.summary_data as TikTokReportData);
+            if (cachedData.generated_at) {
+                setGeneratedAt(new Date(cachedData.generated_at));
+            }
+            if (cachedData.file_name && !file) {
+                setFile(new File([""], cachedData.file_name, { type: "text/csv" }));
             }
         }
     }, [cachedData, file, toast]);
@@ -292,7 +224,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         if (!f) return;
         const ext = f.name.substring(f.name.lastIndexOf(".")).toLowerCase();
         if (![".csv", ".xlsx", ".xls"].includes(ext)) {
-            toast({ title: "Invalid file", description: "Upload a .csv or .xlsx Amazon Ads report", variant: "destructive" });
+            toast({ title: "Invalid file", description: "Upload a .csv or .xlsx TikTok Ads report", variant: "destructive" });
             return;
         }
         setFile(f);
@@ -308,7 +240,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     // ─── Analysis ────────────────────────────────────────────────────────────
     const handleAnalyze = async () => {
         if (!file) {
-            toast({ title: "No file selected", description: "Upload an Amazon Ads CSV or Excel report", variant: "destructive" });
+            toast({ title: "No file selected", description: "Upload a TikTok Ads CSV or Excel report", variant: "destructive" });
             return;
         }
 
@@ -317,10 +249,11 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             const { data: { session } } = await supabase.auth.getSession();
             const formData = new FormData();
             formData.append("clientId", clientId);
+            formData.append("adPlatform", "tiktok");
             formData.append("file", file);
 
             const response = await fetch(
-                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/analyze-amazon-ads`,
+                `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/generate-ads-summary`,
                 {
                     method: "POST",
                     headers: {
@@ -339,17 +272,11 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
             const result = await response.json();
             
-            // Note: If Cloud Run is slow, the edge function might return status: 'pending' immediately.
-            // Our polling in useQuery will catch the update.
-            if (result.status === 'complete') {
-                setReport(result.data);
-                setGeneratedAt(new Date());
-                toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated and saved." });
-            } else {
-                toast({ title: "Processing", description: "Report is being processed in the background." });
-            }
+            setReport(result);
+            setGeneratedAt(new Date());
+            toast({ title: "Report ready!", description: "Your TikTok Ads report has been generated and saved." });
             
-            queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
+            queryClient.invalidateQueries({ queryKey: ["tiktok-ads-report", clientId] });
 
         } catch (err: any) {
             toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
@@ -381,13 +308,13 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
             <CardHeader className="pb-3">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500/20 to-amber-500/20">
-                        <BarChart3 className="h-5 w-5 text-orange-400" />
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-pink-500/20 to-rose-500/20">
+                        <BarChart3 className="h-5 w-5 text-pink-400" />
                     </div>
                     <div className="flex-1">
                         <CardTitle className="text-base flex items-center gap-2">
-                            Amazon Ads Report
-                            <Badge variant="secondary" className="text-[10px] bg-orange-500/10 text-orange-400 border-orange-500/20">
+                            TikTok Ads Report
+                            <Badge variant="secondary" className="text-[10px] bg-pink-500/10 text-pink-400 border-pink-500/20">
                                 PDF Export
                             </Badge>
                         </CardTitle>
@@ -414,13 +341,13 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                     {/* Upload Zone */}
                 <div>
                     <div
-                        className="border-2 border-dashed border-border/60 rounded-lg p-4 text-center hover:border-orange-500/40 transition-colors cursor-pointer"
+                        className="border-2 border-dashed border-border/60 rounded-lg p-4 text-center hover:border-pink-500/40 transition-colors cursor-pointer"
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={handleDrop}
-                        onClick={() => document.getElementById(`amazon-upload-${clientId}`)?.click()}
+                        onClick={() => document.getElementById(`tiktok-upload-${clientId}`)?.click()}
                     >
                         <input
-                            id={`amazon-upload-${clientId}`}
+                            id={`tiktok-upload-${clientId}`}
                             type="file"
                             accept=".xlsx,.xls,.csv"
                             onChange={handleFileChange}
@@ -445,7 +372,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         ) : (
                             <div className="space-y-1">
                                 <Upload className="h-6 w-6 mx-auto text-muted-foreground/60" />
-                                <p className="text-sm text-muted-foreground">Drop your Amazon Ads report here or click to upload</p>
+                                <p className="text-sm text-muted-foreground">Drop your TikTok Ads report here or click to upload</p>
                                 <p className="text-xs text-muted-foreground/60">
                                     Campaign Performance or Search Term reports (.csv, .xlsx)
                                 </p>
@@ -459,7 +386,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                             size="sm"
                             onClick={handleAnalyze}
                             disabled={isAnalyzing || !file}
-                            className="h-8 text-xs bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700"
+                            className="h-8 text-xs bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700"
                         >
                             <Crosshair className={`h-3 w-3 mr-1.5 ${isAnalyzing ? "animate-spin" : ""}`} />
                             {isAnalyzing ? "Analyzing…" : report ? "Re-analyze" : "Generate Report"}
@@ -482,8 +409,8 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                     onClick={async () => { 
                                         setReport(null); 
                                         setFile(null); 
-                                        await supabase.from("amazon_ads_reports" as any).delete().eq("client_id", clientId);
-                                        queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
+                                        await supabase.from("ads_analytics_summaries" as any).delete().eq("client_id", clientId).eq("type", "tiktok");
+                                        queryClient.invalidateQueries({ queryKey: ["tiktok-ads-report", clientId] });
                                     }}
                                     className="h-8 text-xs text-muted-foreground"
                                 >
@@ -498,8 +425,8 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 {isAnalyzing && (
                     <div className="space-y-4">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <RefreshCw className="h-4 w-4 animate-spin text-orange-400" />
-                            Crunching your Amazon data…
+                            <RefreshCw className="h-4 w-4 animate-spin text-pink-400" />
+                            Crunching your TikTok data…
                         </div>
                         <div className="grid grid-cols-4 gap-3">
                             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16" />)}
@@ -513,9 +440,9 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 {!isAnalyzing && !report && (
                     <div className="text-center py-8 text-muted-foreground">
                         <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                        <p className="text-sm">Upload an Amazon Ads report and click Generate</p>
+                        <p className="text-sm">Upload a TikTok Ads report and click Generate</p>
                         <p className="text-xs mt-1 opacity-60">
-                            Supports Campaign Performance and Search Term reports
+                            Supports Campaign Performance reports
                         </p>
                     </div>
                 )}
@@ -525,16 +452,12 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                     <div className="space-y-5">
 
                         {/* KPI Bar */}
-                        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                             {[
-                                { label: "Ad Sales", value: fmt$(report.kpis.adSales) },
-                                { label: "Ad Spend", value: fmt$(report.kpis.adSpend) },
-                                { label: "ACoS", value: fmtPct(report.kpis.acos), className: acosClass(report.kpis.acos) },
-                                { label: "ROAS", value: fmtX(report.kpis.roas), className: roasClass(report.kpis.roas) },
-                                { label: "Orders", value: fmtN(report.kpis.orders) },
-                                { label: "CTR", value: fmtPct(report.kpis.ctr) },
-                                { label: "CVR", value: fmtPct(report.kpis.cvr) },
-                                { label: "Avg CPC", value: fmt$(report.kpis.avgCpc) },
+                                { label: "Revenue", value: fmt$(report.performanceSnapshot.revenue) },
+                                { label: "Spend", value: fmt$(report.performanceSnapshot.spend) },
+                                { label: "ROAS", value: fmtX(report.performanceSnapshot.roas), className: roasClass(report.performanceSnapshot.roas) },
+                                { label: "Orders", value: fmtN(report.performanceSnapshot.orders) },
                             ].map(({ label, value, className }) => (
                                 <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
                                     <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
@@ -543,76 +466,54 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                             ))}
                         </div>
 
-                        {/* Executive Summary */}
-                        {report.executiveSummary.length > 0 && (
-                            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
-                                <div className="flex items-center gap-2 mb-3 text-blue-400">
+                        {/* Summary */}
+                        {report.summary && (
+                            <div className="rounded-lg border border-pink-500/20 bg-pink-500/5 p-4">
+                                <div className="flex items-center gap-2 mb-3 text-pink-400">
                                     <Lightbulb className="h-4 w-4" />
-                                    <span className="font-semibold text-sm">Executive Summary</span>
+                                    <span className="font-semibold text-sm">Summary</span>
                                 </div>
-                                <ul className="space-y-1.5">
-                                    {report.executiveSummary.map((b, i) => (
-                                        <li key={i} className="text-xs text-foreground/80 flex gap-2">
-                                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-blue-500/70" />
-                                            {b}
-                                        </li>
-                                    ))}
-                                </ul>
+                                <p className="text-xs text-foreground/80 leading-relaxed">{report.summary}</p>
                             </div>
                         )}
 
-                        {/* Client Needs to Know + Channel Snapshot */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {report.clientNeedsToKnow && (
-                                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
-                                    <div className="flex items-center gap-2 mb-2 text-amber-400">
-                                        <AlertTriangle className="h-4 w-4" />
-                                        <span className="font-semibold text-sm">What the Client Needs to Know</span>
-                                    </div>
-                                    <p className="text-xs text-foreground/80 leading-relaxed">{report.clientNeedsToKnow}</p>
+                        {/* Main Takeaway */}
+                        {report.mainTakeaway && (
+                            <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-4">
+                                <div className="flex items-center gap-2 mb-2 text-purple-400">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <span className="font-semibold text-sm">Main Takeaway</span>
                                 </div>
-                            )}
-                            {report.channelSnapshot && (
-                                <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-4">
-                                    <div className="flex items-center gap-2 mb-2 text-purple-400">
-                                        <BarChart3 className="h-4 w-4" />
-                                        <span className="font-semibold text-sm">Channel Snapshot</span>
-                                    </div>
-                                    <p className="text-xs text-foreground/80 leading-relaxed">{report.channelSnapshot}</p>
-                                </div>
-                            )}
-                        </div>
+                                <p className="text-xs text-foreground/80 leading-relaxed">{report.mainTakeaway}</p>
+                            </div>
+                        )}
 
-                        {/* Top Revenue Drivers Table */}
-                        {report.topRevenueCampaigns.length > 0 && (
+                        {/* Winning Products Table */}
+                        {report.winningProducts && report.winningProducts.length > 0 && (
                             <div>
                                 <div className="flex items-center gap-2 mb-2 text-emerald-400">
                                     <CheckCircle2 className="h-4 w-4" />
-                                    <span className="font-semibold text-sm">Top Revenue Drivers</span>
+                                    <span className="font-semibold text-sm">Winning Products</span>
                                 </div>
                                 <div className="rounded-lg border border-border/40 overflow-hidden">
                                     <Table>
                                         <TableHeader>
                                             <TableRow className="bg-muted/30">
-                                                <TableHead className="pl-4 text-xs">Campaign</TableHead>
+                                                <TableHead className="pl-4 text-xs">Product Name</TableHead>
                                                 <TableHead className="text-right text-xs">Spend</TableHead>
-                                                <TableHead className="text-right text-xs">Sales</TableHead>
-                                                <TableHead className="text-right text-xs">ACoS</TableHead>
+                                                <TableHead className="text-right text-xs">Revenue</TableHead>
                                                 <TableHead className="text-right text-xs">Orders</TableHead>
                                                 <TableHead className="text-right pr-4 text-xs">ROAS</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {report.topRevenueCampaigns.map((c, i) => (
+                                            {report.winningProducts.map((c, i) => (
                                                 <TableRow key={i} className="hover:bg-muted/20">
                                                     <TableCell className="pl-4 text-xs font-medium max-w-[220px]">
                                                         <span className="truncate block" title={c.name}>{c.name}</span>
                                                     </TableCell>
                                                     <TableCell className="text-right text-xs">{fmt$(c.spend)}</TableCell>
-                                                    <TableCell className="text-right text-xs font-medium">{fmt$(c.sales)}</TableCell>
-                                                    <TableCell className={`text-right text-xs font-semibold ${acosClass(c.acos)}`}>
-                                                        {fmtPct(c.acos)}
-                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs font-medium">{fmt$(c.revenue)}</TableCell>
                                                     <TableCell className="text-right text-xs">{c.orders}</TableCell>
                                                     <TableCell className={`text-right text-xs font-semibold pr-4 ${roasClass(c.roas)}`}>
                                                         {fmtX(c.roas)}
@@ -622,72 +523,6 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                         </TableBody>
                                     </Table>
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Wasteful Search Terms Table */}
-                        {report.wastefulSearchTerms.length > 0 && (
-                            <div>
-                                <div className="flex items-center gap-2 mb-2 text-red-400">
-                                    <TrendingDown className="h-4 w-4" />
-                                    <span className="font-semibold text-sm">Highest Spend Search Terms With No Sales</span>
-                                </div>
-                                <div className="rounded-lg border border-red-500/20 overflow-hidden">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow className="bg-red-500/5">
-                                                <TableHead className="pl-4 text-xs">Search Term</TableHead>
-                                                <TableHead className="text-right text-xs">Clicks</TableHead>
-                                                <TableHead className="text-right text-xs">Spend</TableHead>
-                                                <TableHead className="text-right text-xs">Sales</TableHead>
-                                                <TableHead className="pr-4 text-xs">Action</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {report.wastefulSearchTerms.map((t, i) => (
-                                                <TableRow key={i} className="hover:bg-red-500/5">
-                                                    <TableCell className="pl-4 text-xs font-medium">{t.term}</TableCell>
-                                                    <TableCell className="text-right text-xs">{t.clicks}</TableCell>
-                                                    <TableCell className="text-right text-xs font-semibold text-red-400">
-                                                        {fmt$(t.spend)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right text-xs text-muted-foreground">
-                                                        {fmt$(t.sales)}
-                                                    </TableCell>
-                                                    <TableCell className="pr-4 text-xs text-muted-foreground">{t.action}</TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Action Plan */}
-                        {report.actionPlan.length > 0 && (
-                            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
-                                <div className="flex items-center gap-2 mb-3 text-emerald-400">
-                                    <Target className="h-4 w-4" />
-                                    <span className="font-semibold text-sm">Action Plan for the Next 7 Days</span>
-                                </div>
-                                <ol className="space-y-2">
-                                    {report.actionPlan.map((action, i) => (
-                                        <li key={i} className="text-xs text-foreground/80 flex gap-2">
-                                            <span className="shrink-0 font-bold text-emerald-400 w-4">{i + 1}.</span>
-                                            {action}
-                                        </li>
-                                    ))}
-                                </ol>
-                            </div>
-                        )}
-
-                        {/* Final Recommendation */}
-                        {report.finalRecommendation && (
-                            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 border-l-2 border-l-foreground/60">
-                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-                                    Final Recommendation
-                                </p>
-                                <p className="text-sm text-foreground/90 leading-relaxed">{report.finalRecommendation}</p>
                             </div>
                         )}
                     </div>

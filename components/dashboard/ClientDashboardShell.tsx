@@ -35,6 +35,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
+import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { Globe, Share2, Star } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
@@ -74,7 +75,7 @@ const getMonthFromDateRange = (dateRange: string): string => {
 
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 
-type DateRangePreset = "7d" | "30d" | "60d" | "custom";
+type DateRangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "custom";
 type RankingChoice = "all" | "engagement" | "reach" | "clicks";
 
 interface ClientDashboardShellProps {
@@ -90,6 +91,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
   const [activeTab, setActiveTab] = useState<string>("analytics");
+  const [selectedShredderPlatforms, setSelectedShredderPlatforms] = useState<string[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -519,7 +521,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
-    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency") return false;
+    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && getClientAdPlatforms(client.name).includes('amazon')) return true;
@@ -607,17 +609,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   )}
                 </div>
               </div>
-              
-              <div className="flex items-center gap-2">
-                <DateRangeSelector 
-                  value={dateRange} 
-                  onChange={(preset, custom) => {
-                    setDateRange(preset);
-                    if (preset === "custom" && custom) setCustomDateRange(custom);
-                  }} 
-                  customRange={customDateRange}
-                />
-              </div>
             </div>
           </div>
 
@@ -636,15 +627,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[true, hasSocialMedia, hasAdsPlatform, ((!isAdsOnlyClient && client.supabase_url) || ['Snarky Pets','Snarky Humans','BlingyBag','Father Figure Formula'].includes(client?.name?.trim() || '') || connectedAccounts?.substack), true].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform, ((!isAdsOnlyClient && client.supabase_url) || ['Snarky Pets','Snarky Humans','BlingyBag','Father Figure Formula'].includes(client?.name?.trim() || '') || connectedAccounts?.substack), true].filter(Boolean).length}, 1fr)` }}
             >
-              <button
-                onClick={() => scrollToSection("executive-insights")}
-                className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-primary/5 border-r border-primary/10 last:border-r-0 group"
-              >
-                <TrendingUp className="h-4 w-4 text-primary group-hover:scale-110 transition-transform" />
-                <span>EXECUTIVE INSIGHTS</span>
-              </button>
               
               {hasSocialMedia && (
                 <button
@@ -678,13 +662,15 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              <button
-                onClick={() => scrollToSection("seo")}
-                className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-slate-500/10 border-r border-primary/10 last:border-r-0 group"
-              >
-                <span className="text-base grayscale group-hover:scale-110 transition-transform">🔍</span>
-                <span>SEO DASHBOARD</span>
-              </button>
+              {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && (
+                <button
+                  onClick={() => scrollToSection("seo")}
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-slate-500/10 border-r border-primary/10 last:border-r-0 group"
+                >
+                  <span className="text-base grayscale group-hover:scale-110 transition-transform">🔍</span>
+                  <span>SEO DASHBOARD</span>
+                </button>
+              )}
             </div>
 
             {/* Analytics Tab */}
@@ -692,12 +678,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               
               {/* Zone 2: Executive Insight Layer */}
               <div className="space-y-6 scroll-mt-24" id="executive-insights">
-                <div className="flex items-center gap-3 pb-3 border-b">
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Star className="h-5 w-5 text-primary" />
-                  </div>
-                  <h2 className="text-2xl font-heading font-semibold tracking-tight">Executive Insights</h2>
-                </div>
+
                 
                 <div className="grid gap-6">
                   {hasSocialMedia && !isAdsOnlyClient && (
@@ -714,6 +695,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     />
                   )}
 
+                  {/* HIDING WEB & E-COMMERCE AND ADS OVERVIEW FOR NOW
                   {((!isAdsOnlyClient && client.supabase_url) || 
                     ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
                     connectedAccounts?.substack) && (
@@ -739,6 +721,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       isActive={activeTab === "analytics"}
                     />
                   )}
+                  */}
 
                   {/* {hasSocialMedia && (
                     <div className="space-y-4 pt-2">
@@ -763,12 +746,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                 {/* Social Channel */}
                 {hasSocialMedia && (
-                  <div className="mt-6 mb-12 scroll-mt-24" id="social-media">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
-                      <div className="p-2 rounded-lg bg-violet-500/10"><Share2 className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div>
+                  <div className="mt-8 mb-8 scroll-mt-24 bg-violet-50 dark:bg-violet-500/5 border-2 border-violet-200 dark:border-violet-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="social-media">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-violet-200 dark:border-violet-500/20">
+                      <div className="p-2 rounded-lg bg-violet-100 dark:bg-violet-500/20"><Share2 className="h-5 w-5 text-violet-600 dark:text-violet-400" /></div>
                       <div>
-                        <h3 className="font-semibold text-xl text-foreground tracking-tight">Social Media</h3>
-                        <p className="text-sm text-muted-foreground mt-1">Platform-specific metrics and audience data</p>
+                        <h3 className="font-semibold text-xl text-violet-950 dark:text-violet-100 tracking-tight">Social Media</h3>
+                        <p className="text-sm text-violet-600/80 dark:text-violet-300/70 mt-1">Platform-specific metrics and audience data</p>
                       </div>
                     </div>
                     
@@ -898,43 +881,77 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
-                {/* Ads Channel */}
-                {client?.name !== "Father Figure Formula" && client?.name !== "Sienvi Agency" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon')) && (
-                  <div className="mt-12 mb-12 scroll-mt-24" id="advertising">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
-                      <div className="p-2 rounded-lg bg-orange-500/10"><BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" /></div>
+                {client?.name !== "Father Figure Formula" && client?.name !== "Sienvi Agency" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon') || getClientAdPlatforms(client.name).includes('tiktok')) && (
+                  <div className="mt-8 mb-8 scroll-mt-24 bg-orange-50 dark:bg-orange-500/5 border-2 border-orange-200 dark:border-orange-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="advertising">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-orange-200 dark:border-orange-500/20">
+                      <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-500/20"><BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" /></div>
                       <div>
-                        <h3 className="font-semibold text-xl text-foreground tracking-tight">Advertising</h3>
-                        <p className="text-sm text-muted-foreground mt-1">Campaign performance, ad spend, and conversions</p>
+                        <h3 className="font-semibold text-xl text-orange-950 dark:text-orange-100 tracking-tight">Advertising</h3>
+                        <p className="text-sm text-orange-600/80 dark:text-orange-300/70 mt-1">Campaign performance, ad spend, and conversions</p>
                       </div>
                     </div>
                     <div className="space-y-4">
-                        {metricoolPlatforms?.some(p => p.platform === 'meta_ads') && (
-                          <AdsShredderCard 
-                            clientId={clientId!} 
-                            adPlatform="meta" 
-                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`} 
-                            isActive={activeTab === "analytics"}
-                          />
-                        )}
-                        {metricoolPlatforms?.some(p => p.platform === 'google_ads') && (
-                          <AdsShredderCard 
-                            clientId={clientId!} 
-                            adPlatform="google" 
-                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`} 
-                            isActive={activeTab === "analytics"}
-                          />
-                        )}
-                        {metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') && (
-                          <AdsShredderCard 
-                            clientId={clientId!} 
-                            adPlatform="tiktok" 
-                            title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`} 
-                            isActive={activeTab === "analytics"}
-                          />
-                        )}
+                      {(() => {
+                        const availableAdPlatforms: string[] = [];
+                        if (metricoolPlatforms?.some(p => p.platform === 'meta_ads')) availableAdPlatforms.push('meta');
+                        if (metricoolPlatforms?.some(p => p.platform === 'google_ads')) availableAdPlatforms.push('google');
+                        
+                        if (availableAdPlatforms.length === 0) return null;
+
+                        return (
+                          <div className="space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-card/50 p-4 rounded-xl border border-border/50">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-lg flex items-center gap-2">
+                                  <Target className="h-5 w-5 text-amber-500" />
+                                  Ads Shredder Analysis
+                                </h4>
+                                <p className="text-sm text-muted-foreground mt-1">Select an ad platform to upload data and generate an AI teardown</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {availableAdPlatforms.map(p => {
+                                  const isSelected = selectedShredderPlatforms.includes(p);
+                                  return (
+                                    <Button
+                                      key={p}
+                                      variant={isSelected ? "default" : "outline"}
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedShredderPlatforms(prev => 
+                                          isSelected ? prev.filter(x => x !== p) : [...prev, p]
+                                        );
+                                      }}
+                                      className="gap-2"
+                                    >
+                                      {AD_PLATFORM_LABELS[p as keyof typeof AD_PLATFORM_LABELS] || p}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {availableAdPlatforms.map(p => 
+                              selectedShredderPlatforms.includes(p) && (
+                                <AdsShredderCard 
+                                  key={p}
+                                  clientId={clientId!} 
+                                  adPlatform={p} 
+                                  title={`Ads Shredder — ${AD_PLATFORM_LABELS[p as keyof typeof AD_PLATFORM_LABELS] || p}`} 
+                                  isActive={activeTab === "analytics"}
+                                />
+                              )
+                            )}
+                          </div>
+                        );
+                      })()}
                         {getClientAdPlatforms(client.name).includes('amazon') && (
                           <AmazonAdsReportCard
+                            clientId={clientId!}
+                            clientName={client.name}
+                          />
+                        )}
+                        {(metricoolPlatforms?.some(p => p.platform === 'tiktok_ads') || getClientAdPlatforms(client.name).includes('tiktok')) && (
+                          <TikTokAdsReportCard
                             clientId={clientId!}
                             clientName={client.name}
                           />
@@ -965,12 +982,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 {(!isAdsOnlyClient && client.supabase_url) || 
                   ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
                   connectedAccounts?.substack ? (
-                  <div className="mt-12 mb-12 scroll-mt-24" id="web-ecommerce">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
-                      <div className="p-2 rounded-lg bg-emerald-500/10"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
+                  <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="web-ecommerce">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
+                      <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
                       <div>
-                        <h3 className="font-semibold text-xl text-foreground tracking-tight">Web & E-Commerce</h3>
-                        <p className="text-sm text-muted-foreground mt-1">Site traffic, sales engines, and integrations</p>
+                        <h3 className="font-semibold text-xl text-emerald-950 dark:text-emerald-100 tracking-tight">Web & E-Commerce</h3>
+                        <p className="text-sm text-emerald-600/80 dark:text-emerald-300/70 mt-1">Site traffic, sales engines, and integrations</p>
                       </div>
                     </div>
 
@@ -1088,26 +1105,28 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 ) : null}
 
                 {/* SEO Channel (Ubersuggest) */}
-                <div className="mt-12 mb-12 scroll-mt-24" id="seo">
-                  <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border/60">
-                    <div className="p-3 rounded-xl bg-slate-800 flex items-center justify-center">
-                       <span className="text-xl leading-none">🔍</span>
+                {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && (
+                  <div className="mt-8 mb-8 scroll-mt-24 bg-blue-50 dark:bg-blue-500/5 border-2 border-blue-200 dark:border-blue-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="seo">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-blue-200 dark:border-blue-500/20">
+                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
+                         <span className="text-xl leading-none">🔍</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-xl text-blue-950 dark:text-blue-100 tracking-tight">Search Engine Optimization</h3>
+                        <p className="text-sm text-blue-600/80 dark:text-blue-300/70 mt-1">Site audit score, crawl issues, and rankings</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-xl text-foreground tracking-tight">Search Engine Optimization</h3>
-                      <p className="text-sm text-muted-foreground mt-1">Site audit score, crawl issues, and rankings</p>
+                    
+                    <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
+                      <UbersuggestSection 
+                        clientId={clientId!} 
+                        dateRange={dateRange} 
+                        customDateRange={customDateRange} 
+                        isActive={activeTab === "analytics"}
+                      />
                     </div>
                   </div>
-                  
-                  <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
-                    <UbersuggestSection 
-                      clientId={clientId!} 
-                      dateRange={dateRange} 
-                      customDateRange={customDateRange} 
-                      isActive={activeTab === "analytics"}
-                    />
-                  </div>
-                </div>
+                )}
 
               </div>
             </TabsContent>

@@ -8,7 +8,7 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { DateRange } from "react-day-picker";
 
-type DateRangePreset = "7d" | "30d" | "60d" | "custom";
+type DateRangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "custom";
 
 interface DateRangeSelectorProps {
   value: DateRangePreset;
@@ -44,8 +44,10 @@ export const DateRangeSelector = ({ value, onChange, customRange }: DateRangeSel
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="7d">Last 7 days</SelectItem>
+          <SelectItem value="14d">Last 14 days</SelectItem>
           <SelectItem value="30d">Last 30 days</SelectItem>
           <SelectItem value="60d">Last 60 days</SelectItem>
+          <SelectItem value="90d">Last 90 days</SelectItem>
           <SelectItem value="custom">Custom</SelectItem>
         </SelectContent>
       </Select>

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
+import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -765,35 +766,36 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
           </Tabs>
 
           {/* Ads Shredder Analysis — one card per platform */}
-          <div className="space-y-4">
-            {hasMetaData && (
-              <AdsShredderCard
-                clientId={clientId}
-                adPlatform="meta"
-                title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`}
-              />
-            )}
-            {hasGoogleData && (
-              <AdsShredderCard
-                clientId={clientId}
-                adPlatform="google"
-                title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`}
-              />
-            )}
-            {hasTikTokAdsData && (
-              <AdsShredderCard
-                clientId={clientId}
-                adPlatform="tiktok"
-                title={`Ads Shredder — ${AD_PLATFORM_LABELS.tiktok}`}
-              />
-            )}
-          </div>
+          {(hasMetaData || hasGoogleData) && (
+            <div className="space-y-4">
+              {hasMetaData && (
+                <AdsShredderCard
+                  clientId={clientId}
+                  adPlatform="meta"
+                  title={`Ads Shredder — ${AD_PLATFORM_LABELS.meta}`}
+                />
+              )}
+              {hasGoogleData && (
+                <AdsShredderCard
+                  clientId={clientId}
+                  adPlatform="google"
+                  title={`Ads Shredder — ${AD_PLATFORM_LABELS.google}`}
+                />
+              )}
+            </div>
+          )}
         </>
       )}
 
-      {/* Amazon Ads Report — always shown for Amazon clients, independent of Metricool data */}
+      {/* Standalone Ads Reports */}
       {getClientAdPlatforms(clientName).includes('amazon') && (
         <AmazonAdsReportCard
+          clientId={clientId}
+          clientName={clientName}
+        />
+      )}
+      {(hasTikTokAdsData || getClientAdPlatforms(clientName).includes('tiktok')) && (
+        <TikTokAdsReportCard
           clientId={clientId}
           clientName={clientName}
         />

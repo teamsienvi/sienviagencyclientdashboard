@@ -55,9 +55,55 @@ export function useTopPerformingPosts(
         .lte("period_end", periodEndDate.toISOString().split("T")[0])
         .limit(500);
 
-      const { data: metricsRaw, error: contentError } = await metricsQuery;
+      let { data: metricsRaw, error: contentError } = await metricsQuery;
 
       if (contentError) throw contentError;
+      
+      if (!metricsRaw || metricsRaw.length === 0) {
+        // Fallback: query social_content directly by published_at if period_end join yielded no results
+        const { data: fallbackContent } = await supabase
+          .from("social_content")
+          .select(`
+            id,
+            client_id,
+            platform,
+            published_at,
+            url,
+            title,
+            social_content_metrics (
+              views, impressions, reach, likes, comments, shares, period_end, collected_at
+            )
+          `)
+          .eq("client_id", clientId)
+          .gte("published_at", periodStartDate.toISOString().split("T")[0])
+          .lte("published_at", periodEndDate.toISOString().split("T")[0])
+          .order('published_at', { ascending: false })
+          .limit(100);
+
+        if (fallbackContent && fallbackContent.length > 0) {
+            metricsRaw = fallbackContent.flatMap((post: any) => {
+                if (!post.social_content_metrics || post.social_content_metrics.length === 0) {
+                    return [];
+                }
+                const latestMetric = post.social_content_metrics.sort((a: any, b: any) => 
+                    new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime()
+                )[0];
+                
+                return [{
+                    ...latestMetric,
+                    social_content: {
+                        id: post.id,
+                        client_id: post.client_id,
+                        platform: post.platform,
+                        published_at: post.published_at,
+                        url: post.url,
+                        title: post.title
+                    }
+                }];
+            });
+        }
+      }
+
       if (!metricsRaw || metricsRaw.length === 0) return [];
 
       // Deduplicate: for each post, keep only the row with the latest period_end
