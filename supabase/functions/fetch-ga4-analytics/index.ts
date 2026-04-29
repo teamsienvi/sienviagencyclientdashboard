@@ -85,7 +85,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { clientId, startDate, endDate } = await req.json();
+    const { clientId, startDate, endDate, propertyId: providedPropertyId } = await req.json();
 
     if (!clientId || !startDate || !endDate) {
       return new Response(
@@ -99,24 +99,31 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // ── Fetch GA4 config for client ──
-    const { data: config, error: cfgErr } = await supabase
-      .from('client_ga4_config')
-      .select('*')
-      .eq('client_id', clientId)
-      .eq('is_active', true)
-      .maybeSingle();
+    let targetPropertyId = providedPropertyId;
+    let websiteUrl = "";
 
-    if (cfgErr || !config) {
-      return new Response(
-        JSON.stringify({
-          ok: false,
-          error: 'GA4 not configured for this client',
-          errorType: 'not_configured',
-          clientId,
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      );
+    if (!targetPropertyId) {
+      // ── Fetch GA4 config for client ──
+      const { data: config, error: cfgErr } = await supabase
+        .from('client_ga4_config')
+        .select('*')
+        .eq('client_id', clientId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (cfgErr || !config) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: 'GA4 not configured for this client',
+            errorType: 'not_configured',
+            clientId,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+      targetPropertyId = config.ga4_property_id;
+      websiteUrl = config.website_url;
     }
 
     // ── Fetch client name ──
@@ -137,7 +144,7 @@ serve(async (req) => {
     const sa = JSON.parse(saJson);
     const accessToken = await getAccessToken(sa);
 
-    const propertyId = config.ga4_property_id;
+    const propertyId = targetPropertyId;
     const dateRange = { startDate, endDate };
 
     // ── 1. Summary report ──
@@ -279,7 +286,7 @@ serve(async (req) => {
       topPages,
       countries,
       // Website metadata
-      websiteUrl: config.website_url,
+      websiteUrl,
     };
 
     console.log(`GA4 analytics fetched for ${client?.name}: ${activeUsers} users, ${sessions} sessions, ${pageViews} pageViews`);

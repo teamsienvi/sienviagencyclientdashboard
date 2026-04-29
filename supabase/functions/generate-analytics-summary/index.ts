@@ -82,6 +82,7 @@ serve(async (req) => {
                 weaknesses: ["Insufficient analytics data collected for this period."],
                 smartActions: ["Ensure web trackers or Substack GA4 integrations are correctly configured."],
                 highlights: ["Data collection is in progress — check back after more metrics are gathered."],
+                debugContext: analyticsContext,
                 metrics: {
                     total_views: 0,
                     engagement_rate: 0,
@@ -110,6 +111,7 @@ serve(async (req) => {
         // Merge metrics into the AI summary
         const summaryData = {
             ...aiSummary,
+            debugContext: analyticsContext,
             metrics: {
                 total_views: collectedMetrics.total_views || 0,
                 engagement_rate: collectedMetrics.engagement_rate || 0,
@@ -715,9 +717,11 @@ async function collectWebsiteData(
                 sections.push(subOutput);
                 } else {
                     console.warn(`Substack invoke for ${clientId} returned no analytics or error:`, ga4Err);
+                    sections.push(`DEBUG SUBSTACK: Error=${JSON.stringify(ga4Err)}, Data=${JSON.stringify(ga4Data)}`);
                 }
             } catch (e) {
                 console.error("Failed to fetch Substack GA4 data for summary", e);
+                sections.push(`DEBUG SUBSTACK Catch: ${e}`);
             }
         }
 
@@ -748,6 +752,47 @@ async function collectWebsiteData(
                 }
             } catch (e) {
                 console.error("Failed to fetch Shopify data for summary", e);
+            }
+        }
+
+        // 0c. Check for generic GA4 integration
+        const { data: ga4Config } = await supabase
+            .from('client_ga4_config')
+            .select('*')
+            .eq('client_id', clientId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+        if (ga4Config) {
+            try {
+                const { data: ga4Data, error: ga4Err } = await supabase.functions.invoke("fetch-ga4-analytics", {
+                    body: { clientId, startDate: startStr, endDate: endStr }
+                });
+                
+                if (!ga4Err && ga4Data && ga4Data.analytics) {
+                    const a = ga4Data.analytics;
+                    console.log(`GA4 data found for ${clientId}: sessions=${a.totalSessions}, visitors=${a.uniqueVisitors}`);
+
+                    let ga4Output = `## Web Traffic Performance (GA4) (${startStr} to ${endStr})\n` +
+                        `- Total Sessions: ${a.totalSessions ?? 0}\n` +
+                        `- Unique Visitors: ${a.uniqueVisitors ?? 0}\n` +
+                        `- Avg Session Duration: ${a.avgDuration ?? 0} seconds\n` +
+                        `- Bounce Rate: ${(a.bounceRate ?? 0).toFixed(1)}%\n`;
+
+                    metricsResult.total_views += (a.totalSessions ?? 0); // Using sessions as views for aggregation
+                    metricsResult.unique_visitors += (a.uniqueVisitors ?? 0);
+                    if (a.bounceRate !== undefined) {
+                        metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, 100 - (a.bounceRate ?? 0));
+                    }
+
+                    sections.push(ga4Output);
+                } else {
+                    console.warn(`GA4 invoke for ${clientId} returned no analytics or error:`, ga4Err);
+                    sections.push(`DEBUG GA4: Error=${JSON.stringify(ga4Err)}, Data=${JSON.stringify(ga4Data)}`);
+                }
+            } catch (e) {
+                console.error("Failed to fetch GA4 data for summary", e);
+                sections.push(`DEBUG GA4 Catch: ${e}`);
             }
         }
 

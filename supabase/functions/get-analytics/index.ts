@@ -145,13 +145,37 @@ serve(async (req) => {
         try {
           const hostname = new URL(referrer).hostname.replace(/^www\./, '');
           if (['google.com', 'bing.com', 'yahoo.com', 'duckduckgo.com', 'baidu.com'].some(se => hostname.includes(se))) source = 'organic';
-          else if (['facebook.com', 'instagram.com', 'twitter.com', 'tiktok.com', 'linkedin.com', 'pinterest.com', 't.co', 'x.com'].some(sn => hostname.includes(sn))) source = 'social';
+          else if (['facebook.com', 'instagram.com', 'twitter.com', 'tiktok.com', 'linkedin.com', 'pinterest.com', 't.co', 'x.com'].some(sn => hostname.includes(sn))) {
+             let platform = 'unknown';
+             if (hostname.includes('facebook')) platform = 'facebook';
+             else if (hostname.includes('instagram')) platform = 'instagram';
+             else if (hostname.includes('tiktok')) platform = 'tiktok';
+             else if (hostname.includes('twitter') || hostname.includes('t.co') || hostname.includes('x.com')) platform = 'x (twitter)';
+             else if (hostname.includes('linkedin')) platform = 'linkedin';
+             else if (hostname.includes('pinterest')) platform = 'pinterest';
+             else if (hostname.includes('youtube')) platform = 'youtube';
+             else if (hostname.includes('reddit')) platform = 'reddit';
+             source = `social - ${platform}`;
+          }
           else source = 'referral';
         } catch { source = 'referral'; }
       }
       const utmMedium = ((session as any).utm_medium || '').toLowerCase();
+      const utmSource = ((session as any).utm_source || '').toLowerCase();
       if (['cpc', 'ppc', 'paid', 'paid_social', 'display'].includes(utmMedium)) source = 'paid';
-      else if (utmMedium === 'email') source = 'email';
+      else if (utmMedium === 'email' || utmSource.includes('mail')) source = 'email';
+      else if (utmMedium === 'social' || ['facebook', 'instagram', 'tiktok', 'twitter', 'linkedin'].some(p => utmSource.includes(p))) {
+         let platform = 'unknown';
+         if (utmSource.includes('facebook')) platform = 'facebook';
+         else if (utmSource.includes('instagram')) platform = 'instagram';
+         else if (utmSource.includes('tiktok')) platform = 'tiktok';
+         else if (utmSource.includes('twitter') || utmSource.includes('x')) platform = 'x (twitter)';
+         else if (utmSource.includes('linkedin')) platform = 'linkedin';
+         else if (utmSource.includes('pinterest')) platform = 'pinterest';
+         else if (utmSource.includes('youtube')) platform = 'youtube';
+         else if (utmSource.includes('reddit')) platform = 'reddit';
+         source = `social - ${platform}`;
+      }
       sourceMap[source] = (sourceMap[source] || 0) + 1;
     });
 

@@ -98,11 +98,23 @@ serve(async (req) => {
         let src = "Direct";
         if (["cpc", "ppc", "paid", "paid_social", "display"].includes(utmMedium)) src = "Paid";
         else if (utmMedium === "email" || utmSource.includes("mail") || hostname.includes("mail")) src = "Email";
-        else if (!utmSource && !hostname) src = "Direct";
-        else if (searchHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "Organic";
-        else if (socialHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "Social";
-        else if (hostname) src = "Referral";
-        else src = "Referral";
+        else if (!utmSource && !hostname) src = "direct";
+        else if (searchHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "organic";
+        else if (socialHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname.includes(s.replace('m.', '').replace('l.', '')))) {
+          let platform = 'unknown';
+          const combined = `${utmSource} ${hostname}`.toLowerCase();
+          if (combined.includes('facebook')) platform = 'facebook';
+          else if (combined.includes('instagram')) platform = 'instagram';
+          else if (combined.includes('tiktok')) platform = 'tiktok';
+          else if (combined.includes('twitter') || combined.includes('t.co') || combined.includes('x.com')) platform = 'x (twitter)';
+          else if (combined.includes('linkedin')) platform = 'linkedin';
+          else if (combined.includes('youtube')) platform = 'youtube';
+          else if (combined.includes('pinterest')) platform = 'pinterest';
+          else if (combined.includes('reddit')) platform = 'reddit';
+          src = `social - ${platform}`;
+        }
+        else if (hostname) src = "referral";
+        else src = "referral";
         srcCounts[src] = (srcCounts[src] || 0) + 1;
 
         // Device
@@ -211,19 +223,10 @@ serve(async (req) => {
               }));
             }
 
-            // Supplement: if external lacks trafficSources or deviceBreakdown, compute from local
-            const hasSources = enrichedData.trafficSources?.length > 0 || enrichedData.sources?.length > 0;
+            // Supplement: if external lacks trafficSources or deviceBreakdown, compute from local or external raw data
+            const extSources = enrichedData.trafficSources || enrichedData.sources;
+            const hasGoodSources = extSources?.length > 0 && !extSources.some((t: any) => t.source.toLowerCase() === 'social');
             const hasDevices = enrichedData.deviceBreakdown?.length > 0 || enrichedData.devices?.length > 0;
-
-            if (!hasSources || !hasDevices) {
-              console.log('External data lacks sources/devices, supplementing from local tables...');
-              const localBreakdowns = await computeLocalBreakdowns(clientId, startDate, endDate);
-              if (localBreakdowns) {
-                if (!hasSources) enrichedData.trafficSources = localBreakdowns.trafficSources;
-                if (!hasDevices) enrichedData.deviceBreakdown = localBreakdowns.deviceBreakdown;
-                console.log('Supplemented with local breakdowns');
-              }
-            }
 
             // Helper to fetch from external REST API with timeout
             const fetchExternal = async (url: string, timeoutMs = 5000): Promise<any[] | null> => {
@@ -246,6 +249,87 @@ serve(async (req) => {
                 return null;
               }
             };
+
+            if (!hasGoodSources || !hasDevices) {
+              console.log('External data lacks detailed sources/devices, trying to compute from raw data...');
+              
+              // First try to fetch raw sessions from the external project
+              let externalRawSessions = await fetchExternal(
+                `${client.supabase_url}/rest/v1/web_analytics_sessions?select=referrer,utm_source,utm_medium,device_type,user_agent&started_at=gte.${startDate}&started_at=lt.${endDate}&limit=2000`
+              );
+              
+              if (!externalRawSessions) {
+                 externalRawSessions = await fetchExternal(
+                  `${client.supabase_url}/rest/v1/analytics_sessions?select=referrer_url,referrer,utm_source,utm_medium,device_type,user_agent&started_at=gte.${startDate}&started_at=lt.${endDate}&limit=2000`
+                );
+              }
+              
+              if (externalRawSessions && externalRawSessions.length > 0) {
+                 // Compute from external raw sessions
+                 const searchHostnames = ["google.com", "bing.com", "yahoo.com", "duckduckgo.com", "baidu.com", "yandex.com"];
+                 const socialHostnames = ["facebook.com", "m.facebook.com", "l.facebook.com", "instagram.com", "l.instagram.com", "twitter.com", "t.co", "linkedin.com", "tiktok.com", "youtube.com", "pinterest.com", "reddit.com"];
+                 const getHostname = (r: string) => { try { return new URL(r).hostname.replace(/^www\./, ""); } catch { return ""; } };
+
+                 const srcCounts: Record<string, number> = { direct: 0, organic: 0, social: 0, referral: 0, email: 0, paid: 0 };
+                 const devCounts: Record<string, number> = { Desktop: 0, Mobile: 0, Tablet: 0 };
+
+                 externalRawSessions.forEach((item: any) => {
+                   // Traffic source
+                   const utmMedium = String(item.utm_medium || "").toLowerCase();
+                   const utmSource = String(item.utm_source || "").toLowerCase();
+                   const referrer = String(item.referrer || item.referrer_url || "");
+                   const hostname = referrer ? getHostname(referrer) : "";
+                   let src = "direct";
+                   if (["cpc", "ppc", "paid", "paid_social", "display"].includes(utmMedium)) src = "paid";
+                   else if (utmMedium === "email" || utmSource.includes("mail") || hostname.includes("mail")) src = "email";
+                   else if (!utmSource && !hostname) src = "direct";
+                   else if (searchHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname === s)) src = "organic";
+                   else if (socialHostnames.some(s => utmSource.includes(s.split(".")[0]) || hostname.includes(s.replace('m.', '').replace('l.', '')))) {
+                     let platform = 'unknown';
+                     const combined = `${utmSource} ${hostname}`.toLowerCase();
+                     if (combined.includes('facebook')) platform = 'facebook';
+                     else if (combined.includes('instagram')) platform = 'instagram';
+                     else if (combined.includes('tiktok')) platform = 'tiktok';
+                     else if (combined.includes('twitter') || combined.includes('t.co') || combined.includes('x.com')) platform = 'x (twitter)';
+                     else if (combined.includes('linkedin')) platform = 'linkedin';
+                     else if (combined.includes('youtube')) platform = 'youtube';
+                     else if (combined.includes('pinterest')) platform = 'pinterest';
+                     else if (combined.includes('reddit')) platform = 'reddit';
+                     src = `social - ${platform}`;
+                   }
+                   else if (hostname) src = "referral";
+                   else src = "referral";
+                   srcCounts[src] = (srcCounts[src] || 0) + 1;
+
+                   // Device
+                   const explicit = String(item.device_type || "").toLowerCase();
+                   const ua = String(item.user_agent || "").toLowerCase();
+                   let dev = "Desktop";
+                   if (explicit.includes("mobile") || explicit.includes("phone") || (!explicit && /mobile|android|iphone/i.test(ua))) dev = "Mobile";
+                   else if (explicit.includes("tablet") || explicit.includes("ipad") || (!explicit && /tablet|ipad/i.test(ua))) dev = "Tablet";
+                   devCounts[dev] = (devCounts[dev] || 0) + 1;
+                 });
+
+                 const total = externalRawSessions.length;
+                 if (!hasGoodSources) {
+                    enrichedData.trafficSources = Object.entries(srcCounts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
+                      .map(([source, count]) => ({ source, sessions: count, percentage: Math.round((count / total) * 1000) / 10 }));
+                 }
+                 if (!hasDevices) {
+                    enrichedData.deviceBreakdown = Object.entries(devCounts).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1])
+                      .map(([device, count]) => ({ device, sessions: count, percentage: Math.round((count / total) * 1000) / 10 }));
+                 }
+                 console.log('Supplemented sources/devices from external raw sessions');
+              } else {
+                 // Fallback to local database (if this is actually a local client)
+                 const localBreakdowns = await computeLocalBreakdowns(clientId, startDate, endDate);
+                 if (localBreakdowns) {
+                   if (!hasGoodSources) enrichedData.trafficSources = localBreakdowns.trafficSources;
+                   if (!hasDevices) enrichedData.deviceBreakdown = localBreakdowns.deviceBreakdown;
+                   console.log('Supplemented with local breakdowns');
+                 }
+              }
+            }
 
             // Supplement top pages from external project's REST API if missing or sparse
             const hasTopPages = (data.topPages?.length > 0 || data.top_pages?.length > 0) &&
@@ -281,21 +365,32 @@ serve(async (req) => {
               }
             }
 
-            // Supplement countries from external project's sessions table if missing/poor
-            const hasCountries = data.countries?.length > 0 &&
-              !(data.countries.length === 1 && data.countries[0].country === 'Unknown');
             if (!hasCountries) {
               console.log('Trying to supplement countries from external sessions...');
-              const sessData = await fetchExternal(
-                `${client.supabase_url}/rest/v1/analytics_sessions?select=country&started_at=gte.${startDate}&started_at=lt.${endDate}&limit=1000`
+              let sessData = await fetchExternal(
+                `${client.supabase_url}/rest/v1/web_analytics_sessions?select=country&started_at=gte.${startDate}&started_at=lt.${endDate}&limit=1000`
               );
+              if (!sessData) {
+                sessData = await fetchExternal(
+                  `${client.supabase_url}/rest/v1/analytics_sessions?select=country&started_at=gte.${startDate}&started_at=lt.${endDate}&limit=1000`
+                );
+              }
+              
+              if (!sessData) {
+                  // Fallback to page views if sessions tables don't exist
+                  sessData = await fetchExternal(
+                      `${client.supabase_url}/rest/v1/analytics_events?select=country&created_at=gte.${startDate}&created_at=lt.${endDate}&limit=1000`
+                  );
+              }
+
               if (sessData && sessData.length > 0) {
                 const countryCounts: Record<string, number> = {};
                 for (const s of sessData) {
-                  const c = s.country && s.country !== 'Unknown' ? s.country.trim().toUpperCase().slice(0, 2) : 'XX';
+                  const c = s.country && s.country !== 'Unknown' && s.country !== 'null' && s.country !== 'undefined' ? s.country.trim().toUpperCase().slice(0, 2) : 'XX';
                   countryCounts[c] = (countryCounts[c] || 0) + 1;
                 }
                 const countries = Object.entries(countryCounts)
+                  .filter(([country]) => country !== 'XX')
                   .map(([country, count]) => ({ country, count }))
                   .sort((a, b) => b.count - a.count);
                 if (countries.length > 0) {
@@ -571,20 +666,33 @@ serve(async (req) => {
       if (["cpc", "ppc", "paid", "paid_social", "display"].includes(utmMedium)) return "Paid";
       if (utmMedium === "email" || utmSource.includes("mail") || hostname.includes("mail")) return "Email";
 
-      if (!utmSource && !hostname) return "Direct";
+      if (!utmSource && !hostname) return "direct";
 
       // Prefer explicit utm_source when it matches a known category
-      if (searchHostnames.some((se) => utmSource.includes(se.split(".")[0]) || utmSource.includes(se))) return "Organic";
-      if (socialHostnames.some((sp) => utmSource.includes(sp.split(".")[0]) || utmSource.includes(sp))) return "Social";
+      if (searchHostnames.some((se) => utmSource.includes(se.split(".")[0]) || utmSource.includes(se))) return "organic";
+      
+      const isSocial = socialHostnames.some((sp) => utmSource.includes(sp.split(".")[0]) || utmSource.includes(sp)) || socialHostnames.some(sp => hostname.includes(sp.replace('m.', '').replace('l.', '')));
+      if (isSocial) {
+          let platform = 'unknown';
+          const combined = `${utmSource} ${hostname}`.toLowerCase();
+          if (combined.includes('facebook')) platform = 'facebook';
+          else if (combined.includes('instagram')) platform = 'instagram';
+          else if (combined.includes('tiktok')) platform = 'tiktok';
+          else if (combined.includes('twitter') || combined.includes('t.co') || combined.includes('x.com')) platform = 'x (twitter)';
+          else if (combined.includes('linkedin')) platform = 'linkedin';
+          else if (combined.includes('youtube')) platform = 'youtube';
+          else if (combined.includes('pinterest')) platform = 'pinterest';
+          else if (combined.includes('reddit')) platform = 'reddit';
+          return `social - ${platform}` as any;
+      }
 
       if (hostname) {
-        if (searchHostnames.includes(hostname)) return "Organic";
-        if (socialHostnames.includes(hostname)) return "Social";
-        return "Referral";
+        if (searchHostnames.includes(hostname)) return "organic";
+        return "referral";
       }
 
       // If utm_source exists but isn't recognized, treat as Referral rather than Direct
-      return "Referral";
+      return "referral";
     };
 
     const dataForAttribution = sessionList.length > 0 ? sessionList : pageViewList;

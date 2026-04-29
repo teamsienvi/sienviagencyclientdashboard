@@ -29,6 +29,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 // import { TopPerformingPosts } from "@/components/TopPerformingPosts";
@@ -681,58 +682,60 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               <div className="space-y-6 scroll-mt-24" id="executive-insights">
 
                 
-                <div className="grid gap-6">
-                  {hasSocialMedia && !isAdsOnlyClient && (
-                    <AnalyticsSummaryCard
-                      clientId={clientId!}
-                      type="social"
-                      title="Social Media Overview"
-                      icon={<Share2 className="h-5 w-5 text-violet-500" />}
-                      dateRange={dateRange}
-                      customDateRange={customDateRange}
-                      isActive={activeTab === "analytics"}
-                      liveFollowers={metricoolFollowers}
-                      socialMetrics={socialMetrics}
-                    />
-                  )}
+                <div className="relative px-4 sm:px-12">
+                  <Carousel opts={{ align: "start" }} className="w-full">
+                    <CarouselContent>
+                      {hasSocialMedia && !isAdsOnlyClient && (
+                        <CarouselItem>
+                          <AnalyticsSummaryCard
+                            clientId={clientId!}
+                            type="social"
+                            title="Social Media Overview"
+                            icon={<Share2 className="h-5 w-5 text-violet-500" />}
+                            dateRange={dateRange}
+                            customDateRange={customDateRange}
+                            isActive={activeTab === "analytics"}
+                            liveFollowers={metricoolFollowers}
+                            socialMetrics={socialMetrics}
+                          />
+                        </CarouselItem>
+                      )}
 
-                  {/* HIDING WEB & E-COMMERCE AND ADS OVERVIEW FOR NOW
-                  {((!isAdsOnlyClient && client.supabase_url) || 
-                    ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
-                    connectedAccounts?.substack) && (
-                    <AnalyticsSummaryCard
-                      clientId={clientId!}
-                      type="website"
-                      title="Web & E-Commerce Overview"
-                      icon={<Globe className="h-5 w-5 text-emerald-500" />}
-                      dateRange={dateRange}
-                      customDateRange={customDateRange}
-                      isActive={activeTab === "analytics"}
-                    />
-                  )}
+                      {((!isAdsOnlyClient && client.supabase_url) || 
+                        ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
+                        connectedAccounts?.substack) && (
+                        <CarouselItem>
+                          <AnalyticsSummaryCard
+                            clientId={clientId!}
+                            type="website"
+                            title="Web & E-Commerce Overview"
+                            icon={<Globe className="h-5 w-5 text-emerald-500" />}
+                            dateRange={dateRange}
+                            customDateRange={customDateRange}
+                            isActive={activeTab === "analytics"}
+                          />
+                        </CarouselItem>
+                      )}
 
-                    {hasAdsPlatform && (
-                    <AnalyticsSummaryCard
-                      clientId={clientId!}
-                      type="ads"
-                      title="Ads & Campaigns Overview"
-                      icon={<Target className="h-5 w-5 text-amber-500" />}
-                      dateRange={dateRange}
-                      customDateRange={customDateRange}
-                      isActive={activeTab === "analytics"}
-                    />
-                  )}
-                  */}
-
-                  {/* {hasSocialMedia && (
-                    <div className="space-y-4 pt-2">
-                      <div className="flex justify-between flex-col sm:flex-row sm:items-center gap-4">
-                        <h3 className="text-lg font-semibold flex items-center gap-2"><TrendingUp className="h-5 w-5 text-primary" /> Top Performing Posts</h3>
-                        <AllTimeTopPostsModal clientId={clientId!} buttonLabel="🏆 View Hall of Fame" buttonSize="default" buttonVariant="outline" />
-                      </div>
-                      <TopPerformingPosts clientId={clientId!} dateRange={dateRange} customDateRange={customDateRange} />
-                    </div>
-                  )} */}
+                      {/*
+                      {hasAdsPlatform && (
+                        <CarouselItem>
+                          <AnalyticsSummaryCard
+                            clientId={clientId!}
+                            type="ads"
+                            title="Ads & Campaigns Overview"
+                            icon={<Target className="h-5 w-5 text-amber-500" />}
+                            dateRange={dateRange}
+                            customDateRange={customDateRange}
+                            isActive={activeTab === "analytics"}
+                          />
+                        </CarouselItem>
+                      )}
+                      */}
+                    </CarouselContent>
+                    <CarouselPrevious className="flex -left-2 sm:-left-12 h-8 w-8 bg-background/80 backdrop-blur-sm border-border hover:bg-accent" />
+                    <CarouselNext className="flex -right-2 sm:-right-12 h-8 w-8 bg-background/80 backdrop-blur-sm border-border hover:bg-accent" />
+                  </Carousel>
                 </div>
               </div>
 
