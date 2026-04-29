@@ -169,17 +169,66 @@ serve(async (req) => {
             console.error("Failed to upsert pending status:", upsertError);
         }
 
-        // DISPATCH TO CLOUD RUN / BACKGROUND WORKER
-        // Immediately return pending status so edge function doesn't timeout.
-        // A background worker (e.g., Cloud Run) will poll or receive a webhook
-        // to process the file and update `amazon_ads_reports` to 'complete'.
+        // Execute analysis directly
+        console.log("Calling OpenAI assistant for Amazon Ads analysis...");
+        
+        // Background task wrapper to avoid blocking the HTTP response if it takes too long
+        // (Supabase Edge Functions allow up to 5 minutes execution time)
+        const processReport = async () => {
+            try {
+                const parsedReport = await callOpenAIAssistant(openaiApiKey, AMAZON_ASSISTANT_ID, userMessage);
+                
+                const { error: updateError } = await supabase
+                    .from("amazon_ads_reports")
+                    .update({
+                        parsed_data: parsedReport,
+                        generated_at: new Date().toISOString(),
+                        generation_status: 'complete'
+                    })
+                    .eq("client_id", clientId)
+                    .eq("report_period", reportPeriod);
+                    
+                if (updateError) {
+                     console.error("Failed to update report status:", updateError);
+                } else {
+                     console.log("Successfully analyzed and saved Amazon Ads report.");
+                }
+            } catch (err) {
+                console.error("Background processing failed:", err);
+                await supabase
+                    .from("amazon_ads_reports")
+                    .update({ generation_status: 'failed' })
+                    .eq("client_id", clientId)
+                    .eq("report_period", reportPeriod);
+            }
+        };
 
-        // Simulate dispatch:
-        console.log("Dispatched to background worker: ", { clientId, reportPeriod });
-
-        return new Response(JSON.stringify({ status: 'pending', message: 'Report is processing in the background' }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        // If EdgeRuntime is available, use waitUntil to keep the isolate alive
+        if (typeof (globalThis as any).EdgeRuntime !== 'undefined' && (globalThis as any).EdgeRuntime.waitUntil) {
+            (globalThis as any).EdgeRuntime.waitUntil(processReport());
+            return new Response(JSON.stringify({ status: 'pending', message: 'Report is processing in the background' }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        } else {
+            // Otherwise execute synchronously
+            await processReport();
+            
+            // Check if it failed
+            const { data: checkData } = await supabase
+                .from("amazon_ads_reports")
+                .select("generation_status, parsed_data")
+                .eq("client_id", clientId)
+                .eq("report_period", reportPeriod)
+                .single();
+                
+            if (checkData?.generation_status === 'failed') {
+                throw new Error("Analysis failed during processing.");
+            }
+            
+            return new Response(JSON.stringify({ status: 'complete', data: checkData?.parsed_data, message: 'Report processed successfully' }), {
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+        }
 
     } catch (error) {
         console.error("Error in analyze-amazon-ads:", error);
