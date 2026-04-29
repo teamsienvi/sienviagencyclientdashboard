@@ -93,11 +93,12 @@ serve(async (req) => {
         let clientId: string;
         let fileContent: string;
         let fileName: string;
+        let reportPeriod: string;
 
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
             clientId = formData.get("clientId") as string;
-            const reportPeriod = formData.get("reportPeriod") as string || new Date().toISOString().substring(0, 7); // Default to YYYY-MM
+            reportPeriod = formData.get("reportPeriod") as string || new Date().toISOString().substring(0, 7); // Default to YYYY-MM
             const file = formData.get("file") as File;
 
             if (!file) {
