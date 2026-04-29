@@ -105,7 +105,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Fetch client details from database
   const { data: client, isLoading: isLoadingClient } = useQuery({
-    queryKey: ["client-dashboard", clientId],
+    queryKey: ["client-dashboard", clientId, "with-ga4"],
     queryFn: async () => {
       if (!clientId) return null;
       const { data, error } = await supabase
