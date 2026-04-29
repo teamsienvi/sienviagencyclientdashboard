@@ -509,18 +509,25 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
            hasMetricsData;
   }, [metricoolPlatforms, connectedAccounts, socialMetrics, client]);
 
+  // Helper: resolve ga4 property id regardless of whether supabase returns object or array
+  const clientGa4PropertyId = useMemo(() => {
+    const cfg = client?.client_ga4_config;
+    if (!cfg) return null;
+    if (Array.isArray(cfg)) return cfg[0]?.ga4_property_id || null;
+    return (cfg as any)?.ga4_property_id || null;
+  }, [client]);
+
   // Check if client only has ads (meta_ads) and no other platforms
   const isAdsOnlyClient = useMemo(() => {
     if (!metricoolPlatforms) return false;
     const name = client?.name?.trim();
     // If client has website analytics configured, it's not ads-only
-    const hasGa4 = client?.client_ga4_config?.[0]?.ga4_property_id || client?.client_ga4_config?.ga4_property_id;
-    if (client?.supabase_url || hasGa4 || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency"].includes(name || "")) return false;
+    if (client?.supabase_url || clientGa4PropertyId || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency"].includes(name || "")) return false;
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
     return hasAnyAdsPlatform && !hasSocialMedia;
-  }, [metricoolPlatforms, hasSocialMedia, client]);
+  }, [metricoolPlatforms, hasSocialMedia, client, clientGa4PropertyId]);
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
@@ -984,9 +991,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Web & E-Comm Channel */}
-                {(!isAdsOnlyClient && (client.supabase_url || client.client_ga4_config?.[0]?.ga4_property_id || client.client_ga4_config?.ga4_property_id)) || 
+                {(client.supabase_url || clientGa4PropertyId || 
                   ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
-                  connectedAccounts?.substack ? (
+                  connectedAccounts?.substack) ? (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="web-ecommerce">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
                       <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
@@ -998,7 +1005,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* Website specific */}
-                        {!isAdsOnlyClient && (client.supabase_url || client.client_ga4_config?.[0]?.ga4_property_id || client.client_ga4_config?.ga4_property_id) && (
+                        {(client.supabase_url || clientGa4PropertyId) && (
                           <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/web-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
