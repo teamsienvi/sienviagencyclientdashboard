@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -162,7 +163,52 @@ function buildPrintHTML(data: TikTokReportData, clientName: string, fileName: st
     <div class="final-box"><p>${data.mainTakeaway}</p></div>
   </div>` : ""}
 
+  ${data.spendSplit ? `
+  <div class="section">
+    <div class="section-title">Spend Split by Converting Status</div>
+    <div style="margin-top: 10px; border: 1px solid #ececec; padding: 10px; border-radius: 6px;">
+      <div style="margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
+          <span>Products without orders</span>
+          <span style="font-weight: 600;">$${data.spendSplit.nonConvertingProductsSpend.toFixed(2)}</span>
+        </div>
+        <div style="background: #f0f0f0; height: 8px; border-radius: 4px; overflow: hidden;">
+          <div style="background: #cbd5e1; width: ${(data.spendSplit.nonConvertingProductsSpend / ((data.spendSplit.convertingProductsSpend + data.spendSplit.nonConvertingProductsSpend) || 1)) * 100}%; height: 100%;"></div>
+        </div>
+      </div>
+      <div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
+          <span>Products with orders</span>
+          <span style="font-weight: 600; color: #16a34a;">$${data.spendSplit.convertingProductsSpend.toFixed(2)}</span>
+        </div>
+        <div style="background: #f0f0f0; height: 8px; border-radius: 4px; overflow: hidden;">
+          <div style="background: #16a34a; width: ${(data.spendSplit.convertingProductsSpend / ((data.spendSplit.convertingProductsSpend + data.spendSplit.nonConvertingProductsSpend) || 1)) * 100}%; height: 100%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>` : ""}
+
   ${data.winningProducts && data.winningProducts.length > 0 ? `
+  <div class="section">
+    <div class="section-title">Revenue by Winning Product</div>
+    <div style="margin-top: 10px; border: 1px solid #ececec; padding: 10px; border-radius: 6px;">
+      ${data.winningProducts.map(p => {
+        const maxRev = Math.max(...data.winningProducts.map(w => w.revenue));
+        const pct = (p.revenue / (maxRev || 1)) * 100;
+        return `
+        <div style="margin-bottom: 8px;">
+          <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 4px;">
+            <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80%;">${p.name}</span>
+            <span style="font-weight: 600; color: #111;">$${p.revenue.toFixed(2)}</span>
+          </div>
+          <div style="background: #f0f0f0; height: 8px; border-radius: 4px; overflow: hidden;">
+            <div style="background: #f43f5e; width: ${pct}%; height: 100%;"></div>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>
+  
   <div class="section">
     <div class="section-title">Winning Products</div>
     <table>
@@ -487,6 +533,90 @@ export function TikTokAdsReportCard({ clientId, clientName }: TikTokAdsReportCar
                                 <p className="text-xs text-foreground/80 leading-relaxed">{report.mainTakeaway}</p>
                             </div>
                         )}
+
+                        {/* Charts Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Spend Split Chart */}
+                            {report.spendSplit && (
+                                <div className="rounded-lg border border-border/40 bg-card p-4">
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Spend split by converting status</h4>
+                                    <div className="h-[180px]">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                data={[
+                                                    { name: 'Products without orders', spend: report.spendSplit.nonConvertingProductsSpend, fill: '#94a3b8' },
+                                                    { name: 'Products with orders', spend: report.spendSplit.convertingProductsSpend, fill: '#10b981' }
+                                                ]}
+                                                layout="vertical"
+                                                margin={{ top: 0, right: 20, left: 0, bottom: 0 }}
+                                            >
+                                                <XAxis type="number" hide />
+                                                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={130} tick={{ fontSize: 11, fill: '#64748b' }} />
+                                                <Tooltip 
+                                                    cursor={{ fill: 'transparent' }}
+                                                    content={({ active, payload }) => {
+                                                        if (active && payload && payload.length) {
+                                                            return (
+                                                                <div className="bg-background border border-border/50 shadow-md rounded-md p-2 text-xs">
+                                                                    <span className="font-medium">{payload[0].payload.name}: </span>
+                                                                    <span className="font-bold text-foreground">${Number(payload[0].value).toFixed(2)}</span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
+                                                <Bar dataKey="spend" radius={[0, 4, 4, 0]} barSize={24}>
+                                                    {
+                                                        [0, 1].map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={index === 0 ? '#94a3b8' : '#10b981'} />
+                                                        ))
+                                                    }
+                                                </Bar>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Revenue by Winning Product Chart */}
+                            {report.winningProducts && report.winningProducts.length > 0 && (
+                                <div className="rounded-lg border border-border/40 bg-card p-4">
+                                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Revenue by winning product</h4>
+                                    <div className="h-[180px]">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart
+                                                data={report.winningProducts.slice(0, 5).map(p => ({
+                                                    name: p.name.length > 20 ? p.name.substring(0, 20) + '...' : p.name,
+                                                    fullName: p.name,
+                                                    revenue: p.revenue
+                                                }))}
+                                                layout="vertical"
+                                                margin={{ top: 0, right: 30, left: 0, bottom: 0 }}
+                                            >
+                                                <XAxis type="number" hide />
+                                                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={130} tick={{ fontSize: 11, fill: '#64748b' }} />
+                                                <Tooltip 
+                                                    cursor={{ fill: 'transparent' }}
+                                                    content={({ active, payload }) => {
+                                                        if (active && payload && payload.length) {
+                                                            return (
+                                                                <div className="bg-background border border-border/50 shadow-md rounded-md p-2 text-xs max-w-[200px]">
+                                                                    <div className="font-medium mb-1 line-clamp-2">{payload[0].payload.fullName}</div>
+                                                                    <div className="font-bold text-rose-500">${Number(payload[0].value).toFixed(2)}</div>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    }}
+                                                />
+                                                <Bar dataKey="revenue" fill="#f43f5e" radius={[0, 4, 4, 0]} barSize={24} label={{ position: 'right', fill: '#64748b', fontSize: 10, formatter: (val: number) => `$${val.toFixed(2)}` }} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Winning Products Table */}
                         {report.winningProducts && report.winningProducts.length > 0 && (
