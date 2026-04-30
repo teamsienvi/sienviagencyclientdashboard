@@ -448,73 +448,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                   Go to Admin Settings
                                 </Button>
                               )}
-                              {errorType === 'no_data' && clientId && (
-                                <div className="mt-4 p-4 bg-muted rounded-lg text-left max-w-xl w-full">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <p className="text-sm font-medium">Manual Script (External Sites)</p>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={copyTrackingScript}
-                                      className="h-7 px-2"
-                                    >
-                                      <Copy className="h-3 w-3 mr-1" />
-                                      Copy
-                                    </Button>
-                                  </div>
-                                  <code className="text-xs break-all block p-2 bg-background rounded border">
-                                    {`\u003cscript src="${getTrackingEndpoint()}" data-client-id="${clientId}"\u003e\u003c/script\u003e`}
-                                  </code>
-                                  <p className="text-xs text-muted-foreground mt-2">
-                                    Add this script to your website's HTML header.
-                                  </p>
 
-                                  {/* Test Tracking Button */}
-                                  <div className="mt-4 pt-4 border-t border-border">
-                                    <div className="flex items-center gap-3">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={handleTestTracking}
-                                        disabled={isTesting}
-                                      >
-                                        {isTesting ? (
-                                          <>
-                                            <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                                            Testing...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Play className="h-3 w-3 mr-2" />
-                                            Test Tracking
-                                          </>
-                                        )}
-                                      </Button>
-                                      {testResult && (
-                                        <div className={`flex items-center gap-1 text-xs ${testResult.success ? 'text-green-600' : 'text-destructive'}`}>
-                                          {testResult.success ? (
-                                            <CheckCircle className="h-3 w-3" />
-                                          ) : (
-                                            <XCircle className="h-3 w-3" />
-                                          )}
-                                          <span className="max-w-[250px] truncate">{testResult.message}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {/* Troubleshooting Guide */}
-                                  <div className="mt-4 text-xs text-muted-foreground space-y-1">
-                                    <p className="font-medium text-foreground">Troubleshooting:</p>
-                                    <ul className="list-disc list-inside space-y-1 ml-1">
-                                      <li>Use the "Copy Prompt" button for managed client sites</li>
-                                      <li>Verify the client ID matches this client</li>
-                                      <li>Disable ad blockers which may block tracking</li>
-                                      <li>Check browser console for blocked requests</li>
-                                    </ul>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         })()}
