@@ -637,7 +637,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform, ((!isAdsOnlyClient && client.supabase_url) || ['Snarky Pets','Snarky Humans','BlingyBag','Father Figure Formula'].includes(client?.name?.trim() || '') || connectedAccounts?.substack), true].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", ((!isAdsOnlyClient && client.supabase_url) || ['Snarky Pets','Snarky Humans','BlingyBag','Father Figure Formula'].includes(client?.name?.trim() || '') || connectedAccounts?.substack), client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park"].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -650,7 +650,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {hasAdsPlatform && (
+              {hasAdsPlatform && client?.name !== "The Haven At Deer Park" && (
                 <button
                   onClick={() => scrollToSection("advertising")}
                   className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-orange-500/5 border-r border-primary/10 last:border-r-0 group"
@@ -672,7 +672,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && (
+              {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park" && (
                 <button
                   onClick={() => scrollToSection("seo")}
                   className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-slate-500/10 border-r border-primary/10 last:border-r-0 group"
