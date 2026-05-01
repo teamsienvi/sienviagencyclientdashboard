@@ -893,7 +893,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
-                {client?.name !== "Father Figure Formula" && client?.name !== "Sienvi Agency" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon') || getClientAdPlatforms(client.name).includes('tiktok')) && (
+                {client?.name !== "Father Figure Formula" && client?.name !== "Sienvi Agency" && client?.name !== "The Haven At Deer Park" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon') || getClientAdPlatforms(client.name).includes('tiktok')) && (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-orange-50 dark:bg-orange-500/5 border-2 border-orange-200 dark:border-orange-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="advertising">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-orange-200 dark:border-orange-500/20">
                       <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-500/20"><BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" /></div>
@@ -1119,7 +1119,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 ) : null}
 
                 {/* SEO Channel (Ubersuggest) */}
-                {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && (
+                {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park" && (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-blue-50 dark:bg-blue-500/5 border-2 border-blue-200 dark:border-blue-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="seo">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-blue-200 dark:border-blue-500/20">
                       <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
