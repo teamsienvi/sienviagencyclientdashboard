@@ -74,11 +74,40 @@ serve(async (req) => {
             lockMinutes = 10;
             workerFn = "generate-analytics-summary";
             workerPayload = { clientId, type: "website" };
-        } else if ((module === 'metricool' && platform !== 'ads') || platform === 'tiktok' || platform === 'linkedin') {
+        } else if ((module === 'metricool' && platform !== 'ads') || platform === 'linkedin') {
             lockMinutes = 5;
             workerFn = "sync-metricool";
             // sync-metricool requires platform to look up the correct Metricool config
             workerPayload = { clientId, platform };
+        } else if (platform === 'tiktok') {
+            lockMinutes = 5;
+            // Get Metricool config
+            const { data: config } = await supabase
+                .from("client_metricool_config")
+                .select("user_id, blog_id")
+                .eq("client_id", clientId)
+                .eq("platform", "tiktok")
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (config) {
+                workerFn = "metricool-tiktok-posts";
+                // Compute standard 30 day period for background sync
+                const now = new Date();
+                const to = now.toISOString().split('T')[0];
+                const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                workerPayload = {
+                    clientId,
+                    userId: config.user_id,
+                    blogId: config.blog_id || undefined,
+                    from: `${from}T00:00:00`,
+                    to: `${to}T23:59:59`,
+                    timezone: "UTC"
+                };
+            } else {
+                workerFn = "sync-metricool";
+                workerPayload = { clientId, platform };
+            }
         } else if (module === 'meta' || platform === 'instagram' || platform === 'facebook') {
             lockMinutes = 5;
             workerFn = "sync-meta";
@@ -106,9 +135,36 @@ serve(async (req) => {
             }
         } else if (platform === 'youtube') {
             lockMinutes = 5;
-            workerFn = "sync-youtube";
-            // sync-youtube will self-resolve channelHandle from client_metricool_config
-            workerPayload = { clientId, resolveFromConfig: true };
+            const { data: config } = await supabase
+                .from("client_metricool_config")
+                .select("user_id, blog_id")
+                .eq("client_id", clientId)
+                .eq("platform", "youtube")
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (config) {
+                workerFn = "metricool-youtube";
+                const now = new Date();
+                const end = now.toISOString().split('T')[0];
+                const start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                const prevEnd = new Date(now.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                const prevStart = new Date(now.getTime() - 61 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                
+                workerPayload = {
+                    clientId,
+                    userId: config.user_id,
+                    blogId: config.blog_id || undefined,
+                    from: start,
+                    to: end,
+                    prevFrom: prevStart,
+                    prevTo: prevEnd,
+                    timezone: "America/Chicago"
+                };
+            } else {
+                workerFn = "sync-youtube";
+                workerPayload = { clientId, resolveFromConfig: true };
+            }
         } else if (platform === 'ads' && module === 'metricool') {
             lockMinutes = 5;
             workerFn = "metricool-ads";

@@ -7,23 +7,23 @@ serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
-  // ID for The Haven At Deer Park
   const clientId = "b6c39651-9259-4930-af6e-b744a5a191ad";
   
-  const { data, error } = await supabase
-    .from('client_ga4_config')
-    .upsert({
-      client_id: clientId,
-      ga4_property_id: '535561041',
-      website_url: 'https://thehavenatdeerpark.com',
-      is_active: true
-    }, { onConflict: 'client_id' });
+  // 1. Check metricool config or legacy mapping
+  const { data: legacyMapping } = await supabase
+    .from('legacy_agency_client_mapping')
+    .select('*')
+    .eq('client_id', clientId);
+
+  const { data: socialAccounts } = await supabase
+    .from('social_accounts')
+    .select('*')
+    .eq('client_id', clientId);
 
   return new Response(
     JSON.stringify({
-      success: true,
-      data,
-      error
+      legacyMapping,
+      socialAccounts
     }),
     { headers: { "Content-Type": "application/json" } },
   )

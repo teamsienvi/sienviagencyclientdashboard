@@ -731,7 +731,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                 {trafficSources.map((item) => (
                                   <div key={item.source} className="space-y-2">
                                     <div className="flex justify-between text-sm">
-                                      <span>{item.source}</span>
+                                      <span className="font-medium">{item.source}</span>
                                       <span className="text-muted-foreground">
                                         {item.visitors.toLocaleString()} ({item.percentage}%)
                                       </span>
@@ -742,6 +742,16 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                         style={{ width: `${item.percentage}%` }}
                                       />
                                     </div>
+                                    {item.breakdown && item.breakdown.length > 0 && (
+                                      <div className="pl-2 mt-1 space-y-1">
+                                        {item.breakdown.map((b: any, idx: number) => (
+                                          <div key={idx} className="flex justify-between text-xs text-muted-foreground">
+                                            <span className="truncate pr-2">- {b.name}</span>
+                                            <span>{b.sessions.toLocaleString()}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>

@@ -148,7 +148,7 @@ serve(async (req) => {
       // 2. Traffic Sources
       runGA4Report(cleanPropertyId, accessToken, {
         dateRanges,
-        dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+        dimensions: [{ name: 'sessionDefaultChannelGroup' }, { name: 'sessionSource' }],
         metrics: [{ name: 'sessions' }]
       }),
       // 3. Devices
@@ -212,11 +212,42 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, errorType: 'no_data', error: 'No analytics data found for this date range in GA4.', clientId, clientName: client.name }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Parse Traffic Sources
-    const trafficSources = (trafficData.rows || []).map((row: any) => {
-      const source = row.dimensionValues[0].value;
+    // Parse Traffic Sources with Breakdown
+    const trafficSourcesMap = new Map<string, any>();
+    
+    (trafficData.rows || []).forEach((row: any) => {
+      const group = row.dimensionValues[0].value;
+      const sourceDetail = row.dimensionValues[1].value;
       const sessions = parseInt(row.metricValues[0].value);
-      return { source, sessions, percentage: totalSessions > 0 ? Math.round((sessions / totalSessions) * 1000) / 10 : 0 };
+      
+      if (!trafficSourcesMap.has(group)) {
+        trafficSourcesMap.set(group, { source: group, sessions: 0, breakdown: [] });
+      }
+      
+      const groupData = trafficSourcesMap.get(group)!;
+      groupData.sessions += sessions;
+      if (sessions > 0) {
+        groupData.breakdown.push({ name: sourceDetail, sessions });
+      }
+    });
+
+    const trafficSources = Array.from(trafficSourcesMap.values()).map(groupData => {
+      // Sort the breakdown details
+      groupData.breakdown.sort((a: any, b: any) => b.sessions - a.sessions);
+      // Optional: limit breakdown to top 5 and group rest into "Other"
+      let finalBreakdown = groupData.breakdown;
+      if (finalBreakdown.length > 5) {
+        const top5 = finalBreakdown.slice(0, 5);
+        const otherSessions = finalBreakdown.slice(5).reduce((sum: number, item: any) => sum + item.sessions, 0);
+        top5.push({ name: 'Other', sessions: otherSessions });
+        finalBreakdown = top5;
+      }
+      
+      return {
+        ...groupData,
+        breakdown: finalBreakdown,
+        percentage: totalSessions > 0 ? Math.round((groupData.sessions / totalSessions) * 1000) / 10 : 0
+      };
     }).sort((a: any, b: any) => b.sessions - a.sessions);
 
     // Parse Devices
