@@ -104,6 +104,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   // Realtime subscription: auto-invalidate top posts cache when background sync writes new data
   useSocialMetricsRealtime(clientId);
 
+  // Fetch all clients this user has access to (for the client switcher in the header)
+  const { data: userClients } = useUserClients();
+
   // Fetch client details from database
   const { data: client, isLoading: isLoadingClient } = useQuery({
     queryKey: ["client-dashboard", clientId, "with-ga4"],
@@ -555,7 +558,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   if (!mounted || isLoadingClient) {
     return (
       <div className="min-h-screen bg-background">
-        <ClientHeader />
+        <ClientHeader authorizedClients={userClients} />
         <main className="container mx-auto px-4 py-8">
           <Skeleton className="h-12 w-64 mb-4" />
           <Skeleton className="h-6 w-48 mb-8" />
@@ -572,7 +575,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   if (!client) {
     return (
       <div className="min-h-screen bg-background">
-        <ClientHeader />
+        <ClientHeader authorizedClients={userClients} />
         <main className="container mx-auto px-4 py-8">
           <Card>
             <CardContent className="py-12 text-center">
@@ -587,7 +590,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   return (
     <div className="min-h-screen bg-background">
-      <ClientHeader clientName={client.name} clientLogo={getClientLogo(client.name, client.logo_url)} currentClientId={clientId} />
+      <ClientHeader clientName={client.name} clientLogo={getClientLogo(client.name, client.logo_url)} currentClientId={clientId} authorizedClients={userClients} />
 
       <main className="container mx-auto px-4 py-8">
         <div className="space-y-6">
@@ -1287,11 +1290,18 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 };
 
 // Client-specific header component
-const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?: string; clientLogo?: string | null; currentClientId?: string }) => {
+const ClientHeader = ({
+  clientName, clientLogo, currentClientId, authorizedClients
+}: {
+  clientName?: string;
+  clientLogo?: string | null;
+  currentClientId?: string;
+  authorizedClients?: { id: string; name: string; logo_url?: string | null }[];
+}) => {
   const router = useRouter();
   const { isAdmin, isAuthenticated, signOut } = useAuth();
 
-  const { data: clients, isLoading: isLoadingClients } = useUserClients();
+  const clients = authorizedClients;
 
   // Show switcher only when user has more than 1 authorized client
   const showClientSwitcher = clients && clients.length > 1;
