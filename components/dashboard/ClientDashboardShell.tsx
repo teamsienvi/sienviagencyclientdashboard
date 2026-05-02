@@ -14,6 +14,8 @@ import {
   BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserClients } from "@/hooks/useClientAccess";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -1290,18 +1292,7 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
   const router = useRouter();
   const { isAdmin, isAuthenticated, signOut } = useAuth();
 
-  const { data: clients } = useQuery({
-    queryKey: ["all-clients-dropdown"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, logo_url")
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return data;
-    }
-  });
+  const { data: clients } = useUserClients();
 
   const showClientSwitcher = clients && clients.length > 0;
   const currentClient = clients?.find(c => c.id === currentClientId);
