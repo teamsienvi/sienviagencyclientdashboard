@@ -338,6 +338,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
         percentage: ts.percentage,
         visitors: ts.visitors ?? ts.sessions ?? 0,
         color: colors[index % colors.length],
+        breakdown: ts.breakdown,
       }));
     }
     // Return empty array if no real data - don't make up estimates
