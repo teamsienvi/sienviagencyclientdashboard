@@ -28,7 +28,7 @@ const logins = [
     {
         email: "snarky@sienvi.com",
         password: genPassword(),
-        clientNames: ["Snarky Humans", "Snarky Pets", "Snarky A$$ Humans"],
+        clientNames: ["Snarky Humans", "Snarky Pets", "Snarky A$$ Humans", "BlingyBag"],
     },
     {
         email: "serenityscrolls@sienvi.com",
