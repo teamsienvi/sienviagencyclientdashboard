@@ -195,6 +195,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         .eq("is_active", true)
         .limit(1);
 
+      // Check Ubersuggest config
+      const { data: ubersuggestData } = await supabase
+        .from("client_ubersuggest_config" as any)
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("is_active", true)
+        .limit(1);
+
       return {
         x: xData && xData.length > 0,
         xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
@@ -203,6 +211,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         shopify: shopifyData && shopifyData.length > 0,
         metaAds: metaAdsData && metaAdsData.length > 0,
         substack: substackData && substackData.length > 0,
+        ubersuggest: ubersuggestData && ubersuggestData.length > 0,
       };
     },
     enabled: !!clientId,
@@ -672,7 +681,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park" && (
+              {connectedAccounts?.ubersuggest && (
                 <button
                   onClick={() => scrollToSection("seo")}
                   className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-slate-500/10 border-r border-primary/10 last:border-r-0 group"
@@ -1119,7 +1128,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 ) : null}
 
                 {/* SEO Channel (Ubersuggest) */}
-                {client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park" && (
+                {connectedAccounts?.ubersuggest && (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-blue-50 dark:bg-blue-500/5 border-2 border-blue-200 dark:border-blue-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="seo">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-blue-200 dark:border-blue-500/20">
                       <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center">
