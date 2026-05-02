@@ -544,12 +544,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
-    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother") return false;
+    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "Hwabelle" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && getClientAdPlatforms(client.name).includes('amazon')) return true;
     return false;
   }, [client?.name, metricoolPlatforms, connectedAccounts]);
+
+  // Check if client has Web & E-Commerce features
+  const hasWebAndEcomm = useMemo(() => {
+    if (!client) return false;
+    return !!(
+      (!isAdsOnlyClient && client.supabase_url) || 
+      clientGa4PropertyId ||
+      ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Hwabelle", "Billionaire Brother", "The Billionaire Brother"].includes(client.name?.trim() || "") || 
+      connectedAccounts?.substack
+    );
+  }, [client, isAdsOnlyClient, clientGa4PropertyId, connectedAccounts]);
+
 
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
     ? clientReports.reports[clientReports.reports.length - 1] 
@@ -650,7 +662,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", ((!isAdsOnlyClient && client.supabase_url) || ['Snarky Pets','Snarky Humans','BlingyBag','Father Figure Formula'].includes(client?.name?.trim() || '') || connectedAccounts?.substack), client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park"].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park"].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -673,9 +685,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {((!isAdsOnlyClient && client.supabase_url) || 
-                ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
-                connectedAccounts?.substack) && (
+              {hasWebAndEcomm && (
                 <button
                   onClick={() => scrollToSection("web-ecommerce")}
                   className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-emerald-500/5 border-r border-primary/10 last:border-r-0 group"
@@ -722,9 +732,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         </CarouselItem>
                       )}
 
-                      {((!isAdsOnlyClient && client.supabase_url) || 
-                        ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
-                        connectedAccounts?.substack) && (
+                      {hasWebAndEcomm && (
                         <CarouselItem>
                           <AnalyticsSummaryCard
                             clientId={clientId!}
@@ -906,7 +914,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
-                {client?.name !== "Father Figure Formula" && client?.name !== "Sienvi Agency" && client?.name !== "The Haven At Deer Park" && (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)) || connectedAccounts?.metaAds || getClientAdPlatforms(client.name).includes('amazon') || getClientAdPlatforms(client.name).includes('tiktok')) && (
+                {hasAdsPlatform && client?.name !== "The Haven At Deer Park" && (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-orange-50 dark:bg-orange-500/5 border-2 border-orange-200 dark:border-orange-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="advertising">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-orange-200 dark:border-orange-500/20">
                       <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-500/20"><BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" /></div>
@@ -1004,9 +1012,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 )}
 
                 {/* Web & E-Comm Channel */}
-                {(client.supabase_url || clientGa4PropertyId || 
-                  ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula"].includes(client?.name?.trim() || "") || 
-                  connectedAccounts?.substack) ? (
+                {hasWebAndEcomm ? (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="web-ecommerce">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
                       <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>

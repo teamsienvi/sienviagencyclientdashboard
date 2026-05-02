@@ -361,11 +361,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-5 divide-y lg:divide-y-0 lg:divide-x border-b">
-            
-            {/* Table */}
-            <div className="lg:col-span-3 p-0">
-               <div className="overflow-x-auto">
+          <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
                   <thead className="bg-muted/10 text-xs uppercase text-muted-foreground">
                     <tr>
@@ -426,46 +422,6 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                   </tbody>
                 </table>
               </div>
-            </div>
-
-            {/* Keyword Line Chart */}
-            <div className="lg:col-span-2 p-5 bg-muted/5 flex flex-col">
-              <h4 className="text-xs uppercase font-semibold text-muted-foreground mb-4">Ranking History (Top 5)</h4>
-              <div className="flex-1 min-h-[200px]">
-                {keywordHistoryData.length > 1 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={keywordHistoryData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-muted/20" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10 }} className="text-muted-foreground" />
-                      <YAxis reversed axisLine={false} tickLine={false} tick={{ fontSize: 10 }} className="text-muted-foreground" domain={[1, 100]} />
-                      <Tooltip content={renderCustomTooltip} />
-                      {trackedKeywordNames.slice(0, 5).map((kwName: string, i: number) => {
-                         const colors = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444"];
-                         return (
-                           <Line 
-                             key={kwName} 
-                             type="monotone" 
-                             dataKey={kwName} 
-                             stroke={colors[i % colors.length]} 
-                             strokeWidth={2} 
-                             dot={{ r: 3, strokeWidth: 2 }} 
-                             activeDot={{ r: 5 }} 
-                             connectNulls 
-                           />
-                         );
-                      })}
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-xs text-muted-foreground px-4">
-                     <ShieldAlert className="h-6 w-6 text-muted-foreground/30 mb-2" />
-                    <p>Not enough historical ranking data yet. Check back after Ubersuggest processes the next crawl.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-          </div>
         )}
       </div>
 

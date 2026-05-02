@@ -126,7 +126,18 @@ serve(async (req) => {
     const positionTrackings = projectAlerts.filter(
       (a: any) => a.alertType === "position_tracking" || a.alert_type === "position_tracking"
     );
-    const trackedKeywords = positionTrackings[0]?.content?.keywords || [];
+    // Merge ALL position_tracking alerts oldest→newest to get a full current snapshot.
+    // Ubersuggest only sends keywords that CHANGED in each alert, not the full list.
+    // By accumulating all alerts we reconstruct the complete rankings picture.
+    const kwMap = new Map<string, any>();
+    for (const alert of [...positionTrackings].reverse()) {
+      for (const kw of (alert.content?.keywords || [])) {
+        const existing = kwMap.get(kw.keyword);
+        // Keep the entry from the most recent alert (last write wins as we iterate oldest→newest)
+        kwMap.set(kw.keyword, kw);
+      }
+    }
+    const trackedKeywords = Array.from(kwMap.values());
 
     // 4.5 Fetch recent SEO metrics to fall back to if no new alerts
     const { data: previousRows } = await supabase
@@ -144,7 +155,12 @@ serve(async (req) => {
       for (const row of previousRows) {
         if (lastValidScore === null && row.site_audit_score !== null) lastValidScore = row.site_audit_score;
         if (lastValidIssues === null && row.site_audit_issues !== null) lastValidIssues = row.site_audit_issues;
-        if (lastValidKeywords.length === 0 && row.tracked_keywords && row.tracked_keywords.length > 0) lastValidKeywords = row.tracked_keywords;
+        if (lastValidKeywords.length === 0 && row.tracked_keywords && row.tracked_keywords.length > 0) {
+          // When loading from DB, prefer rows where at least some keywords have real position data
+          const stored = row.tracked_keywords as any[];
+          const hasRealData = stored.some((k: any) => k.desktop_new !== null);
+          if (hasRealData) lastValidKeywords = stored;
+        }
       }
     }
 
@@ -156,18 +172,41 @@ serve(async (req) => {
         highest_impact: latestAudit.content.highest_impact || []
       };
     }
-    let finalTrackedKeywords = trackedKeywords.length > 0 ? trackedKeywords : lastValidKeywords;
-
-    // 4.6 If we STILL have no keywords tracked (e.g. brand new project), pull the pending keywords from activeProject
-    if (finalTrackedKeywords.length === 0 && activeProject?.keywords) {
-      finalTrackedKeywords = Object.keys(activeProject.keywords).map((kw) => ({
-        keyword: kw,
-        volume: null,
-        desktop_new: null,
-        desktop_old: null,
-        focus_device: "desktop",
-      }));
+    // Build final keyword list: start with DB history as a base,
+    // then overlay the fresh alert data for any keywords that appear in it.
+    // This ensures keywords that didn't change still show their last known position.
+    const dbKwMap = new Map<string, any>();
+    for (const kw of lastValidKeywords) {
+      dbKwMap.set((kw as any).keyword, kw);
     }
+    // Fresh alert data overwrites DB data for the same keyword
+    for (const kw of trackedKeywords) {
+      dbKwMap.set(kw.keyword, kw);
+    }
+    let finalTrackedKeywords = Array.from(dbKwMap.values());
+
+    // Enforce 1:1 parity with activeProject.keywords
+    if (activeProject?.keywords) {
+      const activeKwKeys = Object.keys(activeProject.keywords);
+      
+      // 1. Add any new keywords that don't have any data yet (pending crawl)
+      const existingKwKeys = new Set(finalTrackedKeywords.map((k: any) => k.keyword));
+      for (const kw of activeKwKeys) {
+        if (!existingKwKeys.has(kw)) {
+          finalTrackedKeywords.push({
+            keyword: kw,
+            volume: null,
+            desktop_new: null,
+            desktop_old: null,
+            focus_device: "desktop",
+          });
+        }
+      }
+      
+      // 2. Remove any keywords that were deleted from the Ubersuggest project
+      finalTrackedKeywords = finalTrackedKeywords.filter((k: any) => activeKwKeys.includes(k.keyword));
+    }
+
 
     console.log(`Final Metrics: score=${finalAuditScore}, keywords=${finalTrackedKeywords.length}`);
 

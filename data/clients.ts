@@ -11,6 +11,8 @@ import luxxeAutoLogo from "@/assets/luxxe-auto-logo.jpg";
 import playiqLogo from "@/assets/logos/playiq-logo.jpeg";
 import blingybagLogo from "@/assets/logos/blingybag-logo.jpeg";
 import snarkyassLogo from "@/assets/logos/snarkyass-logo.jpeg";
+import billionaireBrotherLogo from "@/assets/logos/billionaire-brother-logo.jpg";
+import hwabelleLogo from "@/assets/logos/hwabelle-logo.png";
 
 export interface Report {
   dateRange: string;
@@ -183,10 +185,12 @@ export const clientsData: Client[] = [
   },
   {
     name: "Hwabelle",
+    logo: hwabelleLogo.src,
     reports: [],
   },
   {
     name: "Billionaire Brother",
+    logo: billionaireBrotherLogo.src,
     reports: [],
   },
 ];
