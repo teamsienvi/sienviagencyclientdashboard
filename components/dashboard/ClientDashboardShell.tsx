@@ -1291,9 +1291,10 @@ const ClientHeader = ({ clientName, clientLogo, currentClientId }: { clientName?
   const router = useRouter();
   const { isAdmin, isAuthenticated, signOut } = useAuth();
 
-  const { data: clients } = useUserClients();
+  const { data: clients, isLoading: isLoadingClients } = useUserClients();
 
-  const showClientSwitcher = clients && clients.length > 0;
+  // Show switcher only when user has more than 1 authorized client
+  const showClientSwitcher = clients && clients.length > 1;
   const currentClient = clients?.find(c => c.id === currentClientId);
 
   const handleClientSelect = (clientId: string) => {
