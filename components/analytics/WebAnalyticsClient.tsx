@@ -157,6 +157,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
         visitors: count,
         sessions: count,
         percentage: s.percentage ?? (totalCount > 0 ? Math.round((count / totalCount) * 100) : 0),
+        breakdown: s.breakdown,
       };
     }) : undefined;
 
