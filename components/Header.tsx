@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import sienviLogo from "@/assets/sienvi-agency-client-logo.jpg";
 import { useAuth } from "@/hooks/useAuth";
+import { useUserClients } from "@/hooks/useClientAccess";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
@@ -22,19 +23,8 @@ export const Header = () => {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Fetch all clients unconditionally for the Switch Client dropdown
-  const { data: clients } = useQuery({
-    queryKey: ["all-clients-dropdown"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("id, name, logo_url")
-        .eq("is_active", true)
-        .order("name");
-      if (error) throw error;
-      return data;
-    }
-  });
+  // Fetch only the clients the user has access to
+  const { data: clients } = useUserClients();
 
   const showClientSwitcher = clients && clients.length > 0;
 
