@@ -19,6 +19,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSummaryMetrics, PlatformMetric } from "@/hooks/useSummaryMetrics";
 import { useAllTimeTopPosts } from "@/hooks/useAllTimeTopPosts";
+import { useTopPerformingPosts } from "@/hooks/useTopPerformingPosts";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { useSyncState } from "@/hooks/useSyncState";
 
