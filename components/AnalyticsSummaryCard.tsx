@@ -78,6 +78,7 @@ export function AnalyticsSummaryCard({
 
     const { data: cachedSummary, isLoading: isLoadingCache, isFetching: isFetchingCache } = useQuery({
         queryKey: ["analytics-summary", clientId, type],
+        queryFn: async () => {
             console.log(`[AnalyticsSummaryCard] Starting fetch with Next.js SSR client for client_id=${clientId}, type=${type}`);
             
             const { data, error } = await supabase
