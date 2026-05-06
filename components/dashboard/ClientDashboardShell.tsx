@@ -256,6 +256,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       if (!clientId || !metricoolPlatforms || metricoolPlatforms.length === 0) return null;
 
       const followers: Record<string, number> = {};
+      const gained: Record<string, number> = {};
+
       // Include social platforms that support the followers metric via metricool-social-weekly
       // YouTube has different metrics and is fetched via social_account_metrics instead
       const socialPlatforms = metricoolPlatforms
@@ -298,23 +300,30 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
             },
           });
 
-          if (error || !data?.success) return { platform, followers: null };
+          if (error || !data?.success) return { platform, followers: null, gained: 0 };
 
           // Get followers from the last point in the current timeline
           const timeline = data.data?.current?.followersTimeline || [];
           const lastPoint = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+          const firstPoint = timeline.length > 0 ? timeline[0] : null;
+          
+          let gain = 0;
+          if (lastPoint && firstPoint) {
+            gain = lastPoint.value - firstPoint.value;
+          }
 
-          return { platform, followers: lastPoint?.value || null };
+          return { platform, followers: lastPoint?.value || null, gained: gain };
         })
       );
 
       results.forEach((result) => {
-        if (result.status === "fulfilled" && result.value.followers) {
+        if (result.status === "fulfilled" && result.value.followers !== null) {
           followers[result.value.platform] = result.value.followers;
+          gained[result.value.platform] = result.value.gained;
         }
       });
 
-      return Object.keys(followers).length > 0 ? followers : null;
+      return Object.keys(followers).length > 0 ? { followers, gained } : null;
     },
     enabled: !!clientId && !!metricoolPlatforms && metricoolPlatforms.length > 0,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -445,9 +454,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     const countedPlatforms = new Set<string>();
 
     // First priority: Live Metricool followers (most accurate)
-    if (metricoolFollowers) {
-      Object.entries(metricoolFollowers).forEach(([platform, followers]) => {
-        if (followers && followers > 0) {
+    if (metricoolFollowers && metricoolFollowers.followers) {
+      Object.entries(metricoolFollowers.followers).forEach(([platform, followers]) => {
+        if (followers && typeof followers === 'number' && followers > 0) {
           total += followers;
           countedPlatforms.add(platform);
           breakdown.push({ platform, count: followers });

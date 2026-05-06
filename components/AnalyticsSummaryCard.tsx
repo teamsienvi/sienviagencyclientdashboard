@@ -37,7 +37,7 @@ interface AnalyticsSummaryCardProps {
     dateRange?: string;
     customDateRange?: { start: Date; end: Date };
     isActive?: boolean;
-    liveFollowers?: Record<string, number> | null;
+    liveFollowers?: { followers: Record<string, number>; gained: Record<string, number> } | null;
     socialMetrics?: Record<string, any> | null;
 }
 
@@ -150,8 +150,8 @@ export function AnalyticsSummaryCard({
     const allPlatforms = new Set<string>();
     platformData.forEach(p => allPlatforms.add(String(p.platform).toLowerCase()));
     
-    if (liveFollowers) {
-        Object.keys(liveFollowers).forEach(p => allPlatforms.add(p.toLowerCase()));
+    if (liveFollowers?.followers) {
+        Object.keys(liveFollowers.followers).forEach(p => allPlatforms.add(p.toLowerCase()));
     }
     if (socialMetrics) {
         Object.keys(socialMetrics).forEach(p => allPlatforms.add(p.toLowerCase()));
@@ -166,15 +166,21 @@ export function AnalyticsSummaryCard({
         const finalViews = existingData?.views || fallbackViews;
         const finalEngagements = existingData?.engagements || fallbackEngagements;
 
+        // Use live followers and gained if available, otherwise fallback to DB metrics
+        const finalFollowers = liveFollowers?.followers?.[plToLower] ?? socialMetrics?.[plToLower]?.followers ?? existingData?.followers ?? 0;
+        const finalFollowersGained = liveFollowers?.gained?.[plToLower] ?? (
+            (existingData?.followersGained || 0) !== 0 
+                ? existingData.followersGained 
+                : (socialMetrics?.[plToLower]?.new_followers ?? 0)
+        );
+
         return {
             platform: plToLower,
             views: finalViews,
             engagementRate: existingData?.engagementRate || (finalViews > 0 ? (finalEngagements / finalViews) * 100 : 0),
             engagements: finalEngagements,
-            followers: liveFollowers?.[plToLower] || socialMetrics?.[plToLower]?.followers || existingData?.followers || 0,
-            followersGained: (existingData?.followersGained || 0) !== 0 
-                ? existingData.followersGained 
-                : (socialMetrics?.[plToLower]?.new_followers ?? 0)
+            followers: finalFollowers,
+            followersGained: finalFollowersGained
         };
     });
 
