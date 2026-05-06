@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSyncState } from "@/hooks/useSyncState";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -59,6 +59,7 @@ interface LmsApiResponse {
 }
 
 const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
+    const queryClient = useQueryClient();
     const router = useRouter();
     const [mounted, setMounted] = useState(false);
 
@@ -114,7 +115,15 @@ const LmsAnalyticsClient = ({ clientId }: { clientId: string }) => {
     const isFetching = syncState.isSyncing;
     
     const refetch = async () => {
+        // Trigger the sync
         await syncState.retry();
+        // Poll Supabase every 3s for up to 30s for fresh data
+        let attempts = 0;
+        const poll = setInterval(async () => {
+            attempts++;
+            await queryClient.invalidateQueries({ queryKey: ["platform-analytics-cache", clientId, "lms", "analytics"] });
+            if (attempts >= 10) clearInterval(poll);
+        }, 3000);
     };
 
     const summary = data?.summary;
