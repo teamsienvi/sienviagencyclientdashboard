@@ -53,6 +53,9 @@ export function useTopPerformingPosts(
         .eq("social_content.client_id", clientId)
         .gte("period_end", periodStartDate.toISOString().split("T")[0])
         .lte("period_end", periodEndDate.toISOString().split("T")[0])
+        // Only show posts published within the selected reporting window
+        .gte("social_content.published_at", periodStartDate.toISOString().split("T")[0])
+        .lte("social_content.published_at", periodEndDate.toISOString().split("T")[0])
         .limit(500);
 
       let { data: metricsRaw, error: contentError } = await metricsQuery;
@@ -149,6 +152,7 @@ export function useTopPerformingPosts(
           return {
             id: content.id,
             post_url: content.url || "",
+            title: content.title || null,
             platform: content.platform,
             published_at: content.published_at,
             views: primaryMetric,
