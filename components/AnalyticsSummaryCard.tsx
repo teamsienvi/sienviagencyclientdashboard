@@ -598,7 +598,9 @@ export function AnalyticsSummaryCard({
                                             <div className={type === 'social' ? "w-1/4 text-right" : "w-1/3 text-right"}>Engagements</div>
                                         </div>
                                         <div className="flex flex-col gap-1">
-                                            {optimizedPlatformData.map((plat, idx) => (
+                                            {optimizedPlatformData.filter(plat => 
+                                                plat.followers > 0 || plat.engagements > 0 || plat.views > 0
+                                            ).map((plat, idx) => (
                                                 <div key={idx} className="flex items-center text-sm py-2 px-2 hover:bg-muted/40 rounded-lg group">
                                                     <div className={type === 'social' ? "w-1/4 flex items-center gap-2" : "w-1/3 flex items-center gap-2"}>
                                                         <Badge variant="outline" className="text-[10px] capitalize h-5">{plat.platform}</Badge>
