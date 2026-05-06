@@ -272,14 +272,15 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       thisMonday.setDate(today.getDate() - daysToSubtract);
       thisMonday.setHours(0, 0, 0, 0);
 
-      const currentStart = new Date(thisMonday);
-      currentStart.setDate(thisMonday.getDate() - 7);
-      const currentEnd = new Date(thisMonday);
-      currentEnd.setDate(thisMonday.getDate() - 1);
-      const prevStart = new Date(currentStart);
-      prevStart.setDate(currentStart.getDate() - 7);
+      const currentEnd = new Date(today);
+      const currentStart = new Date(today);
+      currentStart.setDate(today.getDate() - 7);
+      
       const prevEnd = new Date(currentStart);
       prevEnd.setDate(currentStart.getDate() - 1);
+      
+      const prevStart = new Date(prevEnd);
+      prevStart.setDate(prevEnd.getDate() - 7);
 
       const formatDate = (d: Date) => d.toISOString().split("T")[0];
 
