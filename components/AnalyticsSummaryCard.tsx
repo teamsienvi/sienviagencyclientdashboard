@@ -78,21 +78,9 @@ export function AnalyticsSummaryCard({
 
     const { data: cachedSummary, isLoading: isLoadingCache, isFetching: isFetchingCache } = useQuery({
         queryKey: ["analytics-summary", clientId, type],
-        queryFn: async () => {
-            // Use the Next.js @supabase/ssr client which uses cookies and bypasses localStorage locks!
-            const { createClient } = await import("@/lib/supabase/browser");
-            const browserSupabase = createClient();
-
-            // Verify session from cookies quickly
-            const { data: { session } } = await browserSupabase.auth.getSession();
-            if (!session) {
-                console.log(`[AnalyticsSummaryCard] No session from cookies, cannot fetch`);
-                return null;
-            }
-
             console.log(`[AnalyticsSummaryCard] Starting fetch with Next.js SSR client for client_id=${clientId}, type=${type}`);
             
-            const { data, error } = await browserSupabase
+            const { data, error } = await supabase
                 .from("analytics_summaries" as any)
                 .select("summary_data, generated_at, period_start, period_end")
                 .eq("client_id", clientId)
@@ -445,12 +433,10 @@ export function AnalyticsSummaryCard({
                                 </p>
                                 <div className="h-8 w-full mt-2 flex items-center">
                                     {type === 'social' ? (
-                                        followersGained !== 0 ? (
-                                            <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                                                <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
-                                                {followersGained > 0 ? `+${formatNumber(followersGained)}` : formatNumber(followersGained)} this period
-                                            </div>
-                                        ) : null
+                                        <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                                            <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
+                                            {followersGained > 0 ? `+${formatNumber(followersGained)}` : followersGained < 0 ? formatNumber(followersGained) : "+0"} this period
+                                        </div>
                                     ) : (
                                         <div className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
                                             {type === 'ads' ? <Target className="h-3.5 w-3.5" /> : (aiMetrics.total_sales > 0 ? <ShoppingBag className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />)}
@@ -612,11 +598,9 @@ export function AnalyticsSummaryCard({
                                                             <span className="text-foreground">
                                                                 {formatNumber(plat.followers || 0)}
                                                             </span>
-                                                            {plat.followersGained !== 0 && (
-                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : "text-rose-500"}`}>
-                                                                    {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : formatNumber(plat.followersGained)}
-                                                                </span>
-                                                            )}
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : plat.followersGained < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
+                                                                {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : plat.followersGained < 0 ? formatNumber(plat.followersGained) : "+0"}
+                                                            </span>
                                                         </div>
                                                     )}
                                                     <div className={type === 'social' ? "w-1/4 text-center font-medium" : "w-1/3 text-center font-medium"}>{plat.engagementRate.toFixed(1)}%</div>

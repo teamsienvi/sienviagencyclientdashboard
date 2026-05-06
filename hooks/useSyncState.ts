@@ -88,6 +88,8 @@ export function useSyncState(clientId: string, platform: string, module: string)
             await supabase.functions.invoke('orchestrate-sync', {
                 body: { clientId, platform, module, forceRetry: true }
             });
+            // We DO NOT reset optimisticSyncing here so the UI continues to show "Syncing..." 
+            // until the registry says it's done, or the 30s safety timeout hits.
             refetch();
         }
     };

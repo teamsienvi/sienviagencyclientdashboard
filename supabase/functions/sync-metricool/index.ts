@@ -211,7 +211,27 @@ serve(async (req) => {
     }
 
     // Store account metrics if we have any
-    if (accountMetrics.followers || accountMetrics.newFollowers || accountMetrics.engagementRate) {
+    if (accountMetrics.followers !== undefined || accountMetrics.newFollowers !== undefined || accountMetrics.engagementRate !== undefined) {
+      // Fallback: If newFollowers is missing but we have current followers, look up historical DB records
+      if ((accountMetrics.newFollowers === undefined || accountMetrics.newFollowers === null) && accountMetrics.followers !== undefined && accountMetrics.followers !== null) {
+        const { data: prevRecord } = await supabase
+          .from("social_account_metrics")
+          .select("followers")
+          .eq("client_id", clientId)
+          .eq("platform", platform)
+          .lt("period_start", startDate)
+          .order("period_start", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+          
+        if (prevRecord && prevRecord.followers !== null) {
+          accountMetrics.newFollowers = accountMetrics.followers - prevRecord.followers;
+          console.log(`[Fallback] ${platform} newFollowers calculated via DB: ${accountMetrics.newFollowers}`);
+        } else {
+          accountMetrics.newFollowers = 0;
+        }
+      }
+
       console.log("Storing account metrics:", accountMetrics);
 
       const { error: metricsError } = await supabase

@@ -447,6 +447,13 @@ export const MetricoolAnalyticsSection = ({
     queryKey: ["metricool-content", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
       const { start, end } = getDateRange();
+      let queryEnd = end;
+      if (dateRangePreset !== "custom") {
+        queryEnd = new Date();
+      } else {
+        queryEnd = endOfDay(end);
+      }
+
       // First get content within the selected date range
       const { data: content, error: contentError } = await supabase
         .from("social_content")
@@ -454,7 +461,7 @@ export const MetricoolAnalyticsSection = ({
         .eq("client_id", clientId)
         .eq("platform", platform)
         .gte("published_at", start.toISOString())
-        .lte("published_at", end.toISOString())
+        .lte("published_at", queryEnd.toISOString())
         .order("published_at", { ascending: false })
         .limit(100);
 

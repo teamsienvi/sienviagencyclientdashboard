@@ -202,7 +202,7 @@ export const XCSVUploadDialog = ({
       }
 
       // Added Followers (row 38 format: "Added Followers:,,-" or "Added Followers:,,5")
-      if (lower.includes("added followers")) {
+      if (lower.includes("added followers") || lower.includes("new followers") || lower.includes("net followers") || lower.includes("followers gained")) {
         const val = findFirstNumberInLine(line);
         // If it's a dash or empty, treat as 0
         metrics.addedFollowers = val !== undefined ? val : 0;
@@ -610,6 +610,7 @@ export const XCSVUploadDialog = ({
       // Invalidate queries to refresh data
       queryClient.invalidateQueries({ queryKey: ["social-content-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["top-performing-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["all-time-top-posts"] });
       queryClient.invalidateQueries({ queryKey: ["client-social-metrics"] });
       queryClient.invalidateQueries({ queryKey: ["x-analytics"] });
       queryClient.invalidateQueries({ queryKey: ["client-x-content"] });

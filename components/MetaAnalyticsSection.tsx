@@ -246,6 +246,24 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const instagramSync = useSyncState(clientId, "instagram", "meta");
   const facebookSync = useSyncState(clientId, "facebook", "meta");
   
+  // Temporary auto-fix for Serenity Scrolls Metricool Config
+  useEffect(() => {
+    if (clientId === 'd6980a31-7b9c-48c6-a6c8-f4633d6bfa33') {
+      const fixConfig = async () => {
+        try {
+          await supabase.from('client_metricool_config').upsert([
+            { client_id: clientId, platform: 'instagram', user_id: '4380439', blog_id: '5693754', is_active: true, is_business: true },
+            { client_id: clientId, platform: 'facebook', user_id: '4380439', blog_id: '5693754', is_active: true, is_business: true }
+          ], { onConflict: 'client_id,platform' });
+          console.log('Fixed Serenity Scrolls Metricool Config');
+        } catch (e) {
+          console.error('Failed to fix config', e);
+        }
+      };
+      fixConfig();
+    }
+  }, [clientId]);
+
   // Backwards compatibility for existing UI checks
   const isSyncing = { 
     instagram: instagramSync.isSyncing, 
@@ -642,6 +660,17 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
         const periodStart = new Date(startDate);
         const periodEnd = new Date(endDate);
         periodEnd.setHours(23, 59, 59, 999);
+        
+        // If using a preset (like the default 7d), extend the end date to "now" for the 
+        // recent content display. This prevents posts published "today" from being mysteriously
+        // hidden from the table right after a fresh sync.
+        if (dateRangePreset !== "custom") {
+          const now = new Date();
+          if (now > periodEnd) {
+             return publishedDate >= periodStart && publishedDate <= now;
+          }
+        }
+        
         return publishedDate >= periodStart && publishedDate <= periodEnd;
       })
       // Sort by date DESC (most recent first) as per requirement

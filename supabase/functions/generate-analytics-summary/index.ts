@@ -126,30 +126,48 @@ serve(async (req) => {
             }
         };
 
-        // Try to cache the result (non-blocking — if table doesn't exist, we still return data)
+        let debugUpsertError = null;
+        // Build a lean version for caching (strip debugContext — it's large raw text, not needed for display)
+        const summaryToCache = {
+            strengths: summaryData.strengths,
+            weaknesses: summaryData.weaknesses,
+            smartActions: summaryData.smartActions,
+            highlights: summaryData.highlights,
+            metrics: summaryData.metrics,
+        };
+
+        // Try to cache using supabase-js (handles large JSONB correctly; service role bypasses RLS)
         try {
-            const { error: upsertError } = await supabase
+            // Delete first to avoid onConflict PGRST102 bug
+            await supabase
                 .from("analytics_summaries")
-                .upsert(
-                    {
-                        client_id: clientId,
-                        type,
-                        summary_data: summaryData,
-                        period_start: startStr,
-                        period_end: endStr,
-                        generated_at: new Date().toISOString(),
-                    },
-                    { onConflict: "client_id,type" }
-                );
-            if (upsertError) {
-                console.error("Upsert error:", upsertError);
-                throw upsertError;
+                .delete()
+                .eq("client_id", clientId)
+                .eq("type", type);
+
+            const { error: insertError } = await supabase
+                .from("analytics_summaries")
+                .insert({
+                    client_id: clientId,
+                    type,
+                    summary_data: summaryToCache,
+                    period_start: startStr,
+                    period_end: endStr,
+                    generated_at: new Date().toISOString(),
+                });
+
+            if (insertError) {
+                console.error("Insert error:", insertError);
+                debugUpsertError = insertError;
+            } else {
+                console.log(`Analytics summary cached for ${clientId} / ${type}`);
             }
         } catch (cacheErr) {
             console.warn("Failed to cache summary (table may not exist):", cacheErr);
+            debugUpsertError = cacheErr instanceof Error ? cacheErr.message : String(cacheErr);
         }
 
-        return new Response(JSON.stringify(summaryData), {
+        return new Response(JSON.stringify({ ...summaryData, debugUpsertError }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     } catch (error) {

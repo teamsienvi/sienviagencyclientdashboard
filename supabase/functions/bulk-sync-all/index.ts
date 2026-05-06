@@ -243,6 +243,26 @@ serve(async (req) => {
               newFollowers = last - first;
             }
           }
+          
+          // Fallback: If newFollowers couldn't be calculated from the timeline, calculate it from historical DB records
+          if (newFollowers === null && followers !== null) {
+            const { data: prevRecord } = await supabase
+              .from("social_account_metrics")
+              .select("followers")
+              .eq("client_id", clientId)
+              .eq("platform", platform)
+              .lt("period_start", from)
+              .order("period_start", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+              
+            if (prevRecord && prevRecord.followers !== null) {
+              newFollowers = followers - prevRecord.followers;
+            } else {
+              newFollowers = 0;
+            }
+          }
+          
           console.log(`  ${platform} followers: ${followers}, new: ${newFollowers}`);
         } catch (e: any) {
           console.error(`  Error fetching followers for ${clientName} ${platform}:`, e.message);

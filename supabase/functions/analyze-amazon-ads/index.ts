@@ -14,12 +14,13 @@ const AMAZON_PROMPT = `You are an expert Amazon Ads analyst. Analyze the followi
 
 IMPORTANT: You MUST respond with ONLY a valid JSON object — no markdown, no code fences, no text outside the JSON. Your response must start with { and end with }.
 
-Extract or calculate these values from the data:
-- Ad Sales (total revenue attributed to ads)
-- Ad Spend (total cost)
+- Ad Sales (Use the EXACT pre-calculated total provided)
+- Ad Spend (Use the EXACT pre-calculated total provided)
 - ACoS = (Ad Spend / Ad Sales) * 100
 - ROAS = Ad Sales / Ad Spend
-- Orders (total order count)
+- Orders (Use the EXACT pre-calculated total provided)
+- Clicks (Use the EXACT pre-calculated total provided)
+- Impressions (Use the EXACT pre-calculated total provided)
 - CTR = (Clicks / Impressions) * 100
 - CVR = (Orders / Clicks) * 100
 - Avg CPC = Ad Spend / Clicks
@@ -94,6 +95,7 @@ serve(async (req) => {
         let fileContent: string;
         let fileName: string;
         let reportPeriod: string;
+        let fileBytes: Uint8Array | null = null;
 
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
@@ -107,7 +109,7 @@ serve(async (req) => {
 
             fileName = file.name;
             const fileBuffer = await file.arrayBuffer();
-            const fileBytes = new Uint8Array(fileBuffer);
+            fileBytes = new Uint8Array(fileBuffer);
 
             if (fileName.endsWith(".csv")) {
                 fileContent = new TextDecoder().decode(fileBytes);
@@ -146,7 +148,23 @@ serve(async (req) => {
             ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated ...]"
             : fileContent;
 
-        const userMessage = `${AMAZON_PROMPT}\nClient: ${client.name}\nFile: ${fileName}\n\n${"─".repeat(60)}\nAMAZON ADS DATA:\n${truncatedData}\n${"─".repeat(60)}`;
+        let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
+        if (contentType.includes("multipart/form-data") && fileBytes) {
+            exactTotals = await extractExactTotals(fileBytes);
+        }
+
+        const preCalculatedContext = `
+${"─".repeat(60)}
+PRE-CALCULATED ACCURATE TOTALS (Use these EXACTLY for the top-level KPIs, do not sum the truncated rows):
+- Ad Spend: ${exactTotals.spend.toFixed(2)}
+- Ad Sales: ${exactTotals.sales.toFixed(2)}
+- Orders: ${exactTotals.orders}
+- Clicks: ${exactTotals.clicks}
+- Impressions: ${exactTotals.impressions}
+${"─".repeat(60)}
+`;
+
+        const userMessage = `${AMAZON_PROMPT}\nClient: ${client.name}\nFile: ${fileName}\n\n${preCalculatedContext}\n\n${"─".repeat(60)}\nAMAZON ADS DATA (Sample/Truncated for Top Campaigns):\n${truncatedData}\n${"─".repeat(60)}`;
 
         // Calculate simple hash for file
         const encoder = new TextEncoder();
@@ -379,4 +397,54 @@ function parseAmazonResponse(text: string): any {
         actionPlan: [],
         finalRecommendation: "",
     };
+}
+
+// ─── Totals Extractor ─────────────────────────────────────────────────────────
+async function extractExactTotals(fileBytes: Uint8Array) {
+    let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
+    try {
+        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
+        const workbook = XLSX.read(fileBytes, { type: "array" });
+        
+        const isBulkFile = workbook.SheetNames.length > 1 && workbook.SheetNames.some(name => name.includes("Campaigns"));
+
+        for (const sheetName of workbook.SheetNames) {
+            // If it's a Bulk Operations file, only process sheets with "Campaigns" in the name to avoid double counting from Search Term reports
+            if (isBulkFile && !sheetName.toLowerCase().includes("campaigns")) {
+                continue;
+            }
+
+            const sheet = workbook.Sheets[sheetName];
+            const rows = XLSX.utils.sheet_to_json(sheet) as any[];
+            
+            if (rows.length > 0) {
+                // Find column keys
+                const sampleRow = rows[0];
+                const keys = Object.keys(sampleRow).map(k => k.trim());
+                const hasEntity = keys.some(k => k.toLowerCase() === "entity");
+                
+                const spendKey = keys.find(k => k.toLowerCase() === 'spend' || k.toLowerCase() === 'cost');
+                const salesKey = keys.find(k => k.toLowerCase() === 'sales' || k.toLowerCase().includes('total sales') || k.toLowerCase().includes('14 day total sales'));
+                const ordersKey = keys.find(k => k.toLowerCase() === 'orders' || k.toLowerCase().includes('total orders'));
+                const clicksKey = keys.find(k => k.toLowerCase() === 'clicks');
+                const impressionsKey = keys.find(k => k.toLowerCase() === 'impressions');
+
+                for (const row of rows) {
+                    // Bulk Operations logic: if Entity column exists, ONLY sum 'Campaign' rows
+                    if (hasEntity && row['Entity'] !== 'Campaign') {
+                        continue;
+                    }
+
+                    if (spendKey && row[spendKey] && !isNaN(parseFloat(row[spendKey]))) exactTotals.spend += parseFloat(row[spendKey]);
+                    if (salesKey && row[salesKey] && !isNaN(parseFloat(row[salesKey]))) exactTotals.sales += parseFloat(row[salesKey]);
+                    if (ordersKey && row[ordersKey] && !isNaN(parseFloat(row[ordersKey]))) exactTotals.orders += parseFloat(row[ordersKey]);
+                    if (clicksKey && row[clicksKey] && !isNaN(parseFloat(row[clicksKey]))) exactTotals.clicks += parseFloat(row[clicksKey]);
+                    if (impressionsKey && row[impressionsKey] && !isNaN(parseFloat(row[impressionsKey]))) exactTotals.impressions += parseFloat(row[impressionsKey]);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Failed to extract exact totals:", err);
+    }
+    return exactTotals;
 }
