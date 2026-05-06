@@ -170,7 +170,7 @@ async function computeMetrics(
         // Fallback to social_account_metrics if timeline is empty
         const { data: accountMetrics } = await supabase
             .from("social_account_metrics")
-            .select("platform, followers, collected_at")
+            .select("platform, followers, new_followers, collected_at")
             .eq("client_id", clientId)
             .gte("collected_at", periodStartStr)
             .order("collected_at", { ascending: true });
@@ -190,6 +190,8 @@ async function computeMetrics(
                     const first = validPoints[0].followers;
                     const last = validPoints[validPoints.length - 1].followers;
                     platformFollowers[platform] = last - first;
+                } else if (validPoints.length === 1 && validPoints[0].new_followers != null) {
+                    platformFollowers[platform] = validPoints[0].new_followers;
                 } else {
                     platformFollowers[platform] = 0;
                 }

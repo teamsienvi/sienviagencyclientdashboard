@@ -190,16 +190,18 @@ export function AnalyticsSummaryCard({
         });
     }
 
+    const hasLiveMetrics = !!metricsData || !!socialMetrics;
+
     const totalViews = type === 'social' 
-        ? (optimizedTotalViews || metricsData?.totalViews || aiMetrics.total_views || 0) 
+        ? (hasLiveMetrics ? (optimizedTotalViews || metricsData?.totalViews || 0) : (aiMetrics.total_views || 0)) 
         : (aiMetrics.total_views || 0);
         
     const totalEngagements = type === 'social'
-        ? (optimizedTotalEngagements || metricsData?.totalEngagements || 0)
+        ? (hasLiveMetrics ? (optimizedTotalEngagements || metricsData?.totalEngagements || 0) : (metricsData?.totalEngagements || 0))
         : (metricsData?.totalEngagements || 0);
 
     const followersGained = type === 'social'
-        ? (optimizedTotalFollowersGained || aiMetrics.followers_gained || 0)
+        ? (hasLiveMetrics ? optimizedTotalFollowersGained : (aiMetrics.followers_gained || 0))
         : (aiMetrics.followers_gained || 0);
 
     // Calculate accurate total current followers directly from live props if available
