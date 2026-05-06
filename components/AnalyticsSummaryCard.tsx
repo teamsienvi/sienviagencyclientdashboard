@@ -132,7 +132,7 @@ export function AnalyticsSummaryCard({
     const { data: metricsData, isLoading: isLoadingMetrics, isFetching: isFetchingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange, isActive);
 
     // 3. Fetch Top Posts
-    const { data: topPosts, isLoading: isLoadingTopPosts } = useAllTimeTopPosts(isSocial ? clientId : undefined, isSocial ? 4 : 0, undefined, bounds.start, bounds.end);
+    const { data: topPosts, isLoading: isLoadingTopPosts } = useTopPerformingPosts(isSocial ? clientId : undefined, dateRange, 4, customDateRange);
 
     const summary: SummaryData | null = (cachedSummary as any)?.summary_data || null;
     const isGenerating = isSyncing;
