@@ -761,5 +761,3 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         </Card>
     );
 }
-   
- 
