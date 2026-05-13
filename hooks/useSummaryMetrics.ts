@@ -153,7 +153,7 @@ async function computeMetrics(
 
             // Split into points before the period and points within the period
             const beforePoints = points.filter(p => p.date < periodStartStr);
-            const periodPoints = points.filter(p => p.date >= periodStartStr);
+            const periodPoints = points.filter(p => p.date >= periodStartStr && p.date <= periodEndStr);
             
             if (periodPoints.length > 0) {
                 // Baseline is the last known follower count BEFORE the period,
@@ -169,8 +169,10 @@ async function computeMetrics(
             } else {
                 platformFollowers[platform] = 0;
             }
-            // Always set current followers to the absolute latest point we have
-            platformCurrentFollowers[platform] = points[points.length - 1].followers;
+            // Always set current followers to the absolute latest point within the period we have
+            platformCurrentFollowers[platform] = periodPoints.length > 0 
+                ? periodPoints[periodPoints.length - 1].followers 
+                : (beforePoints.length > 0 ? beforePoints[beforePoints.length - 1].followers : 0);
         });
     } else {
         // Fallback to social_account_metrics if timeline is empty
@@ -179,6 +181,7 @@ async function computeMetrics(
             .select("platform, followers, new_followers, collected_at")
             .eq("client_id", clientId)
             .gte("collected_at", periodStartStr)
+            .lte("collected_at", periodEndStr)
             .order("collected_at", { ascending: true });
 
         if (accountMetrics && accountMetrics.length > 0) {
