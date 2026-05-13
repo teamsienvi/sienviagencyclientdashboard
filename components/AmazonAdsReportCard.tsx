@@ -26,6 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import * as XLSX from "xlsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -306,6 +307,62 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         if (f) { setFile(f); setReport(null); }
     }, []);
 
+    // ─── Parse file client-side ───────────────────────────────────────────────
+    const parseFileClientSide = async (f: File): Promise<{ csvText: string; exactTotals: { spend: number; sales: number; orders: number; clicks: number; impressions: number }; fileName: string }> => {
+        const arrayBuffer = await f.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+
+        // For Bulk files, only process Campaigns sheets to avoid huge payloads
+        const isBulkFile = workbook.SheetNames.length > 2 ||
+            workbook.SheetNames.some(n => n.toLowerCase().includes('campaign'));
+        const sheetsToProcess = isBulkFile
+            ? workbook.SheetNames.filter(n =>
+                n.toLowerCase().includes('campaign') ||
+                n.toLowerCase().includes('sponsored')
+            )
+            : workbook.SheetNames;
+        const finalSheets = sheetsToProcess.length > 0 ? sheetsToProcess : workbook.SheetNames;
+
+        const allText: string[] = [];
+        let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
+
+        for (const sheetName of finalSheets) {
+            const sheet = workbook.Sheets[sheetName];
+            const csv = XLSX.utils.sheet_to_csv(sheet);
+            if (csv.trim()) allText.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+
+            // Compute exact totals from this sheet
+            const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[];
+            if (rows.length === 0) continue;
+            const keys = Object.keys(rows[0]).map(k => k.trim());
+            const hasEntity = keys.some(k => k.toLowerCase() === 'entity');
+
+            const findKey = (patterns: string[]) => keys.find(k => patterns.some(p => k.toLowerCase().includes(p) || k.toLowerCase() === p));
+            const spendKey = findKey(['spend', 'cost']);
+            const salesKey = findKey(['14 day total sales', 'total sales', 'sales']);
+            const ordersKey = findKey(['14 day total orders', '7 day total orders', 'total orders', 'unit orders', 'orders']);
+            const clicksKey = findKey(['clicks']);
+            const impressionsKey = findKey(['impressions']);
+
+            for (const row of rows) {
+                if (hasEntity && row['Entity'] !== 'Campaign') continue;
+                const parse = (k?: string) => k && row[k] ? parseFloat(String(row[k]).replace(/,/g, '')) || 0 : 0;
+                exactTotals.spend += parse(spendKey);
+                exactTotals.sales += parse(salesKey);
+                exactTotals.orders += parse(ordersKey);
+                exactTotals.clicks += parse(clicksKey);
+                exactTotals.impressions += parse(impressionsKey);
+            }
+        }
+
+        const MAX_CHARS = 50000;
+        let csvText = allText.join('\n\n');
+        if (csvText.length > MAX_CHARS) csvText = csvText.substring(0, MAX_CHARS) + '\n\n[... truncated ...]';
+
+        return { csvText, exactTotals, fileName: f.name };
+    };
+
     // ─── Analysis ────────────────────────────────────────────────────────────
     const handleAnalyze = async () => {
         if (!file) {
@@ -316,10 +373,12 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         setIsAnalyzing(true);
         try {
             const { data: { session } } = await supabase.auth.getSession();
-            const formData = new FormData();
-            formData.append("clientId", clientId);
-            formData.append("file", file);
 
+            // Parse client-side — no binary upload, no xlsx import on edge function
+            toast({ title: "Parsing file…", description: "Reading your report data" });
+            const { csvText, exactTotals, fileName } = await parseFileClientSide(file);
+
+            toast({ title: "Analyzing…", description: "Sending to AI for analysis" });
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/analyze-amazon-ads`,
                 {
@@ -327,8 +386,15 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                     headers: {
                         Authorization: `Bearer ${session?.access_token || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
                         apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+                        "Content-Type": "application/json",
                     },
-                    body: formData,
+                    body: JSON.stringify({
+                        clientId,
+                        fileName,
+                        rawData: csvText,
+                        exactTotals,
+                        reportPeriod: new Date().toISOString().substring(0, 7),
+                    }),
                 }
             );
 
@@ -339,17 +405,14 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             }
 
             const result = await response.json();
-            
-            // Note: If Cloud Run is slow, the edge function might return status: 'pending' immediately.
-            // Our polling in useQuery will catch the update.
-            if (result.status === 'complete') {
+            if (result.status === 'complete' && result.data) {
                 setReport(result.data);
                 setGeneratedAt(new Date());
-                toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated and saved." });
+                toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated." });
             } else {
-                toast({ title: "Processing", description: "Report is being processed in the background." });
+                toast({ title: "Processing", description: "Report is being processed." });
             }
-            
+
             queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
 
         } catch (err: any) {
@@ -698,3 +761,5 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         </Card>
     );
 }
+   
+ 
