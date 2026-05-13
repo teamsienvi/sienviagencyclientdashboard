@@ -6,8 +6,8 @@ const corsHeaders = {
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Amazon-specific OpenAI assistant
-const AMAZON_ASSISTANT_ID = "asst_YQf5tpRHLbcXtdNuNwIn6RWJ";
+// Use gpt-4o-mini via Chat Completions — fast, no polling, no timeout issues
+const OPENAI_CHAT_MODEL = "gpt-4o-mini";
 
 // Prompt engineered to match the exact PDF report format
 const AMAZON_PROMPT = `You are an expert Amazon Ads analyst. Analyze the following Amazon Ads report data and produce a structured, actionable report.
@@ -188,72 +188,37 @@ ${"─".repeat(60)}
             console.error("Failed to upsert pending status:", upsertError);
         }
 
-        // Execute analysis directly
-        console.log("Calling OpenAI assistant for Amazon Ads analysis...");
-        
-        // Background task wrapper to avoid blocking the HTTP response if it takes too long
-        // (Supabase Edge Functions allow up to 5 minutes execution time)
-        const processReport = async () => {
-            try {
-                const parsedReport = await callOpenAIAssistant(openaiApiKey, AMAZON_ASSISTANT_ID, userMessage);
-                
-                const { error: updateError } = await supabase
-                    .from("amazon_ads_reports")
-                    .update({
-                        parsed_data: parsedReport,
-                        generated_at: new Date().toISOString(),
-                        generation_status: 'complete'
-                    })
-                    .eq("client_id", clientId)
-                    .eq("report_period", reportPeriod);
-                    
-                if (updateError) {
-                     console.error("Failed to update report status:", updateError);
-                } else {
-                     console.log("Successfully analyzed and saved Amazon Ads report.");
-                }
-            } catch (err) {
-                console.error("Background processing failed:", err);
-                await supabase
-                    .from("amazon_ads_reports")
-                    .update({ generation_status: 'failed' })
-                    .eq("client_id", clientId)
-                    .eq("report_period", reportPeriod);
-            }
-        };
+        // Execute analysis via Chat Completions (single call, no polling, fast)
+        console.log("Calling OpenAI Chat Completions for Amazon Ads analysis...");
+        try {
+            const parsedReport = await callChatCompletion(openaiApiKey, userMessage);
 
-        // If EdgeRuntime is available, use waitUntil to keep the isolate alive
-        if (typeof (globalThis as any).EdgeRuntime !== 'undefined' && (globalThis as any).EdgeRuntime.waitUntil) {
-            (globalThis as any).EdgeRuntime.waitUntil(processReport());
-            return new Response(JSON.stringify({ status: 'pending', message: 'Report is processing in the background' }), {
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-        } else {
-            // Otherwise execute synchronously
-            await processReport();
-            
-            // Check if it failed
-            const { data: checkData } = await supabase
+            const { error: updateError } = await supabase
                 .from("amazon_ads_reports")
-                .select("generation_status, parsed_data")
+                .update({
+                    parsed_data: parsedReport,
+                    generated_at: new Date().toISOString(),
+                    generation_status: 'complete'
+                })
                 .eq("client_id", clientId)
-                .eq("report_period", reportPeriod)
-                .single();
-                
-            if (checkData?.generation_status === 'failed') {
-                throw new Error("Analysis failed during processing.");
-            }
-            
-            return new Response(JSON.stringify({ status: 'complete', data: checkData?.parsed_data, message: 'Report processed successfully' }), {
+                .eq("report_period", reportPeriod);
+
+            if (updateError) console.error("Failed to update report status:", updateError);
+
+            return new Response(JSON.stringify({ status: 'complete', data: parsedReport }), {
                 headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
+        } catch (aiErr) {
+            console.error("AI analysis failed:", aiErr);
+            await supabase.from("amazon_ads_reports")
+                .update({ generation_status: 'failed' })
+                .eq("client_id", clientId)
+                .eq("report_period", reportPeriod);
+            throw aiErr;
         }
 
     } catch (error) {
         console.error("Error in analyze-amazon-ads:", error);
-        
-        // Try to update failure status if we have the necessary identifiers
-        // (In a real background worker, this would be handled cleanly)
         return new Response(
             JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
             { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -297,77 +262,43 @@ async function parseExcelToText(fileBytes: Uint8Array): Promise<string> {
     }
 }
 
-// ─── OpenAI Assistants API ────────────────────────────────────────────────────
-const OPENAI_BASE = "https://api.openai.com/v1";
-
-async function openaiRequest(apiKey: string, path: string, method: string, body?: unknown): Promise<any> {
-    const res = await fetch(`${OPENAI_BASE}${path}`, {
-        method,
+// ─── Chat Completions API (fast, single call, no polling) ────────────────────
+async function callChatCompletion(apiKey: string, userMessage: string): Promise<any> {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
         headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
-            "OpenAI-Beta": "assistants=v2",
         },
-        body: body ? JSON.stringify(body) : undefined,
+        body: JSON.stringify({
+            model: OPENAI_CHAT_MODEL,
+            response_format: { type: "json_object" },
+            max_tokens: 4096,
+            temperature: 0.2,
+            messages: [
+                {
+                    role: "system",
+                    content: "You are an expert Amazon Ads analyst. Always respond with valid JSON only."
+                },
+                {
+                    role: "user",
+                    content: userMessage
+                }
+            ]
+        })
     });
 
     if (!res.ok) {
         const errText = await res.text();
         throw new Error(`OpenAI API ${res.status}: ${errText.substring(0, 500)}`);
     }
-    return res.json();
-}
 
-async function callOpenAIAssistant(apiKey: string, assistantId: string, userMessage: string): Promise<any> {
-    const thread = await openaiRequest(apiKey, "/threads", "POST", {});
-    const threadId = thread.id;
-
-    await openaiRequest(apiKey, `/threads/${threadId}/messages`, "POST", {
-        role: "user",
-        content: userMessage,
-    });
-
-    const run = await openaiRequest(apiKey, `/threads/${threadId}/runs`, "POST", {
-        assistant_id: assistantId,
-        response_format: { type: "json_object" }
-    });
-    const runId = run.id;
-
-    // Poll for completion (max 3 minutes)
-    const maxWait = 180_000;
-    const pollInterval = 2_000;
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < maxWait) {
-        const runStatus = await openaiRequest(apiKey, `/threads/${threadId}/runs/${runId}`, "GET");
-
-        if (runStatus.status === "completed") break;
-        if (["failed", "cancelled", "expired", "incomplete"].includes(runStatus.status)) {
-            throw new Error(`OpenAI run ${runStatus.status}: ${runStatus.last_error?.message || runStatus.status}`);
-        }
-        await new Promise((r) => setTimeout(r, pollInterval));
-    }
-
-    if (Date.now() - startTime >= maxWait) {
-        throw new Error("Analysis timed out after 3 minutes. Try a smaller file.");
-    }
-
-    const messages = await openaiRequest(apiKey, `/threads/${threadId}/messages?order=desc&limit=1`, "GET");
-    const assistantMessage = messages.data?.[0];
-
-    if (!assistantMessage || assistantMessage.role !== "assistant") {
-        throw new Error("No assistant response found");
-    }
-
-    let text = "";
-    for (const content of assistantMessage.content) {
-        if (content.type === "text") { text = content.text.value; break; }
-    }
-
-    if (!text) throw new Error("Empty response from OpenAI assistant");
-
+    const json = await res.json();
+    const text = json.choices?.[0]?.message?.content || "";
+    if (!text) throw new Error("Empty response from OpenAI");
     return parseAmazonResponse(text);
 }
+
 
 function parseAmazonResponse(text: string): any {
     const firstBrace = text.indexOf("{");
