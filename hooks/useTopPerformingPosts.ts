@@ -27,10 +27,18 @@ export function useTopPerformingPosts(
         periodEndDate = endOfDay(range.end);
       }
 
-      // Fetch metrics filtered by COLLECTION date (period_end) only.
-      // Do NOT also filter by published_at — sync batches cover multi-day windows,
-      // so a post published on day 1 of a 7-day window will have period_end = day 7.
-      // Filtering both would silently exclude valid posts at window boundaries.
+      const periodStartStr = periodStartDate.toISOString().split("T")[0];
+      const periodEndStr = periodEndDate.toISOString().split("T")[0];
+
+      // Apply 2-day buffer on the lower bound for collected_at to handle Metricool lag
+      // (some clients' last sync ran 1-2 days before window start, but period_end is in-window)
+      const fetchStart = new Date(periodStartDate);
+      fetchStart.setDate(fetchStart.getDate() - 2);
+      const fetchStartStr = fetchStart.toISOString().split("T")[0];
+
+      // Only return posts published within the reporting period.
+      // Filter by published_at on the join so old videos whose metrics got refreshed
+      // this week are excluded from Top Content.
       let metricsQuery = supabase
         .from("social_content_metrics")
         .select(`
@@ -53,7 +61,9 @@ export function useTopPerformingPosts(
           )
         `)
         .eq("social_content.client_id", clientId)
-        .gte("collected_at", periodStartDate.toISOString().split("T")[0])
+        .gte("social_content.published_at", periodStartStr)
+        .lte("social_content.published_at", periodEndStr)
+        .or(`collected_at.gte.${fetchStartStr},period_end.gte.${fetchStartStr}`)
         .limit(2000);
 
       let { data: metricsRaw, error: contentError } = await metricsQuery;
@@ -61,9 +71,7 @@ export function useTopPerformingPosts(
       if (contentError) throw contentError;
       
       if (!metricsRaw || metricsRaw.length === 0) {
-        // Fallback: widen window to 60 days of collected_at — captures recently synced older posts
-        const wideStart = new Date(periodStartDate);
-        wideStart.setDate(wideStart.getDate() - 30);
+        // Fallback: query via published_at directly
         const { data: fallbackContent } = await supabase
           .from("social_content")
           .select(`
@@ -78,25 +86,17 @@ export function useTopPerformingPosts(
             )
           `)
           .eq("client_id", clientId)
-          .gte("published_at", wideStart.toISOString().split("T")[0])
-          .lte("published_at", periodEndDate.toISOString().split("T")[0])
+          .gte("published_at", periodStartStr)
+          .lte("published_at", periodEndStr)
           .order('published_at', { ascending: false })
           .limit(200);
 
         if (fallbackContent && fallbackContent.length > 0) {
             metricsRaw = fallbackContent.flatMap((post: any) => {
-                if (!post.social_content_metrics || post.social_content_metrics.length === 0) {
-                    return [];
-                }
-                // Keep only metrics collected within or just after the reporting window
-                const relevantMetrics = post.social_content_metrics.filter((m: any) =>
-                    m.collected_at && new Date(m.collected_at) >= wideStart
-                );
-                if (relevantMetrics.length === 0) return [];
-                const latestMetric = relevantMetrics.sort((a: any, b: any) => 
-                    new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime()
+                if (!post.social_content_metrics || post.social_content_metrics.length === 0) return [];
+                const latestMetric = [...post.social_content_metrics].sort((a: any, b: any) =>
+                    new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
                 )[0];
-                
                 return [{
                     ...latestMetric,
                     social_content: {
