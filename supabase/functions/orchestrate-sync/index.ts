@@ -110,8 +110,24 @@ serve(async (req) => {
             }
         } else if (module === 'meta' || platform === 'instagram' || platform === 'facebook') {
             lockMinutes = 5;
-            workerFn = "sync-meta";
-            workerPayload = { clientId };
+            // Prefer Metricool config if available (avoids direct OAuth dependency)
+            const { data: metaMetricoolConfig } = await supabase
+                .from("client_metricool_config")
+                .select("id")
+                .eq("client_id", clientId)
+                .eq("platform", platform)
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (metaMetricoolConfig) {
+                workerFn = "sync-metricool";
+                workerPayload = { clientId, platform };
+                console.log(`[orchestrate-sync] ${platform} has Metricool config — routing to sync-metricool`);
+            } else {
+                workerFn = "sync-meta";
+                workerPayload = { clientId };
+                console.log(`[orchestrate-sync] ${platform} has no Metricool config — falling back to sync-meta (OAuth)`);
+            }
         } else if (platform === 'x') {
             lockMinutes = 5;
             // Check if client has Metricool config for X — if so, use sync-metricool

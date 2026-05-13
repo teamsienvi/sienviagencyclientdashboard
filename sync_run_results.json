@@ -1,0 +1,125 @@
+{
+  "timestamp": "2026-05-13T08:47:00.098Z",
+  "totalDispatched": 115,
+  "finalRegistry": {
+    "total": 154,
+    "ready": 86,
+    "syncing": 0,
+    "failed": 68,
+    "clients": [
+      "041555a7-1a25-42b8-89c7-edc40afff861",
+      "ef580ebf-439f-4305-826a-f1f8aa89fd03",
+      "79099b9d-0281-4a95-8076-dcff0fd128a4",
+      "d8f38e01-77ff-4839-ac48-54795adc9f3e",
+      "d8a121fe-cdd9-4e19-90dc-dd32b159f973",
+      "95791e88-87cd-4621-af7e-df46f5ad93ac",
+      "1a1edf9f-2ebe-4d40-a904-7295d5033401",
+      "b6c39651-9259-4930-af6e-b744a5a191ad",
+      "297cbb3c-54b4-4bed-8206-25949a94fa62",
+      "973e8407-bf7f-45ca-bd73-a26acc3ad9e3",
+      "0b90215e-e55d-4b5e-8453-de35153a1fcd",
+      "3177cefc-46cc-4790-8a20-65b160103077",
+      "22090989-2d0e-47b2-b9c5-98652d7f0957",
+      "cf4bf738-9cc2-421b-bdc0-7344b88b0dad",
+      "0771b432-d720-4d0f-a964-ee6c7edcd116"
+    ]
+  },
+  "summaryResults": [
+    {
+      "clientId": "79099b9d-0281-4a95-8076-dcff0fd128a4",
+      "name": "BlingyBag",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "973e8407-bf7f-45ca-bd73-a26acc3ad9e3",
+      "name": "BSUE Brow & Lash",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "edfc083a-77f7-4c83-b6e0-a32bfc0553a1",
+      "name": "Cissie Pryor Presents",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "3177cefc-46cc-4790-8a20-65b160103077",
+      "name": "Luxxe Auto Accessories",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "1a1edf9f-2ebe-4d40-a904-7295d5033401",
+      "name": "OxiSure Tech",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "ef580ebf-439f-4305-826a-f1f8aa89fd03",
+      "name": "Snarky Humans",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "d8a121fe-cdd9-4e19-90dc-dd32b159f973",
+      "name": "Snarky Pets",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "b6c39651-9259-4930-af6e-b744a5a191ad",
+      "name": "The Haven At Deer Park",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "041555a7-1a25-42b8-89c7-edc40afff861",
+      "name": "Serenity Scrolls",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "297cbb3c-54b4-4bed-8206-25949a94fa62",
+      "name": "Snarky A$$ Humans",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "22090989-2d0e-47b2-b9c5-98652d7f0957",
+      "name": "PlayIQ",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "d8f38e01-77ff-4839-ac48-54795adc9f3e",
+      "name": "Sienvi Agency",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "cf4bf738-9cc2-421b-bdc0-7344b88b0dad",
+      "name": "Ban Batu",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "95791e88-87cd-4621-af7e-df46f5ad93ac",
+      "name": "Father Figure Formula",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "0b90215e-e55d-4b5e-8453-de35153a1fcd",
+      "name": "The Billionaire Brother",
+      "social": true,
+      "website": true
+    },
+    {
+      "clientId": "0771b432-d720-4d0f-a964-ee6c7edcd116",
+      "name": "Hwabelle",
+      "social": true,
+      "website": true
+    }
+  ]
+}

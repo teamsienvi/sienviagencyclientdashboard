@@ -1,0 +1,103 @@
+[
+  {
+    "fn": "sync-meta",
+    "status": 400,
+    "ok": false,
+    "elapsed": 719,
+    "response": {
+      "success": false,
+      "error": "Missing access token or account ID"
+    }
+  },
+  {
+    "fn": "sync-metricool",
+    "status": 500,
+    "ok": false,
+    "elapsed": 1993,
+    "response": {
+      "success": false,
+      "error": "No Metricool config found for client 95791e88-87cd-4621-af7e-df46f5ad93ac and platform social"
+    }
+  },
+  {
+    "fn": "sync-lms",
+    "status": 200,
+    "ok": true,
+    "elapsed": 4181,
+    "response": {
+      "success": true
+    }
+  },
+  {
+    "fn": "sync-ubersuggest",
+    "status": 500,
+    "ok": false,
+    "elapsed": 2121,
+    "response": {
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    }
+  },
+  {
+    "fn": "shopify-analytics",
+    "status": 400,
+    "ok": false,
+    "elapsed": 838,
+    "response": {
+      "success": false,
+      "error": "Shopify not connected. Please connect via OAuth.",
+      "connected": false
+    }
+  },
+  {
+    "fn": "sync-x",
+    "status": 400,
+    "ok": false,
+    "elapsed": 323,
+    "response": {
+      "success": false,
+      "error": "X_BEARER_TOKEN not configured"
+    }
+  },
+  {
+    "fn": "generate-analytics-summary",
+    "status": 200,
+    "ok": true,
+    "elapsed": 17563,
+    "response": {
+      "strengths": [
+        "Facebook and Instagram exhibit exceptionally high engagement rates at 40.91% and 38.46% respectively, indicating strong audience resonance with the single post made on each platform.",
+        "LinkedIn maintains a healthy engagement rate of 4.40% with its 74 followers, suggesting the content effectively connects with its professional audience.",
+        "YouTube's older content, like \"3 Dad Habits That Change Everything\" (1,140 views), continues to attract significant viewership, highlighting the evergreen appeal of key topics."
+      ],
+      "weaknesses": [
+        "YouTube's engagement rate is relatively low at 1.27%, significantly trailing Facebook's 40.91% and Instagram's 38.46%, indicating content may not be prompting enough interaction.",
+        "The recent YouTube video from May 7th only garnered 407 views, underperforming compared to the majority of April's YouTube content, many of which exceeded 1,000 views.",
+        "Despite very high engagement rates on Facebook (40.91%) and Instagram (38.46%), only one post was made on each platform, representing a missed opportunity for broader reach and interaction."
+      ],
+      "smartActions": [
+        "Increase posting frequency on Facebook and Instagram to capitalize on their high engagement rates (40.91% and 38.46% respectively), aiming to replicate the success of the single high-performing post.",
+        "Analyze the top-performing YouTube videos from April, such as \"3 Dad Habits That Change Everything\" (1,140 views, 6 likes, 2 comments, 6 shares), to identify common themes and formats that could improve the current 1.27% engagement rate.",
+        "Repurpose successful YouTube content or create tailored posts for LinkedIn, leveraging its 4.40% engagement rate to further engage the 74 followers and expand reach within a professional context.",
+        "Develop a strategy to cross-promote new YouTube content, like the May 7th video (407 views), on higher-engagement platforms such as Facebook and Instagram to drive more initial viewership."
+      ],
+      "highlights": [
+        "Facebook and Instagram showed exceptional audience connection with engagement rates of 40.91% and 38.46%, respectively, for the content posted.",
+        "YouTube continues to grow its audience, adding 8 new followers this period to reach a total of 188 followers.",
+        "The YouTube video \"3 Dad Habits That Change Everything\" from April 10th remains a strong performer, accumulating 1,140 views, showcasing its enduring relevance."
+      ],
+      "debugContext": "## Platform Metrics (latest snapshot)\n- youtube: 188 followers 1.2745618693574083% engagement rate 8 new followers this period 45 total posts\n- facebook: 40.91% engagement rate 1 total posts\n- instagram: 38.46% engagement rate 1 total posts\n- x: 14 total posts\n- tiktok: 1.4133333333333336% engagement rate 15 total posts\n- linkedin: 74 followers 4.395604395604396% engagement rate 79 total posts\n\n## Recent Content Performance (ranked by views)\n- youtube video (2026-04-10): 1,140 views 6 likes 2 comments 6 shares — \"3 Dad Habits That Change Everything #dadlife #pare\"\n- youtube video (2026-04-20): 1,129 views 2 likes 1 shares — \"Your boss will replace you in a month, but your ki\"\n- youtube video (2026-04-19): 1,005 views 12 likes 1 comments 2 shares — \"Confidence isn’t built when things go right; it’s \"\n- youtube video (2026-04-17): 994 views 9 likes 1 comments 3 shares — \"Dads, your daughter’s confidence starts with YOU. \"\n- youtube video (2026-04-18): 874 views 6 likes — \"Being the dad who’s always there isn't easier—it’s\"\n- youtube video (2026-04-19): 813 views 5 likes — \"Leading teams and solving problems all day is exha\"\n- youtube video (2026-04-16): 763 views 15 likes 1 comments 2 shares — \"How you treat your partner postpartum is how she w\"\n- youtube video (2026-04-18): 682 views 12 likes — \"Listen up, fellas: Everything you do for your chil\"\n- youtube video (2026-04-13): 526 views 19 likes 4 comments 3 shares — \"Four non-negotiables every father should model #Pa\"\n- youtube video (2026-04-16): 518 views 21 likes 4 shares — \"The secret to happy kids? Love their mother first.\"\n- youtube video (2026-05-07): 407 views — \"Confidence takes time, repetition, and a father wh\"\n- youtube video (2026-04-11): 363 views 1 likes — \"Your daughter's first love standard starts with yo\"\n- youtube video (2026-04-21): 267 views 1 likes — \"Stay-at-home and homeschool dads: you pour into ev\"\n- youtube video (2026-04-25): 234 views 1 likes — \"Your family doesn’t just feel what you say…\"\n- youtube video (2026-04-24): 200 views — \"Your family doesn’t just feel what you say… They f\"\n\n## Audience Demographics\n- tiktok: Female: 37%, Male: 62%, Unknown: 1% | Countries: 0: [object Object]%, 1: [object Object]%, 2: [object Object]%, 3: [object Object]%, 4: [object Object]%",
+      "metrics": {
+        "total_views": 0,
+        "engagement_rate": 0,
+        "followers_gained": 33,
+        "unique_visitors": 0,
+        "total_sales": 0,
+        "total_spend": 0,
+        "total_conversions": 0,
+        "roas": 0,
+        "top_platform": "youtube"
+      },
+      "debugUpsertError": null
+    }
+  }
+]

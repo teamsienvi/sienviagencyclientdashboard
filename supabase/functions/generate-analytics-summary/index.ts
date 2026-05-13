@@ -457,7 +457,13 @@ async function collectSocialData(
     }
 
     // 3. Recent content with metrics - filter by metric collection date, NOT published_at
-    // This ensures posts from any date whose metrics were synced in this period are included
+    // Metricool always reports through "yesterday", so a client whose last sync ran 1-2 days
+    // before the window start will have period_end just outside the window.
+    // Use a 2-day buffer to never miss recent syncs.
+    const fetchStartDate = new Date(startStr);
+    fetchStartDate.setDate(fetchStartDate.getDate() - 2);
+    const fetchStartStr = fetchStartDate.toISOString().split("T")[0];
+
     const { data: recentMetrics } = await supabase
         .from("social_content_metrics")
         .select(`
@@ -469,9 +475,10 @@ async function collectSocialData(
             )
         `)
         .eq("social_content.client_id", clientId)
-        .gte("period_end", startStr)
-        .order("period_end", { ascending: false })
-        .limit(100);
+        .or(`collected_at.gte.${fetchStartStr},period_end.gte.${fetchStartStr}`)
+        .lte("period_end", endStr)
+        .order("collected_at", { ascending: false })
+        .limit(2000);
 
     // Deduplicate: keep only the freshest metric row per content item
     const contentMetricsByPost: Record<string, any> = {};
@@ -479,7 +486,7 @@ async function collectSocialData(
         const key = row.social_content?.id || row.social_content_id;
         if (!key) return;
         const existing = contentMetricsByPost[key];
-        if (!existing || (row.period_end || "") > (existing.period_end || "")) {
+        if (!existing || (row.collected_at || "") > (existing.collected_at || "")) {
             contentMetricsByPost[key] = row;
         }
     });
@@ -646,6 +653,8 @@ async function collectSocialData(
     if (content && content.length > 0) {
         content.forEach((c: any) => {
             if (!c.social_content_metrics || c.social_content_metrics.length === 0) return;
+            // Only count views from posts published within the reporting period
+            if (c.published_at && c.published_at < startStr) return;
             const m = [...c.social_content_metrics].sort((a: any, b: any) => 
                 new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
             )[0];
@@ -656,6 +665,20 @@ async function collectSocialData(
             platformStats[c.platform].views += views;
             platformStats[c.platform].engagements += engagements;
         });
+        
+        // If live metricool data wasn't available, sum up the individual post views for the total
+        if (metricsResult.total_views === 0) {
+            let sumViews = 0;
+            let sumEngagements = 0;
+            Object.values(platformStats).forEach(stat => {
+                sumViews += stat.views;
+                sumEngagements += stat.engagements;
+            });
+            metricsResult.total_views = sumViews;
+            if (sumViews > 0) {
+                metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, (sumEngagements / sumViews) * 100);
+            }
+        }
     }
 
     const topPlatformEntry = Object.entries(platformStats).sort((a, b) => b[1].views - a[1].views)[0];

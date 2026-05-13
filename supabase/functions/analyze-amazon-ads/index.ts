@@ -26,7 +26,7 @@ IMPORTANT: You MUST respond with ONLY a valid JSON object — no markdown, no co
 - Avg CPC = Ad Spend / Clicks
 
 Identify:
-- Top 5 campaigns by revenue (Sales), include their Spend, Sales, ACoS, Orders, ROAS
+- ALL campaigns by revenue (Sales), sorted highest first. Include their Spend, Sales, ACoS, Orders, ROAS. Do not limit the number — include every campaign row.
 - Top 6 search terms with highest spend but ZERO sales (these are wasting budget)
 
 Then write:
@@ -142,10 +142,10 @@ serve(async (req) => {
 
         if (clientError || !client) throw new Error(`Client not found: ${clientError?.message}`);
 
-        // Truncate if too large
-        const maxDataLength = 30000;
+        // Truncate if too large — Bulk files can be huge; prioritise the first 50k chars
+        const maxDataLength = 50000;
         const truncatedData = fileContent.length > maxDataLength
-            ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated ...]"
+            ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated for size ...]"
             : fileContent;
 
         let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
@@ -267,7 +267,23 @@ async function parseExcelToText(fileBytes: Uint8Array): Promise<string> {
         const XLSX = await import("https://esm.sh/xlsx@0.18.5");
         const workbook = XLSX.read(fileBytes, { type: "array" });
         const allSheetData: string[] = [];
-        for (const sheetName of workbook.SheetNames) {
+
+        // For Bulk Operations files (multiple sheets), only process the Campaigns sheet
+        // to avoid generating a huge payload from Keywords/Targets/SearchTerms sheets
+        const isBulkFile = workbook.SheetNames.length > 2 ||
+            workbook.SheetNames.some(n => n.toLowerCase().includes('campaign'));
+        const targetSheets = isBulkFile
+            ? workbook.SheetNames.filter(n =>
+                n.toLowerCase().includes('campaign') ||
+                n.toLowerCase() === 'sponsored products campaigns' ||
+                n.toLowerCase() === 'sponsored brands campaigns' ||
+                n.toLowerCase() === 'sponsored display campaigns'
+            )
+            : workbook.SheetNames;
+
+        const sheetsToProcess = targetSheets.length > 0 ? targetSheets : workbook.SheetNames;
+
+        for (const sheetName of sheetsToProcess) {
             const sheet = workbook.Sheets[sheetName];
             const csv = XLSX.utils.sheet_to_csv(sheet);
             if (csv.trim()) {
@@ -425,7 +441,13 @@ async function extractExactTotals(fileBytes: Uint8Array) {
                 
                 const spendKey = keys.find(k => k.toLowerCase() === 'spend' || k.toLowerCase() === 'cost');
                 const salesKey = keys.find(k => k.toLowerCase() === 'sales' || k.toLowerCase().includes('total sales') || k.toLowerCase().includes('14 day total sales'));
-                const ordersKey = keys.find(k => k.toLowerCase() === 'orders' || k.toLowerCase().includes('total orders'));
+                const ordersKey = keys.find(k =>
+                    k.toLowerCase() === 'orders' ||
+                    k.toLowerCase().includes('total orders') ||
+                    k.toLowerCase().includes('14 day total orders') ||
+                    k.toLowerCase().includes('7 day total orders') ||
+                    k.toLowerCase() === 'unit orders'
+                );
                 const clicksKey = keys.find(k => k.toLowerCase() === 'clicks');
                 const impressionsKey = keys.find(k => k.toLowerCase() === 'impressions');
 

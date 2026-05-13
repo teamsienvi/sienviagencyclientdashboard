@@ -27,8 +27,10 @@ export function useTopPerformingPosts(
         periodEndDate = endOfDay(range.end);
       }
 
-      // Fetch metrics filtered by COLLECTION date (period_end), not publish date
-      // This ensures posts synced during the reporting window appear even if published earlier
+      // Fetch metrics filtered by COLLECTION date (period_end) only.
+      // Do NOT also filter by published_at — sync batches cover multi-day windows,
+      // so a post published on day 1 of a 7-day window will have period_end = day 7.
+      // Filtering both would silently exclude valid posts at window boundaries.
       let metricsQuery = supabase
         .from("social_content_metrics")
         .select(`
@@ -51,19 +53,17 @@ export function useTopPerformingPosts(
           )
         `)
         .eq("social_content.client_id", clientId)
-        .gte("period_end", periodStartDate.toISOString().split("T")[0])
-        .lte("period_end", periodEndDate.toISOString().split("T")[0])
-        // Only show posts published within the selected reporting window
-        .gte("social_content.published_at", periodStartDate.toISOString().split("T")[0])
-        .lte("social_content.published_at", periodEndDate.toISOString().split("T")[0])
-        .limit(500);
+        .gte("collected_at", periodStartDate.toISOString().split("T")[0])
+        .limit(2000);
 
       let { data: metricsRaw, error: contentError } = await metricsQuery;
 
       if (contentError) throw contentError;
       
       if (!metricsRaw || metricsRaw.length === 0) {
-        // Fallback: query social_content directly by published_at if period_end join yielded no results
+        // Fallback: widen window to 60 days of collected_at — captures recently synced older posts
+        const wideStart = new Date(periodStartDate);
+        wideStart.setDate(wideStart.getDate() - 30);
         const { data: fallbackContent } = await supabase
           .from("social_content")
           .select(`
@@ -78,17 +78,22 @@ export function useTopPerformingPosts(
             )
           `)
           .eq("client_id", clientId)
-          .gte("published_at", periodStartDate.toISOString().split("T")[0])
+          .gte("published_at", wideStart.toISOString().split("T")[0])
           .lte("published_at", periodEndDate.toISOString().split("T")[0])
           .order('published_at', { ascending: false })
-          .limit(100);
+          .limit(200);
 
         if (fallbackContent && fallbackContent.length > 0) {
             metricsRaw = fallbackContent.flatMap((post: any) => {
                 if (!post.social_content_metrics || post.social_content_metrics.length === 0) {
                     return [];
                 }
-                const latestMetric = post.social_content_metrics.sort((a: any, b: any) => 
+                // Keep only metrics collected within or just after the reporting window
+                const relevantMetrics = post.social_content_metrics.filter((m: any) =>
+                    m.collected_at && new Date(m.collected_at) >= wideStart
+                );
+                if (relevantMetrics.length === 0) return [];
+                const latestMetric = relevantMetrics.sort((a: any, b: any) => 
                     new Date(b.collected_at).getTime() - new Date(a.collected_at).getTime()
                 )[0];
                 

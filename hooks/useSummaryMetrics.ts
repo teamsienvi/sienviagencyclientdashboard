@@ -37,8 +37,13 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 periodEndStr = now.toISOString().split("T")[0];
             }
 
-            // Primary approach: filter social_content_metrics by period_end (when data was synced)
-            // This ensures all synced posts in the sync window are counted regardless of publish date
+            // Metricool always reports through "yesterday" — if a client's last sync was 1-2 days
+            // before the window start, their period_end will be just outside the window.
+            // Use a 2-day buffer on the lower bound so we never miss recent syncs.
+            const fetchStart = new Date(start);
+            fetchStart.setDate(fetchStart.getDate() - 2);
+            const fetchStartStr = fetchStart.toISOString().split("T")[0];
+
             const { data: metricsRaw, error } = await supabase
                 .from("social_content_metrics")
                 .select(`
@@ -51,13 +56,14 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                     collected_at,
                     platform,
                     social_content!inner (
+                        id,
                         client_id,
                         platform,
                         published_at
                     )
                 `)
                 .eq("social_content.client_id", clientId)
-                .gte("period_end", periodStartStr)
+                .or(`collected_at.gte.${fetchStartStr},period_end.gte.${fetchStartStr}`)
                 .lte("period_end", periodEndStr)
                 .limit(2000);
 
@@ -90,12 +96,13 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 return computeMetrics(posts, dateRange, periodStartStr, clientId);
             }
 
-            // Deduplicate: for the same content+platform, keep only the row with the latest period_end
+            // Deduplicate: for the same content row (by social_content.id), keep only the latest metric snapshot
             const groupedByContent: Record<string, any> = {};
             metricsRaw.forEach((row: any) => {
-                const key = (row.social_content?.published_at || "") + "_" + (row.social_content?.platform || row.platform);
+                // Use the actual content row ID for dedup — published_at string is not unique across clients
+                const key = row.social_content?.id || ((row.social_content?.published_at || "") + "_" + (row.social_content?.platform || row.platform));
                 const existing = groupedByContent[key];
-                if (!existing || (row.period_end || "") > (existing.period_end || "")) {
+                if (!existing || (row.collected_at || "") > (existing.collected_at || "")) {
                     groupedByContent[key] = row;
                 }
             });
@@ -218,6 +225,8 @@ async function computeMetrics(
 
     posts.forEach(post => {
         if (!post.metrics || post.metrics.length === 0) return;
+        // Only aggregate views for content published within the reporting period
+        if (post.published_at && post.published_at < periodStartStr) return;
 
         // Use the most recently collected metric snapshot
         const sortedMetrics = [...post.metrics].sort((a: any, b: any) => {

@@ -1,0 +1,24 @@
+const fs = require('fs');
+const envFile = fs.readFileSync('.env.local', 'utf8');
+const env = {};
+envFile.split('\n').forEach(line => {
+  const match = line.match(/^([^=]+)=(.*)$/);
+  if (match) {
+    let val = match[2].trim().replace(/\r/g, '');
+    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+    env[match[1].trim()] = val;
+  }
+});
+const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const clientId = 'd6980a31-7b9c-48c6-a6c8-f4633d6bfa33'; // Serenity Scrolls
+
+async function run() {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/social_content?client_id=eq.${clientId}&platform=in.(instagram,facebook)&order=published_at.desc&limit=5`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  const contentData = await res.json();
+  console.log(contentData);
+}
+
+run().catch(console.error);
