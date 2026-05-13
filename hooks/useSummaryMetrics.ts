@@ -40,9 +40,9 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
             // Metricool always reports through "yesterday" — if a client's last sync was 1-2 days
             // before the window start, their period_end will be just outside the window.
             // Use a 2-day buffer on the lower bound so we never miss recent syncs.
-            const fetchStart = new Date(start);
-            fetchStart.setDate(fetchStart.getDate() - 2);
-            const fetchStartStr = fetchStart.toISOString().split("T")[0];
+            const fetchStartDate = new Date(periodStartStr);
+            fetchStartDate.setDate(fetchStartDate.getDate() - 2);
+            const fetchStartStr = fetchStartDate.toISOString().split("T")[0];
 
             const { data: metricsRaw, error } = await supabase
                 .from("social_content_metrics")
@@ -64,7 +64,6 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 `)
                 .eq("social_content.client_id", clientId)
                 .or(`collected_at.gte.${fetchStartStr},period_end.gte.${fetchStartStr}`)
-                .lte("period_end", periodEndStr)
                 .limit(2000);
 
         if (error || !metricsRaw || metricsRaw.length === 0) {
