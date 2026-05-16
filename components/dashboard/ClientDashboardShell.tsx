@@ -37,7 +37,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
-import { AmazonOrdersCard } from "@/components/AmazonOrdersCard";
+
 import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { WebsiteAnalyticsSection } from "@/components/analytics/WebsiteAnalyticsSection";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS, hasAmazonOrdersAnalytics } from "@/config/adPlatforms";
@@ -1142,17 +1142,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </Card>
                           </>
                         )}
+                        
+                        {hasAmazonOrdersAnalytics(client.name) && (
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/amazon-orders-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                                  <ShoppingBag className="h-5 w-5 text-orange-500" />
+                                </div>
+                                <div><CardTitle className="text-base">Amazon Orders</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-orange-500/10 text-orange-600">Active</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
-                      
-                      {hasAmazonOrdersAnalytics(client.name) && (
-                        <div className="mt-6">
-                          <AmazonOrdersCard
-                            clientId={clientId!}
-                            clientName={client.name}
-                          />
-                        </div>
-                      )}
-
                   </div>
                 ) : null}
 

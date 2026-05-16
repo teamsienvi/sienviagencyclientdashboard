@@ -71,7 +71,7 @@ export function AmazonOrdersCard({ clientId, clientName }: AmazonOrdersCardProps
     };
 
     return (
-        <Card className="col-span-4 border-2 border-primary/10 shadow-lg bg-gradient-to-br from-background to-secondary/5">
+        <Card className="border-2 border-primary/10 shadow-lg bg-gradient-to-br from-background to-secondary/5">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <div className="space-y-1">
                     <CardTitle className="text-xl flex items-center gap-2">
