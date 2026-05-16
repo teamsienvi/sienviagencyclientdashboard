@@ -24,7 +24,7 @@ const CLIENT_AD_PLATFORMS: Record<string, AdPlatform[]> = {
   "Ban Batu": ["amazon"],
   "BSUE Brow & Lash": [],
   "PlayIQ": [],
-  "Hwabelle": [],
+  "Hwabelle": ["amazon"],
   "The Haven At Deer Park": [],
   "Cissie Pryor Presents": [],
   "Father Figure Formula": [],
