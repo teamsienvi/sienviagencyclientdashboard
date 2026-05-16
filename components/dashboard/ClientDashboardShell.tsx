@@ -40,7 +40,7 @@ import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { AmazonOrdersCard } from "@/components/AmazonOrdersCard";
 import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { WebsiteAnalyticsSection } from "@/components/analytics/WebsiteAnalyticsSection";
-import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
+import { getClientAdPlatforms, AD_PLATFORM_LABELS, hasAmazonOrdersAnalytics } from "@/config/adPlatforms";
 import { Globe, Share2, Star } from "lucide-react";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -558,7 +558,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "Hwabelle" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
-    if (client?.name && getClientAdPlatforms(client.name).includes('amazon')) return true;
+    if (client?.name && hasAmazonOrdersAnalytics(client.name)) return true;
     return false;
   }, [client?.name, metricoolPlatforms, connectedAccounts]);
 
@@ -1144,7 +1144,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                       </div>
                       
-                      {getClientAdPlatforms(client.name).includes('amazon') && (
+                      {hasAmazonOrdersAnalytics(client.name) && (
                         <div className="mt-6">
                           <AmazonOrdersCard
                             clientId={clientId!}
