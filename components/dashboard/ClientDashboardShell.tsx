@@ -37,6 +37,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
+import { AmazonOrdersCard } from "@/components/AmazonOrdersCard";
 import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { WebsiteAnalyticsSection } from "@/components/analytics/WebsiteAnalyticsSection";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
@@ -1143,6 +1144,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         )}
                       </div>
                       
+                      {getClientAdPlatforms(client.name).includes('amazon') && (
+                        <div className="mt-6">
+                          <AmazonOrdersCard
+                            clientId={clientId!}
+                            clientName={client.name}
+                          />
+                        </div>
+                      )}
 
                   </div>
                 ) : null}
