@@ -40,3 +40,19 @@ const DEFAULT_AD_PLATFORMS: AdPlatform[] = ["meta", "google", "tiktok", "amazon"
 export function getClientAdPlatforms(clientName: string): AdPlatform[] {
   return CLIENT_AD_PLATFORMS[clientName] || DEFAULT_AD_PLATFORMS;
 }
+
+/**
+ * Clients with a live Amazon SP-API orders integration (sync-amazon-orders edge function).
+ * This is SEPARATE from Amazon Ads — Ban Batu has Amazon Ads but NOT SP-API orders access.
+ */
+const AMAZON_ORDERS_CLIENTS = new Set([
+  "Serenity Scrolls",
+  "Hwabelle",
+]);
+
+/**
+ * Returns true if this client has Amazon SP-API orders analytics enabled.
+ */
+export function hasAmazonOrdersAnalytics(clientName: string): boolean {
+  return AMAZON_ORDERS_CLIENTS.has(clientName);
+}

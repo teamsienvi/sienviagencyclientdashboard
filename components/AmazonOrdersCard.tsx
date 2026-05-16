@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@/lib/supabase/browser";
 import { ShoppingBag, TrendingUp, Package, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -12,7 +12,7 @@ interface AmazonOrdersCardProps {
 }
 
 export function AmazonOrdersCard({ clientId, clientName }: AmazonOrdersCardProps) {
-    const supabase = createClientComponentClient();
+    const supabase = createClient();
     const { toast } = useToast();
     const [isSyncing, setIsSyncing] = useState(false);
 
