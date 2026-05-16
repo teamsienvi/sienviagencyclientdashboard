@@ -61,16 +61,34 @@ serve(async (req) => {
                 // waiting for it to complete, and downloading the document.
                 // For this MVP, we scaffold the endpoint integration.
                 const marketplaceId = "ATVPDKIKX0DER"; // US Marketplace
+                const yesterday = new Date(Date.now() - 86400000).toISOString();
+                const endpoint = `https://sellingpartnerapi-na.amazon.com/orders/v0/orders?MarketplaceIds=${marketplaceId}&CreatedAfter=${yesterday}`;
                 
-                // Example of getting orders directly if you don't use Reports API
-                // const yesterday = new Date(Date.now() - 86400000).toISOString();
-                // const endpoint = `https://sellingpartnerapi-na.amazon.com/orders/v0/orders?MarketplaceIds=${marketplaceId}&CreatedAfter=${yesterday}`;
-                
-                // For demonstration, we assume we fetch or calculate daily metrics
-                // This would be replaced with actual Report parsing in production
-                const mockDailyRevenue = Math.floor(Math.random() * 500) + 100;
-                const mockUnitsOrdered = Math.floor(Math.random() * 20) + 1;
-                const mockTotalOrders = Math.floor(Math.random() * 15) + 1;
+                console.log(`Fetching orders from SP-API for client ${cred.client_id}...`);
+                const ordersRes = await fetch(endpoint, {
+                    headers: {
+                        "x-amz-access-token": accessToken,
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                let totalOrders = 0;
+                let dailyRevenue = 0;
+
+                if (ordersRes.ok) {
+                    const ordersData = await ordersRes.json();
+                    const orders = ordersData.payload?.Orders || [];
+                    totalOrders = orders.length;
+                    
+                    // Simple revenue estimation from OrderTotal if available
+                    for (const order of orders) {
+                        if (order.OrderTotal && order.OrderTotal.Amount) {
+                            dailyRevenue += parseFloat(order.OrderTotal.Amount);
+                        }
+                    }
+                } else {
+                    console.error(`Failed to fetch from SP-API: ${await ordersRes.text()}`);
+                }
                 
                 const today = new Date().toISOString().split('T')[0];
 
@@ -79,11 +97,12 @@ serve(async (req) => {
                     .upsert({
                         client_id: cred.client_id,
                         date: today,
-                        ordered_product_sales_amount: mockDailyRevenue,
+                        ordered_product_sales_amount: dailyRevenue,
                         ordered_product_sales_currency: "USD",
-                        units_ordered: mockUnitsOrdered,
-                        total_order_items: mockTotalOrders,
-                        page_views: Math.floor(Math.random() * 1000)
+                        units_ordered: totalOrders, // Assuming 1 unit per order for now
+                        total_order_items: totalOrders,
+                        page_views: 0
+
                     }, { onConflict: 'client_id, date' });
 
                 if (upsertError) {
