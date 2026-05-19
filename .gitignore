@@ -27,4 +27,21 @@ dist-ssr
 .vercel
 .env*.local
 .next
-tmp_*
+
+# Scratch / one-off test scripts (may contain credentials)
+scratch/
+tmp_*.mjs
+tmp_*.js
+tmp_*.cjs
+test_*.mjs
+test_*.js
+test_*.cjs
+test-*.mjs
+test-*.js
+test-*.cjs
+insert_*.mjs
+check_*.mjs
+seed-*.cjs
+seed-*.mjs
+remove_*.mjs
+setup_*.sql

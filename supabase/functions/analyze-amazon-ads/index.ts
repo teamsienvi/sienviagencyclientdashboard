@@ -83,53 +83,20 @@ serve(async (req) => {
         const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 
-        if (!openaiApiKey) {
-            throw new Error("OPENAI_API_KEY is not configured.");
-        }
+        if (!openaiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-        // Parse multipart form data
-        const contentType = req.headers.get("content-type") || "";
-        let clientId: string;
-        let fileContent: string;
-        let fileName: string;
-        let reportPeriod: string;
-        let fileBytes: Uint8Array | null = null;
-
-        if (contentType.includes("multipart/form-data")) {
-            const formData = await req.formData();
-            clientId = formData.get("clientId") as string;
-            reportPeriod = formData.get("reportPeriod") as string || new Date().toISOString().substring(0, 7); // Default to YYYY-MM
-            const file = formData.get("file") as File;
-
-            if (!file) {
-                throw new Error("No file uploaded. Please upload an Excel (.xlsx) or CSV (.csv) Amazon Ads report.");
-            }
-
-            fileName = file.name;
-            const fileBuffer = await file.arrayBuffer();
-            fileBytes = new Uint8Array(fileBuffer);
-
-            if (fileName.endsWith(".csv")) {
-                fileContent = new TextDecoder().decode(fileBytes);
-            } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
-                fileContent = await parseExcelToText(fileBytes);
-            } else {
-                throw new Error("Unsupported file format. Please upload .xlsx or .csv files.");
-            }
-        } else {
-            const body = await req.json();
-            clientId = body.clientId;
-            fileContent = body.rawData || "";
-            fileName = body.fileName || "manual-input";
-            reportPeriod = body.reportPeriod || new Date().toISOString().substring(0, 7);
-        }
+        // All parsing happens client-side — we only receive JSON here
+        const body = await req.json();
+        const clientId: string = body.clientId;
+        const fileContent: string = body.rawData || "";
+        const fileName: string = body.fileName || "report";
+        const reportPeriod: string = body.reportPeriod || new Date().toISOString().substring(0, 7);
+        const exactTotals = body.exactTotals || { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
 
         if (!clientId) throw new Error("clientId is required");
-        if (!fileContent || fileContent.trim().length < 20) {
-            throw new Error("File appears empty or too small.");
-        }
+        if (!fileContent || fileContent.trim().length < 20) throw new Error("File appears empty or too small.");
 
         console.log(`Analyzing Amazon Ads for client ${clientId}, file: ${fileName}`);
 
@@ -142,20 +109,15 @@ serve(async (req) => {
 
         if (clientError || !client) throw new Error(`Client not found: ${clientError?.message}`);
 
-        // Truncate if too large — Bulk files can be huge; prioritise the first 50k chars
+        // Truncate if still too large
         const maxDataLength = 50000;
         const truncatedData = fileContent.length > maxDataLength
             ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated for size ...]"
             : fileContent;
 
-        let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
-        if (contentType.includes("multipart/form-data") && fileBytes) {
-            exactTotals = await extractExactTotals(fileBytes);
-        }
-
         const preCalculatedContext = `
 ${"─".repeat(60)}
-PRE-CALCULATED ACCURATE TOTALS (Use these EXACTLY for the top-level KPIs, do not sum the truncated rows):
+PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
 - Ad Spend: ${exactTotals.spend.toFixed(2)}
 - Ad Sales: ${exactTotals.sales.toFixed(2)}
 - Orders: ${exactTotals.orders}
@@ -164,29 +126,22 @@ PRE-CALCULATED ACCURATE TOTALS (Use these EXACTLY for the top-level KPIs, do not
 ${"─".repeat(60)}
 `;
 
-        const userMessage = `${AMAZON_PROMPT}\nClient: ${client.name}\nFile: ${fileName}\n\n${preCalculatedContext}\n\n${"─".repeat(60)}\nAMAZON ADS DATA (Sample/Truncated for Top Campaigns):\n${truncatedData}\n${"─".repeat(60)}`;
+        const userMessage = `${AMAZON_PROMPT}\nClient: ${client.name}\nFile: ${fileName}\n\n${preCalculatedContext}\n\n${"─".repeat(60)}\nAMAZON ADS DATA:\n${truncatedData}\n${"─".repeat(60)}`;
 
-        // Calculate simple hash for file
+        // Upsert pending
         const encoder = new TextEncoder();
-        const dataBuffer = encoder.encode(fileContent);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const fileHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(fileContent));
+        const fileHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
-        // 1. Upsert Pending Status
-        const { error: upsertError } = await supabase
-            .from("amazon_ads_reports")
-            .upsert({
-                client_id: clientId,
-                report_period: reportPeriod,
-                source_file_name: fileName,
-                source_file_hash: fileHash,
-                generation_status: 'pending'
-            }, { onConflict: 'client_id, report_period' });
+        const { error: upsertError } = await supabase.from("amazon_ads_reports").upsert({
+            client_id: clientId,
+            report_period: reportPeriod,
+            source_file_name: fileName,
+            source_file_hash: fileHash,
+            generation_status: 'pending'
+        }, { onConflict: 'client_id, report_period' });
 
-        if (upsertError) {
-            console.error("Failed to upsert pending status:", upsertError);
-        }
+        if (upsertError) console.error("Failed to upsert pending status:", upsertError);
 
         // Execute analysis via Chat Completions (single call, no polling, fast)
         console.log("Calling OpenAI Chat Completions for Amazon Ads analysis...");
@@ -225,42 +180,6 @@ ${"─".repeat(60)}
         );
     }
 });
-
-// ─── Excel Parser ─────────────────────────────────────────────────────────────
-async function parseExcelToText(fileBytes: Uint8Array): Promise<string> {
-    try {
-        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
-        const workbook = XLSX.read(fileBytes, { type: "array" });
-        const allSheetData: string[] = [];
-
-        // For Bulk Operations files (multiple sheets), only process the Campaigns sheet
-        // to avoid generating a huge payload from Keywords/Targets/SearchTerms sheets
-        const isBulkFile = workbook.SheetNames.length > 2 ||
-            workbook.SheetNames.some(n => n.toLowerCase().includes('campaign'));
-        const targetSheets = isBulkFile
-            ? workbook.SheetNames.filter(n =>
-                n.toLowerCase().includes('campaign') ||
-                n.toLowerCase() === 'sponsored products campaigns' ||
-                n.toLowerCase() === 'sponsored brands campaigns' ||
-                n.toLowerCase() === 'sponsored display campaigns'
-            )
-            : workbook.SheetNames;
-
-        const sheetsToProcess = targetSheets.length > 0 ? targetSheets : workbook.SheetNames;
-
-        for (const sheetName of sheetsToProcess) {
-            const sheet = workbook.Sheets[sheetName];
-            const csv = XLSX.utils.sheet_to_csv(sheet);
-            if (csv.trim()) {
-                allSheetData.push(`--- Sheet: ${sheetName} ---\n${csv}`);
-            }
-        }
-        return allSheetData.join("\n\n");
-    } catch (err) {
-        console.error("Excel parse error:", err);
-        return new TextDecoder().decode(fileBytes);
-    }
-}
 
 // ─── Chat Completions API (fast, single call, no polling) ────────────────────
 async function callChatCompletion(apiKey: string, userMessage: string): Promise<any> {
@@ -346,58 +265,3 @@ function parseAmazonResponse(text: string): any {
     };
 }
 
-// ─── Totals Extractor ─────────────────────────────────────────────────────────
-async function extractExactTotals(fileBytes: Uint8Array) {
-    let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
-    try {
-        const XLSX = await import("https://esm.sh/xlsx@0.18.5");
-        const workbook = XLSX.read(fileBytes, { type: "array" });
-        
-        const isBulkFile = workbook.SheetNames.length > 1 && workbook.SheetNames.some(name => name.includes("Campaigns"));
-
-        for (const sheetName of workbook.SheetNames) {
-            // If it's a Bulk Operations file, only process sheets with "Campaigns" in the name to avoid double counting from Search Term reports
-            if (isBulkFile && !sheetName.toLowerCase().includes("campaigns")) {
-                continue;
-            }
-
-            const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet) as any[];
-            
-            if (rows.length > 0) {
-                // Find column keys
-                const sampleRow = rows[0];
-                const keys = Object.keys(sampleRow).map(k => k.trim());
-                const hasEntity = keys.some(k => k.toLowerCase() === "entity");
-                
-                const spendKey = keys.find(k => k.toLowerCase() === 'spend' || k.toLowerCase() === 'cost');
-                const salesKey = keys.find(k => k.toLowerCase() === 'sales' || k.toLowerCase().includes('total sales') || k.toLowerCase().includes('14 day total sales'));
-                const ordersKey = keys.find(k =>
-                    k.toLowerCase() === 'orders' ||
-                    k.toLowerCase().includes('total orders') ||
-                    k.toLowerCase().includes('14 day total orders') ||
-                    k.toLowerCase().includes('7 day total orders') ||
-                    k.toLowerCase() === 'unit orders'
-                );
-                const clicksKey = keys.find(k => k.toLowerCase() === 'clicks');
-                const impressionsKey = keys.find(k => k.toLowerCase() === 'impressions');
-
-                for (const row of rows) {
-                    // Bulk Operations logic: if Entity column exists, ONLY sum 'Campaign' rows
-                    if (hasEntity && row['Entity'] !== 'Campaign') {
-                        continue;
-                    }
-
-                    if (spendKey && row[spendKey] && !isNaN(parseFloat(row[spendKey]))) exactTotals.spend += parseFloat(row[spendKey]);
-                    if (salesKey && row[salesKey] && !isNaN(parseFloat(row[salesKey]))) exactTotals.sales += parseFloat(row[salesKey]);
-                    if (ordersKey && row[ordersKey] && !isNaN(parseFloat(row[ordersKey]))) exactTotals.orders += parseFloat(row[ordersKey]);
-                    if (clicksKey && row[clicksKey] && !isNaN(parseFloat(row[clicksKey]))) exactTotals.clicks += parseFloat(row[clicksKey]);
-                    if (impressionsKey && row[impressionsKey] && !isNaN(parseFloat(row[impressionsKey]))) exactTotals.impressions += parseFloat(row[impressionsKey]);
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Failed to extract exact totals:", err);
-    }
-    return exactTotals;
-}

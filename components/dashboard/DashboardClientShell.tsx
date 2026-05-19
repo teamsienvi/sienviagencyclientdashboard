@@ -5,7 +5,12 @@ import { Header } from "@/components/Header";
 import { ClientCard } from "@/components/ClientCard";
 import { DashboardStats } from "@/components/DashboardStats";
 import { ClientSearch } from "@/components/ClientSearch";
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { clientsData, type Client } from "@/data/clients";
+import { WeeklyReviewModal } from "@/components/WeeklyReviewModal";
+import { Button } from "@/components/ui/button";
+import { ClipboardList } from "lucide-react";
 
 type DbClient = { id: string; name: string; supabase_url: string | null };
 type MetricoolConfig = { client_id: string; platform: string };
@@ -17,6 +22,7 @@ interface DashboardClientShellProps {
 
 export default function DashboardClientShell({ dbClients, metricoolConfigs }: DashboardClientShellProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const clientIdMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -57,6 +63,7 @@ export default function DashboardClientShell({ dbClients, metricoolConfigs }: Da
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
       <Header />
+      <WeeklyReviewModal open={reviewOpen} onClose={() => setReviewOpen(false)} />
       
       <main className="container mx-auto px-6 py-12 max-w-[1400px]">
         <div className="mb-10 animate-slide-up flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-border/40">
@@ -64,8 +71,26 @@ export default function DashboardClientShell({ dbClients, metricoolConfigs }: Da
             <h2 className="text-3xl sm:text-4xl font-heading font-bold text-foreground mb-3 tracking-tight">Agency Command Center</h2>
             <p className="text-muted-foreground text-base sm:text-lg max-w-2xl">Monitor active client portfolios, track generative analytics insights, and manage weekly reporting schedules.</p>
           </div>
-          <div className="w-full md:w-auto md:min-w-[320px]">
-            <ClientSearch value={searchQuery} onChange={setSearchQuery} />
+          <div className="flex flex-row items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReviewOpen(true)}
+              className="gap-2 h-9 flex-shrink-0 font-medium border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all"
+            >
+              <ClipboardList className="w-4 h-4 text-primary" />
+              Weekly Review
+            </Button>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search clients..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-9 w-52 bg-card border-border focus:border-primary/50 transition-all duration-300"
+              />
+            </div>
           </div>
         </div>
         
