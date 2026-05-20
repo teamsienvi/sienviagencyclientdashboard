@@ -559,6 +559,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && hasAmazonOrdersAnalytics(client.name)) return true;
+    // Show Advertising section if client has Amazon Ads (PDF upload) configured
+    if (client?.name && getClientAdPlatforms(client.name).includes('amazon')) return true;
     return false;
   }, [client?.name, metricoolPlatforms, connectedAccounts]);
 
