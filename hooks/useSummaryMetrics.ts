@@ -279,11 +279,10 @@ async function computeMetrics(
             totalViews += postViews;
             totalEngagements += postEngagements;
 
-            // Place in timeline by collection date (the day this activity was synced)
-            const collectedDate = latest.collected_at ? latest.collected_at.split("T")[0] : null;
-            if (collectedDate && timelineMap[collectedDate]) {
-                timelineMap[collectedDate].views += postViews;
-                timelineMap[collectedDate].engagement += postEngagements;
+            // Place in timeline by publish date (closest proxy for when impressions occurred)
+            if (postDate && timelineMap[postDate]) {
+                timelineMap[postDate].views += postViews;
+                timelineMap[postDate].engagement += postEngagements;
             }
         }
     });
