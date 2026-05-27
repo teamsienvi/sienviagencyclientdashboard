@@ -217,11 +217,13 @@ async function computeMetrics(
     const pMap: Record<string, { views: number; engagements: number }> = {};
     const timelineMap: Record<string, { date: string; views: number; engagement: number }> = {};
 
+    // Use UTC midnight dates to ensure timezone-agnostic matching with DB timestamps
+    const endDate = new Date(periodEndStr + "T00:00:00Z");
     for (let i = days; i >= 0; i--) {
-        const d = new Date();
+        const d = new Date(endDate);
         d.setDate(d.getDate() - i);
         const dStr = d.toISOString().split("T")[0];
-        const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
         timelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0 };
     }
 
