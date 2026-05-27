@@ -230,27 +230,61 @@ async function computeMetrics(
         
         const postDate = post.published_at ? post.published_at.split("T")[0] : null;
 
-        // Use the most recently collected metric snapshot
+        // Sort metrics from oldest to newest by collected_at
         const sortedMetrics = [...post.metrics].sort((a: any, b: any) => {
-            return new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime();
+            return new Date(a.collected_at || 0).getTime() - new Date(b.collected_at || 0).getTime();
         });
 
-        const m = sortedMetrics[0];
-        const postViews = Math.max(m.views || 0, m.impressions || 0);
-        const postEngagements = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+        // Filter points inside the selected period
+        const periodPoints = sortedMetrics.filter((m: any) => {
+            const date = (m.collected_at || m.period_end || "").split("T")[0];
+            return date >= periodStartStr && date <= periodEndStr;
+        });
 
-        const plat = post.platform || "unknown";
-        if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0 };
+        // Filter points before the selected period
+        const beforePoints = sortedMetrics.filter((m: any) => {
+            const date = (m.collected_at || m.period_end || "").split("T")[0];
+            return date < periodStartStr;
+        });
 
-        pMap[plat].views += postViews;
-        pMap[plat].engagements += postEngagements;
-        totalViews += postViews;
-        totalEngagements += postEngagements;
+        if (periodPoints.length > 0) {
+            const latest = periodPoints[periodPoints.length - 1];
+            const latestViews = Math.max(latest.views || 0, latest.impressions || 0);
+            const latestEngagements = (latest.likes || 0) + (latest.comments || 0) + (latest.shares || 0);
 
-        // Place in timeline by publish date (closest proxy for when impressions occurred)
-        if (postDate && timelineMap[postDate]) {
-            timelineMap[postDate].views += postViews;
-            timelineMap[postDate].engagement += postEngagements;
+            // Baseline is the last known count before the period,
+            // or if none exists and the post was published before the period, the first count inside the period.
+            // If the post was published during the period, its baseline is 0.
+            const publishedDuringPeriod = postDate && postDate >= periodStartStr && postDate <= periodEndStr;
+
+            let baselineViews = 0;
+            let baselineEngagements = 0;
+
+            if (!publishedDuringPeriod) {
+                const baseline = beforePoints.length > 0
+                    ? beforePoints[beforePoints.length - 1]
+                    : periodPoints[0];
+                baselineViews = Math.max(baseline.views || 0, baseline.impressions || 0);
+                baselineEngagements = (baseline.likes || 0) + (baseline.comments || 0) + (baseline.shares || 0);
+            }
+
+            const postViews = Math.max(0, latestViews - baselineViews);
+            const postEngagements = Math.max(0, latestEngagements - baselineEngagements);
+
+            const plat = post.platform || "unknown";
+            if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0 };
+
+            pMap[plat].views += postViews;
+            pMap[plat].engagements += postEngagements;
+            totalViews += postViews;
+            totalEngagements += postEngagements;
+
+            // Place in timeline by collection date (the day this activity was synced)
+            const collectedDate = latest.collected_at ? latest.collected_at.split("T")[0] : null;
+            if (collectedDate && timelineMap[collectedDate]) {
+                timelineMap[collectedDate].views += postViews;
+                timelineMap[collectedDate].engagement += postEngagements;
+            }
         }
     });
 
