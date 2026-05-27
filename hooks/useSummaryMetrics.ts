@@ -228,7 +228,11 @@ async function computeMetrics(
 
     posts.forEach(post => {
         if (!post.metrics || post.metrics.length === 0) return;
-        // Count views for all active content during the reporting period
+        
+        // Filter out content published outside the reporting period
+        const postDate = post.published_at ? post.published_at.split("T")[0] : null;
+        const isWithinPeriod = postDate && postDate >= periodStartStr && postDate <= periodEndStr;
+        if (!isWithinPeriod) return;
 
         // Use the most recently collected metric snapshot
         const sortedMetrics = [...post.metrics].sort((a: any, b: any) => {
@@ -248,7 +252,6 @@ async function computeMetrics(
         totalEngagements += postEngagements;
 
         // Place in timeline by publish date (closest proxy for when impressions occurred)
-        const postDate = post.published_at ? post.published_at.split("T")[0] : null;
         if (postDate && timelineMap[postDate]) {
             timelineMap[postDate].views += postViews;
             timelineMap[postDate].engagement += postEngagements;
