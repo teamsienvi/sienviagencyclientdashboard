@@ -315,7 +315,7 @@ serve(async (req) => {
       // Fetch followers from Metricool followers timeline endpoint
       let followers: number | null = null;
       try {
-        const followersUrl = new URL(`${METRICOOL_BASE_URL}/api/stats/timeling/tiktokFollowers`);
+        const followersUrl = new URL(`${METRICOOL_BASE_URL}/api/stats/timeline/tiktokFollowers`);
         followersUrl.searchParams.set("userId", userId);
         if (blogId) {
           followersUrl.searchParams.set("blog_id", blogId);

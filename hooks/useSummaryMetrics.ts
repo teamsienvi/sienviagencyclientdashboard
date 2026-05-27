@@ -63,7 +63,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                     )
                 `)
                 .eq("social_content.client_id", clientId)
-                .or(`collected_at.gte.${fetchStartStr},period_end.gte.${fetchStartStr}`)
+                .order("collected_at", { ascending: false })
                 .limit(2000);
 
         if (error || !metricsRaw || metricsRaw.length === 0) {
@@ -84,7 +84,6 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                         )
                     `)
                     .eq("client_id", clientId)
-                    .gte("published_at", periodStartStr)
                     .limit(2000);
 
                 const posts = (fallbackContent || []).map(post => ({
@@ -229,10 +228,7 @@ async function computeMetrics(
     posts.forEach(post => {
         if (!post.metrics || post.metrics.length === 0) return;
         
-        // Filter out content published outside the reporting period
         const postDate = post.published_at ? post.published_at.split("T")[0] : null;
-        const isWithinPeriod = postDate && postDate >= periodStartStr && postDate <= periodEndStr;
-        if (!isWithinPeriod) return;
 
         // Use the most recently collected metric snapshot
         const sortedMetrics = [...post.metrics].sort((a: any, b: any) => {

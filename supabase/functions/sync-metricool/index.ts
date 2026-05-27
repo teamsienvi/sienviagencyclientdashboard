@@ -135,7 +135,7 @@ serve(async (req) => {
     console.log("Using blogId:", targetBlogId, "Platform connected:", platformConnected);
 
     // Step 2: Fetch TikTok account stats using discovered endpoints
-    // Based on network inspection: /api/v2/analytics/stats/tiktok and /api/stats/timeling/tiktokFollowers
+    // Based on network inspection: /api/v2/analytics/stats/tiktok and /api/stats/timeline/tiktokFollowers
 
     if (platform.toLowerCase() === "tiktok") {
       // Endpoint 1: /api/v2/analytics/stats/tiktok - Main analytics stats (use blog_id with underscore)
@@ -164,8 +164,8 @@ serve(async (req) => {
         console.error("Error fetching analytics stats:", e);
       }
 
-      // Endpoint 2: /api/stats/timeling/tiktokFollowers - Follower timeline (use start/end params)
-      const followersUrl = `${baseUrl}/stats/timeling/tiktokFollowers?userId=${userId}&blog_id=${targetBlogId}&start=${startDate}&end=${endDate}`;
+      // Endpoint 2: /api/stats/timeline/tiktokFollowers - Follower timeline (use start/end params)
+      const followersUrl = `${baseUrl}/stats/timeline/tiktokFollowers?userId=${userId}&blog_id=${targetBlogId}&start=${startDate}&end=${endDate}`;
       console.log("Fetching TikTok followers timeline:", followersUrl);
 
       try {
