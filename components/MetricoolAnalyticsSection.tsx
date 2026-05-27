@@ -138,6 +138,20 @@ export const MetricoolAnalyticsSection = ({
   const [demographics, setDemographics] = useState<DemographicsData | null>(null);
   const [demographicsLoading, setDemographicsLoading] = useState(false);
 
+  // Refetch all queries when database sync successfully completes
+  useEffect(() => {
+    if (syncState.lastSuccessAt) {
+      console.log("Manual sync success detected, invalidating cache to refresh UI...");
+      queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
+      queryClient.invalidateQueries({ queryKey: ["metricool-content", clientId, platform] });
+      queryClient.invalidateQueries({ queryKey: ["metricool-auto-posts", clientId, platform] });
+      queryClient.invalidateQueries({ queryKey: ["metricool-live-followers", clientId, platform] });
+      queryClient.invalidateQueries({ queryKey: ["metricool-linkedin-live-followers", clientId, platform] });
+      queryClient.invalidateQueries({ queryKey: ["persisted-demographics", clientId, platform] });
+      setLastSyncTime(new Date(syncState.lastSuccessAt));
+    }
+  }, [syncState.lastSuccessAt, clientId, platform, queryClient]);
+
   // Date range state - default to "7d" which uses the standardized reporting week
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();

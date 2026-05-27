@@ -92,7 +92,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                     published_at: post.published_at,
                     metrics: post.social_content_metrics || []
                 }));
-                return computeMetrics(posts, dateRange, periodStartStr, clientId);
+                return computeMetrics(posts, dateRange, periodStartStr, periodEndStr, clientId);
             }
 
             // Deduplicate: for the same content row (by social_content.id), keep only the latest metric snapshot
@@ -112,7 +112,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 metrics: [row]
             }));
 
-            return computeMetrics(normalizedPosts, dateRange, periodStartStr, clientId);
+            return computeMetrics(normalizedPosts, dateRange, periodStartStr, periodEndStr, clientId);
         },
         enabled: !!clientId,
         staleTime: 5 * 60 * 1000, // 5 min
@@ -127,6 +127,7 @@ async function computeMetrics(
     posts: Array<{ platform: string; published_at: string | null; metrics: any[] }>,
     dateRange: string,
     periodStartStr: string,
+    periodEndStr: string,
     clientId: string
 ) {
     const days = dateRange === "30d" ? 30 : dateRange === "60d" ? 60 : 7;
@@ -227,8 +228,11 @@ async function computeMetrics(
 
     posts.forEach(post => {
         if (!post.metrics || post.metrics.length === 0) return;
-        // Only aggregate views for content published within the reporting period
-        if (post.published_at && post.published_at < periodStartStr) return;
+        
+        // Filter out content published outside the reporting period
+        const postDate = post.published_at ? post.published_at.split("T")[0] : null;
+        const isWithinPeriod = postDate && postDate >= periodStartStr && postDate <= periodEndStr;
+        if (!isWithinPeriod) return;
 
         // Use the most recently collected metric snapshot
         const sortedMetrics = [...post.metrics].sort((a: any, b: any) => {
@@ -248,7 +252,6 @@ async function computeMetrics(
         totalEngagements += postEngagements;
 
         // Place in timeline by publish date (closest proxy for when impressions occurred)
-        const postDate = post.published_at ? post.published_at.split("T")[0] : null;
         if (postDate && timelineMap[postDate]) {
             timelineMap[postDate].views += postViews;
             timelineMap[postDate].engagement += postEngagements;

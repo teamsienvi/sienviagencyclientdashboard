@@ -74,11 +74,6 @@ serve(async (req) => {
             lockMinutes = 10;
             workerFn = "generate-analytics-summary";
             workerPayload = { clientId, type: "website" };
-        } else if ((module === 'metricool' && platform !== 'ads') || platform === 'linkedin') {
-            lockMinutes = 5;
-            workerFn = "sync-metricool";
-            // sync-metricool requires platform to look up the correct Metricool config
-            workerPayload = { clientId, platform };
         } else if (platform === 'tiktok') {
             lockMinutes = 5;
             // Get Metricool config
@@ -108,7 +103,7 @@ serve(async (req) => {
                 workerFn = "sync-metricool";
                 workerPayload = { clientId, platform };
             }
-        } else if (module === 'meta' || platform === 'instagram' || platform === 'facebook') {
+        } else if (platform === 'instagram' || platform === 'facebook' || module === 'meta') {
             lockMinutes = 5;
             // Prefer Metricool config if available (avoids direct OAuth dependency)
             const { data: metaMetricoolConfig } = await supabase
@@ -120,14 +115,19 @@ serve(async (req) => {
                 .maybeSingle();
 
             if (metaMetricoolConfig) {
-                workerFn = "sync-metricool";
-                workerPayload = { clientId, platform };
-                console.log(`[orchestrate-sync] ${platform} has Metricool config — routing to sync-metricool`);
+                workerFn = platform === 'facebook' ? "sync-metricool-facebook" : "sync-metricool-instagram";
+                workerPayload = { clientId };
+                console.log(`[orchestrate-sync] ${platform} has Metricool config — routing to ${workerFn}`);
             } else {
                 workerFn = "sync-meta";
                 workerPayload = { clientId };
                 console.log(`[orchestrate-sync] ${platform} has no Metricool config — falling back to sync-meta (OAuth)`);
             }
+        } else if ((module === 'metricool' && platform !== 'ads') || platform === 'linkedin') {
+            lockMinutes = 5;
+            workerFn = "sync-metricool";
+            // sync-metricool requires platform to look up the correct Metricool config
+            workerPayload = { clientId, platform };
         } else if (platform === 'x') {
             lockMinutes = 5;
             // Check if client has Metricool config for X — if so, use sync-metricool

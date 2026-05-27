@@ -499,6 +499,7 @@ async function collectSocialData(
     if (content && content.length > 0) {
         const withMetrics = content
             .filter((c: any) => isPlatformActive(c.platform) && c.social_content_metrics && c.social_content_metrics.length > 0)
+            .filter((c: any) => c.published_at && c.published_at >= startStr && c.published_at <= endStr)
             .map((c: any) => {
                 const sorted = [...c.social_content_metrics].sort((a: any, b: any) =>
                     new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
@@ -653,8 +654,7 @@ async function collectSocialData(
     if (content && content.length > 0) {
         content.forEach((c: any) => {
             if (!c.social_content_metrics || c.social_content_metrics.length === 0) return;
-            // Only count views from posts published within the reporting period
-            if (c.published_at && c.published_at < startStr) return;
+            // Count views for all active content during the reporting period
             const m = [...c.social_content_metrics].sort((a: any, b: any) => 
                 new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
             )[0];
