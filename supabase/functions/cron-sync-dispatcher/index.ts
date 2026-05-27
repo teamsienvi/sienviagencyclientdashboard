@@ -35,6 +35,7 @@ serve(async (req) => {
                 clients!inner(is_active)
             `)
             .eq("clients.is_active", true)
+            .lt("retry_count", 3)
             .or(`job_locked_until.is.null,job_locked_until.lt.${now}`)
             .or(`and(status.eq.ready,or(stale_after_at.lt.${now},stale_after_at.is.null)),and(status.eq.failed,next_retry_at.lt.${now})`)
             .limit(15); // Small conservative batch size as requested

@@ -310,7 +310,7 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
 
   useEffect(() => {
     fetchData();
-  }, [clientId, dateRangePreset, customDateRange]);
+  }, [clientId, dateRangePreset, customDateRange, instagramSync.lastSuccessAt, facebookSync.lastSuccessAt]);
 
   // Listen for bulk sync to show/hide banner and auto-refresh (works across tabs)
   useEffect(() => {
