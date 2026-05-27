@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserClients } from "@/hooks/useClientAccess";
@@ -564,6 +564,17 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     return false;
   }, [client?.name, metricoolPlatforms, connectedAccounts]);
 
+  // Check if client has Sienvi Sender email campaigns active
+  const hasEmailCampaigns = useMemo(() => {
+    if (!client?.name) return false;
+    const senderClients = [
+      "Billionaire Brother", "Serenity Scrolls", "Father Figure Formula", "PlayIQ", "CheerCPT", "Snarky Humans", "The Billionaire Brother",
+      "BlingyBag", "BSUE Brow & Lash", "Cissie Pryor Presents", "Luxxe Auto Accessories", "OxiSure Tech", "Snarky Pets", 
+      "The Haven At Deer Park", "Snarky A$$ Humans", "Sienvi Agency", "Ban Batu", "Hwabelle"
+    ];
+    return senderClients.some(name => client.name.toLowerCase().includes(name.toLowerCase()));
+  }, [client?.name]);
+
   // Check if client has Web & E-Commerce features
   const hasWebAndEcomm = useMemo(() => {
     if (!client) return false;
@@ -571,9 +582,10 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       (!isAdsOnlyClient && client.supabase_url) || 
       clientGa4PropertyId ||
       ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Hwabelle", "Billionaire Brother", "The Billionaire Brother"].includes(client.name?.trim() || "") || 
-      connectedAccounts?.substack
+      connectedAccounts?.substack ||
+      hasEmailCampaigns
     );
-  }, [client, isAdsOnlyClient, clientGa4PropertyId, connectedAccounts]);
+  }, [client, isAdsOnlyClient, clientGa4PropertyId, connectedAccounts, hasEmailCampaigns]);
 
 
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
@@ -1086,6 +1098,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </CardHeader>
                             <CardContent>
                               <Badge variant="secondary" className="bg-orange-500/10 text-orange-600">Active</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* Email Campaigns (Sienvi Sender) */}
+                        {hasEmailCampaigns && (
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/email-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                                  <Mail className="h-5 w-5 text-blue-500" />
+                                </div>
+                                <div><CardTitle className="text-base">Email Campaigns</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">Active</Badge>
                             </CardContent>
                           </Card>
                         )}

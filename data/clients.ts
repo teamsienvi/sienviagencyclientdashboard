@@ -189,7 +189,7 @@ export const clientsData: Client[] = [
     reports: [],
   },
   {
-    name: "Billionaire Brother",
+    name: "The Billionaire Brother",
     logo: billionaireBrotherLogo.src,
     reports: [],
   },
