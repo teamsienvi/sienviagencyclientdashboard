@@ -80,16 +80,38 @@ async function runReport(
   return resp.json();
 }
 
+async function runRealtimeReport(
+  token: string,
+  propertyId: string,
+  body: Record<string, unknown>,
+): Promise<any> {
+  const resp = await fetch(`${GA4_BASE}/properties/${propertyId}:runRealtimeReport`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    console.error(`GA4 runRealtimeReport error (${resp.status}):`, errText);
+    throw new Error(`GA4 Realtime API error: ${resp.status} - ${errText}`);
+  }
+  return resp.json();
+}
+
 // ── Main handler ────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { clientId, startDate, endDate, propertyId: providedPropertyId } = await req.json();
+    const reqBody = await req.json();
+    const { clientId, startDate, endDate, propertyId: providedPropertyId, realtime } = reqBody;
 
-    if (!clientId || !startDate || !endDate) {
+    if (!clientId || (!realtime && (!startDate || !endDate))) {
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters: clientId, startDate, endDate' }),
+        JSON.stringify({ error: 'Missing required parameters: clientId' + (realtime ? '' : ', startDate, endDate') }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
@@ -145,6 +167,31 @@ serve(async (req) => {
     const accessToken = await getAccessToken(sa);
 
     const propertyId = targetPropertyId;
+
+    if (realtime) {
+      console.log(`Fetching GA4 realtime for property ${propertyId} (Client: ${client?.name})`);
+      const realtimeReport = await runRealtimeReport(accessToken, propertyId, {
+        metrics: [
+          { name: 'activeUsers' },
+          { name: 'screenPageViews' }
+        ],
+        dimensions: [
+          { name: 'unifiedScreenName' }
+        ],
+        limit: 10
+      });
+
+      return new Response(
+        JSON.stringify({
+          clientId,
+          clientName: client?.name || 'Unknown Client',
+          realtime: realtimeReport,
+          source: 'ga4_realtime',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     const dateRange = { startDate, endDate };
 
     // ── 1. Summary report ──

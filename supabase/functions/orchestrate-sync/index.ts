@@ -74,6 +74,10 @@ serve(async (req) => {
             lockMinutes = 10;
             workerFn = "generate-analytics-summary";
             workerPayload = { clientId, type: "website" };
+        } else if (module === 'ads_summary') {
+            lockMinutes = 10;
+            workerFn = "generate-analytics-summary";
+            workerPayload = { clientId, type: "ads" };
         } else if (platform === 'tiktok') {
             lockMinutes = 5;
             // Get Metricool config

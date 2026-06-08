@@ -13,6 +13,8 @@ import blingybagLogo from "@/assets/logos/blingybag-logo.jpeg";
 import snarkyassLogo from "@/assets/logos/snarkyass-logo.jpeg";
 import billionaireBrotherLogo from "@/assets/logos/billionaire-brother-logo.jpg";
 import hwabelleLogo from "@/assets/logos/hwabelle-logo.png";
+import cheercptLogo from "@/assets/logos/cheercpt-logo.jpeg";
+
 
 export interface Report {
   dateRange: string;
@@ -191,6 +193,11 @@ export const clientsData: Client[] = [
   {
     name: "The Billionaire Brother",
     logo: billionaireBrotherLogo.src,
+    reports: [],
+  },
+  {
+    name: "CheerCPT",
+    logo: cheercptLogo.src,
     reports: [],
   },
 ];

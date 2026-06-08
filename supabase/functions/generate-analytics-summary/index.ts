@@ -710,6 +710,9 @@ async function collectWebsiteData(
         top_platform: "Website"
     };
 
+    let totalSessions = 0;
+    let totalEngagedSessions = 0;
+
     try {
         // 0. Check for Substack GA4 integration
         const { data: substackConfig } = await supabase
@@ -749,13 +752,17 @@ async function collectWebsiteData(
                     }
 
                     // Update metrics for the return object
-                metricsResult.total_views += (a.pageViews ?? a.totalPageViews ?? 0);
-                metricsResult.unique_visitors += (a.visitors ?? a.uniqueVisitors ?? 0);
-                if (a.bounceRate !== undefined) {
-                    metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, 100 - (a.bounceRate ?? 0));
-                }
+                    metricsResult.total_views += (a.pageViews ?? a.totalPageViews ?? 0);
+                    metricsResult.unique_visitors += (a.visitors ?? a.uniqueVisitors ?? 0);
+                    
+                    const subSessions = a.totalSessions ?? a.sessions ?? 0;
+                    if (subSessions > 0 && a.bounceRate !== undefined) {
+                        totalSessions += subSessions;
+                        const subEngagementRate = 1 - (a.bounceRate / 100);
+                        totalEngagedSessions += subSessions * subEngagementRate;
+                    }
 
-                sections.push(subOutput);
+                    sections.push(subOutput);
                 } else {
                     console.warn(`Substack invoke for ${clientId} returned no analytics or error:`, ga4Err);
                     sections.push(`DEBUG SUBSTACK: Error=${JSON.stringify(ga4Err)}, Data=${JSON.stringify(ga4Data)}`);
@@ -822,8 +829,12 @@ async function collectWebsiteData(
 
                     metricsResult.total_views += (a.totalSessions ?? 0); // Using sessions as views for aggregation
                     metricsResult.unique_visitors += (a.uniqueVisitors ?? 0);
-                    if (a.bounceRate !== undefined) {
-                        metricsResult.engagement_rate = Math.max(metricsResult.engagement_rate, 100 - (a.bounceRate ?? 0));
+                    
+                    const ga4Sessions = a.totalSessions ?? 0;
+                    if (ga4Sessions > 0 && a.bounceRate !== undefined) {
+                        totalSessions += ga4Sessions;
+                        const ga4EngagementRate = 1 - (a.bounceRate / 100);
+                        totalEngagedSessions += ga4Sessions * ga4EngagementRate;
                     }
 
                     sections.push(ga4Output);
@@ -840,102 +851,116 @@ async function collectWebsiteData(
         // Website analytics data is stored in the agency's own Supabase
         // (the track-analytics edge function inserts into web_analytics_page_views
         //  and web_analytics_sessions using the agency's client_id)
+        
+        const isSnarkyAzzHumans = clientId === '297cbb3c-54b4-4bed-8206-25949a94fa62';
 
-        // 1. Page views — filtered by client_id
-        const { data: pageViews } = await supabase
-            .from("web_analytics_page_views")
-            .select("page_url, page_title, visitor_id, device_type, country, referrer, viewed_at, utm_source, utm_medium, utm_campaign")
-            .eq("client_id", clientId)
-            .gte("viewed_at", startStr)
-            .lte("viewed_at", endStr + "T23:59:59Z")
-            .limit(500);
+        if (!isSnarkyAzzHumans) {
+            // 1. Page views — filtered by client_id
+            const { data: pageViews } = await supabase
+                .from("web_analytics_page_views")
+                .select("page_url, page_title, visitor_id, device_type, country, referrer, viewed_at, utm_source, utm_medium, utm_campaign")
+                .eq("client_id", clientId)
+                .gte("viewed_at", startStr)
+                .lte("viewed_at", endStr + "T23:59:59Z")
+                .limit(500);
 
-        if (pageViews && pageViews.length > 0) {
-            const uniqueVisitors = new Set(pageViews.map((pv: any) => pv.visitor_id)).size;
-            const devices: Record<string, number> = {};
-            const countries: Record<string, number> = {};
-            const referrers: Record<string, number> = {};
-            const pageCounts: Record<string, number> = {};
-            const utmSources: Record<string, number> = {};
+            if (pageViews && pageViews.length > 0) {
+                const uniqueVisitors = new Set(pageViews.map((pv: any) => pv.visitor_id)).size;
+                const devices: Record<string, number> = {};
+                const countries: Record<string, number> = {};
+                const referrers: Record<string, number> = {};
+                const pageCounts: Record<string, number> = {};
+                const utmSources: Record<string, number> = {};
 
-            pageViews.forEach((pv: any) => {
-                if (pv.device_type) devices[pv.device_type] = (devices[pv.device_type] || 0) + 1;
-                if (pv.country) countries[pv.country] = (countries[pv.country] || 0) + 1;
-                if (pv.referrer) {
-                    try {
-                        const host = new URL(pv.referrer).hostname;
-                        referrers[host] = (referrers[host] || 0) + 1;
-                    } catch {
-                        referrers[pv.referrer] = (referrers[pv.referrer] || 0) + 1;
+                pageViews.forEach((pv: any) => {
+                    if (pv.device_type) devices[pv.device_type] = (devices[pv.device_type] || 0) + 1;
+                    if (pv.country) countries[pv.country] = (countries[pv.country] || 0) + 1;
+                    if (pv.referrer) {
+                        try {
+                            const host = new URL(pv.referrer).hostname;
+                            referrers[host] = (referrers[host] || 0) + 1;
+                        } catch {
+                            referrers[pv.referrer] = (referrers[pv.referrer] || 0) + 1;
+                        }
                     }
+                    const path = pv.page_url || pv.page_title || "unknown";
+                    pageCounts[path] = (pageCounts[path] || 0) + 1;
+                    if (pv.utm_source) {
+                        const src = pv.utm_medium ? `${pv.utm_source}/${pv.utm_medium}` : pv.utm_source;
+                        utmSources[src] = (utmSources[src] || 0) + 1;
+                    }
+                });
+
+                const topPages = Object.entries(pageCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10);
+
+                let output =
+                    `## Website Analytics (${startStr} to ${endStr})\n` +
+                    `- Total Page Views: ${pageViews.length}\n` +
+                    `- Unique Visitors: ${uniqueVisitors || 0}\n` +
+                    `- Devices: ${Object.entries(devices).sort((a, b) => b[1] - a[1]).map(([d, c]) => `${d}: ${c}`).join(", ")}\n` +
+                    `- Top Countries: ${Object.entries(countries).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, n]) => `${c}: ${n}`).join(", ")}\n` +
+                    `- Top Referrers: ${Object.entries(referrers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([r, n]) => `${r}: ${n}`).join(", ")}\n` +
+                    `- Top Pages:\n${topPages.map(([path, count]) => `  - ${path}: ${count} views`).join("\n")}`;
+
+                if (Object.keys(utmSources).length > 0) {
+                    output += `\n- Traffic Sources (UTM): ${Object.entries(utmSources).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${s}: ${n}`).join(", ")}`;
                 }
-                const path = pv.page_url || pv.page_title || "unknown";
-                pageCounts[path] = (pageCounts[path] || 0) + 1;
-                if (pv.utm_source) {
-                    const src = pv.utm_medium ? `${pv.utm_source}/${pv.utm_medium}` : pv.utm_source;
-                    utmSources[src] = (utmSources[src] || 0) + 1;
-                }
-            });
 
-            const topPages = Object.entries(pageCounts)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 10);
-
-            let output =
-                `## Website Analytics (${startStr} to ${endStr})\n` +
-                `- Total Page Views: ${pageViews.length}\n` +
-                `- Unique Visitors: ${uniqueVisitors || 0}\n` +
-                `- Devices: ${Object.entries(devices).sort((a, b) => b[1] - a[1]).map(([d, c]) => `${d}: ${c}`).join(", ")}\n` +
-                `- Top Countries: ${Object.entries(countries).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c, n]) => `${c}: ${n}`).join(", ")}\n` +
-                `- Top Referrers: ${Object.entries(referrers).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([r, n]) => `${r}: ${n}`).join(", ")}\n` +
-                `- Top Pages:\n${topPages.map(([path, count]) => `  - ${path}: ${count} views`).join("\n")}`;
-
-            if (Object.keys(utmSources).length > 0) {
-                output += `\n- Traffic Sources (UTM): ${Object.entries(utmSources).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([s, n]) => `${s}: ${n}`).join(", ")}`;
+                metricsResult.total_views += pageViews.length;
+                metricsResult.unique_visitors += uniqueVisitors;
+                sections.push(output);
             }
 
-            metricsResult.total_views += pageViews.length;
-            metricsResult.unique_visitors += uniqueVisitors;
-            sections.push(output);
-        }
+            // 2. Sessions — filtered by client_id, with duration and page count
+            const { data: sessions } = await supabase
+                .from("web_analytics_sessions")
+                .select("visitor_id, device_type, country, referrer, created_at, bounce, page_count, started_at, ended_at, utm_source, utm_medium")
+                .eq("client_id", clientId)
+                .gte("created_at", startStr)
+                .lte("created_at", endStr + "T23:59:59Z")
+                .limit(500);
 
-        // 2. Sessions — filtered by client_id, with duration and page count
-        const { data: sessions } = await supabase
-            .from("web_analytics_sessions")
-            .select("visitor_id, device_type, country, referrer, created_at, bounce, page_count, started_at, ended_at, utm_source, utm_medium")
-            .eq("client_id", clientId)
-            .gte("created_at", startStr)
-            .lte("created_at", endStr + "T23:59:59Z")
-            .limit(500);
+            if (sessions && sessions.length > 0) {
+                const bounceCount = sessions.filter((s: any) => s.bounce).length;
+                const bounceRate = ((bounceCount / sessions.length) * 100).toFixed(1);
+                
+                const engagedCount = sessions.length - bounceCount;
+                totalSessions += sessions.length;
+                totalEngagedSessions += engagedCount;
 
-        if (sessions && sessions.length > 0) {
-            const bounceCount = sessions.filter((s: any) => s.bounce).length;
-            const bounceRate = ((bounceCount / sessions.length) * 100).toFixed(1);
+                // Calculate avg pages per session
+                const pagesPerSession = sessions.reduce((sum: number, s: any) => sum + (s.page_count || 1), 0) / sessions.length;
 
-            // Calculate avg pages per session
-            const pagesPerSession = sessions.reduce((sum: number, s: any) => sum + (s.page_count || 1), 0) / sessions.length;
+                // Calculate avg session duration
+                let avgDurationStr = "N/A";
+                const durations = sessions
+                    .filter((s: any) => s.started_at && s.ended_at)
+                    .map((s: any) => new Date(s.ended_at).getTime() - new Date(s.started_at).getTime());
+                if (durations.length > 0) {
+                    const avgMs = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
+                    const avgSec = Math.round(avgMs / 1000);
+                    avgDurationStr = avgSec >= 60 ? `${Math.floor(avgSec / 60)}m ${avgSec % 60}s` : `${avgSec}s`;
+                }
 
-            // Calculate avg session duration
-            let avgDurationStr = "N/A";
-            const durations = sessions
-                .filter((s: any) => s.started_at && s.ended_at)
-                .map((s: any) => new Date(s.ended_at).getTime() - new Date(s.started_at).getTime());
-            if (durations.length > 0) {
-                const avgMs = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
-                const avgSec = Math.round(avgMs / 1000);
-                avgDurationStr = avgSec >= 60 ? `${Math.floor(avgSec / 60)}m ${avgSec % 60}s` : `${avgSec}s`;
+                sections.push(
+                    `## Website Visitor Metrics\n` +
+                    `- Total Sessions: ${sessions.length}\n` +
+                    `- Bounce Rate: ${bounceRate}%\n` +
+                    `- Avg Pages/Session: ${pagesPerSession.toFixed(1)}\n` +
+                    `- Avg Session Duration: ${avgDurationStr}`
+                );
             }
-
-            sections.push(
-                `## Website Visitor Metrics\n` +
-                `- Total Sessions: ${sessions.length}\n` +
-                `- Bounce Rate: ${bounceRate}%\n` +
-                `- Avg Pages/Session: ${pagesPerSession.toFixed(1)}\n` +
-                `- Avg Session Duration: ${avgDurationStr}`
-            );
         }
     } catch (webErr) {
         console.error("Error in website data collection:", webErr);
+    }
+
+    if (totalSessions > 0) {
+        metricsResult.engagement_rate = (totalEngagedSessions / totalSessions) * 100;
+    } else {
+        metricsResult.engagement_rate = 0;
     }
 
     return { context: sections.join("\n\n"), metrics: metricsResult };

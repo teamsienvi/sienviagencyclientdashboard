@@ -13,6 +13,7 @@
  */
 
 import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 
 // ── Credentials ───────────────────────────────────────────────────
 const envContent = fs.readFileSync('.env.local', 'utf8');
@@ -27,31 +28,52 @@ envContent.split('\n').forEach(line => {
 });
 
 const SUPABASE_URL  = env['NEXT_PUBLIC_SUPABASE_URL'];
-const SERVICE_KEY   = env['SUPABASE_SERVICE_ROLE_KEY'];
 const ANON_KEY      = env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];
 
-if (!SUPABASE_URL || !SERVICE_KEY) {
-  console.error('❌  Missing SUPABASE_URL or SERVICE_KEY — check .env.local');
+if (!SUPABASE_URL || !ANON_KEY) {
+  console.error('❌  Missing SUPABASE_URL or ANON_KEY — check .env.local');
   process.exit(1);
 }
 
+const supabase = createClient(SUPABASE_URL, ANON_KEY);
+
+console.log("Authenticating as teamsienvi@gmail.com...");
+const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  email: "teamsienvi@gmail.com",
+  password: "9SwvfoTIoQce"
+});
+
+if (authError) {
+  console.error("❌ Authentication failed:", authError.message);
+  process.exit(1);
+}
+console.log("✓ Authenticated successfully.");
+
 // ── All clients (matched from tmp_bulk_sync.mjs + DB) ─────────────
 const ALL_CLIENTS = [
-  { id: 'ef580ebf-439f-4305-826a-f1f8aa89fd03', name: 'Snarky Humans'         },
-  { id: 'd8a121fe-cdd9-4e19-90dc-dd32b159f973', name: 'Snarky Pets'           },
-  { id: '297cbb3c-54b4-4bed-8206-25949a94fa62', name: 'Snarky A$$ Humans'     },
-  { id: '95791e88-87cd-4621-af7e-df46f5ad93ac', name: 'Father Figure Formula' },
-  { id: 'b6c39651-9259-4930-af6e-b744a5a191ad', name: 'The Haven At Deer Park'},
-  { id: '041555a7-1a25-42b8-89c7-edc40afff861', name: 'Serenity Scrolls'      },
-  { id: '22090989-2d0e-47b2-b9c5-98652d7f0957', name: 'PlayIQ'                },
-  { id: '1a1edf9f-2ebe-4d40-a904-7295d5033401', name: 'OxiSure Tech'          },
-  { id: 'd8f38e01-77ff-4839-ac48-54795adc9f3e', name: 'Sienvi Agency'         },
+  { id: 'cf4bf738-9cc2-421b-bdc0-7344b88b0dad', name: 'Ban Batu'                 },
+  { id: '79099b9d-0281-4a95-8076-dcff0fd128a4', name: 'BlingyBag'                },
+  { id: '973e8407-bf7f-45ca-bd73-a26acc3ad9e3', name: 'BSUE Brow & Lash'         },
+  { id: 'edfc083a-77f7-4c83-b6e0-a32bfc0553a1', name: 'Cissie Pryor Presents'    },
+  { id: '95791e88-87cd-4621-af7e-df46f5ad93ac', name: 'Father Figure Formula'    },
+  { id: '0771b432-d720-4d0f-a964-ee6c7edcd116', name: 'Hwabelle'                 },
+  { id: '3177cefc-46cc-4790-8a20-65b160103077', name: 'Luxxe Auto Accessories'  },
+  { id: '1a1edf9f-2ebe-4d40-a904-7295d5033401', name: 'OxiSure Tech'             },
+  { id: '22090989-2d0e-47b2-b9c5-98652d7f0957', name: 'PlayIQ'                   },
+  { id: '041555a7-1a25-42b8-89c7-edc40afff861', name: 'Serenity Scrolls'         },
+  { id: 'd8f38e01-77ff-4839-ac48-54795adc9f3e', name: 'Sienvi Agency'            },
+  { id: '297cbb3c-54b4-4bed-8206-25949a94fa62', name: 'Snarky A$$ Humans'        },
+  { id: 'ef580ebf-439f-4305-826a-f1f8aa89fd03', name: 'Snarky Humans'            },
+  { id: 'd8a121fe-cdd9-4e19-90dc-dd32b159f973', name: 'Snarky Pets'              },
+  { id: '0b90215e-e55d-4b5e-8453-de35153a1fcd', name: 'The Billionaire Brother'  },
+  { id: 'b6c39651-9259-4930-af6e-b744a5a191ad', name: 'The Haven At Deer Park'   },
 ];
 
 // ── Per-platform orchestrate-sync dispatch list ────────────────────
 // (platform / module pairs the orchestrator understands)
 const PLATFORM_MODULES = [
-  { platform: 'social',    module: 'metricool'    },  // Instagram, Facebook via Metricool
+  { platform: 'instagram', module: 'meta'         },  // Instagram via Metricool/Meta OAuth
+  { platform: 'facebook',  module: 'meta'         },  // Facebook via Metricool/Meta OAuth
   { platform: 'tiktok',   module: 'metricool'    },  // TikTok via Metricool
   { platform: 'youtube',  module: 'youtube'      },  // YouTube via Metricool / direct
   { platform: 'x',        module: 'x'            },  // X/Twitter
@@ -65,27 +87,24 @@ const PLATFORM_MODULES = [
 // ── Helpers ────────────────────────────────────────────────────────
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-const hdr = (useService = true) => ({
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${useService ? SERVICE_KEY : ANON_KEY}`,
-});
+const hdr = () => ({});
 
 async function callFn(fnName, body, label, useService = true) {
   try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/${fnName}`, {
-      method: 'POST',
-      headers: hdr(useService),
-      body: JSON.stringify(body),
+    const { data, error } = await supabase.functions.invoke(fnName, {
+      body
     });
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 300) }; }
+    
+    if (error) {
+      console.log(`    [${label}] ERROR → ${error.message}`);
+      return { ok: false, data: { error: error.message } };
+    }
 
-    const status = data.status || data.error || (data.success === false ? 'failed' : 'ok');
-    console.log(`    [${label}] HTTP ${res.status} → ${JSON.stringify(status)}`);
-    return { ok: res.ok, data };
+    const status = data?.status || data?.error || (data?.success === false ? 'failed' : 'ok');
+    console.log(`    [${label}] SUCCESS → ${JSON.stringify(status)}`);
+    return { ok: true, data };
   } catch (e) {
-    console.error(`    [${label}] FETCH ERROR: ${e.message}`);
+    console.error(`    [${label}] INVOCATION ERROR: ${e.message}`);
     return { ok: false, data: { error: e.message } };
   }
 }
@@ -93,26 +112,51 @@ async function callFn(fnName, body, label, useService = true) {
 // Force-reset a stuck registry row before dispatching
 async function forceResetRegistry(clientId, platform, module) {
   try {
-    await fetch(
-      `${SUPABASE_URL}/rest/v1/sync_state_registry` +
-      `?client_id=eq.${clientId}&platform=eq.${platform}&module=eq.${module}`,
-      {
-        method: 'PATCH',
-        headers: {
-          ...hdr(true),
-          apikey: SERVICE_KEY,
-          Prefer: 'return=minimal',
-        },
-        body: JSON.stringify({
-          status: 'idle',
-          job_locked_until: null,
-          retry_count: 0,
-          error_message: null,
-          next_retry_at: null,
-        }),
-      }
-    );
-  } catch (_) { /* ignore */ }
+    const { error } = await supabase
+      .from('sync_state_registry')
+      .update({
+        status: 'ready',
+        job_locked_until: null,
+        retry_count: 0,
+        error_message: null,
+        next_retry_at: null,
+      })
+      .match({ client_id: clientId, platform, module });
+      
+    if (error) {
+      console.error(`    [registry-reset-error] ${platform}/${module}: ${error.message}`);
+    }
+  } catch (e) {
+    console.error(`    [registry-reset-catch] ${platform}/${module}: ${e.message}`);
+  }
+}
+
+// Mark a registry row as successfully complete
+async function markRegistrySuccess(clientId, platform, module) {
+  try {
+    const now = new Date();
+    const staleAfter = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours TTL
+    const { error } = await supabase
+      .from('sync_state_registry')
+      .upsert({
+        client_id: clientId,
+        platform,
+        module,
+        status: 'ready',
+        job_locked_until: null,
+        last_synced_at: now.toISOString(),
+        last_success_at: now.toISOString(),
+        stale_after_at: staleAfter.toISOString(),
+        retry_count: 0,
+        error_message: null
+      }, { onConflict: "client_id,platform,module" });
+
+    if (error) {
+      console.error(`    [registry-success-error] ${platform}/${module}: ${error.message}`);
+    }
+  } catch (e) {
+    console.error(`    [registry-success-catch] ${platform}/${module}: ${e.message}`);
+  }
 }
 
 // ── PHASE 1: bulk-sync-all (Metricool social platforms + follower timeline) ──
@@ -181,12 +225,15 @@ async function phase3SocialOverview() {
 
   for (const client of ALL_CLIENTS) {
     console.log(`\n  ${client.name}:`);
-    await callFn(
+    const { ok } = await callFn(
       'generate-analytics-summary',
       { clientId: client.id, type: 'social', dateRange: '7d' },
       `${client.name} / social-summary`,
       true
     );
+    if (ok) {
+      await markRegistrySuccess(client.id, 'social', 'social_summary');
+    }
     await sleep(1200);
   }
 }
@@ -201,21 +248,27 @@ async function phase4WebEcommerceOverview() {
     console.log(`\n  ${client.name}:`);
 
     // Website (GA4 / Substack)
-    await callFn(
+    const resWeb = await callFn(
       'generate-analytics-summary',
       { clientId: client.id, type: 'website', dateRange: '7d' },
       `${client.name} / website-summary`,
       true
     );
+    if (resWeb.ok) {
+      await markRegistrySuccess(client.id, 'website', 'website_summary');
+    }
     await sleep(800);
 
     // Ads (for clients that have ad configs)
-    await callFn(
+    const resAds = await callFn(
       'generate-analytics-summary',
       { clientId: client.id, type: 'ads', dateRange: '7d' },
       `${client.name} / ads-summary`,
       true
     );
+    if (resAds.ok) {
+      await markRegistrySuccess(client.id, 'ads', 'ads_summary');
+    }
     await sleep(800);
   }
 }
@@ -228,15 +281,19 @@ async function phase5VerifyPlatformBreakdown() {
 
   for (const client of ALL_CLIENTS) {
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/social_account_metrics` +
-        `?client_id=eq.${client.id}&select=platform,followers,new_followers,engagement_rate,collected_at` +
-        `&order=collected_at.desc&limit=20`,
-        { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` } }
-      );
-      const rows = await res.json();
+      const { data: rows, error } = await supabase
+        .from("social_account_metrics")
+        .select("platform, followers, new_followers, engagement_rate, collected_at")
+        .eq("client_id", client.id)
+        .order("collected_at", { ascending: false })
+        .limit(20);
 
-      if (!Array.isArray(rows) || rows.length === 0) {
+      if (error) {
+        console.error(`  ${client.name} verify error: ${error.message}`);
+        continue;
+      }
+
+      if (!rows || rows.length === 0) {
         console.log(`  ${client.name}: no platform metrics yet`);
         continue;
       }

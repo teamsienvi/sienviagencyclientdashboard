@@ -449,6 +449,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   // Aggregate total followers from ALL sources:
   // 1. Live Metricool API data (most accurate, real-time)
   // 2. social_account_metrics (for platforms not in Metricool)
+  // 3. client_metricool_config configured followers (fallback for creator accounts)
   const { totalFollowers, followerBreakdown } = useMemo(() => {
     let total = 0;
     const breakdown: { platform: string; count: number }[] = [];
@@ -465,7 +466,18 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       });
     }
 
-    // Second: Add from social_account_metrics for platforms not already counted
+    // Second: Add from client_metricool_config (manually configured follower overrides)
+    if (metricoolPlatforms) {
+      metricoolPlatforms.forEach(p => {
+        if (p.followers && typeof p.followers === 'number' && p.followers > 0 && !countedPlatforms.has(p.platform)) {
+          total += p.followers;
+          countedPlatforms.add(p.platform);
+          breakdown.push({ platform: p.platform, count: p.followers });
+        }
+      });
+    }
+
+    // Third: Add from social_account_metrics for platforms not already counted
     if (socialMetrics) {
       Object.entries(socialMetrics).forEach(([platform, m]) => {
         if (m?.followers && !countedPlatforms.has(platform)) {
@@ -479,7 +491,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     breakdown.sort((a, b) => b.count - a.count);
 
     return { totalFollowers: total, followerBreakdown: breakdown };
-  }, [socialMetrics, metricoolFollowers]);
+  }, [socialMetrics, metricoolFollowers, metricoolPlatforms]);
 
   // Count connected platforms accurately
   const connectedPlatformsCount = useMemo(() => {
@@ -878,9 +890,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             <CardContent>
                               <div className="flex justify-between items-center">
                                 <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
-                                {socialMetrics?.tiktok?.followers && (
-                                  <span className="text-sm text-muted-foreground">{socialMetrics.tiktok.followers.toLocaleString()} followers</span>
-                                )}
+                                {(() => {
+                                  const count = metricoolFollowers?.followers?.tiktok || 
+                                                socialMetrics?.tiktok?.followers || 
+                                                metricoolPlatforms?.find(p => p.platform === 'tiktok')?.followers;
+                                  return count ? (
+                                    <span className="text-sm text-muted-foreground">{count.toLocaleString()} followers</span>
+                                  ) : null;
+                                })()}
                               </div>
                             </CardContent>
                           </Card>

@@ -583,28 +583,52 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
       .maybeSingle();
 
     // Fetch latest account metrics that overlap with selected range
-    const { data: metricsData } = await supabase
+    const { data: metricsDataList } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", platform)
       .lte("period_start", endDate)
       .gte("period_end", startDate)
-      .order("collected_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("collected_at", { ascending: false });
+
+    const targetDuration = (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24);
+
+    const metricsData = metricsDataList?.find(row => {
+      const rowStart = new Date(row.period_start);
+      const rowEnd = new Date(row.period_end);
+      const rowDuration = (rowEnd.getTime() - rowStart.getTime()) / (1000 * 60 * 60 * 24);
+      return Math.abs(rowDuration - targetDuration) <= 3 && row.followers !== null;
+    }) || metricsDataList?.find(row => {
+      const rowStart = new Date(row.period_start);
+      const rowEnd = new Date(row.period_end);
+      const rowDuration = (rowEnd.getTime() - rowStart.getTime()) / (1000 * 60 * 60 * 24);
+      return Math.abs(rowDuration - targetDuration) <= 3;
+    }) || metricsDataList?.[0] || null;
 
     // Fetch comparison period metrics
-    const { data: prevMetricsData } = await supabase
+    const { data: prevMetricsDataList } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", platform)
       .lte("period_start", compEndDate)
       .gte("period_end", compStartDate)
-      .order("collected_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order("collected_at", { ascending: false });
+
+    const prevTargetDuration = (new Date(compEndDate).getTime() - new Date(compStartDate).getTime()) / (1000 * 60 * 60 * 24);
+
+    const prevMetricsData = prevMetricsDataList?.find(row => {
+      const rowStart = new Date(row.period_start);
+      const rowEnd = new Date(row.period_end);
+      const rowDuration = (rowEnd.getTime() - rowStart.getTime()) / (1000 * 60 * 60 * 24);
+      return Math.abs(rowDuration - prevTargetDuration) <= 3 && row.followers !== null;
+    }) || prevMetricsDataList?.find(row => {
+      const rowStart = new Date(row.period_start);
+      const rowEnd = new Date(row.period_end);
+      const rowDuration = (rowEnd.getTime() - rowStart.getTime()) / (1000 * 60 * 60 * 24);
+      return Math.abs(rowDuration - prevTargetDuration) <= 3;
+    }) || prevMetricsDataList?.[0] || null;
 
     // Fetch ALL content for this client/platform with their metrics
     // We filter by metrics period_start/period_end instead of published_at

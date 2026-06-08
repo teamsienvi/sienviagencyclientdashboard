@@ -132,30 +132,50 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
 
       // Fetch current period account metrics
       // Use overlap logic: period_start <= currentEnd AND period_end >= currentStart
-      const { data: currentMetrics } = await supabase
+      const { data: currentMetricsList } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", "x")
         .lte("period_start", currentEnd)
         .gte("period_end", currentStart)
-        .order("collected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("collected_at", { ascending: false });
+
+      const currentMetrics = currentMetricsList?.find(row => {
+        const start = new Date(row.period_start);
+        const end = new Date(row.period_end);
+        const diffDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+        return diffDays <= 10 && row.followers !== null;
+      }) || currentMetricsList?.find(row => {
+        const start = new Date(row.period_start);
+        const end = new Date(row.period_end);
+        const diffDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+        return diffDays <= 10;
+      }) || currentMetricsList?.[0] || null;
 
       console.log("X Analytics - current metrics query:", { clientId, currentStart, currentEnd, currentMetrics });
 
       // Fetch previous period account metrics
-      const { data: previousMetrics } = await supabase
+      const { data: previousMetricsList } = await supabase
         .from("social_account_metrics")
         .select("*")
         .eq("client_id", clientId)
         .eq("platform", "x")
         .lte("period_start", previousEnd)
         .gte("period_end", previousStart)
-        .order("collected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("collected_at", { ascending: false });
+
+      const previousMetrics = previousMetricsList?.find(row => {
+        const start = new Date(row.period_start);
+        const end = new Date(row.period_end);
+        const diffDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+        return diffDays <= 10 && row.followers !== null;
+      }) || previousMetricsList?.find(row => {
+        const start = new Date(row.period_start);
+        const end = new Date(row.period_end);
+        const diffDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24);
+        return diffDays <= 10;
+      }) || previousMetricsList?.[0] || null;
 
       // Fetch content for current period only
       const { data: content } = await supabase

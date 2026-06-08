@@ -30,6 +30,7 @@ const CLIENT_AD_PLATFORMS: Record<string, AdPlatform[]> = {
   "Father Figure Formula": [],
   "Sienvi Agency": [],
   "The Billionaire Brother": [],
+  "CheerCPT": [],
 };
 
 const DEFAULT_AD_PLATFORMS: AdPlatform[] = ["meta", "google", "tiktok", "amazon"];
