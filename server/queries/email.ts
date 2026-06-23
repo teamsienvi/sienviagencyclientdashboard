@@ -71,8 +71,74 @@ export async function getEmailCampaignMetrics(clientName: string): Promise<Email
       return createEmptyResponse(clientName, `API Error: ${res.statusText}`);
     }
 
-    const data = await res.json();
-    return data as EmailCampaignMetricsResponse;
+    const data = await res.json() as EmailCampaignMetricsResponse;
+
+    // Normalize and align aggregates and campaign-level counts to resolve inconsistencies
+    if (data && data.success && data.campaigns) {
+      let grandTotalSent = 0;
+      let grandTotalDelivered = 0;
+      let grandTotalOpened = 0;
+      let grandTotalClicked = 0;
+
+      data.campaigns = data.campaigns.map(c => {
+        const recipients = c.sequenceData?.recipients || [];
+        const emails = c.sequenceData?.emails || [];
+        const schedules = c.sequenceData?.schedules || [];
+        
+        let sentSteps = 0;
+        if (c.status !== 'Scheduled' && emails.length > 0) {
+          emails.forEach((_, idx) => {
+            const scheduleStr = schedules[idx];
+            const isStepScheduled = c.status === 'Scheduled' || 
+              !!(scheduleStr && new Date(scheduleStr) > new Date());
+            if (!isStepScheduled) {
+              sentSteps++;
+            }
+          });
+        }
+
+        const calculatedSent = sentSteps * recipients.length;
+        const calculatedDelivered = Math.round(calculatedSent * (c.deliveryRate / 100));
+        const calculatedOpened = Math.round(calculatedDelivered * (c.openRate / 100));
+        const calculatedClicked = Math.round(calculatedOpened * (c.clickRate / 100));
+
+        const finalSent = c.sentCount > 0 ? c.sentCount : calculatedSent;
+        const finalDelivered = c.deliveredCount > 0 ? c.deliveredCount : calculatedDelivered;
+        const finalOpened = c.openedCount > 0 ? c.openedCount : calculatedOpened;
+        const finalClicked = c.clickedCount > 0 ? c.clickedCount : calculatedClicked;
+
+        grandTotalSent += finalSent;
+        grandTotalDelivered += finalDelivered;
+        grandTotalOpened += finalOpened;
+        grandTotalClicked += finalClicked;
+
+        return {
+          ...c,
+          sentCount: finalSent,
+          deliveredCount: finalDelivered,
+          openedCount: finalOpened,
+          clickedCount: finalClicked
+        };
+      });
+
+      if (grandTotalSent > 0) {
+        data.aggregates = {
+          totalSent: grandTotalSent,
+          deliveryRate: Math.round((grandTotalDelivered / grandTotalSent) * 100) || 0,
+          openRate: Math.round((grandTotalOpened / grandTotalDelivered) * 100) || 0,
+          clickRate: Math.round((grandTotalClicked / grandTotalOpened) * 100) || 0
+        };
+
+        data.funnelSteps = [
+          { name: "Sent", value: grandTotalSent },
+          { name: "Delivered", value: grandTotalDelivered },
+          { name: "Opened", value: grandTotalOpened },
+          { name: "Clicked", value: grandTotalClicked }
+        ];
+      }
+    }
+
+    return data;
 
   } catch (error: any) {
     console.error(`Failed to connect to Sienvi Sender API at ${targetEndpoint}:`, error.message);
