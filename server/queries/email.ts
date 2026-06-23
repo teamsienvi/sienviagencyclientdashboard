@@ -86,11 +86,12 @@ export async function getEmailCampaignMetrics(clientName: string): Promise<Email
         const schedules = c.sequenceData?.schedules || [];
         
         let sentSteps = 0;
-        if (c.status !== 'Scheduled' && emails.length > 0) {
+        const isScheduled = c.status === 'Scheduled';
+
+        if (!isScheduled && emails.length > 0) {
           emails.forEach((_, idx) => {
             const scheduleStr = schedules[idx];
-            const isStepScheduled = c.status === 'Scheduled' || 
-              !!(scheduleStr && new Date(scheduleStr) > new Date());
+            const isStepScheduled = !!(scheduleStr && new Date(scheduleStr) > new Date());
             if (!isStepScheduled) {
               sentSteps++;
             }
@@ -102,10 +103,10 @@ export async function getEmailCampaignMetrics(clientName: string): Promise<Email
         const calculatedOpened = Math.round(calculatedDelivered * (c.openRate / 100));
         const calculatedClicked = Math.round(calculatedOpened * (c.clickRate / 100));
 
-        const finalSent = c.sentCount > 0 ? c.sentCount : calculatedSent;
-        const finalDelivered = c.deliveredCount > 0 ? c.deliveredCount : calculatedDelivered;
-        const finalOpened = c.openedCount > 0 ? c.openedCount : calculatedOpened;
-        const finalClicked = c.clickedCount > 0 ? c.clickedCount : calculatedClicked;
+        const finalSent = isScheduled ? 0 : (c.sentCount > 0 ? c.sentCount : calculatedSent);
+        const finalDelivered = isScheduled ? 0 : (c.deliveredCount > 0 ? c.deliveredCount : calculatedDelivered);
+        const finalOpened = isScheduled ? 0 : (c.openedCount > 0 ? c.openedCount : calculatedOpened);
+        const finalClicked = isScheduled ? 0 : (c.clickedCount > 0 ? c.clickedCount : calculatedClicked);
 
         grandTotalSent += finalSent;
         grandTotalDelivered += finalDelivered;
@@ -121,21 +122,19 @@ export async function getEmailCampaignMetrics(clientName: string): Promise<Email
         };
       });
 
-      if (grandTotalSent > 0) {
-        data.aggregates = {
-          totalSent: grandTotalSent,
-          deliveryRate: Math.round((grandTotalDelivered / grandTotalSent) * 100) || 0,
-          openRate: Math.round((grandTotalOpened / grandTotalDelivered) * 100) || 0,
-          clickRate: Math.round((grandTotalClicked / grandTotalOpened) * 100) || 0
-        };
+      data.aggregates = {
+        totalSent: grandTotalSent,
+        deliveryRate: grandTotalSent > 0 ? Math.round((grandTotalDelivered / grandTotalSent) * 100) : 0,
+        openRate: grandTotalDelivered > 0 ? Math.round((grandTotalOpened / grandTotalDelivered) * 100) : 0,
+        clickRate: grandTotalOpened > 0 ? Math.round((grandTotalClicked / grandTotalOpened) * 100) : 0
+      };
 
-        data.funnelSteps = [
-          { name: "Sent", value: grandTotalSent },
-          { name: "Delivered", value: grandTotalDelivered },
-          { name: "Opened", value: grandTotalOpened },
-          { name: "Clicked", value: grandTotalClicked }
-        ];
-      }
+      data.funnelSteps = [
+        { name: "Sent", value: grandTotalSent },
+        { name: "Delivered", value: grandTotalDelivered },
+        { name: "Opened", value: grandTotalOpened },
+        { name: "Clicked", value: grandTotalClicked }
+      ];
     }
 
     return data;
