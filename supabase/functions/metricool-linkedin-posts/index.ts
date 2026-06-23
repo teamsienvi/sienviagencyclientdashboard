@@ -300,6 +300,9 @@ serve(async (req) => {
           .from("social_content_metrics")
           .upsert({
             social_content_id: contentData.id,
+            platform: "linkedin",
+            period_start: periodStartDate,
+            period_end: periodEndDate,
             views: post.views,
             likes: post.likes,
             comments: post.comments,

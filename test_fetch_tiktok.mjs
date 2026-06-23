@@ -13,7 +13,7 @@ envContent.split('\n').forEach(line => {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function run() {
-  const { data: clients } = await supabase.from('clients').select('id, name').ilike('name', '%Serenity Scrolls%');
+  const { data: clients } = await supabase.from('clients').select('id, name').ilike('name', '%OxiSure Tech%');
   const clientId = clients[0].id;
 
   console.log(`Testing edge function for ${clients[0].name} (${clientId})`);
@@ -30,8 +30,8 @@ async function run() {
       clientId,
       userId,
       blogId,
-      from: '2023-01-01',
-      to: '2026-04-01'
+      from: '2026-05-25',
+      to: '2026-06-03'
     }
   });
 
@@ -41,19 +41,13 @@ async function run() {
   }
 
   console.log('Success:', data?.success);
-  console.log('Records synced:', data?.recordsSynced);
+  console.log('Records synced:', data?.savedCount);
 
-  if (data?.posts && data.posts.length > 0) {
-    console.log('\nSample raw post returned by Edge Function:');
-    console.log(JSON.stringify(data.posts[0], null, 2));
-    
-    // Find highest views
-    const maxViews = Math.max(...data.posts.map(p => p.views || 0));
-    console.log(`\nHighest views in payload: ${maxViews}`);
-    
-    // Look for properties that might be views
-    const firstPost = data.posts[0];
-    console.log('\nAll keys in the first post:', Object.keys(firstPost));
+  if (data?.rows && data.rows.length > 0) {
+    console.log('\nAll posts returned by Edge Function:');
+    data.rows.forEach((r, idx) => {
+      console.log(`[${idx}] Date: ${r.date} | Views: ${r.views} | Likes: ${r.likes} | Title: "${r.title?.substring(0, 50)}..."`);
+    });
   } else {
     console.log('No posts returned or error');
   }

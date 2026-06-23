@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle, Activity, Search, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle, Activity, Search, ShieldCheck, ShieldAlert, Info } from "lucide-react";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSyncState } from "@/hooks/useSyncState";
 import { Button } from "@/components/ui/button";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface UbersuggestSectionProps {
   clientId: string;
@@ -153,17 +154,28 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
   };
 
   return (
-    <div className="space-y-6">
+    <TooltipProvider>
+      <div className="space-y-6">
 
       {/* Row 1: Health, Issues & Trend */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         {/* Site Health Overview */}
-        <div className="bg-card rounded-xl border overflow-hidden">
+        <div className="bg-card rounded-xl border flex flex-col overflow-hidden">
           <div className="p-5 border-b bg-muted/20 flex justify-between items-center">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">Site Health Overview</h3>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2 normal-case font-normal">
+                  Overall search optimization score of the website. A higher score means fewer technical SEO issues.
+                </TooltipContent>
+              </UITooltip>
             </div>
             {scoreChange !== null && scoreChange !== 0 && (
               <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${scoreChange > 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
@@ -173,7 +185,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             )}
           </div>
           
-          <div className="p-6 flex flex-col justify-center items-center text-center gap-4 h-full min-h-[220px]">
+          <div className="p-6 flex-1 flex flex-col justify-center items-center text-center gap-4 min-h-[220px]">
             {latest.site_audit_score === null || latest.site_audit_score === 0 ? (
                <div className="flex flex-col items-center justify-center space-y-3">
                  <ShieldAlert className="h-12 w-12 text-muted-foreground/30 animate-pulse" />
@@ -229,6 +241,16 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             <div className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">Top SEO Issues</h3>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2 normal-case font-normal">
+                  Technical and content issues identified on the website that are affecting its SEO performance.
+                </TooltipContent>
+              </UITooltip>
             </div>
             {totalIssues > 0 && (
               <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{totalIssues} Total</span>
@@ -274,6 +296,16 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">Issues Over Time</h3>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2 normal-case font-normal">
+                  A historical chart tracking the number of SEO issues identified during recent site audits.
+                </TooltipContent>
+              </UITooltip>
             </div>
           </div>
           <div className="flex-1 p-5 min-h-[200px]">
@@ -304,7 +336,19 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
       {latest.raw_project_data?.domain_overview && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-card rounded-xl border p-4 flex flex-col justify-center items-center text-center">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Organic Traffic</span>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Organic Traffic</span>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2">
+                  Estimated monthly organic search traffic the domain receives from Google search.
+                </TooltipContent>
+              </UITooltip>
+            </div>
             <span className="text-xl font-bold text-foreground">
               {(latest.raw_project_data.domain_overview.traffic ?? 
                 latest.raw_project_data.domain_overview.Total_Organic_Traffic ?? 0).toLocaleString()}
@@ -312,7 +356,19 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             <span className="text-[9px] text-muted-foreground/70 mt-1">Est. monthly visits</span>
           </div>
           <div className="bg-card rounded-xl border p-4 flex flex-col justify-center items-center text-center">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Backlinks</span>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Backlinks</span>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2">
+                  Total number of external links pointing to this website from other pages on the internet.
+                </TooltipContent>
+              </UITooltip>
+            </div>
             <span className="text-xl font-bold text-primary">
               {(latest.raw_project_data.domain_overview.backlinks ?? 
                 latest.raw_project_data.domain_overview.Total_Backlinks ?? 0).toLocaleString()}
@@ -320,7 +376,19 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             <span className="text-[9px] text-muted-foreground/70 mt-1">Total inbound links</span>
           </div>
           <div className="bg-card rounded-xl border p-4 flex flex-col justify-center items-center text-center">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Referring Domains</span>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Referring Domains</span>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2">
+                  Number of unique websites that link to this site. Multiple links from the same domain count as one referring domain.
+                </TooltipContent>
+              </UITooltip>
+            </div>
             <span className="text-xl font-bold text-primary/80">
               {(latest.raw_project_data.domain_overview.refDomains ?? 
                 latest.raw_project_data.domain_overview.Total_RefDomains ?? 0).toLocaleString()}
@@ -328,7 +396,19 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             <span className="text-[9px] text-muted-foreground/70 mt-1">Unique linking sites</span>
           </div>
           <div className="bg-card rounded-xl border p-4 flex flex-col justify-center items-center text-center">
-            <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold mb-1">Organic Keywords</span>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Organic Keywords</span>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[220px] text-xs p-2">
+                  Total number of keywords this domain ranks for in Google's top 100 search results.
+                </TooltipContent>
+              </UITooltip>
+            </div>
             <span className="text-xl font-bold text-amber-500">
               {(latest.raw_project_data.domain_overview.organic ?? 
                 latest.raw_project_data.domain_overview.Organic_Keywords?.length ?? 0).toLocaleString()}
@@ -365,10 +445,66 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                 <table className="w-full text-sm text-left">
                   <thead className="bg-muted/10 text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-5 py-3 font-semibold rounded-tl-xl">Keyword</th>
-                      <th className="px-5 py-3 font-semibold">Volume</th>
-                      <th className="px-5 py-3 font-semibold text-right">Current Rank</th>
-                      <th className="px-5 py-3 font-semibold text-right">Change</th>
+                      <th className="px-5 py-3 font-semibold rounded-tl-xl">
+                        <div className="flex items-center gap-1.5">
+                          <span>Keyword</span>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                                <Info className="h-3 w-3" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[200px] text-xs p-2 normal-case font-normal">
+                              The target search term being tracked for search rankings.
+                            </TooltipContent>
+                          </UITooltip>
+                        </div>
+                      </th>
+                      <th className="px-5 py-3 font-semibold">
+                        <div className="flex items-center gap-1.5">
+                          <span>Volume</span>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                                <Info className="h-3 w-3" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[200px] text-xs p-2 normal-case font-normal">
+                              The average number of monthly searches for this keyword in Google.
+                            </TooltipContent>
+                          </UITooltip>
+                        </div>
+                      </th>
+                      <th className="px-5 py-3 font-semibold text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>Current Rank</span>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                                <Info className="h-3 w-3" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[200px] text-xs p-2 normal-case font-normal">
+                              The website's current ranking position in Google search results.
+                            </TooltipContent>
+                          </UITooltip>
+                        </div>
+                      </th>
+                      <th className="px-5 py-3 font-semibold text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>Change</span>
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                                <Info className="h-3 w-3" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[200px] text-xs p-2 normal-case font-normal">
+                              The change in ranking position compared to the previous week.
+                            </TooltipContent>
+                          </UITooltip>
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -456,6 +592,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
           <span>Last known good data (Sync currently unavailable)</span>
         </div>
       )}
-    </div>
+      </div>
+    </TooltipProvider>
   );
 }

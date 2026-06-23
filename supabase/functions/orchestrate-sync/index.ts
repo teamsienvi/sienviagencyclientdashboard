@@ -127,15 +127,9 @@ serve(async (req) => {
                 workerPayload = { clientId };
                 console.log(`[orchestrate-sync] ${platform} has no Metricool config — falling back to sync-meta (OAuth)`);
             }
-        } else if ((module === 'metricool' && platform !== 'ads') || platform === 'linkedin') {
-            lockMinutes = 5;
-            workerFn = "sync-metricool";
-            // sync-metricool requires platform to look up the correct Metricool config
-            workerPayload = { clientId, platform };
         } else if (platform === 'x') {
             lockMinutes = 5;
-            // Check if client has Metricool config for X — if so, use sync-metricool
-            // (e.g. Father Figure Formula syncs X via Metricool, not direct API)
+            // Check if client has Metricool config for X — if so, use sync-metricool-x
             const { data: xMetricoolConfig } = await supabase
                 .from("client_metricool_config")
                 .select("id")
@@ -145,14 +139,55 @@ serve(async (req) => {
                 .maybeSingle();
 
             if (xMetricoolConfig) {
-                workerFn = "sync-metricool";
-                workerPayload = { clientId, platform: "x" };
-                console.log(`[orchestrate-sync] X has Metricool config — routing to sync-metricool`);
+                workerFn = "sync-metricool-x";
+                const now = new Date();
+                const to = now.toISOString().split('T')[0];
+                const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                workerPayload = {
+                    clientId,
+                    periodStart: from,
+                    periodEnd: to
+                };
+                console.log(`[orchestrate-sync] X has Metricool config — routing to sync-metricool-x`);
             } else {
                 workerFn = "sync-x";
                 workerPayload = { clientId };
                 console.log(`[orchestrate-sync] X has no Metricool config — routing to sync-x (CSV/OAuth)`);
             }
+        } else if (platform === 'linkedin') {
+            lockMinutes = 5;
+            // Check if client has Metricool config for LinkedIn — if so, use metricool-linkedin-posts
+            const { data: linkedinMetricoolConfig } = await supabase
+                .from("client_metricool_config")
+                .select("user_id, blog_id")
+                .eq("client_id", clientId)
+                .eq("platform", "linkedin")
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (linkedinMetricoolConfig) {
+                workerFn = "metricool-linkedin-posts";
+                const now = new Date();
+                const to = now.toISOString().split('T')[0];
+                const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                workerPayload = {
+                    clientId,
+                    userId: linkedinMetricoolConfig.user_id,
+                    blogId: linkedinMetricoolConfig.blog_id || undefined,
+                    from: `${from}T00:00:00`,
+                    to: `${to}T23:59:59`,
+                    timezone: "UTC"
+                };
+                console.log(`[orchestrate-sync] LinkedIn has Metricool config — routing to metricool-linkedin-posts`);
+            } else {
+                workerFn = "sync-linkedin";
+                workerPayload = { clientId };
+                console.log(`[orchestrate-sync] LinkedIn has no Metricool config — routing to sync-linkedin (OAuth)`);
+            }
+        } else if (module === 'metricool' && platform !== 'ads') {
+            lockMinutes = 5;
+            workerFn = "sync-metricool";
+            workerPayload = { clientId, platform };
         } else if (platform === 'youtube') {
             lockMinutes = 5;
             const { data: config } = await supabase

@@ -498,7 +498,8 @@ const EmailAnalyticsClient = ({
                             : "Sent immediately / No delay";
                           
                           // Determine if step is sent or scheduled
-                          const isStepScheduled = selectedCampaign.status === 'Scheduled' && scheduleStr && new Date(scheduleStr) > new Date();
+                          const isStepScheduled = selectedCampaign.status === 'Scheduled' || 
+                            !!(scheduleStr && new Date(scheduleStr) > new Date());
                           const stepStatus = isStepScheduled ? 'Scheduled' : 'Sent';
 
                           return (

@@ -54,6 +54,7 @@ const ALL_CLIENTS = [
   { id: 'cf4bf738-9cc2-421b-bdc0-7344b88b0dad', name: 'Ban Batu'                 },
   { id: '79099b9d-0281-4a95-8076-dcff0fd128a4', name: 'BlingyBag'                },
   { id: '973e8407-bf7f-45ca-bd73-a26acc3ad9e3', name: 'BSUE Brow & Lash'         },
+  { id: '18614cdc-35fb-4c4f-abb4-f26842574b0f', name: 'CheerCPT'                 },
   { id: 'edfc083a-77f7-4c83-b6e0-a32bfc0553a1', name: 'Cissie Pryor Presents'    },
   { id: '95791e88-87cd-4621-af7e-df46f5ad93ac', name: 'Father Figure Formula'    },
   { id: '0771b432-d720-4d0f-a964-ee6c7edcd116', name: 'Hwabelle'                 },
@@ -72,11 +73,11 @@ const ALL_CLIENTS = [
 // ── Per-platform orchestrate-sync dispatch list ────────────────────
 // (platform / module pairs the orchestrator understands)
 const PLATFORM_MODULES = [
-  { platform: 'instagram', module: 'meta'         },  // Instagram via Metricool/Meta OAuth
-  { platform: 'facebook',  module: 'meta'         },  // Facebook via Metricool/Meta OAuth
+  { platform: 'instagram', module: 'metricool'    },  // Instagram via Metricool
+  { platform: 'facebook',  module: 'metricool'    },  // Facebook via Metricool
   { platform: 'tiktok',   module: 'metricool'    },  // TikTok via Metricool
   { platform: 'youtube',  module: 'youtube'      },  // YouTube via Metricool / direct
-  { platform: 'x',        module: 'x'            },  // X/Twitter
+  { platform: 'x',        module: 'metricool'    },  // X/Twitter via Metricool
   { platform: 'linkedin', module: 'metricool'    },  // LinkedIn via Metricool
   { platform: 'ads',      module: 'metricool'    },  // Meta/TikTok ads
   { platform: 'shopify',  module: 'shopify'      },  // Shopify e-commerce

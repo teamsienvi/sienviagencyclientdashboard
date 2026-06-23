@@ -132,12 +132,62 @@ serve(async (req) => {
     const kwMap = new Map<string, any>();
     for (const alert of [...positionTrackings].reverse()) {
       for (const kw of (alert.content?.keywords || [])) {
-        const existing = kwMap.get(kw.keyword);
         // Keep the entry from the most recent alert (last write wins as we iterate oldest→newest)
         kwMap.set(kw.keyword, kw);
       }
     }
     const trackedKeywords = Array.from(kwMap.values());
+
+    // 4.2 Fetch Direct Site Audit Score and Issues from Ubersuggest API directly
+    let directSiteAuditScore = null;
+    let directSiteAuditIssues = null;
+    try {
+      const locId = activeProject?.locations?.[0]?.loc_id || 2840;
+      const lang = activeProject?.locations?.[0]?.lang || "en";
+      const auditUrl = `https://app.neilpatel.com/api/site_audit?domain=${targetDomain}&locId=${locId}&lang=${lang}`;
+      const auditRes = await fetch(auditUrl, { headers: authHeaders });
+      if (auditRes.ok) {
+        const auditData = await auditRes.json();
+        const resObj = auditData.result || auditData;
+        directSiteAuditScore = resObj.score ?? null;
+        if (resObj.issues) {
+          directSiteAuditIssues = {
+            total: resObj.issues.total ?? 0,
+            new: resObj.issues.new ?? 0,
+            fixed: resObj.issues.fixed ?? 0,
+            highest_impact: resObj.issues.highest_impact || resObj.issues.highestImpact || []
+          };
+        }
+        console.log(`[sync-ubersuggest] Direct site audit fetched for ${targetDomain}: score=${directSiteAuditScore}, issues=${directSiteAuditIssues?.total}`);
+      } else {
+        console.warn(`[sync-ubersuggest] Direct site audit returned status ${auditRes.status} for ${targetDomain}`);
+      }
+    } catch (e) {
+      console.error(`[sync-ubersuggest] Failed to fetch direct site audit for ${targetDomain}:`, e);
+    }
+
+    // 4.3 Fetch Direct Rank Tracking keywords from Ubersuggest API directly
+    let directTrackedKeywords = [];
+    try {
+      const rtUrl = `https://app.neilpatel.com/api/rank_tracking/${projectId}`;
+      const rtRes = await fetch(rtUrl, { headers: authHeaders });
+      if (rtRes.ok) {
+        const rtData = await rtRes.json();
+        const list = Array.isArray(rtData) ? rtData : (rtData.result || rtData.keywords || rtData.data || []);
+        directTrackedKeywords = list.map((item: any) => ({
+          keyword: item.keyword,
+          volume: item.volume ?? null,
+          desktop_new: item.position ?? item.desktop_new ?? item.rank ?? null,
+          desktop_old: item.position_prev ?? item.desktop_old ?? item.previous_position ?? item.previousPosition ?? null,
+          focus_device: "desktop"
+        }));
+        console.log(`[sync-ubersuggest] Direct rank tracking fetched for ${targetDomain}: keywords=${directTrackedKeywords.length}`);
+      } else {
+        console.warn(`[sync-ubersuggest] Direct rank tracking returned status ${rtRes.status} for ${targetDomain}`);
+      }
+    } catch (e) {
+      console.error(`[sync-ubersuggest] Failed to fetch direct rank tracking for ${targetDomain}:`, e);
+    }
 
     // 4.5 Fetch recent SEO metrics to fall back to if no new alerts
     const { data: previousRows } = await supabase
@@ -164,22 +214,27 @@ serve(async (req) => {
       }
     }
 
-    const finalAuditScore = siteAuditScore ?? lastValidScore ?? null;
+    const finalAuditScore = siteAuditScore ?? directSiteAuditScore ?? lastValidScore ?? null;
     let finalAuditIssues = lastValidIssues ?? null;
     if (latestAudit?.content?.issues) {
       finalAuditIssues = {
         ...latestAudit.content.issues,
         highest_impact: latestAudit.content.highest_impact || []
       };
+    } else if (directSiteAuditIssues) {
+      finalAuditIssues = directSiteAuditIssues;
     }
     // Build final keyword list: start with DB history as a base,
-    // then overlay the fresh alert data for any keywords that appear in it.
-    // This ensures keywords that didn't change still show their last known position.
+    // then overlay direct rank tracking, then overlay fresh alert data.
     const dbKwMap = new Map<string, any>();
     for (const kw of lastValidKeywords) {
       dbKwMap.set((kw as any).keyword, kw);
     }
-    // Fresh alert data overwrites DB data for the same keyword
+    // Direct rank tracking overwrites DB data
+    for (const kw of directTrackedKeywords) {
+      dbKwMap.set(kw.keyword, kw);
+    }
+    // Fresh alert data overwrites direct/DB data for the same keyword
     for (const kw of trackedKeywords) {
       dbKwMap.set(kw.keyword, kw);
     }
