@@ -284,7 +284,9 @@ export function AnalyticsSummaryCard({
     
     // Find highest platform by views (most intuitive for 'Primary Channel')
     const validTopPlatform = aiMetrics.top_platform && aiMetrics.top_platform !== "None" ? aiMetrics.top_platform : null;
-    const bestPlatform = validTopPlatform || [...optimizedPlatformData].sort((a,b) => b.views - a.views)[0]?.platform || "None";
+    const sortedPlatforms = [...optimizedPlatformData].sort((a,b) => b.views - a.views);
+    const highestPlatform = sortedPlatforms[0];
+    const bestPlatform = validTopPlatform || (highestPlatform && (highestPlatform.views > 0 || highestPlatform.engagements > 0) ? highestPlatform.platform : "None");
 
     
     // Extract thumbnail for YouTube videos

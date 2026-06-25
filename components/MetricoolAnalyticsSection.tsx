@@ -84,6 +84,7 @@ interface TikTokPost {
   url: string | null;
   link: string | null;
   image: string | null;
+  isMocked?: boolean;
 }
 
 interface ContentWithMetrics {
@@ -100,6 +101,7 @@ interface ContentWithMetrics {
     shares: number;
     reach: number;
     impressions: number;
+    isMocked?: boolean;
   } | null;
 }
 
@@ -534,7 +536,15 @@ export const MetricoolAnalyticsSection = ({
             published_at: c.published_at,
             content_type: c.content_type,
             metrics: (() => {
-              let finalMetrics = metrics ? {
+              let finalMetrics: {
+                views: number;
+                likes: number;
+                comments: number;
+                shares: number;
+                reach: number;
+                impressions: number;
+                isMocked?: boolean;
+              } | null = metrics ? {
                 // For LinkedIn we persist impressions into `impressions` (and now also `views`).
                 // For backwards compatibility, fall back between the two.
                 views: metrics.views || metrics.impressions || 0,
@@ -560,7 +570,8 @@ export const MetricoolAnalyticsSection = ({
                     comments: mockComments,
                     shares: mockShares,
                     reach: mockViews,
-                    impressions: mockViews
+                    impressions: mockViews,
+                    isMocked: true
                   };
                 }
               }
@@ -619,7 +630,8 @@ export const MetricoolAnalyticsSection = ({
                 likes: mockLikes,
                 comments: mockComments,
                 shares: mockShares,
-                engagement: (mockViews > 0 ? ((mockLikes + mockComments + mockShares) / mockViews) * 100 : 0)
+                engagement: (mockViews > 0 ? ((mockLikes + mockComments + mockShares) / mockViews) * 100 : 0),
+                isMocked: true
               };
             }
             return post;
@@ -1440,6 +1452,11 @@ export const MetricoolAnalyticsSection = ({
     return num.toString();
   };
 
+  const hasMockedData = platform === "tiktok" && (
+    livePosts.some(p => (p as any).isMocked) || 
+    (contentData && contentData.some(c => c.metrics?.isMocked))
+  );
+
   if (configLoading) {
     return (
       <div className="space-y-4">
@@ -1607,6 +1624,19 @@ export const MetricoolAnalyticsSection = ({
           </Button>
         </div>
       </div>
+
+      {hasMockedData && platform === "tiktok" && (
+        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 p-4 rounded-xl flex items-start gap-3 shadow-xs">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-semibold mb-1">TikTok Account Connection Status</p>
+            <p className="leading-relaxed">
+              We are detecting posts but with zero engagement and metrics from Metricool. This usually happens when the TikTok account connected under your brand is <strong>not authorized as a Business Account</strong> or the login session has expired. 
+              Please log in to your Metricool dashboard, disconnect, and re-authorize your TikTok channel as a Business Account to restore live analytics sync.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Config editor */}
       {showConfig && (

@@ -121,7 +121,7 @@ serve(async (req) => {
                 total_spend: collectedMetrics.total_spend || 0,
                 total_conversions: collectedMetrics.total_conversions || 0,
                 roas: collectedMetrics.roas || 0,
-                top_platform: collectedMetrics.top_platform || (detectedPlatforms.length > 0 ? detectedPlatforms[0] : "None"),
+                top_platform: collectedMetrics.top_platform || "None",
                 ...collectedMetrics // Include any platform-specific metrics
             }
         };
@@ -682,10 +682,10 @@ async function collectSocialData(
     }
 
     const topPlatformEntry = Object.entries(platformStats).sort((a, b) => b[1].views - a[1].views)[0];
-    if (topPlatformEntry) {
+    if (topPlatformEntry && (topPlatformEntry[1].views > 0 || topPlatformEntry[1].engagements > 0)) {
         metricsResult.top_platform = topPlatformEntry[0];
-    } else if (activePlatforms.size > 0) {
-        metricsResult.top_platform = [...activePlatforms][0];
+    } else {
+        metricsResult.top_platform = "None";
     }
 
     // Log what data we collected for debugging

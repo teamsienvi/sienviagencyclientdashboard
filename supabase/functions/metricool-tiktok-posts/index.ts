@@ -417,7 +417,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, rows, savedCount }),
+      JSON.stringify({ success: true, rows, savedCount, csvText }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {

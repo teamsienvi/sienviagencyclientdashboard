@@ -221,26 +221,57 @@ serve(async (req) => {
 
         // 1. Fetch followers timeline
         try {
-          const data = await fetchMetricool("/api/v2/analytics/timelines", {
-            ...params,
-            metric: followersMetric,
-            subject: "account",
-          });
-          followers = extractTimelineValue(data);
+          let data: any;
+          if (platform === "tiktok") {
+            data = await fetchMetricool("/api/stats/timeline/tiktokFollowers", {
+              userId,
+              blog_id: blogId || "",
+              start: from,
+              end: to
+            });
 
-          // Also calculate new followers from timeline
-          if (data) {
             let points: any[] = [];
             if (Array.isArray(data)) {
-              points = data[0]?.values || data;
-            } else if (data.data) {
-              points = Array.isArray(data.data) ? data.data : (data.data.values || []);
+              points = data;
+            } else if (data?.data && Array.isArray(data.data)) {
+              points = data.data;
             }
-            if (points.length > 1) {
-              points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
-              const first = points[0]?.value ?? 0;
-              const last = points[points.length - 1]?.value ?? 0;
-              newFollowers = last - first;
+
+            if (points.length > 0) {
+              points.sort((a, b) => new Date(a.dateTime || a.date || 0).getTime() - new Date(b.dateTime || b.date || 0).getTime());
+              const latestEntry = points[points.length - 1];
+              followers = latestEntry.followers ?? latestEntry.value ?? null;
+
+              if (points.length > 1) {
+                const first = points[0]?.followers ?? points[0]?.value ?? 0;
+                const last = latestEntry?.followers ?? latestEntry?.value ?? 0;
+                newFollowers = last - first;
+              } else {
+                newFollowers = 0;
+              }
+            }
+          } else {
+            data = await fetchMetricool("/api/v2/analytics/timelines", {
+              ...params,
+              metric: followersMetric,
+              subject: "account",
+            });
+            followers = extractTimelineValue(data);
+
+            // Also calculate new followers from timeline
+            if (data) {
+              let points: any[] = [];
+              if (Array.isArray(data)) {
+                points = data[0]?.values || data;
+              } else if (data.data) {
+                points = Array.isArray(data.data) ? data.data : (data.data.values || []);
+              }
+              if (points.length > 1) {
+                points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
+                const first = points[0]?.value ?? 0;
+                const last = points[points.length - 1]?.value ?? 0;
+                newFollowers = last - first;
+              }
             }
           }
           
