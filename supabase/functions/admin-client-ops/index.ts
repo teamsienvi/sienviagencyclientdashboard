@@ -18,7 +18,7 @@ serve(async (req) => {
             auth: { autoRefreshToken: false, persistSession: false },
         });
 
-        const { action, clientName, clientId, userId, blogId, platform, logoUrl } = await req.json();
+        const { action, clientName, clientId, userId, blogId, platform, logoUrl, serviceName, credentialToken } = await req.json();
 
         if (action === "create_client") {
             const { data, error } = await supabaseAdmin
@@ -192,6 +192,22 @@ serve(async (req) => {
             }
 
             return new Response(JSON.stringify({ success: true, chunksProcessed: chunks.length, results }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        if (action === "update_credentials") {
+            if (!serviceName || !credentialToken) {
+                return new Response(JSON.stringify({ error: "serviceName and credentialToken required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            }
+            const { data, error } = await supabaseAdmin
+                .from("integration_credentials")
+                .upsert(
+                    { service_name: serviceName, token: credentialToken, updated_at: new Date().toISOString() },
+                    { onConflict: "service_name" }
+                )
+                .select("service_name, updated_at")
+                .single();
+            if (error) return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return new Response(JSON.stringify({ success: true, credential: data }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         return new Response(JSON.stringify({ error: "unknown action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

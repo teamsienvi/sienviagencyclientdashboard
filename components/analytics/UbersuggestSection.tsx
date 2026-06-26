@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle, Activity, Search, ShieldCheck, ShieldAlert, Info } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle, Activity, Search, ShieldCheck, ShieldAlert, Info, History } from "lucide-react";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSyncState } from "@/hooks/useSyncState";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,6 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
   const issues = typeof latest.site_audit_issues === 'string' ? JSON.parse(latest.site_audit_issues) : latest.site_audit_issues;
   const keywords = typeof latest.tracked_keywords === 'string' ? JSON.parse(latest.tracked_keywords) : (latest.tracked_keywords || []);
   const totalIssues = issues?.total || 0;
-  const scoreChange = issues?.score_change ?? null;
   const fromDate = issues?.from_date;
   const toDate = issues?.to_date;
   const allTrackedKeywords = issues?.all_tracked_keywords || [];
@@ -74,6 +73,35 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
     used: keywords.length, 
     limit: latest.raw_project_data?.limits?.keywords?.limit || 150 
   };
+
+  // Compute score change from historical snapshots (not relying on issues.score_change which is often null)
+  const scoreSnapshot = useMemo(() => {
+    const validScoreRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
+    if (validScoreRows.length < 2) return { change: issues?.score_change ?? null, previousScore: null, snapshotDate: null };
+
+    const currentRow = validScoreRows[validScoreRows.length - 1];
+    const previousRow = validScoreRows[validScoreRows.length - 2];
+    const change = currentRow.site_audit_score - previousRow.site_audit_score;
+    return {
+      change,
+      previousScore: previousRow.site_audit_score,
+      snapshotDate: new Date(previousRow.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    };
+  }, [allMetrics, issues]);
+
+  // Build score history data for sparkline
+  const scoreHistoryData = useMemo(() => {
+    const validRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
+    // Deduplicate by date, keep last entry per day
+    const byDay = new Map<string, number>();
+    validRows.forEach(m => {
+      const dateStr = new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      byDay.set(dateStr, m.site_audit_score);
+    });
+    return Array.from(byDay.entries()).map(([date, s]) => ({ date, score: s }));
+  }, [allMetrics]);
+
+  const scoreChange = scoreSnapshot.change;
 
   const periodEnd = customDateRange?.end ?? new Date();
   const periodDays = dateRange === "7d" ? 7 : dateRange === "60d" ? 60 : 30;
@@ -196,20 +224,78 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                </div>
             ) : (
               <>
-                <div className="relative w-24 h-24 shrink-0 mx-auto">
-                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 80 80">
-                    <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7" className="stroke-muted" />
-                    <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7"
-                      className={scoreStroke} strokeLinecap="round"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={circumference - (circumference * score) / 100}
-                      style={{ transition: 'stroke-dashoffset 1s ease' }}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={`text-3xl font-bold ${scoreColor}`}>{score}</span>
+                <div className="flex items-center gap-5 w-full justify-center">
+                  <div className="relative w-24 h-24 shrink-0">
+                    <svg className="w-24 h-24 -rotate-90" viewBox="0 0 80 80">
+                      <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7" className="stroke-muted" />
+                      <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7"
+                        className={scoreStroke} strokeLinecap="round"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={circumference - (circumference * score) / 100}
+                        style={{ transition: 'stroke-dashoffset 1s ease' }}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className={`text-3xl font-bold ${scoreColor}`}>{score}</span>
+                    </div>
                   </div>
+
+                  {/* Score Snapshot — always show when we have history */}
+                  {scoreHistoryData.length >= 1 && (
+                    <div className="flex flex-col items-start gap-1.5 text-left">
+                      <div className="flex items-center gap-1.5">
+                        <History className="h-3 w-3 text-muted-foreground/60" />
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Score Snapshot</span>
+                      </div>
+                      {scoreSnapshot.previousScore !== null && scoreSnapshot.previousScore !== score ? (
+                        <>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-lg font-mono font-bold text-muted-foreground/50 line-through decoration-1">{scoreSnapshot.previousScore}</span>
+                            <span className="text-muted-foreground/40">→</span>
+                            <span className={`text-lg font-mono font-bold ${scoreColor}`}>{score}</span>
+                          </div>
+                          {scoreChange !== null && scoreChange !== 0 && (
+                            <div className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${scoreChange > 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                              {scoreChange > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                              {scoreChange > 0 ? '+' : ''}{scoreChange} pts
+                            </div>
+                          )}
+                          {scoreSnapshot.snapshotDate && (
+                            <span className="text-[9px] text-muted-foreground/50">vs {scoreSnapshot.snapshotDate}</span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-lg font-mono font-bold ${scoreColor}`}>{score}</span>
+                            <div className="flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
+                              <Minus className="h-3 w-3" />
+                              Stable
+                            </div>
+                          </div>
+                          <span className="text-[9px] text-muted-foreground/50">
+                            {scoreHistoryData.length} snapshot{scoreHistoryData.length !== 1 ? 's' : ''} since {scoreHistoryData[0]?.date}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {/* Score History Sparkline */}
+                {scoreHistoryData.length > 1 && (
+                  <div className="w-full mt-1">
+                    <ResponsiveContainer width="100%" height={40}>
+                      <LineChart data={scoreHistoryData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                        <Line type="monotone" dataKey="score" stroke={score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'} strokeWidth={2} dot={false} />
+                        <Tooltip
+                          contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', fontSize: '11px', padding: '4px 8px' }}
+                          formatter={(value: number) => [`${value}`, 'Score']}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
     
                 <div className="space-y-3 w-full">
                   <div>
