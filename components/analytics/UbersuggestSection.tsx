@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle, Activity, Search, ShieldCheck, ShieldAlert, Info, History } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Calendar, Key, ArrowUpRight, ArrowDownRight, RefreshCw, AlertCircle, Activity, Search, ShieldCheck, ShieldAlert, Info, History, ChevronDown, ChevronUp } from "lucide-react";
 import { isDataStale, FRESHNESS_POLICIES } from "@/lib/freshnessPolicy";
 import { useSyncState } from "@/hooks/useSyncState";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ interface UbersuggestSectionProps {
 
 export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange, isActive = true }: UbersuggestSectionProps) {
   const syncState = useSyncState(clientId, "seo", "ubersuggest");
+  const [scoreHistoryExpanded, setScoreHistoryExpanded] = useState(false);
 
   const { data: allMetrics, isLoading, isFetching } = useQuery({
     queryKey: ["client-seo-metrics", clientId],
@@ -89,16 +90,24 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
     };
   }, [allMetrics, issues]);
 
-  // Build score history data for sparkline
+  // Build score history data for sparkline + timeline
   const scoreHistoryData = useMemo(() => {
     const validRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
     // Deduplicate by date, keep last entry per day
-    const byDay = new Map<string, number>();
+    const byDay = new Map<string, { score: number; fullDate: string }>();
     validRows.forEach(m => {
       const dateStr = new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      byDay.set(dateStr, m.site_audit_score);
+      byDay.set(dateStr, {
+        score: m.site_audit_score,
+        fullDate: new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      });
     });
-    return Array.from(byDay.entries()).map(([date, s]) => ({ date, score: s }));
+    const entries = Array.from(byDay.entries()).map(([date, d]) => ({ date, score: d.score, fullDate: d.fullDate }));
+    // Add change from previous snapshot
+    return entries.map((entry, i) => ({
+      ...entry,
+      change: i === 0 ? null : entry.score - entries[i - 1].score
+    }));
   }, [allMetrics]);
 
   const scoreChange = scoreSnapshot.change;
@@ -224,78 +233,20 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                </div>
             ) : (
               <>
-                <div className="flex items-center gap-5 w-full justify-center">
-                  <div className="relative w-24 h-24 shrink-0">
-                    <svg className="w-24 h-24 -rotate-90" viewBox="0 0 80 80">
-                      <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7" className="stroke-muted" />
-                      <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7"
-                        className={scoreStroke} strokeLinecap="round"
-                        strokeDasharray={circumference}
-                        strokeDashoffset={circumference - (circumference * score) / 100}
-                        style={{ transition: 'stroke-dashoffset 1s ease' }}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className={`text-3xl font-bold ${scoreColor}`}>{score}</span>
-                    </div>
+                <div className="relative w-24 h-24 shrink-0 mx-auto">
+                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 80 80">
+                    <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7" className="stroke-muted" />
+                    <circle cx="40" cy="40" r="36" fill="none" strokeWidth="7"
+                      className={scoreStroke} strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={circumference - (circumference * score) / 100}
+                      style={{ transition: 'stroke-dashoffset 1s ease' }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={`text-3xl font-bold ${scoreColor}`}>{score}</span>
                   </div>
-
-                  {/* Score Snapshot — always show when we have history */}
-                  {scoreHistoryData.length >= 1 && (
-                    <div className="flex flex-col items-start gap-1.5 text-left">
-                      <div className="flex items-center gap-1.5">
-                        <History className="h-3 w-3 text-muted-foreground/60" />
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Score Snapshot</span>
-                      </div>
-                      {scoreSnapshot.previousScore !== null && scoreSnapshot.previousScore !== score ? (
-                        <>
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-lg font-mono font-bold text-muted-foreground/50 line-through decoration-1">{scoreSnapshot.previousScore}</span>
-                            <span className="text-muted-foreground/40">→</span>
-                            <span className={`text-lg font-mono font-bold ${scoreColor}`}>{score}</span>
-                          </div>
-                          {scoreChange !== null && scoreChange !== 0 && (
-                            <div className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${scoreChange > 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
-                              {scoreChange > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                              {scoreChange > 0 ? '+' : ''}{scoreChange} pts
-                            </div>
-                          )}
-                          {scoreSnapshot.snapshotDate && (
-                            <span className="text-[9px] text-muted-foreground/50">vs {scoreSnapshot.snapshotDate}</span>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-lg font-mono font-bold ${scoreColor}`}>{score}</span>
-                            <div className="flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground">
-                              <Minus className="h-3 w-3" />
-                              Stable
-                            </div>
-                          </div>
-                          <span className="text-[9px] text-muted-foreground/50">
-                            {scoreHistoryData.length} snapshot{scoreHistoryData.length !== 1 ? 's' : ''} since {scoreHistoryData[0]?.date}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  )}
                 </div>
-
-                {/* Score History Sparkline */}
-                {scoreHistoryData.length > 1 && (
-                  <div className="w-full mt-1">
-                    <ResponsiveContainer width="100%" height={40}>
-                      <LineChart data={scoreHistoryData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                        <Line type="monotone" dataKey="score" stroke={score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'} strokeWidth={2} dot={false} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', fontSize: '11px', padding: '4px 8px' }}
-                          formatter={(value: number) => [`${value}`, 'Score']}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
     
                 <div className="space-y-3 w-full">
                   <div>
@@ -316,6 +267,95 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                     </div>
                   </div>
                 </div>
+
+                {/* View Score History toggle */}
+                {scoreHistoryData.length >= 2 && (
+                  <div className="w-full">
+                    <button
+                      onClick={() => setScoreHistoryExpanded(!scoreHistoryExpanded)}
+                      className="w-full flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors py-1.5 border-t border-border/50"
+                    >
+                      <History className="h-3 w-3" />
+                      {scoreHistoryExpanded ? 'Hide' : 'View'} Score History ({scoreHistoryData.length} snapshots)
+                      {scoreHistoryExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    </button>
+
+                    {scoreHistoryExpanded && (
+                      <div className="pt-3 space-y-3 animate-in slide-in-from-top-2 duration-200">
+                        {/* Chart with dates */}
+                        <div className="w-full">
+                          <ResponsiveContainer width="100%" height={80}>
+                            <LineChart data={scoreHistoryData} margin={{ top: 4, right: 8, left: 8, bottom: 2 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.3} />
+                              <XAxis
+                                dataKey="date"
+                                tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
+                                tickLine={false}
+                                axisLine={false}
+                                interval={Math.max(0, Math.floor(scoreHistoryData.length / 5) - 1)}
+                              />
+                              <YAxis
+                                tick={{ fontSize: 9, fill: 'var(--muted-foreground)' }}
+                                tickLine={false}
+                                axisLine={false}
+                                domain={['dataMin - 5', 'dataMax + 5']}
+                                width={25}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="score"
+                                stroke={score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'}
+                                strokeWidth={2}
+                                dot={{ r: 3, fill: 'var(--card)', stroke: score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444', strokeWidth: 2 }}
+                                activeDot={{ r: 5 }}
+                              />
+                              <Tooltip
+                                contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', fontSize: '11px', padding: '6px 10px', background: 'var(--card)' }}
+                                labelStyle={{ fontWeight: 600, marginBottom: 2 }}
+                                formatter={(value: number) => [`${value}`, 'Score']}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+
+                        {/* Timeline table */}
+                        <div className="max-h-[140px] overflow-y-auto space-y-0 scrollbar-thin">
+                          {[...scoreHistoryData].reverse().map((entry, i) => (
+                            <div key={entry.date} className={`flex items-center gap-3 py-1.5 px-2 ${i % 2 === 0 ? 'bg-muted/20' : ''} rounded`}>
+                              {/* Date */}
+                              <span className="text-[11px] text-muted-foreground font-mono w-[100px] shrink-0">
+                                {entry.fullDate}
+                              </span>
+                              {/* Score */}
+                              <span className={`text-[13px] font-bold font-mono w-[32px] text-right ${
+                                entry.score >= 80 ? 'text-emerald-500' : entry.score >= 60 ? 'text-amber-500' : 'text-red-500'
+                              }`}>
+                                {entry.score}
+                              </span>
+                              {/* Change badge */}
+                              <div className="flex-1">
+                                {entry.change === null ? (
+                                  <span className="text-[9px] text-muted-foreground/50 italic">First snapshot</span>
+                                ) : entry.change === 0 ? (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/60 px-1.5 py-0.5 rounded bg-muted/30">
+                                    <Minus className="h-2.5 w-2.5" /> No change
+                                  </span>
+                                ) : (
+                                  <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                    entry.change > 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-500'
+                                  }`}>
+                                    {entry.change > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+                                    {entry.change > 0 ? '+' : ''}{entry.change}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </div>
