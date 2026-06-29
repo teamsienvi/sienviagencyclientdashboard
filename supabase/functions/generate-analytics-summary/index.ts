@@ -33,8 +33,8 @@ serve(async (req) => {
         if (!clientId || !type) {
             throw new Error("clientId and type are required");
         }
-        if (type !== "social" && type !== "website" && type !== "lms" && type !== "ads") {
-            throw new Error("type must be 'social', 'website', 'lms', or 'ads'");
+        if (type !== "social" && type !== "website" && type !== "lms" && type !== "ads" && type !== "seo") {
+            throw new Error("type must be 'social', 'website', 'lms', 'ads', or 'seo'");
         }
 
         console.log(`Generating ${type} summary for client ${clientId} (${dateRange || "7d"})`);
@@ -71,6 +71,10 @@ serve(async (req) => {
             collectedMetrics = result.metrics;
         } else if (type === "ads") {
             const result = await collectAdsData(supabase, clientId, startStr, endStr);
+            analyticsContext = result.context;
+            collectedMetrics = result.metrics;
+        } else if (type === "seo") {
+            const result = await collectSeoData(supabase, clientId, startStr, endStr);
             analyticsContext = result.context;
             collectedMetrics = result.metrics;
         }
@@ -1068,6 +1072,136 @@ async function collectAdsData(
     return { context: sections.join("\n\n"), metrics: metricsResult };
 }
 
+async function collectSeoData(
+    supabase: any,
+    clientId: string,
+    startStr: string,
+    endStr: string
+): Promise<{ context: string; metrics: any }> {
+    const sections: string[] = [];
+    const metricsResult = {
+        total_views: 0,
+        engagement_rate: 0,
+        followers_gained: 0,
+        unique_visitors: 0,
+        total_sales: 0,
+        top_platform: "SEO"
+    };
+
+    try {
+        const { data: seoRows, error } = await supabase
+            .from("report_seo_metrics")
+            .select("site_audit_score, site_audit_issues, tracked_keywords, raw_project_data, collected_at")
+            .eq("client_id", clientId)
+            .gte("collected_at", startStr)
+            .lte("collected_at", endStr + "T23:59:59Z")
+            .order("collected_at", { ascending: true });
+
+        if (error) throw error;
+
+        let finalRows = seoRows || [];
+        if (finalRows.length === 0) {
+            // Fallback to the latest record overall if none in date range
+            const { data: latestRow } = await supabase
+                .from("report_seo_metrics")
+                .select("site_audit_score, site_audit_issues, tracked_keywords, raw_project_data, collected_at")
+                .eq("client_id", clientId)
+                .order("collected_at", { ascending: false })
+                .limit(1);
+            if (latestRow && latestRow.length > 0) {
+                finalRows = [latestRow[0]];
+            }
+        }
+
+        if (finalRows.length > 0) {
+            const oldest = finalRows[0];
+            const newest = finalRows[finalRows.length - 1];
+
+            const oldestScore = oldest.site_audit_score;
+            const newestScore = newest.site_audit_score;
+            const scoreDiff = (oldestScore !== null && newestScore !== null) ? (newestScore - oldestScore) : 0;
+
+            const newestIssues = typeof newest.site_audit_issues === 'string' ? JSON.parse(newest.site_audit_issues) : newest.site_audit_issues;
+            const oldestIssues = typeof oldest.site_audit_issues === 'string' ? JSON.parse(oldest.site_audit_issues) : oldest.site_audit_issues;
+            const newestIssuesCount = newestIssues?.total ?? newestIssues?.total_issues ?? 0;
+            const oldestIssuesCount = oldestIssues?.total ?? oldestIssues?.total_issues ?? 0;
+            const issuesDiff = newestIssuesCount - oldestIssuesCount;
+
+            const newestKeywords = typeof newest.tracked_keywords === 'string' ? JSON.parse(newest.tracked_keywords) : (newest.tracked_keywords || []);
+            const oldestKeywords = typeof oldest.tracked_keywords === 'string' ? JSON.parse(oldest.tracked_keywords) : (oldest.tracked_keywords || []);
+
+            let improvedCount = 0;
+            let declinedCount = 0;
+            let top3Count = 0;
+            let top10Count = 0;
+
+            newestKeywords.forEach((kw: any) => {
+                const pos = kw.desktop_new;
+                if (pos !== null) {
+                    if (pos <= 3) top3Count++;
+                    if (pos <= 10) top10Count++;
+
+                    const oldKw = oldestKeywords.find((okw: any) => okw.keyword === kw.keyword);
+                    if (oldKw && oldKw.desktop_new !== null) {
+                        if (pos < oldKw.desktop_new) {
+                            improvedCount++;
+                        } else if (pos > oldKw.desktop_new) {
+                            declinedCount++;
+                        }
+                    }
+                }
+            });
+
+            // Set main metrics for dashboard display
+            metricsResult.total_views = newestKeywords.length; // Tracked Keywords Count
+            metricsResult.engagement_rate = newestScore ?? 0; // Site Health Score
+            metricsResult.followers_gained = scoreDiff; // Weekly score change
+            metricsResult.unique_visitors = newestIssuesCount; // Total site issues
+
+            const domain = newest.raw_project_data?.domain || newest.raw_project_data?.url || "SEO";
+            metricsResult.top_platform = domain;
+
+            let organicTrafficStr = "N/A";
+            let organicKeywordsCount = "N/A";
+            if (newest.raw_project_data?.domain_overview) {
+                const overview = newest.raw_project_data.domain_overview;
+                const traffic = overview.organic_traffic ?? overview.traffic ?? null;
+                const kws = overview.organic_keywords ?? overview.keywords ?? null;
+                if (traffic !== null) organicTrafficStr = traffic.toLocaleString();
+                if (kws !== null) organicKeywordsCount = kws.toLocaleString();
+            }
+
+            let output = `## SEO Technical Audit\n` +
+                `- Site Health Score: ${newestScore ?? "N/A"} (started at ${oldestScore ?? "N/A"} this period, change: ${scoreDiff >= 0 ? '+' : ''}${scoreDiff})\n` +
+                `- Total Site Issues: ${newestIssuesCount} (started at ${oldestIssuesCount}, change: ${issuesDiff >= 0 ? '+' : ''}${issuesDiff})\n`;
+
+            if (newestIssues?.highest_impact && Array.isArray(newestIssues.highest_impact) && newestIssues.highest_impact.length > 0) {
+                output += `- Key Issues Detected:\n` +
+                    newestIssues.highest_impact.slice(0, 3).map((issue: any) => `  - ${issue.title || issue.issue_type || "Issue"}: ${issue.count || 0} occurrences (${issue.difficulty || "medium"} difficulty)`).join('\n') + `\n`;
+            }
+
+            output += `\n## Keyword Rankings (Tracked Keywords: ${newestKeywords.length})\n` +
+                `- Keywords in Top 3: ${top3Count}\n` +
+                `- Keywords in Top 10: ${top10Count}\n` +
+                `- Improved ranks: ${improvedCount} keywords\n` +
+                `- Declined ranks: ${declinedCount} keywords\n`;
+
+            output += `\n## Domain Visibility Overview\n` +
+                `- Est. Organic Monthly Traffic: ${organicTrafficStr}\n` +
+                `- Total Organic Keywords: ${organicKeywordsCount}\n`;
+
+            sections.push(output);
+        } else {
+            sections.push("No SEO metric updates found in the specified timeframe.");
+        }
+    } catch (err) {
+        console.error("Error collecting SEO data for summary:", err);
+        sections.push("Error collecting SEO data.");
+    }
+
+    return { context: sections.join("\n\n"), metrics: metricsResult };
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /** Extract platform names mentioned in the analytics context string */
@@ -1099,7 +1233,10 @@ function buildPrompt(
     endStr: string,
     platforms: string[]
 ): string {
-    const label = type === "ads" ? "advertising" : (type === "social" ? "social media" : "website");
+    const label = type === "ads" ? "advertising" : 
+                  type === "social" ? "social media" : 
+                  type === "website" ? "website" : 
+                  type === "seo" ? "search engine optimization (SEO)" : "analytics";
     const platformClause = platforms.length > 0
         ? `\nThis client is active on: ${platforms.join(", ")}. Only reference these platforms.`
         : "";

@@ -10,6 +10,7 @@ import { RefreshCw, ExternalLink, TrendingUp, TrendingDown, Info } from "lucide-
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
+import { GoogleAdsReportCard } from "@/components/GoogleAdsReportCard";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -790,6 +791,12 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
       {/* Standalone Ads Reports */}
       {getClientAdPlatforms(clientName).includes('amazon') && (
         <AmazonAdsReportCard
+          clientId={clientId}
+          clientName={clientName}
+        />
+      )}
+      {getClientAdPlatforms(clientName).includes('google') && (
+        <GoogleAdsReportCard
           clientId={clientId}
           clientName={clientName}
         />

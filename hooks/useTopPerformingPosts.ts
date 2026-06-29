@@ -30,15 +30,12 @@ export function useTopPerformingPosts(
       const periodStartStr = periodStartDate.toISOString().split("T")[0];
       const periodEndStr = periodEndDate.toISOString().split("T")[0];
 
-      // Apply 2-day buffer on the lower bound for collected_at to handle Metricool lag
-      // (some clients' last sync ran 1-2 days before window start, but period_end is in-window)
-      const fetchStart = new Date(periodStartDate);
-      fetchStart.setDate(fetchStart.getDate() - 2);
-      const fetchStartStr = fetchStart.toISOString().split("T")[0];
-
       // Only return posts published within the reporting period.
       // Filter by published_at on the join so old videos whose metrics got refreshed
       // this week are excluded from Top Content.
+      // Note: We do NOT filter by collected_at or period_end — the published_at filter
+      // already correctly scopes to posts within the reporting window, and older
+      // sync periods' metrics are still valid for ranking.
       let metricsQuery = supabase
         .from("social_content_metrics")
         .select(`
@@ -63,7 +60,6 @@ export function useTopPerformingPosts(
         .eq("social_content.client_id", clientId)
         .gte("social_content.published_at", periodStartStr)
         .lte("social_content.published_at", periodEndStr)
-        .or(`collected_at.gte.${fetchStartStr},period_end.gte.${fetchStartStr}`)
         .limit(2000);
 
       let { data: metricsRaw, error: contentError } = await metricsQuery;

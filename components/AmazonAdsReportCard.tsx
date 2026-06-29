@@ -249,6 +249,16 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     const { toast } = useToast();
     const printFrameRef = useRef<HTMLIFrameElement | null>(null);
     const queryClient = useQueryClient();
+    const hasTriggeredAnalysis = useRef(false);
+
+    // Reset local state on client switch to prevent leaking/stuck report screens
+    useEffect(() => {
+        setFile(null);
+        setReport(null);
+        setGeneratedAt(null);
+        setIsAnalyzing(false);
+        hasTriggeredAnalysis.current = false;
+    }, [clientId]);
 
     const { data: cachedData, isLoading: isFetchingCache, refetch: refetchReport } = useQuery({
         queryKey: ["amazon-ads-report", clientId],
@@ -272,6 +282,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         if (cachedData) {
             if (cachedData.generation_status === 'pending') {
                 setIsAnalyzing(true);
+                hasTriggeredAnalysis.current = true;
             } else if (cachedData.generation_status === 'complete' && cachedData.parsed_data) {
                 setIsAnalyzing(false);
                 setReport(cachedData.parsed_data as AmazonReportData);
@@ -283,7 +294,10 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 }
             } else if (cachedData.generation_status === 'failed') {
                 setIsAnalyzing(false);
-                toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
+                if (hasTriggeredAnalysis.current) {
+                    toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
+                    hasTriggeredAnalysis.current = false;
+                }
             }
         }
     }, [cachedData, file, toast]);
@@ -371,6 +385,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         }
 
         setIsAnalyzing(true);
+        hasTriggeredAnalysis.current = true;
         try {
             const { data: { session } } = await supabase.auth.getSession();
 
@@ -578,9 +593,14 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                     <div className="text-center py-8 text-muted-foreground">
                         <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-30" />
                         <p className="text-sm">Upload an Amazon Ads report and click Generate</p>
-                        <p className="text-xs mt-1 opacity-60">
+                        <p className="text-xs mt-1 opacity-60 mb-2">
                             Supports Campaign Performance and Search Term reports
                         </p>
+                        {cachedData?.generation_status === 'failed' && (
+                            <p className="text-xs mt-2 text-red-400 bg-red-500/10 py-1.5 px-3 rounded border border-red-500/20 inline-block font-medium">
+                                Previous analysis failed. Please try re-uploading the report.
+                            </p>
+                        )}
                     </div>
                 )}
 

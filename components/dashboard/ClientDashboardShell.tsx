@@ -783,6 +783,20 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         </CarouselItem>
                       )}
 
+                      {connectedAccounts?.ubersuggest && (
+                        <CarouselItem>
+                          <AnalyticsSummaryCard
+                            clientId={clientId!}
+                            type="seo"
+                            title="SEO Performance Overview"
+                            icon={<span className="text-xl leading-none">🔍</span>}
+                            dateRange={dateRange}
+                            customDateRange={customDateRange}
+                            isActive={activeTab === "analytics"}
+                          />
+                        </CarouselItem>
+                      )}
+
                       {/*
                       {hasAdsPlatform && (
                         <CarouselItem>

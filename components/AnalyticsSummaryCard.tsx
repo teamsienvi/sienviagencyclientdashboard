@@ -462,10 +462,10 @@ export function AnalyticsSummaryCard({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'ads' ? `Ad Spend (${dateRangeLabel})` : `Total Views (${dateRangeLabel})`}
+                                    {type === 'ads' ? `Ad Spend (${dateRangeLabel})` : type === 'seo' ? `Tracked Keywords` : `Total Views (${dateRangeLabel})`}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
-                                    {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : formatNumber(totalViews)}
+                                    {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : type === 'seo' ? formatNumber(aiMetrics.total_views || 0) : formatNumber(totalViews)}
                                 </p>
                                 {timelineData.length > 0 && (
                                     <div className="h-8 w-full mt-2">
@@ -485,10 +485,10 @@ export function AnalyticsSummaryCard({
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'ads' ? 'ROAS' : 'Avg. Engagement Rate'}
+                                    {type === 'ads' ? 'ROAS' : type === 'seo' ? 'Site Health Score' : 'Avg. Engagement Rate'}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
-                                    {type === 'ads' ? `${(aiMetrics.roas || 0).toFixed(2)}x` : `${engagementRate.toFixed(1)}%`}
+                                    {type === 'ads' ? `${(aiMetrics.roas || 0).toFixed(2)}x` : type === 'seo' ? `${(aiMetrics.engagement_rate || 0).toFixed(0)}/100` : `${engagementRate.toFixed(1)}%`}
                                 </p>
                                 {timelineData.length > 0 && (
                                     <div className="h-8 w-full mt-2">
@@ -508,12 +508,12 @@ export function AnalyticsSummaryCard({
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'social' ? 'Total Followers' : (type === 'ads' ? 'Total Conversions' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors'))}
+                                    {type === 'social' ? 'Total Followers' : (type === 'ads' ? 'Total Conversions' : (type === 'seo' ? 'Total SEO Issues' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors')))}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'social' 
                                         ? formatNumber(totalCurrentFollowers || 0) 
-                                        : (type === 'ads' ? formatNumber(aiMetrics.total_conversions || 0) : (aiMetrics.total_sales > 0 ? `$${formatNumber(aiMetrics.total_sales)}` : formatNumber(aiMetrics.unique_visitors || 0)))
+                                        : (type === 'ads' ? formatNumber(aiMetrics.total_conversions || 0) : (type === 'seo' ? formatNumber(aiMetrics.unique_visitors || 0) : (aiMetrics.total_sales > 0 ? `$${formatNumber(aiMetrics.total_sales)}` : formatNumber(aiMetrics.unique_visitors || 0))))
                                     }
                                 </p>
                                 <div className="h-8 w-full mt-2 flex items-center">
@@ -521,6 +521,11 @@ export function AnalyticsSummaryCard({
                                         <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
                                             <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
                                             {followersGained > 0 ? `+${formatNumber(followersGained)}` : followersGained < 0 ? formatNumber(followersGained) : "+0"} this period
+                                        </div>
+                                    ) : type === 'seo' ? (
+                                        <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                                            <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
+                                            {followersGained > 0 ? `+${followersGained}` : followersGained < 0 ? followersGained : "+0"} score change
                                         </div>
                                     ) : (
                                         <div className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
@@ -531,15 +536,15 @@ export function AnalyticsSummaryCard({
                                 </div>
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
-                                <p className="text-sm font-semibold text-foreground mb-3">{type === 'social' ? 'Top Platform' : (type === 'ads' ? 'Top Campaign' : 'Top Source')}</p>
+                                <p className="text-sm font-semibold text-foreground mb-3">{type === 'social' ? 'Top Platform' : (type === 'ads' ? 'Top Campaign' : type === 'seo' ? 'Primary Domain' : 'Top Source')}</p>
                                 <div className="flex items-center gap-3">
                                     <div className={`${type === 'social' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'} p-2.5 rounded-lg`}>
                                         {type === 'social' ? <PlaySquare className="h-5 w-5" /> : (type === 'ads' ? <Megaphone className="h-5 w-5" /> : <Globe className="h-5 w-5" />)}
                                     </div>
                                     <div>
-                                        <p className="font-bold text-lg capitalize line-clamp-1">{typeof bestPlatform === 'string' ? bestPlatform : "None"}</p>
+                                        <p className="font-bold text-lg lowercase line-clamp-1">{typeof bestPlatform === 'string' ? bestPlatform : "None"}</p>
                                         <p className="text-xs text-muted-foreground mt-0.5">
-                                            {type === 'ads' ? 'Best Performer' : 'Primary Channel'}
+                                            {type === 'ads' ? 'Best Performer' : type === 'seo' ? 'Target Domain' : 'Primary Channel'}
                                         </p>
                                     </div>
                                 </div>
@@ -602,7 +607,7 @@ export function AnalyticsSummaryCard({
                                 )}
 
                                 {/* Top Content List */}
-                                {type !== 'website' && (
+                                {type !== 'website' && type !== 'seo' && (
                                 <div className="bg-transparent">
                                     <div className="flex items-center justify-between mb-4">
                                         <p className="font-semibold text-lg leading-none">{type === 'social' ? 'Top Content' : (type === 'ads' ? 'Active Campaigns' : 'Top Pages')}</p>
@@ -660,7 +665,7 @@ export function AnalyticsSummaryCard({
                             </div>
 
                             {/* Right Column (Approx 40%) */}
-                            {type !== 'website' && (
+                            {type !== 'website' && type !== 'seo' && (
                             <div className="lg:col-span-12 xl:col-span-5 flex flex-col gap-6">
                                 {/* Platform Breakdown Table */}
                                 <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm">
@@ -777,7 +782,7 @@ export function AnalyticsSummaryCard({
                             )}
 
                             {/* Horizontal AI Insights for Website Type */}
-                            {type === 'website' && (
+                            {(type === 'website' || type === 'seo') && (
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6 col-span-full">
                                     {/* What's Working */}
                                     <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-sm h-full">
