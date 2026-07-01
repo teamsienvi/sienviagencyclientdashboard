@@ -96,7 +96,7 @@ serve(async (req) => {
     );
 
     if (!activeProject) {
-      const tracked = projectsArray.map((p: any) => p.domain || p.url || p.name).join(", ");
+      const tracked = projectsArray.map((p: any) => `[ID:${p.id} Name:${p.name} Domain:${p.domain} Url:${p.url}]`).join(", ");
       throw new Error(`Domain ${targetDomain} not found in Ubersuggest projects. Tracked: ${tracked || "(none)"}`);
     }
 

@@ -160,7 +160,18 @@ async function main() {
     }
 
     await sleep(1000);
-    summaryResults.push({ clientId: client.id, name: client.name, social: social.ok, website: website.ok });
+
+    // SEO summary
+    process.stdout.write(`  ${label} seo...     `);
+    const seoSummary = await invokeFunction('generate-analytics-summary', { clientId: client.id, type: 'seo' });
+    if (seoSummary.ok) {
+      console.log(color.green('✓ seo'));
+    } else {
+      console.log(color.red(`✗ seo (${seoSummary.status}: ${JSON.stringify(seoSummary.data).slice(0,80)})`));
+    }
+
+    await sleep(1000);
+    summaryResults.push({ clientId: client.id, name: client.name, social: social.ok, website: website.ok, seo: seoSummary.ok });
   }
 
   // ── Phase 4: Final registry check ────────────────────────────────────────

@@ -37,7 +37,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
-
+import { GoogleAdsReportCard } from "@/components/GoogleAdsReportCard";
 import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { WebsiteAnalyticsSection } from "@/components/analytics/WebsiteAnalyticsSection";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS, hasAmazonOrdersAnalytics } from "@/config/adPlatforms";
@@ -567,7 +567,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
-    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "Hwabelle" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents") return false;
+    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && hasAmazonOrdersAnalytics(client.name)) return true;
@@ -699,7 +699,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, client?.name !== "Snarky Humans" && client?.name !== "Snarky Pets" && client?.name !== "Snarky A$$ Humans" && client?.name !== "The Haven At Deer Park"].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -1035,6 +1035,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       })()}
                         {getClientAdPlatforms(client.name).includes('amazon') && (
                           <AmazonAdsReportCard
+                            clientId={clientId!}
+                            clientName={client.name}
+                          />
+                        )}
+                        {getClientAdPlatforms(client.name).includes('google') && (
+                          <GoogleAdsReportCard
                             clientId={clientId!}
                             clientName={client.name}
                           />

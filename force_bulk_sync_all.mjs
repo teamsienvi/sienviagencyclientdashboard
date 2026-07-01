@@ -271,6 +271,18 @@ async function phase4WebEcommerceOverview() {
       await markRegistrySuccess(client.id, 'ads', 'ads_summary');
     }
     await sleep(800);
+
+    // SEO (for clients that have SEO configs)
+    const resSeo = await callFn(
+      'generate-analytics-summary',
+      { clientId: client.id, type: 'seo', dateRange: '7d' },
+      `${client.name} / seo-summary`,
+      true
+    );
+    if (resSeo.ok) {
+      await markRegistrySuccess(client.id, 'seo', 'seo_summary');
+    }
+    await sleep(800);
   }
 }
 
