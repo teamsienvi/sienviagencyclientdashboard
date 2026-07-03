@@ -68,7 +68,7 @@ export const useWeeklyComparison = (clientId: string, platform?: PlatformType) =
     queryKey: ["weekly-comparison", clientId, platform],
     queryFn: async (): Promise<WeeklyComparison[]> => {
       const periods = getWeeklyPeriods();
-      const allPlatforms: PlatformType[] = ["instagram", "facebook", "tiktok", "x", "linkedin", "youtube"];
+      const allPlatforms: PlatformType[] = ["instagram", "facebook", "tiktok", "x", "linkedin", "youtube", "pinterest"];
       const platforms: PlatformType[] = platform ? [platform] : allPlatforms;
       const results: WeeklyComparison[] = [];
 

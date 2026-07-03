@@ -35,7 +35,7 @@ interface MetricoolAnalyticsSectionProps {
   clientName: string;
   dateRangePreset?: "7d" | "30d" | "60d" | "custom";
   customDateRange?: { start: Date; end: Date };
-  platform: "tiktok" | "linkedin";
+  platform: "tiktok" | "linkedin" | "pinterest";
   platformIcon: React.ReactNode;
   platformColor: string;
   isActive?: boolean;
@@ -68,7 +68,7 @@ interface PrevMetrics {
   total_likes: number | null;
 }
 
-type DateRangePreset = "7d" | "30d" | "60d" | "custom";
+type DateRangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "custom";
 
 interface TikTokPost {
   title: string | null;
@@ -323,7 +323,7 @@ export const MetricoolAnalyticsSection = ({
     gcTime: 7 * 24 * 60 * 60 * 1000,
   });
 
-  // Automatically fetch live followers for LinkedIn using metricool-social-weekly
+  // Automatically fetch live followers for LinkedIn/Pinterest using metricool-social-weekly
   useQuery({
     queryKey: ["metricool-linkedin-live-followers", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
@@ -343,7 +343,7 @@ export const MetricoolAnalyticsSection = ({
       const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
         body: {
           clientId,
-          platform: "linkedin",
+          platform: platform,
           from: startDate,
           to: endDate,
           prevFrom: prevStartDate,
@@ -398,7 +398,7 @@ export const MetricoolAnalyticsSection = ({
 
       return data;
     },
-    enabled: !!config && platform === "linkedin" && isActive,
+    enabled: !!config && (platform === "linkedin" || platform === "pinterest") && isActive,
     staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
     gcTime: 7 * 24 * 60 * 60 * 1000,
   });
@@ -639,11 +639,11 @@ export const MetricoolAnalyticsSection = ({
         }
       }
 
-      // For LinkedIn, use metricool-csv
-      if (platform === "linkedin") {
+      // For LinkedIn and Pinterest, use metricool-csv
+      if (platform === "linkedin" || platform === "pinterest") {
         const { data, error } = await supabase.functions.invoke("metricool-csv", {
           body: {
-            path: "/api/v2/analytics/posts/linkedin",
+            path: `/api/v2/analytics/posts/${platform}`,
             params: {
               from: `${startDate}T00:00:00`,
               to: `${endDate}T23:59:59`,
@@ -834,6 +834,15 @@ export const MetricoolAnalyticsSection = ({
             clientId,
           },
         });
+      } else if (platform === "pinterest") {
+        postsPromise = supabase.functions.invoke("sync-metricool", {
+          body: {
+            clientId,
+            platform,
+            periodStart: fromUTC.split("T")[0],
+            periodEnd: toUTC.split("T")[0],
+          },
+        });
       } else {
         // For TikTok, use the existing endpoint
         postsPromise = supabase.functions.invoke("metricool-tiktok-posts", {
@@ -886,7 +895,7 @@ export const MetricoolAnalyticsSection = ({
               from: fromUTC,
               to: toUTC,
               metric: "followers",
-              network: "linkedin",
+              network: platform,
               subject: "account",
               userId: config.user_id,
               blogId: config.blog_id || undefined,
@@ -914,7 +923,7 @@ export const MetricoolAnalyticsSection = ({
               from: prevFromUTC,
               to: prevToUTC,
               metric: "followers",
-              network: "linkedin",
+              network: platform,
               subject: "account",
               userId: config.user_id,
               blogId: config.blog_id || undefined,
@@ -922,34 +931,38 @@ export const MetricoolAnalyticsSection = ({
           });
 
       // Fetch demographics data using the distribution endpoint
-      const genderDemographicsPromise = supabase.functions.invoke("metricool-distribution", {
-        body: {
-          metric: "gender",
-          network: platform,
-          subject: "account",
-          from: fromUTC,
-          to: toUTC,
-          userId: config.user_id,
-          blogId: config.blog_id || undefined,
-          clientId, // enable persistence (TikTok)
-        },
-      });
+      const genderDemographicsPromise = platform === "tiktok"
+        ? supabase.functions.invoke("metricool-distribution", {
+            body: {
+              metric: "gender",
+              network: platform,
+              subject: "account",
+              from: fromUTC,
+              to: toUTC,
+              userId: config.user_id,
+              blogId: config.blog_id || undefined,
+              clientId,
+            },
+          })
+        : Promise.resolve({ data: null, error: null });
 
       // Fetch country demographics
-      const countryDemographicsPromise = supabase.functions.invoke("metricool-distribution", {
-        body: {
-          metric: "country",
-          network: platform,
-          subject: "account",
-          from: fromUTC,
-          to: toUTC,
-          userId: config.user_id,
-          blogId: config.blog_id || undefined,
-          clientId, // enable persistence (TikTok)
-        },
-      });
+      const countryDemographicsPromise = platform === "tiktok"
+        ? supabase.functions.invoke("metricool-distribution", {
+            body: {
+              metric: "country",
+              network: platform,
+              subject: "account",
+              from: fromUTC,
+              to: toUTC,
+              userId: config.user_id,
+              blogId: config.blog_id || undefined,
+              clientId,
+            },
+          })
+        : Promise.resolve({ data: null, error: null });
 
-      // Fetch engagement rate timeline for both LinkedIn and TikTok (current + previous week)
+      // Fetch engagement rate timeline for LinkedIn, Pinterest and TikTok (current + previous week)
       const engagementCurrentPromise = supabase.functions.invoke("metricool-json", {
         body: {
           path: "/api/v2/analytics/timelines",
@@ -958,8 +971,8 @@ export const MetricoolAnalyticsSection = ({
             to: toUTC,
             metric: "engagement",
             network: platform,
-            ...(platform === "linkedin" ? { metricType: "posts" } : { subject: "video" }),
-            timezone: platform === "linkedin" ? "America/Chicago" : "UTC",
+            ...((platform === "linkedin" || platform === "pinterest") ? { metricType: "posts" } : { subject: "video" }),
+            timezone: (platform === "linkedin" || platform === "pinterest") ? "America/Chicago" : "UTC",
             userId: config.user_id,
             blogId: config.blog_id || undefined,
           },
@@ -974,8 +987,8 @@ export const MetricoolAnalyticsSection = ({
             to: prevToUTC,
             metric: "engagement",
             network: platform,
-            ...(platform === "linkedin" ? { metricType: "posts" } : { subject: "video" }),
-            timezone: platform === "linkedin" ? "America/Chicago" : "UTC",
+            ...((platform === "linkedin" || platform === "pinterest") ? { metricType: "posts" } : { subject: "video" }),
+            timezone: (platform === "linkedin" || platform === "pinterest") ? "America/Chicago" : "UTC",
             userId: config.user_id,
             blogId: config.blog_id || undefined,
           },
@@ -1022,7 +1035,7 @@ export const MetricoolAnalyticsSection = ({
           if (values.length > 0) {
             persistedFollowers = values[values.length - 1]?.value ?? null;
           }
-        } else if (platform === "linkedin" && followersData?.success) {
+        } else if ((platform === "linkedin" || platform === "pinterest") && followersData?.success) {
           // LinkedIn aggregation format: { success: true, data: number | { value: number } | { total: number } }
           const aggData = followersData.data;
           if (typeof aggData === 'number') {
@@ -1034,7 +1047,7 @@ export const MetricoolAnalyticsSection = ({
           } else if (aggData?.followers !== undefined) {
             persistedFollowers = aggData.followers;
           }
-          console.log("LinkedIn current followers parsed:", persistedFollowers);
+          console.log("LinkedIn/Pinterest current followers parsed:", persistedFollowers);
         }
       }
 
@@ -1048,7 +1061,7 @@ export const MetricoolAnalyticsSection = ({
           if (values.length > 0) {
             persistedPrevFollowers = values[values.length - 1]?.value ?? null;
           }
-        } else if (platform === "linkedin" && prevFollowersData?.success) {
+        } else if ((platform === "linkedin" || platform === "pinterest") && prevFollowersData?.success) {
           const aggData = prevFollowersData.data;
           if (typeof aggData === 'number') {
             persistedPrevFollowers = aggData;
@@ -1434,7 +1447,7 @@ export const MetricoolAnalyticsSection = ({
       setLastSyncTime(new Date());
 
       const postsCount = posts?.rows?.length || 0;
-      const platformName = platform === "linkedin" ? "LinkedIn" : "TikTok";
+      const platformName = platform === "linkedin" ? "LinkedIn" : platform === "pinterest" ? "Pinterest" : "TikTok";
       toast.success(`Synced ${postsCount} ${platformName} posts from Metricool`);
 
       queryClient.invalidateQueries({ queryKey: ["metricool-account-metrics", clientId, platform] });
@@ -1474,11 +1487,11 @@ export const MetricoolAnalyticsSection = ({
           <CardTitle className="flex items-center gap-2">
             {platformIcon}
             <span className={platformColor}>
-              {platform === "tiktok" ? "TikTok" : "LinkedIn"} Analytics
+              {platform === "tiktok" ? "TikTok" : platform === "pinterest" ? "Pinterest" : "LinkedIn"} Analytics
             </span>
           </CardTitle>
           <CardDescription>
-            Connect your Metricool account to sync {platform === "tiktok" ? "TikTok" : "LinkedIn"} analytics
+            Connect your Metricool account to sync {platform === "tiktok" ? "TikTok" : platform === "pinterest" ? "Pinterest" : "LinkedIn"} analytics
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -1591,7 +1604,7 @@ export const MetricoolAnalyticsSection = ({
           <AllTimeTopPostsModal clientId={clientId} platformFilter={platform} buttonLabel="All-Time Top 3" />
           <DateRangeSelector
             value={dateRangePreset}
-            onChange={handleDateRangeChange}
+            onChange={handleDateRangeChange as any}
             customRange={customDateRange}
           />
           <Button
@@ -1744,7 +1757,7 @@ export const MetricoolAnalyticsSection = ({
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Eye className="h-4 w-4" />
-              <span className="text-sm">{platform === "linkedin" ? "Total Impressions" : "Total Views"}</span>
+              <span className="text-sm">{(platform === "linkedin" || platform === "pinterest") ? "Total Impressions" : "Total Views"}</span>
               {livePosts.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Live</Badge>
               )}
@@ -1779,7 +1792,7 @@ export const MetricoolAnalyticsSection = ({
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <Heart className="h-4 w-4" />
-              <span className="text-sm">{platform === "linkedin" ? "Total Reactions" : "Total Likes"}</span>
+              <span className="text-sm">{platform === "linkedin" ? "Total Reactions" : platform === "pinterest" ? "Total Saves" : "Total Likes"}</span>
             </div>
             {(() => {
               const currentLikes = livePosts.length > 0
@@ -2038,7 +2051,7 @@ export const MetricoolAnalyticsSection = ({
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
-              Recent {platform === "tiktok" ? "Videos" : "Posts"}
+              Recent {platform === "tiktok" ? "Videos" : platform === "pinterest" ? "Pins" : "Posts"}
               {livePosts.length > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5">Live</Badge>
               )}
@@ -2051,7 +2064,7 @@ export const MetricoolAnalyticsSection = ({
             </Badge>
           </div>
           <CardDescription>
-            Latest {platform === "tiktok" ? "videos" : "posts"} with performance metrics
+            Latest {platform === "tiktok" ? "videos" : platform === "pinterest" ? "pins" : "posts"} with performance metrics
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -2060,17 +2073,17 @@ export const MetricoolAnalyticsSection = ({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[200px]">{platform === "linkedin" ? "Post" : "Video"}</TableHead>
+                  <TableHead className="min-w-[200px]">{platform === "linkedin" ? "Post" : platform === "pinterest" ? "Pin" : "Video"}</TableHead>
                   <TableHead className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Eye className="h-3 w-3" />
-                      {platform === "linkedin" ? "Impressions" : "Views"}
+                      {(platform === "linkedin" || platform === "pinterest") ? "Impressions" : "Views"}
                     </div>
                   </TableHead>
                   <TableHead className="text-right">
                     <div className="flex items-center justify-end gap-1">
                       <Heart className="h-3 w-3" />
-                      {platform === "linkedin" ? "Reactions" : "Likes"}
+                      {platform === "linkedin" ? "Reactions" : platform === "pinterest" ? "Saves" : "Likes"}
                     </div>
                   </TableHead>
                   <TableHead className="text-right">

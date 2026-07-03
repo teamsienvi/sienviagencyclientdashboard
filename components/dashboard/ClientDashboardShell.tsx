@@ -262,7 +262,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       // Include social platforms that support the followers metric via metricool-social-weekly
       // YouTube has different metrics and is fetched via social_account_metrics instead
       const socialPlatforms = metricoolPlatforms
-        .filter(p => ["instagram", "facebook", "tiktok", "linkedin"].includes(p.platform))
+        .filter(p => ["instagram", "facebook", "tiktok", "linkedin", "pinterest"].includes(p.platform))
         .map(p => p.platform);
 
       if (socialPlatforms.length === 0) return null;
@@ -966,6 +966,35 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </CardContent>
                           </Card>
                         )}
+                        {/* Pinterest */}
+                        {metricoolPlatforms?.some(p => p.platform === 'pinterest') && (
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/pinterest-metricool/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                                  <svg className="h-5 w-5 text-red-500 fill-current" viewBox="0 0 24 24">
+                                    <path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.41 7.61 11.175-.105-.945-.199-2.4.041-3.431.222-.947 1.452-6.14 1.452-6.14s-.369-.742-.369-1.84c0-1.724 1-3.012 2.244-3.012 1.055 0 1.568.79 1.568 1.74 0 1.06-.675 2.647-1.021 4.12-.29 1.23.61 2.232 1.829 2.232 2.197 0 3.886-2.317 3.886-5.659 0-2.959-2.128-5.03-5.17-5.03-3.52 0-5.587 2.64-5.587 5.37 0 1.06.409 2.203.92 2.82.1.12.118.23.087.35-.096.39-.309 1.258-.35 1.42-.055.22-.18.27-.417.16-1.558-.72-2.53-2.99-2.53-4.81 0-3.92 2.85-7.52 8.21-7.52 4.3 0 7.66 3.07 7.66 7.18 0 4.28-2.7 7.72-6.45 7.72-1.26 0-2.45-.66-2.85-1.44l-.777 2.96c-.282 1.08-1.049 2.43-1.56 3.27 1.13.33 2.33.51 3.57.51 6.62 0 11.987-5.366 11.987-11.987C23.999 5.368 18.63 0 12.017 0z"/>
+                                  </svg>
+                                </div>
+                                <div><CardTitle className="text-base">Pinterest</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex justify-between items-center">
+                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                                {(() => {
+                                  const count = metricoolFollowers?.followers?.pinterest || 
+                                                socialMetrics?.pinterest?.followers || 
+                                                metricoolPlatforms?.find(p => p.platform === 'pinterest')?.followers;
+                                  return count ? (
+                                    <span className="text-sm text-muted-foreground">{count.toLocaleString()} followers</span>
+                                  ) : null;
+                                })()}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
                       </div>
                   </div>
                 )}
@@ -1248,7 +1277,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
                       <UbersuggestSection 
                         clientId={clientId!} 
-                        dateRange={dateRange} 
+                        dateRange={dateRange as any} 
                         customDateRange={customDateRange} 
                         isActive={activeTab === "analytics"}
                       />

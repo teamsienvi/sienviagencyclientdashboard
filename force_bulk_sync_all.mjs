@@ -79,6 +79,7 @@ const PLATFORM_MODULES = [
   { platform: 'youtube',  module: 'youtube'      },  // YouTube via Metricool / direct
   { platform: 'x',        module: 'metricool'    },  // X/Twitter via Metricool
   { platform: 'linkedin', module: 'metricool'    },  // LinkedIn via Metricool
+  { platform: 'pinterest',module: 'metricool'    },  // Pinterest via Metricool
   { platform: 'ads',      module: 'metricool'    },  // Meta/TikTok ads
   { platform: 'shopify',  module: 'shopify'      },  // Shopify e-commerce
   { platform: 'lms',      module: 'lms'          },  // LMS analytics

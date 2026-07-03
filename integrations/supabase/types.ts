@@ -1332,6 +1332,7 @@ export type Database = {
         | "x"
         | "linkedin"
         | "youtube"
+        | "pinterest"
       social_content_type:
         | "post"
         | "reel"
@@ -1475,6 +1476,7 @@ export const Constants = {
         "x",
         "linkedin",
         "youtube",
+        "pinterest",
       ],
       social_content_type: [
         "post",
