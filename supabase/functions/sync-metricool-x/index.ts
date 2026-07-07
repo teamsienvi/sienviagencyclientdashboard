@@ -302,9 +302,9 @@ serve(async (req) => {
     let newFollowers: number | null = null;
     try {
       const timelinesUrl = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/timelines`);
-      timelinesUrl.searchParams.set("from", startDate);
-      timelinesUrl.searchParams.set("to", endDate);
-      timelinesUrl.searchParams.set("metric", "followers_count");
+      timelinesUrl.searchParams.set("from", `${startDate}T00:00:00`);
+      timelinesUrl.searchParams.set("to", `${endDate}T23:59:59`);
+      timelinesUrl.searchParams.set("metric", "followers");
       timelinesUrl.searchParams.set("network", "twitter");
       timelinesUrl.searchParams.set("subject", "account");
       timelinesUrl.searchParams.set("timezone", "UTC");
@@ -327,19 +327,29 @@ serve(async (req) => {
         const timelinesData = await timelinesResponse.json();
         console.log("Timelines response:", JSON.stringify(timelinesData).substring(0, 1000));
         
-        if (Array.isArray(timelinesData) && timelinesData.length > 0) {
-          const lastPoint = timelinesData[timelinesData.length - 1];
-          const firstPoint = timelinesData[0];
-          
-          if (lastPoint && typeof lastPoint.value === 'number') {
-            followers = lastPoint.value;
-          } else if (lastPoint && typeof lastPoint === 'number') {
-            followers = lastPoint;
+        const extractPoints = (val: any): any[] => {
+          if (!val) return [];
+          if (Array.isArray(val)) {
+            if (val[0]?.values) return val[0].values;
+            return val;
           }
+          if (val.data) return extractPoints(val.data);
+          return [];
+        };
+        const points = extractPoints(timelinesData);
+
+        if (points.length > 0) {
+          points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
+          const firstPoint = points[0];
+          const lastPoint = points[points.length - 1];
           
-          if (firstPoint && lastPoint) {
-            const firstVal = typeof firstPoint.value === 'number' ? firstPoint.value : (typeof firstPoint === 'number' ? firstPoint : 0);
-            const lastVal = typeof lastPoint.value === 'number' ? lastPoint.value : (typeof lastPoint === 'number' ? lastPoint : 0);
+          const firstVal = firstPoint.value ?? firstPoint.followers ?? firstPoint.count ?? null;
+          const lastVal = lastPoint.value ?? lastPoint.followers ?? lastPoint.count ?? null;
+          
+          if (lastVal !== null) {
+            followers = lastVal;
+          }
+          if (firstVal !== null && lastVal !== null) {
             newFollowers = lastVal - firstVal;
           }
         }

@@ -260,12 +260,16 @@ serve(async (req) => {
 
             // Also calculate new followers from timeline
             if (data) {
-              let points: any[] = [];
-              if (Array.isArray(data)) {
-                points = data[0]?.values || data;
-              } else if (data.data) {
-                points = Array.isArray(data.data) ? data.data : (data.data.values || []);
-              }
+              const extractPoints = (val: any): any[] => {
+                if (!val) return [];
+                if (Array.isArray(val)) {
+                  if (val[0]?.values) return val[0].values;
+                  return val;
+                }
+                if (val.data) return extractPoints(val.data);
+                return [];
+              };
+              const points = extractPoints(data);
               if (points.length > 1) {
                 points.sort((a, b) => new Date(a.dateTime || a.date).getTime() - new Date(b.dateTime || b.date).getTime());
                 const first = points[0]?.value ?? 0;

@@ -238,9 +238,17 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
       if (error) throw error;
 
+      // Filter in memory: keep only weekly rows (duration <= 8 days)
+      const weeklyData = (data || []).filter(row => {
+        if (!row.period_start || !row.period_end) return false;
+        const diffTime = Math.abs(new Date(row.period_end).getTime() - new Date(row.period_start).getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays <= 8;
+      });
+
       // Get latest per platform
-      const latestByPlatform: Record<string, typeof data[0]> = {};
-      for (const metric of data || []) {
+      const latestByPlatform: Record<string, typeof weeklyData[0]> = {};
+      for (const metric of weeklyData) {
         if (!latestByPlatform[metric.platform]) {
           latestByPlatform[metric.platform] = metric;
         }

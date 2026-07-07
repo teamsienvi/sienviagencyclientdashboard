@@ -62,7 +62,7 @@ serve(async (req) => {
         let collectedMetrics: any = {};
 
         if (type === "social") {
-            const result = await collectSocialData(supabase, clientId, startStr, endStr);
+            const result = await collectSocialData(supabase, clientId, startStr, endStr, dateRange);
             analyticsContext = result.context;
             collectedMetrics = result.metrics;
         } else if (type === "website") {
@@ -189,7 +189,8 @@ async function collectSocialData(
     supabase: any,
     clientId: string,
     startStr: string,
-    endStr: string
+    endStr: string,
+    dateRange?: string
 ): Promise<{ context: string; metrics: any }> {
     const sections: string[] = [];
     const metricsResult = {
@@ -334,13 +335,35 @@ async function collectSocialData(
         }
     }
 
-    // 1. Social account metrics (latest per platform) — only active platforms
-    const { data: metrics } = await supabase
+    // 1. Social account metrics (filter by duration in-memory to match weekly or 30d/60d reports)
+    const { data: allMetrics, error: queryErr } = await supabase
         .from("social_account_metrics")
-        .select("platform, followers, engagement_rate, total_content, new_followers, collected_at")
+        .select("platform, followers, engagement_rate, total_content, new_followers, collected_at, period_start, period_end")
         .eq("client_id", clientId)
         .order("collected_at", { ascending: false })
-        .limit(20);
+        .limit(100);
+
+    let metricsData: any[] = [];
+    if (!queryErr && allMetrics && allMetrics.length > 0) {
+        if (dateRange === "30d" || dateRange === "60d") {
+            const targetDays = dateRange === "60d" ? 60 : 30;
+            metricsData = allMetrics.filter((m: any) => {
+                if (!m.period_start || !m.period_end) return false;
+                const diffTime = Math.abs(new Date(m.period_end).getTime() - new Date(m.period_start).getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return Math.abs(diffDays - targetDays) <= 3; // Allow small variance
+            });
+        } else {
+            // Default to weekly
+            metricsData = allMetrics.filter((m: any) => {
+                if (!m.period_start || !m.period_end) return false;
+                const diffTime = Math.abs(new Date(m.period_end).getTime() - new Date(m.period_start).getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays <= 8; // Weekly ranges only
+            });
+        }
+    }
+    const metrics = metricsData;
 
     if (metrics && metrics.length > 0) {
         const seen = new Set<string>();

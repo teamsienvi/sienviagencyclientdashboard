@@ -85,9 +85,11 @@ serve(async (req) => {
     try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+        const googleApiKey = Deno.env.get("GEMINI_API_KEY")
+            || Deno.env.get("GOOGLE_API_KEY")
+            || Deno.env.get("YOUTUBE_API_KEY");
 
-        if (!openaiApiKey) throw new Error("OPENAI_API_KEY is not configured.");
+        if (!googleApiKey) throw new Error("No Gemini/Google API key configured. Set GEMINI_API_KEY.");
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -146,10 +148,10 @@ PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
 
         if (upsertError) console.error("Failed to upsert pending status:", upsertError);
 
-        // Execute analysis via Chat Completions
-        console.log("Calling OpenAI Chat Completions for Google Ads analysis...");
+        // Execute analysis via Gemini
+        console.log("Calling Gemini API for Google Ads analysis...");
         try {
-            const parsedReport = await callChatCompletion(openaiApiKey, userMessage);
+            const parsedReport = await callGemini(googleApiKey, userMessage);
 
             const { error: updateError } = await supabase
                 .from("google_ads_reports")
@@ -184,39 +186,70 @@ PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
     }
 });
 
-async function callChatCompletion(apiKey: string, userMessage: string): Promise<any> {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            model: OPENAI_CHAT_MODEL,
-            response_format: { type: "json_object" },
-            max_tokens: 4096,
-            temperature: 0.2,
-            messages: [
-                {
-                    role: "system",
-                    content: "You are an expert Google Ads analyst. Always respond with valid JSON only matching the requested format."
-                },
-                {
-                    role: "user",
-                    content: userMessage
-                }
-            ]
-        })
-    });
+async function callGemini(apiKey: string, userMessage: string): Promise<any> {
+    // 1. Get models list to find the best available model
+    const modelsReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+    if (!modelsReq.ok) {
+        throw new Error(`Failed to fetch models from Gemini API: ${modelsReq.status}`);
+    }
+    const modelsData = await modelsReq.json();
+    const availableModels = modelsData.models
+        .filter((m: any) => m.supportedGenerationMethods.includes("generateContent"))
+        .map((m: any) => m.name.replace('models/', ''));
 
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`OpenAI API ${res.status}: ${errText.substring(0, 500)}`);
+    const candidateModels = [];
+    if (availableModels.includes("gemini-2.5-flash")) candidateModels.push("gemini-2.5-flash");
+    if (availableModels.includes("gemini-2.5-pro")) candidateModels.push("gemini-2.5-pro");
+    if (availableModels.includes("gemini-2.0-flash")) candidateModels.push("gemini-2.0-flash");
+    if (availableModels.includes("gemini-1.5-flash-latest")) candidateModels.push("gemini-1.5-flash-latest");
+    if (availableModels.includes("gemini-1.5-flash-002")) candidateModels.push("gemini-1.5-flash-002");
+    if (availableModels.includes("gemini-1.5-flash")) candidateModels.push("gemini-1.5-flash");
+
+    if (candidateModels.length === 0) {
+        const anyFlash = availableModels.find((m: string) => m.includes("flash"));
+        if (anyFlash) candidateModels.push(anyFlash);
+        else candidateModels.push(availableModels[0] || "gemini-2.5-flash");
     }
 
-    const json = await res.json();
-    const text = json.choices?.[0]?.message?.content || "";
-    if (!text) throw new Error("Empty response from OpenAI");
+    const currentModel = candidateModels[0];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${currentModel}:generateContent?key=${apiKey}`;
+
+    const systemInstruction = "You are an expert Google Ads analyst. Always respond with valid JSON only matching the requested format.";
+    const fullPrompt = `${systemInstruction}\n\n${userMessage}`;
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: fullPrompt }] }],
+            generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 8192,
+                responseMimeType: "application/json",
+            },
+        }),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API returned ${response.status}: ${errText.substring(0, 500)}`);
+    }
+
+    const result = await response.json();
+    const parts = result?.candidates?.[0]?.content?.parts;
+    if (!parts || parts.length === 0) {
+        throw new Error("Empty response from Gemini");
+    }
+
+    let text = "";
+    for (const part of parts) {
+        if (part.text) text = part.text;
+    }
+
+    if (!text) {
+        throw new Error("Empty text response from Gemini");
+    }
+
     return parseGoogleResponse(text);
 }
 

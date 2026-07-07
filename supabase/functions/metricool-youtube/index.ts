@@ -517,45 +517,20 @@ serve(async (req) => {
     // Persist subscriber count to social_account_metrics so dashboard always has fresh data
     if (currentData.totalSubscribers > 0) {
       try {
-        const { data: existingMetric } = await supabase
+        await supabase
           .from("social_account_metrics")
-          .select("id, followers")
-          .eq("client_id", clientId)
-          .eq("platform", "youtube")
-          .gte("period_start", from)
-          .lte("period_end", to)
-          .order("collected_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (existingMetric) {
-          await supabase
-            .from("social_account_metrics")
-            .update({
-              followers: currentData.totalSubscribers,
-              new_followers: currentData.subscribersGained,
-              engagement_rate: currentData.engagementPct,
-              total_content: currentData.videosCount,
-              collected_at: new Date().toISOString(),
-            })
-            .eq("id", existingMetric.id);
-          console.log(`Updated subscriber count to ${currentData.totalSubscribers} for metric ${existingMetric.id}`);
-        } else {
-          await supabase
-            .from("social_account_metrics")
-            .insert({
-              client_id: clientId,
-              platform: "youtube",
-              followers: currentData.totalSubscribers,
-              new_followers: currentData.subscribersGained,
-              engagement_rate: currentData.engagementPct,
-              total_content: currentData.videosCount,
-              period_start: from,
-              period_end: to,
-              collected_at: new Date().toISOString(),
-            });
-          console.log(`Inserted new subscriber count: ${currentData.totalSubscribers}`);
-        }
+          .upsert({
+            client_id: clientId,
+            platform: "youtube",
+            period_start: from,
+            period_end: to,
+            followers: currentData.totalSubscribers,
+            new_followers: currentData.subscribersGained,
+            engagement_rate: currentData.engagementPct,
+            total_content: currentData.videosCount,
+            collected_at: new Date().toISOString(),
+          }, { onConflict: "client_id,platform,period_start,period_end" });
+        console.log(`Upserted subscriber count: ${currentData.totalSubscribers}, new: ${currentData.subscribersGained} for ${from} to ${to}`);
       } catch (persistErr) {
         console.error("Error persisting subscriber count:", persistErr);
         errors.push(`persist subscribers: ${persistErr}`);
