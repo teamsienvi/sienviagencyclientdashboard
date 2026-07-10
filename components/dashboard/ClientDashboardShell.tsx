@@ -193,12 +193,15 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         .limit(1);
 
       // Check Substack config
-      const { data: substackData } = await supabase
-        .from("client_substack_config" as any)
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("is_active", true)
-        .limit(1);
+      const isOxiSureTech = clientId === '1a1edf9f-2ebe-4d40-a904-7295d5033401';
+      const { data: substackData } = isOxiSureTech 
+        ? { data: null }
+        : await supabase
+            .from("client_substack_config" as any)
+            .select("id")
+            .eq("client_id", clientId)
+            .eq("is_active", true)
+            .limit(1);
 
       // Check Ubersuggest config
       const { data: ubersuggestData } = await supabase

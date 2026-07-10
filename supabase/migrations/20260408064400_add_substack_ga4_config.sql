@@ -28,7 +28,7 @@ VALUES
   ('041555a7-1a25-42b8-89c7-edc40afff861', '531743785', 'https://serenityscrolls.substack.com', 'Serenity Scrolls', true),
   ('95791e88-87cd-4621-af7e-df46f5ad93ac', '531752272', 'https://fatherfigureformula.substack.com', 'Father Figure Formula', true),
   ('d8f38e01-77ff-4839-ac48-54795adc9f3e', '531747724', 'https://sienviagency.substack.com', 'Sienvi Agency', true),
-  ('1a1edf9f-2ebe-4d40-a904-7295d5033401', '531757124', 'https://oxisuretech.substack.com', 'OxiSure Tech', true)
+  ('1a1edf9f-2ebe-4d40-a904-7295d5033401', '531757124', 'https://oxisuretech.substack.com', 'OxiSure Tech', false)
 ON CONFLICT (client_id) DO UPDATE SET
   ga4_property_id = EXCLUDED.ga4_property_id,
   substack_url = EXCLUDED.substack_url,
