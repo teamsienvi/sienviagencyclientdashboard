@@ -518,10 +518,12 @@ export function AnalyticsSummaryCard({
                                 </p>
                                 <div className="h-8 w-full mt-2 flex items-center">
                                     {type === 'social' ? (
-                                        <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                                            <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
-                                            {followersGained > 0 ? `+${formatNumber(followersGained)}` : followersGained < 0 ? formatNumber(followersGained) : "+0"} this period
-                                        </div>
+                                        followersGained >= 0 ? (
+                                            <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
+                                                <TrendingUp className="h-3.5 w-3.5" /> 
+                                                {followersGained > 0 ? `+${formatNumber(followersGained)}` : "+0"} this period
+                                            </div>
+                                        ) : null
                                     ) : type === 'seo' ? (
                                         <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
                                             <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
@@ -690,9 +692,11 @@ export function AnalyticsSummaryCard({
                                                             <span className="text-foreground">
                                                                 {formatNumber(plat.followers || 0)}
                                                             </span>
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : plat.followersGained < 0 ? "text-rose-500" : "text-muted-foreground"}`}>
-                                                                {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : plat.followersGained < 0 ? formatNumber(plat.followersGained) : "+0"}
-                                                            </span>
+                                                            {plat.followersGained >= 0 && (
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : "text-muted-foreground"}`}>
+                                                                    {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : "+0"}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className={type === 'social' ? "w-1/4 text-center font-medium" : "w-1/3 text-center font-medium"}>{plat.engagementRate.toFixed(1)}%</div>
