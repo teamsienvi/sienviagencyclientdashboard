@@ -85,11 +85,13 @@ const MetricDisplay = ({ label, icon, current, delta, percent }: MetricDisplayPr
         <span>{label}</span>
       </div>
       <div className="font-semibold text-lg">{formatNumber(current)}</div>
-      <div className={`flex items-center gap-1 text-xs ${getTrendColor()}`}>
-        {getTrendIcon()}
-        <span>{formatDelta(delta)}</span>
-        {percent !== null && <span>({formatPercent(percent)})</span>}
-      </div>
+      {!(label === "Followers" && delta < 0) && (
+        <div className={`flex items-center gap-1 text-xs ${getTrendColor()}`}>
+          {getTrendIcon()}
+          <span>{formatDelta(delta)}</span>
+          {percent !== null && <span>({formatPercent(percent)})</span>}
+        </div>
+      )}
     </div>
   );
 };

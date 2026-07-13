@@ -463,7 +463,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
             <p className="text-2xl font-bold">
               {kpis?.current.followers?.toLocaleString() || "—"}
             </p>
-            {kpis?.previous.followers != null && kpis?.current.followers != null && (
+            {kpis?.previous.followers != null && kpis?.current.followers != null && kpis.current.followers >= kpis.previous.followers && (
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-xs text-muted-foreground">
                   vs {kpis.previous.followers.toLocaleString()} (prev week)
@@ -471,7 +471,7 @@ const XAnalyticsSection = ({ clientId, clientName }: XAnalyticsSectionProps) => 
                 {renderTrendIndicator(kpis.current.followers, kpis.previous.followers, false, true)}
               </div>
             )}
-            {kpis?.current.newFollowers != null && (
+            {kpis?.current.newFollowers != null && kpis.current.newFollowers >= 0 && (
               <div className="text-xs text-muted-foreground mt-1">
                 {kpis.current.newFollowers >= 0 ? "+" : ""}{kpis.current.newFollowers} new this week
               </div>

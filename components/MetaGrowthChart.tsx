@@ -91,13 +91,9 @@ const MetaGrowthChart = ({
               <span className="text-lg font-bold">
                 {currentFollowers?.toLocaleString() ?? "—"}
               </span>
-              {newFollowers != null && newFollowers !== 0 && (
-                <span className={`ml-1 ${newFollowers > 0 ? "text-green-600" : "text-red-600"}`}>
-                  {newFollowers > 0 ? (
-                    <TrendingUp className="h-3 w-3 inline" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3 inline" />
-                  )}
+              {newFollowers != null && newFollowers > 0 && (
+                <span className="ml-1 text-green-600">
+                  <TrendingUp className="h-3 w-3 inline" />
                 </span>
               )}
               <span className="text-xs ml-1 opacity-80">Followers</span>
