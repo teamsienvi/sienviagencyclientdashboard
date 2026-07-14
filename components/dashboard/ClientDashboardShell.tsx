@@ -978,7 +978,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* Pinterest */}
-                        {metricoolPlatforms?.some(p => p.platform === 'pinterest') && (
+                        {(metricoolPlatforms?.some(p => p.platform === 'pinterest') || client.name === "Hwabelle") && (
                           <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/pinterest-metricool/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
@@ -993,7 +993,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </CardHeader>
                             <CardContent>
                               <div className="flex justify-between items-center">
-                                <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                                {metricoolPlatforms?.some(p => p.platform === 'pinterest') ? (
+                                  <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-amber-600 border-amber-500/20 bg-amber-500/5">Profile Redirect</Badge>
+                                )}
                                 {(() => {
                                   const count = metricoolFollowers?.followers?.pinterest || 
                                                 socialMetrics?.pinterest?.followers || 
@@ -1002,6 +1006,27 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                                     <span className="text-sm text-muted-foreground">{count.toLocaleString()} followers</span>
                                   ) : null;
                                 })()}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )}
+                        {/* Reddit */}
+                        {client.name === "Hwabelle" && (
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/reddit-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-[#FF4500]/10 group-hover:bg-[#FF4500]/20 transition-colors">
+                                  <svg className="h-5 w-5 text-[#FF4500] fill-current" viewBox="0 0 24 24">
+                                    <path d="M24 11.5c0-1.65-1.35-3-3-3-.96 0-1.86.48-2.42 1.24-1.64-1-3.75-1.64-5.99-1.72l1.27-3.99 4.15.88c.05 1.05.92 1.88 1.99 1.88 1.1 0 2-1 2-2s-1-2-2-2c-1.02 0-1.87.77-1.98 1.77L13.1 3.52c-.23-.05-.47.09-.54.32l-1.46 4.6C8.84 8.5 6.7 9.14 5.06 10.15c-.56-.76-1.46-1.24-2.42-1.24-1.65 0-3 1.35-3 3 0 1.2.71 2.24 1.74 2.74-.08.3-.12.61-.12.92 0 3.72 4.19 6.75 9.35 6.75s9.35-3.03 9.35-6.75c0-.31-.04-.62-.12-.92 1.03-.5 1.74-1.54 1.74-2.74zm-18 2c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm10.74 3.73c-.76.76-2.2 1.27-3.74 1.27s-2.98-.51-3.74-1.27c-.19-.19-.19-.51 0-.7.19-.19.51-.19.7 0 .54.54 1.59.87 3.04.87s2.5-.33 3.04-.87c.19-.19.51-.19.7 0 .2.19.2.51.01.7zm-.74-1.73c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+                                  </svg>
+                                </div>
+                                <div><CardTitle className="text-base">Reddit</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex justify-between items-center">
+                                <Badge variant="outline" className="text-amber-600 border-amber-500/20 bg-amber-500/5">Profile Redirect</Badge>
                               </div>
                             </CardContent>
                           </Card>

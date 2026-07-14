@@ -4,6 +4,9 @@ import { MetricoolAnalyticsSection } from "@/components/MetricoolAnalyticsSectio
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/analytics/NextAnalyticsPageLayout";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ExternalLink } from "lucide-react";
 
 interface Client {
   id: string;
@@ -44,6 +47,30 @@ export default function PinterestAnalyticsPage({ clientId }: { clientId: string 
       pageDescription="Pinterest Analytics (via Metricool)"
       isLoading={loading}
     >
+      {client?.name === "Hwabelle" && (
+        <Card className="mb-6 border-red-500/20 bg-red-500/5 shadow-sm">
+          <CardContent className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-red-500/10 rounded-lg">
+                <PinterestIcon className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-lg">Pinterest Profile Redirect</h4>
+                <p className="text-sm text-muted-foreground">
+                  Pinterest analytics are not currently integrated. Click the button to view and manage Hwabelle's Pinterest profile directly.
+                </p>
+              </div>
+            </div>
+            <Button asChild className="bg-red-600 hover:bg-red-700 text-white shrink-0">
+              <a href="https://ph.pinterest.com/hwabelle/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                Visit Pinterest Profile
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <MetricoolAnalyticsSection
         clientId={clientId}
         clientName={client?.name || ""}
@@ -54,3 +81,4 @@ export default function PinterestAnalyticsPage({ clientId }: { clientId: string 
     </AnalyticsPageLayout>
   );
 }
+

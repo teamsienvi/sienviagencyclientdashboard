@@ -280,7 +280,6 @@ serve(async (req) => {
             content_type: "post",
             title: post.title,
             url: post.url || post.link,
-            media_url: post.image,
             published_at: publishedAt,
           }, { onConflict: "client_id,content_id" })
           .select("id")
@@ -320,6 +319,17 @@ serve(async (req) => {
       }
 
       console.log("Saved", savedCount, "posts to database for LinkedIn.");
+
+      if (syncLog) {
+        await supabaseAdmin
+          .from("social_sync_logs")
+          .update({
+            status: "completed",
+            records_synced: savedCount,
+            completed_at: new Date().toISOString()
+          })
+          .eq("id", syncLog.id);
+      }
     }
 
     return new Response(
