@@ -193,20 +193,34 @@ async function computeMetrics(
             
             Object.values(byPlatform).forEach((points) => {
                 const platform = String(points[0].platform || "").toLowerCase();
-                const validPoints = points.filter(p => p.followers != null && p.followers > 0);
+                // Sort descending by collected_at to get latest first
+                const sorted = [...points].sort((a, b) => 
+                    (b.collected_at || "").localeCompare(a.collected_at || "")
+                );
+                const latest = sorted[0];
                 
-                if (validPoints.length >= 2) {
-                    const first = validPoints[0].followers;
-                    const last = validPoints[validPoints.length - 1].followers;
-                    platformFollowers[platform] = last - first;
-                } else if (validPoints.length === 1 && validPoints[0].new_followers != null) {
-                    platformFollowers[platform] = validPoints[0].new_followers;
+                // Use new_followers from the latest metric row — this is the accurate
+                // period gain reported by Metricool. The old approach of computing
+                // last_followers - first_followers gave wrong results when counts
+                // fluctuate within the period (e.g., YouTube 196-197 = -1 instead of +6).
+                if (latest.new_followers != null) {
+                    platformFollowers[platform] = latest.new_followers;
                 } else {
-                    platformFollowers[platform] = 0;
+                    // Only fall back to difference if new_followers is not available
+                    const validPoints = sorted.filter(p => p.followers != null && p.followers > 0);
+                    if (validPoints.length >= 2) {
+                        const oldest = validPoints[validPoints.length - 1].followers;
+                        const newest = validPoints[0].followers;
+                        platformFollowers[platform] = newest - oldest;
+                    } else {
+                        platformFollowers[platform] = 0;
+                    }
                 }
                 
-                if (validPoints.length > 0) {
-                    platformCurrentFollowers[platform] = validPoints[validPoints.length - 1].followers;
+                // Set current followers from the latest row that has a valid count
+                const withFollowers = sorted.find(p => p.followers != null && p.followers > 0);
+                if (withFollowers) {
+                    platformCurrentFollowers[platform] = withFollowers.followers;
                 }
             });
         }
