@@ -719,7 +719,27 @@ export const MetricoolAnalyticsSection = ({
       }
 
       if (data.countries && Array.isArray(data.countries)) {
-        result.countries = data.countries as Array<{ country: string; percentage: number }>;
+        // Translate country codes to full names for display
+        const countryCodeToName: Record<string, string> = {
+          US: "United States", GB: "United Kingdom", CA: "Canada", AU: "Australia",
+          DE: "Germany", FR: "France", IN: "India", BR: "Brazil", JP: "Japan",
+          PH: "Philippines", MX: "Mexico", ES: "Spain", IT: "Italy", NL: "Netherlands",
+          KR: "South Korea", CN: "China", RU: "Russia", ZA: "South Africa",
+          NG: "Nigeria", SE: "Sweden", NO: "Norway", DK: "Denmark", FI: "Finland",
+          PL: "Poland", PT: "Portugal", AR: "Argentina", CL: "Chile", CO: "Colombia",
+          NZ: "New Zealand", SG: "Singapore", MY: "Malaysia", TH: "Thailand",
+          ID: "Indonesia", VN: "Vietnam", AE: "UAE", SA: "Saudi Arabia",
+          EG: "Egypt", KE: "Kenya", GH: "Ghana", IE: "Ireland", CH: "Switzerland",
+          AT: "Austria", BE: "Belgium", CZ: "Czech Republic", HU: "Hungary",
+          RO: "Romania", UA: "Ukraine", TR: "Turkey", IL: "Israel", TW: "Taiwan",
+          HK: "Hong Kong", PK: "Pakistan", BD: "Bangladesh", RS: "Serbia",
+          MA: "Morocco", JO: "Jordan", LB: "Lebanon", IQ: "Iraq", QA: "Qatar",
+          KW: "Kuwait", BH: "Bahrain", OM: "Oman", OTHERS: "Others",
+        };
+        result.countries = (data.countries as Array<{ country: string; percentage: number }>).map(c => ({
+          country: countryCodeToName[c.country] || c.country,
+          percentage: c.percentage,
+        }));
       }
 
       return result;
