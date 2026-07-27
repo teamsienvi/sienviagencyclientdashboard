@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     CheckCircle2,
     TrendingDown,
+    TrendingUp,
     Crosshair,
     ChevronDown,
     ChevronUp,
@@ -104,13 +105,91 @@ const roasClass = (roas: number | null) => {
     return "text-red-400";
 };
 
-// ─── PDF print helper ─────────────────────────────────────────────────────────
-function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: string): string {
+// ─── Parse date range from Amazon bulk export filename ────────────────────────
+// Pattern: bulk-XXXX-YYYYMMDD-YYYYMMDD-NNNNN.xlsx
+const parseDateRangeFromFilename = (filename: string): { from: string; to: string } | null => {
+    const match = filename.match(/(\d{8})-(\d{8})/);
+    if (!match) return null;
+    const fromRaw = match[1];
+    const toRaw = match[2];
+    const from = `${fromRaw.substring(0, 4)}-${fromRaw.substring(4, 6)}-${fromRaw.substring(6, 8)}`;
+    const to = `${toRaw.substring(0, 4)}-${toRaw.substring(4, 6)}-${toRaw.substring(6, 8)}`;
+    return { from, to };
+};
+
+// ─── PDF print helper ─────────────────────────────────────────────────────────────────
+function buildPrintHTML(
+    data: AmazonReportData,
+    clientName: string,
+    fileName: string,
+    prevData?: AmazonReportData | null,
+    w1RawTotals?: { spend: number; sales: number; orders: number; clicks: number; impressions: number } | null,
+): string {
     const today = format(new Date(), "MMMM d, yyyy");
     const displayFileName = data.sourceFileName || fileName;
 
     const kpiRow = (label: string, value: string) =>
         `<div class="kpi-cell"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div></div>`;
+
+    // ─── Week-over-Week Progress table ───
+    const buildWoWSection = () => {
+        // Compute W1 KPIs: prefer raw totals from uploaded file, else fall back to previous DB report
+        const w1kpis = w1RawTotals ? {
+            adSales: w1RawTotals.sales,
+            adSpend: w1RawTotals.spend,
+            orders: w1RawTotals.orders,
+            acos: w1RawTotals.sales > 0 ? (w1RawTotals.spend / w1RawTotals.sales) * 100 : null as number | null,
+            roas: w1RawTotals.spend > 0 ? w1RawTotals.sales / w1RawTotals.spend : null as number | null,
+            cvr: w1RawTotals.clicks > 0 ? (w1RawTotals.orders / w1RawTotals.clicks) * 100 : null as number | null,
+        } : prevData ? {
+            adSales: prevData.kpis.adSales,
+            adSpend: prevData.kpis.adSpend,
+            orders: prevData.kpis.orders,
+            acos: prevData.kpis.acos,
+            roas: prevData.kpis.roas,
+            cvr: prevData.kpis.cvr,
+        } : null;
+
+        if (!w1kpis) return '';
+
+        const rows = [
+            { metric: 'Ad Sales', w1: w1kpis.adSales, w2: data.kpis.adSales, fmt: fmt$, unit: '%', good: 'up' },
+            { metric: 'Ad Spend', w1: w1kpis.adSpend, w2: data.kpis.adSpend, fmt: fmt$, unit: '%', good: 'down' },
+            { metric: 'Orders', w1: w1kpis.orders, w2: data.kpis.orders, fmt: fmtN, unit: '%', good: 'up' },
+            { metric: 'ACoS', w1: w1kpis.acos, w2: data.kpis.acos, fmt: fmtPct, unit: ' pts', good: 'down' },
+            { metric: 'ROAS', w1: w1kpis.roas, w2: data.kpis.roas, fmt: fmtX, unit: '%', good: 'up' },
+            { metric: 'CVR', w1: w1kpis.cvr, w2: data.kpis.cvr, fmt: fmtPct, unit: ' pts', good: 'up' },
+        ];
+        const tableRows = rows.map(r => {
+            let changeStr = '—';
+            let changeClass = '';
+            if (r.w1 != null && r.w2 != null) {
+                if (r.unit === ' pts') {
+                    const diff = r.w2 - r.w1;
+                    const isGood = r.good === 'up' ? diff > 0 : diff < 0;
+                    const isBad = r.good === 'up' ? diff < 0 : diff > 0;
+                    changeStr = `${diff > 0 ? '+' : ''}${diff.toFixed(2)}${r.unit}`;
+                    changeClass = isGood ? 'green' : isBad ? 'red' : '';
+                } else if (r.w1 !== 0) {
+                    const pct = ((r.w2 - r.w1) / Math.abs(r.w1)) * 100;
+                    const isGood = r.good === 'up' ? pct > 0 : pct < 0;
+                    const isBad = r.good === 'up' ? pct < 0 : pct > 0;
+                    changeStr = `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                    changeClass = isGood ? 'green' : isBad ? 'red' : '';
+                }
+            }
+            return `<tr><td>${r.metric}</td><td class="num">${r.fmt(r.w1)}</td><td class="num">${r.fmt(r.w2)}</td><td class="num ${changeClass}">${changeStr}</td></tr>`;
+        }).join('');
+
+        return `
+        <div class="section">
+            <div class="section-title">Week-over-Week Progress</div>
+            <table>
+                <thead><tr><th>Metric</th><th class="num">Previous</th><th class="num">Current</th><th class="num">Change</th></tr></thead>
+                <tbody>${tableRows}</tbody>
+            </table>
+        </div>`;
+    };
 
     const campaignRows = data.topRevenueCampaigns.map((c) => `
         <tr>
@@ -185,6 +264,8 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
     ${kpiRow("Avg CPC", fmt$(data.kpis.avgCpc))}
   </div>
 
+  ${buildWoWSection()}
+
   ${(data.executiveSummary?.length || 0) > 0 ? `
   <div class="section">
     <div class="section-title">Executive Summary</div>
@@ -223,7 +304,7 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
 
   ${(data.actionPlan?.length || 0) > 0 ? `
   <div class="section">
-    <div class="section-title">Action Plan for the Next 7 Days</div>
+    <div class="section-title">Action Plan for the Next 14 Days</div>
     <ul>${actionBullets}</ul>
   </div>` : ""}
 
@@ -243,8 +324,11 @@ function buildPrintHTML(data: AmazonReportData, clientName: string, fileName: st
 export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCardProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [file, setFile] = useState<File | null>(null);
+    const [week1File, setWeek1File] = useState<File | null>(null);
+    const [week1Totals, setWeek1Totals] = useState<{ spend: number; sales: number; orders: number; clicks: number; impressions: number } | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [report, setReport] = useState<AmazonReportData | null>(null);
+    const [previousReport, setPreviousReport] = useState<AmazonReportData | null>(null);
     const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
     const { toast } = useToast();
     const printFrameRef = useRef<HTMLIFrameElement | null>(null);
@@ -254,7 +338,10 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     // Reset local state on client switch to prevent leaking/stuck report screens
     useEffect(() => {
         setFile(null);
+        setWeek1File(null);
+        setWeek1Totals(null);
         setReport(null);
+        setPreviousReport(null);
         setGeneratedAt(null);
         setIsAnalyzing(false);
         hasTriggeredAnalysis.current = false;
@@ -265,34 +352,43 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         queryFn: async () => {
             const { data, error } = await supabase
                 .from("amazon_ads_reports" as any)
-                .select("parsed_data, generated_at, source_file_name, generation_status")
+                .select("parsed_data, generated_at, source_file_name, generation_status, report_period")
                 .eq("client_id", clientId)
                 .order("report_period", { ascending: false })
-                .limit(1)
-                .maybeSingle();
+                .limit(2);
 
             if (error) throw error;
-            return data as any;
+            return data as any[] || [];
         },
         enabled: !!clientId,
-        refetchInterval: (query) => (query.state.data as any)?.generation_status === 'pending' ? 5000 : false // poll if pending
+        refetchInterval: (query) => {
+            const rows = query.state.data as any[] | undefined;
+            return rows?.[0]?.generation_status === 'pending' ? 5000 : false;
+        }
     });
 
     useEffect(() => {
-        if (cachedData) {
-            if (cachedData.generation_status === 'pending') {
+        if (cachedData && cachedData.length > 0) {
+            const latest = cachedData[0];
+            const prev = cachedData.length > 1 ? cachedData[1] : null;
+
+            if (latest.generation_status === 'pending') {
                 setIsAnalyzing(true);
                 hasTriggeredAnalysis.current = true;
-            } else if (cachedData.generation_status === 'complete' && cachedData.parsed_data) {
+            } else if (latest.generation_status === 'complete' && latest.parsed_data) {
                 setIsAnalyzing(false);
-                setReport(cachedData.parsed_data as AmazonReportData);
-                if (cachedData.generated_at) {
-                    setGeneratedAt(new Date(cachedData.generated_at));
+                setReport(latest.parsed_data as AmazonReportData);
+                if (latest.generated_at) {
+                    setGeneratedAt(new Date(latest.generated_at));
                 }
-                if (cachedData.source_file_name && !file) {
-                    setFile(new File([""], cachedData.source_file_name, { type: "text/csv" }));
+                if (latest.source_file_name && !file) {
+                    setFile(new File([""], latest.source_file_name, { type: "text/csv" }));
                 }
-            } else if (cachedData.generation_status === 'failed') {
+                // Set previous report for comparison
+                if (prev?.generation_status === 'complete' && prev?.parsed_data) {
+                    setPreviousReport(prev.parsed_data as AmazonReportData);
+                }
+            } else if (latest.generation_status === 'failed') {
                 setIsAnalyzing(false);
                 if (hasTriggeredAnalysis.current) {
                     toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
@@ -312,6 +408,18 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             return;
         }
         setFile(f);
+        setReport(null);
+    }, [toast]);
+
+    const handleWeek1FileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const f = e.target.files?.[0];
+        if (!f) return;
+        const ext = f.name.substring(f.name.lastIndexOf(".")).toLowerCase();
+        if (![".csv", ".xlsx", ".xls"].includes(ext)) {
+            toast({ title: "Invalid file", description: "Upload a .csv or .xlsx Amazon Ads report", variant: "destructive" });
+            return;
+        }
+        setWeek1File(f);
         setReport(null);
     }, [toast]);
 
@@ -393,6 +501,14 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             toast({ title: "Parsing file…", description: "Reading your report data" });
             const { csvText, exactTotals, fileName } = await parseFileClientSide(file);
 
+            // Parse Week 1 file if provided
+            let w1Totals: typeof exactTotals | null = null;
+            if (week1File) {
+                const w1 = await parseFileClientSide(week1File);
+                w1Totals = w1.exactTotals;
+                setWeek1Totals(w1Totals);
+            }
+
             toast({ title: "Analyzing…", description: "Sending to AI for analysis" });
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/analyze-amazon-ads`,
@@ -408,7 +524,8 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         fileName,
                         rawData: csvText,
                         exactTotals,
-                        reportPeriod: new Date().toISOString().substring(0, 7),
+                        reportPeriod: (() => { const dr = parseDateRangeFromFilename(fileName); return dr ? `${dr.from}_${dr.to}` : new Date().toISOString().substring(0, 7); })(),
+                        dateRange: parseDateRangeFromFilename(fileName),
                     }),
                 }
             );
@@ -440,7 +557,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     const handleDownloadPDF = () => {
         if (!report) return;
 
-        const html = buildPrintHTML(report, clientName, file?.name || report.sourceFileName || "Cached Report");
+        const html = buildPrintHTML(report, clientName, file?.name || report.sourceFileName || "Cached Report", previousReport, week1Totals);
 
         // Open in a new window and trigger print
         const win = window.open("", "_blank", "width=960,height=800");
@@ -490,50 +607,84 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
             {isExpanded && (
                 <CardContent className="pt-0 space-y-4">
-                    {/* Upload Zone */}
-                <div>
-                    <div
-                        className="border-2 border-dashed border-border/60 rounded-lg p-4 text-center hover:border-orange-500/40 transition-colors cursor-pointer"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={handleDrop}
-                        onClick={() => document.getElementById(`amazon-upload-${clientId}`)?.click()}
-                    >
-                        <input
-                            id={`amazon-upload-${clientId}`}
-                            type="file"
-                            accept=".xlsx,.xls,.csv"
-                            onChange={handleFileChange}
-                            className="hidden"
-                        />
-                        {file ? (
-                            <div className="flex items-center justify-center gap-3">
-                                <FileSpreadsheet className="h-5 w-5 text-orange-400" />
-                                <span className="text-sm font-medium">{file.name}</span>
-                                <Badge variant="secondary" className="text-[10px]">
-                                    {(file.size / 1024).toFixed(1)} KB
-                                </Badge>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0"
-                                    onClick={(e) => { e.stopPropagation(); setFile(null); setReport(null); }}
-                                >
-                                    <X className="h-3 w-3" />
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-1">
-                                <Upload className="h-6 w-6 mx-auto text-muted-foreground/60" />
-                                <p className="text-sm text-muted-foreground">Drop your Amazon Ads report here or click to upload</p>
-                                <p className="text-xs text-muted-foreground/60">
-                                    Campaign Performance or Search Term reports (.csv, .xlsx)
-                                </p>
-                            </div>
-                        )}
+                    {/* Upload Zone — Dual file for WoW comparison */}
+                <div className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Week 1 (Optional) */}
+                        <div
+                            className="border-2 border-dashed border-border/60 rounded-lg p-3 text-center hover:border-blue-500/40 transition-colors cursor-pointer"
+                            onClick={() => document.getElementById(`amazon-w1-upload-${clientId}`)?.click()}
+                        >
+                            <input
+                                id={`amazon-w1-upload-${clientId}`}
+                                type="file"
+                                accept=".xlsx,.xls,.csv"
+                                onChange={handleWeek1FileChange}
+                                className="hidden"
+                            />
+                            {week1File ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <FileSpreadsheet className="h-4 w-4 text-blue-400" />
+                                    <span className="text-xs font-medium truncate max-w-[140px]">{week1File.name}</span>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 w-5 p-0"
+                                        onClick={(e) => { e.stopPropagation(); setWeek1File(null); setWeek1Totals(null); }}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-0.5">
+                                    <p className="text-xs font-medium text-blue-400">Week 1 (Previous)</p>
+                                    <p className="text-[10px] text-muted-foreground/60">Optional — for WoW comparison</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Week 2 (Current / Required) */}
+                        <div
+                            className="border-2 border-dashed border-border/60 rounded-lg p-3 text-center hover:border-orange-500/40 transition-colors cursor-pointer"
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={handleDrop}
+                            onClick={() => document.getElementById(`amazon-upload-${clientId}`)?.click()}
+                        >
+                            <input
+                                id={`amazon-upload-${clientId}`}
+                                type="file"
+                                accept=".xlsx,.xls,.csv"
+                                onChange={handleFileChange}
+                                className="hidden"
+                            />
+                            {file ? (
+                                <div className="flex items-center justify-center gap-2">
+                                    <FileSpreadsheet className="h-4 w-4 text-orange-400" />
+                                    <span className="text-xs font-medium truncate max-w-[140px]">{file.name}</span>
+                                    <Badge variant="secondary" className="text-[9px]">
+                                        {(file.size / 1024).toFixed(1)} KB
+                                    </Badge>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 w-5 p-0"
+                                        onClick={(e) => { e.stopPropagation(); setFile(null); setReport(null); }}
+                                    >
+                                        <X className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-0.5">
+                                    <Upload className="h-5 w-5 mx-auto text-muted-foreground/60" />
+                                    <p className="text-xs font-medium text-orange-400">Week 2 (Current)</p>
+                                    <p className="text-[10px] text-muted-foreground/60">.csv or .xlsx report</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Action Bar */}
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2">
                         <Button
                             size="sm"
                             onClick={handleAnalyze}
@@ -561,6 +712,8 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                     onClick={async () => { 
                                         setReport(null); 
                                         setFile(null); 
+                                        setWeek1File(null);
+                                        setWeek1Totals(null);
                                         await supabase.from("amazon_ads_reports" as any).delete().eq("client_id", clientId);
                                         queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
                                     }}
@@ -608,24 +761,126 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 {!isAnalyzing && report && (
                     <div className="space-y-5">
 
-                        {/* KPI Bar */}
+                        {/* KPI Bar — with W1/W2 comparison if previous report exists */}
                         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                            {[
-                                { label: "Ad Sales", value: fmt$(report.kpis.adSales) },
-                                { label: "Ad Spend", value: fmt$(report.kpis.adSpend) },
-                                { label: "ACoS", value: fmtPct(report.kpis.acos), className: acosClass(report.kpis.acos) },
-                                { label: "ROAS", value: fmtX(report.kpis.roas), className: roasClass(report.kpis.roas) },
-                                { label: "Orders", value: fmtN(report.kpis.orders) },
-                                { label: "CTR", value: fmtPct(report.kpis.ctr) },
-                                { label: "CVR", value: fmtPct(report.kpis.cvr) },
-                                { label: "Avg CPC", value: fmt$(report.kpis.avgCpc) },
-                            ].map(({ label, value, className }) => (
-                                <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-                                    <p className={`text-base font-bold ${className ?? ""}`}>{value}</p>
-                                </div>
-                            ))}
+                            {([
+                                { label: "Ad Sales", curr: report.kpis.adSales, prev: previousReport?.kpis.adSales, fmt: fmt$, good: "up" },
+                                { label: "Ad Spend", curr: report.kpis.adSpend, prev: previousReport?.kpis.adSpend, fmt: fmt$, good: "down" },
+                                { label: "ACoS", curr: report.kpis.acos, prev: previousReport?.kpis.acos, fmt: fmtPct, good: "down", cls: acosClass(report.kpis.acos) },
+                                { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, good: "up", cls: roasClass(report.kpis.roas) },
+                                { label: "Orders", curr: report.kpis.orders, prev: previousReport?.kpis.orders, fmt: fmtN, good: "up" },
+                                { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct, good: "up" },
+                                { label: "CVR", curr: report.kpis.cvr, prev: previousReport?.kpis.cvr, fmt: fmtPct, good: "up" },
+                                { label: "Avg CPC", curr: report.kpis.avgCpc, prev: previousReport?.kpis.avgCpc, fmt: fmt$, good: "down" },
+                            ] as { label: string; curr: number | null; prev?: number | null; fmt: (v: number | null | undefined) => string; good: 'up' | 'down'; cls?: string }[]).map(({ label, curr, prev, fmt: fmtFn, good, cls }) => {
+                                const change = curr != null && prev != null && prev !== 0
+                                    ? ((curr - prev) / Math.abs(prev)) * 100
+                                    : null;
+                                const isPositive = change != null && ((good === 'up' && change > 0) || (good === 'down' && change < 0));
+                                const isNegative = change != null && ((good === 'up' && change < 0) || (good === 'down' && change > 0));
+
+                                return (
+                                    <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
+                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+                                        <p className={`text-base font-bold ${cls ?? ""}`}>{fmtFn(curr)}</p>
+                                        {prev != null && (
+                                            <div className="mt-1.5 pt-1.5 border-t border-border/30 space-y-0.5">
+                                                <p className="text-[9px] text-muted-foreground">prev: {fmtFn(prev)}</p>
+                                                {change != null && change !== 0 && (
+                                                    <div className={`flex items-center justify-center gap-0.5 text-[10px] font-semibold ${
+                                                        isPositive ? 'text-emerald-400' : isNegative ? 'text-red-400' : 'text-muted-foreground'
+                                                    }`}>
+                                                        {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                                        <span>{change > 0 ? '+' : ''}{change.toFixed(1)}%</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
+
+                        {/* Week-over-Week Progress Table */}
+                        {(week1Totals || previousReport) && (() => {
+                            // Compute W1 KPIs from week1Totals if available, else fallback to previousReport
+                            const w1kpis = week1Totals ? {
+                                adSales: week1Totals.sales,
+                                adSpend: week1Totals.spend,
+                                orders: week1Totals.orders,
+                                acos: week1Totals.sales > 0 ? (week1Totals.spend / week1Totals.sales) * 100 : null,
+                                roas: week1Totals.spend > 0 ? week1Totals.sales / week1Totals.spend : null,
+                                cvr: week1Totals.clicks > 0 ? (week1Totals.orders / week1Totals.clicks) * 100 : null,
+                            } : previousReport ? {
+                                adSales: previousReport.kpis.adSales,
+                                adSpend: previousReport.kpis.adSpend,
+                                orders: previousReport.kpis.orders,
+                                acos: previousReport.kpis.acos,
+                                roas: previousReport.kpis.roas,
+                                cvr: previousReport.kpis.cvr,
+                            } : null;
+
+                            if (!w1kpis) return null;
+
+                            return (
+                            <div>
+                                <div className="flex items-center gap-2 mb-2 text-sky-400">
+                                    <TrendingUp className="h-4 w-4" />
+                                    <span className="font-semibold text-sm">Week-over-Week Progress</span>
+                                </div>
+                                <div className="rounded-lg border border-border/40 overflow-hidden">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-muted/30">
+                                                <TableHead className="pl-4 text-xs">Metric</TableHead>
+                                                <TableHead className="text-right text-xs">Week 1</TableHead>
+                                                <TableHead className="text-right text-xs">Week 2</TableHead>
+                                                <TableHead className="text-right pr-4 text-xs">Change</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {([
+                                                { metric: 'Ad Sales', w1: w1kpis.adSales, w2: report.kpis.adSales, fmt: fmt$, unit: '%' as const, good: 'up' },
+                                                { metric: 'Ad Spend', w1: w1kpis.adSpend, w2: report.kpis.adSpend, fmt: fmt$, unit: '%' as const, good: 'down' },
+                                                { metric: 'Orders', w1: w1kpis.orders, w2: report.kpis.orders, fmt: fmtN, unit: '%' as const, good: 'up' },
+                                                { metric: 'ACoS', w1: w1kpis.acos, w2: report.kpis.acos, fmt: fmtPct, unit: 'pts' as const, good: 'down' },
+                                                { metric: 'ROAS', w1: w1kpis.roas, w2: report.kpis.roas, fmt: fmtX, unit: '%' as const, good: 'up' },
+                                                { metric: 'CVR', w1: w1kpis.cvr, w2: report.kpis.cvr, fmt: fmtPct, unit: 'pts' as const, good: 'up' },
+                                            ]).map((r) => {
+                                                let changeStr = '\u2014';
+                                                let changeClass = 'text-muted-foreground';
+                                                if (r.w1 != null && r.w2 != null) {
+                                                    if (r.unit === 'pts') {
+                                                        const diff = r.w2 - r.w1;
+                                                        const isGood = r.good === 'up' ? diff > 0 : diff < 0;
+                                                        const isBad = r.good === 'up' ? diff < 0 : diff > 0;
+                                                        changeStr = `${diff > 0 ? '+' : ''}${diff.toFixed(2)} pts`;
+                                                        changeClass = isGood ? 'text-emerald-400' : isBad ? 'text-red-400' : 'text-muted-foreground';
+                                                    } else if (r.w1 !== 0) {
+                                                        const pct = ((r.w2 - r.w1) / Math.abs(r.w1)) * 100;
+                                                        const isGood = r.good === 'up' ? pct > 0 : pct < 0;
+                                                        const isBad = r.good === 'up' ? pct < 0 : pct > 0;
+                                                        changeStr = `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                                                        changeClass = isGood ? 'text-emerald-400 bg-emerald-500/5' : isBad ? 'text-red-400 bg-red-500/5' : 'text-muted-foreground';
+                                                    }
+                                                }
+                                                return (
+                                                    <TableRow key={r.metric} className="hover:bg-muted/20">
+                                                        <TableCell className="pl-4 text-xs font-medium">{r.metric}</TableCell>
+                                                        <TableCell className="text-right text-xs text-muted-foreground">{r.fmt(r.w1)}</TableCell>
+                                                        <TableCell className="text-right text-xs font-medium">{r.fmt(r.w2)}</TableCell>
+                                                        <TableCell className={`text-right pr-4 text-xs font-semibold ${changeClass}`}>
+                                                            {changeStr}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                            );
+                        })()}
 
                         {/* Executive Summary */}
                         {(report.executiveSummary?.length || 0) > 0 && (
@@ -752,7 +1007,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                             <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
                                 <div className="flex items-center gap-2 mb-3 text-emerald-400">
                                     <Target className="h-4 w-4" />
-                                    <span className="font-semibold text-sm">Action Plan for the Next 7 Days</span>
+                                    <span className="font-semibold text-sm">Action Plan for the Next 14 Days</span>
                                 </div>
                                 <ol className="space-y-2">
                                     {report.actionPlan?.map((action, i) => (

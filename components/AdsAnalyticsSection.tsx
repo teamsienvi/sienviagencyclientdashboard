@@ -15,7 +15,7 @@ import { getClientAdPlatforms, AD_PLATFORM_LABELS } from "@/config/adPlatforms";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, eachDayOfInterval } from "date-fns";
-import { getCurrentReportingWeek, getPreviousReportingWeek } from "@/utils/weeklyDateRange";
+import { getBiweeklyReportingPeriod, formatDateRange } from "@/utils/weeklyDateRange";
 import { useQuery } from "@tanstack/react-query";
 import { useSyncState } from "@/hooks/useSyncState";
 import {
@@ -166,18 +166,16 @@ interface GoogleAdsData {
 const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps) => {
   const syncState = useSyncState(clientId, "ads", "metricool");
 
-  const reportingWeek = useMemo(() => getCurrentReportingWeek(), []);
-  const previousWeek = useMemo(() => getPreviousReportingWeek(), []);
+  // Biweekly: Week 1 (previous) + Week 2 (current), combined = 14-day window
+  const biweekly = useMemo(() => getBiweeklyReportingPeriod(), []);
 
   const dateRange = useMemo(() => ({
-    from: reportingWeek.start,
-    to: reportingWeek.end,
-  }), [reportingWeek]);
+    from: biweekly.combined.start,
+    to: biweekly.combined.end,
+  }), [biweekly]);
 
-  const getPreviousRange = (): { from: Date; to: Date } => ({
-    from: previousWeek.start,
-    to: previousWeek.end,
-  });
+  const w1Label = biweekly.week1.dateRange;
+  const w2Label = biweekly.week2.dateRange;
 
   // Removed redundant fetchTimeline as metricool-ads now provides it in the payload
 
@@ -283,13 +281,14 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     return ((current - previous) / previous) * 100;
   };
 
-  // Metric Card Component
+  // Metric Card Component — now with W1/W2 comparison row
   const MetricCard = ({
     label,
     value,
     previousValue,
     format: formatFn = formatNumber,
     invertColors = false,
+    isRate = false,
     info,
   }: {
     label: string;
@@ -297,11 +296,17 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
     previousValue?: number;
     format?: (v: number) => string;
     invertColors?: boolean;
+    isRate?: boolean;
     info?: string;
   }) => {
     const change = previousValue !== undefined ? getChangePercent(value, previousValue) : null;
     const isPositive = invertColors ? change !== null && change < 0 : change !== null && change > 0;
     const isNegative = invertColors ? change !== null && change > 0 : change !== null && change < 0;
+
+    // For rate metrics (CTR, CPC, CPM, ROAS), show average; for cumulative, show sum
+    const combinedValue = previousValue !== undefined
+      ? (isRate ? (value + previousValue) / 2 : value + previousValue)
+      : value;
 
     return (
       <div className="bg-card rounded-lg p-4 border">
@@ -318,7 +323,27 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
             </UITooltip>
           )}
         </div>
-        <p className="text-2xl font-bold">{formatFn(value)}</p>
+        <p className="text-2xl font-bold">{formatFn(combinedValue)}</p>
+        {previousValue !== undefined && (
+          <div className="mt-2 pt-2 border-t border-border/40 space-y-0.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">W1</span>
+              <span className="font-medium">{formatFn(previousValue)}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">W2</span>
+              <span className="font-medium">{formatFn(value)}</span>
+            </div>
+            {change !== null && change !== 0 && (
+              <div className={`flex items-center justify-end gap-1 text-[10px] font-medium mt-0.5 ${
+                isPositive ? 'text-emerald-500' : isNegative ? 'text-red-500' : 'text-muted-foreground'
+              }`}>
+                {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                <span>{change > 0 ? '+' : ''}{change.toFixed(1)}%</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -385,7 +410,7 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Advertising Analytics</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Performance metrics across all connected ad accounts.
+            Biweekly comparison: {biweekly.combined.dateRange} · W1: {w1Label} · W2: {w2Label}
           </p>
         </div>
         <div className="flex gap-2">
@@ -465,20 +490,20 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                   <MetricCard label="Impressions" value={metaAds.current.impressions} previousValue={metaAds.previous.impressions} />
                   <MetricCard label="Reach" value={metaAds.current.reach} previousValue={metaAds.previous.reach} />
                   <MetricCard label="Clicks" value={metaAds.current.clicks} previousValue={metaAds.previous.clicks} />
-                  <MetricCard label="CTR" value={metaAds.current.ctr} previousValue={metaAds.previous.ctr} format={formatPercent} />
-                  <MetricCard label="CPC" value={metaAds.current.cpc} previousValue={metaAds.previous.cpc} format={formatCurrency} invertColors />
+                  <MetricCard label="CTR" value={metaAds.current.ctr} previousValue={metaAds.previous.ctr} format={formatPercent} isRate />
+                  <MetricCard label="CPC" value={metaAds.current.cpc} previousValue={metaAds.previous.cpc} format={formatCurrency} invertColors isRate />
                 </div>
 
                 {/* Performance Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <MetricCard label="CPM" value={metaAds.current.cpm} previousValue={metaAds.previous.cpm} format={formatCurrency} invertColors />
+                  <MetricCard label="CPM" value={metaAds.current.cpm} previousValue={metaAds.previous.cpm} format={formatCurrency} invertColors isRate />
                   <MetricCard
                     label="Conversions"
                     value={metaAds.current.conversions}
                     previousValue={metaAds.previous.conversions}
                     info={`${getConversionLabel(metaAds.current.actions)} tracked via Meta Pixel. May include non-purchase events.`}
                   />
-                  <MetricCard label="ROAS" value={metaAds.current.roas} previousValue={metaAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                  <MetricCard label="ROAS" value={metaAds.current.roas} previousValue={metaAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} isRate />
                   <MetricCard label="Conv. Value" value={metaAds.current.conversionValue} previousValue={metaAds.previous.conversionValue} format={formatCurrency} />
                 </div>
 
@@ -590,20 +615,20 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                   <MetricCard label="Spend" value={googleAds.current.spend} previousValue={googleAds.previous.spend} format={formatCurrency} invertColors />
                   <MetricCard label="Impressions" value={googleAds.current.impressions} previousValue={googleAds.previous.impressions} />
                   <MetricCard label="Clicks" value={googleAds.current.clicks} previousValue={googleAds.previous.clicks} />
-                  <MetricCard label="CTR" value={googleAds.current.ctr} previousValue={googleAds.previous.ctr} format={formatPercent} />
-                  <MetricCard label="CPC" value={googleAds.current.cpc} previousValue={googleAds.previous.cpc} format={formatCurrency} invertColors />
+                  <MetricCard label="CTR" value={googleAds.current.ctr} previousValue={googleAds.previous.ctr} format={formatPercent} isRate />
+                  <MetricCard label="CPC" value={googleAds.current.cpc} previousValue={googleAds.previous.cpc} format={formatCurrency} invertColors isRate />
                 </div>
 
                 {/* Performance Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <MetricCard label="CPM" value={googleAds.current.cpm} previousValue={googleAds.previous.cpm} format={formatCurrency} invertColors />
+                  <MetricCard label="CPM" value={googleAds.current.cpm} previousValue={googleAds.previous.cpm} format={formatCurrency} invertColors isRate />
                   <MetricCard
                     label="Conversions"
                     value={googleAds.current.conversions}
                     previousValue={googleAds.previous.conversions}
                     info="Conversion actions configured in Google Ads (e.g., purchases, leads, page views)"
                   />
-                  <MetricCard label="ROAS" value={googleAds.current.roas} previousValue={googleAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                  <MetricCard label="ROAS" value={googleAds.current.roas} previousValue={googleAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} isRate />
                   <MetricCard label="Conv. Value" value={googleAds.current.allConversionsValue} previousValue={googleAds.previous.allConversionsValue} format={formatCurrency} />
                 </div>
 
@@ -689,16 +714,16 @@ const AdsAnalyticsSection = ({ clientId, clientName }: AdsAnalyticsSectionProps)
                   <MetricCard label="Impressions" value={tiktokAds.current.impressions} previousValue={tiktokAds.previous.impressions} />
                   <MetricCard label="Reach" value={tiktokAds.current.reach} previousValue={tiktokAds.previous.reach} />
                   <MetricCard label="Clicks" value={tiktokAds.current.clicks} previousValue={tiktokAds.previous.clicks} />
-                  <MetricCard label="CTR" value={tiktokAds.current.ctr} previousValue={tiktokAds.previous.ctr} format={formatPercent} />
-                  <MetricCard label="CPC" value={tiktokAds.current.cpc} previousValue={tiktokAds.previous.cpc} format={formatCurrency} invertColors />
+                  <MetricCard label="CTR" value={tiktokAds.current.ctr} previousValue={tiktokAds.previous.ctr} format={formatPercent} isRate />
+                  <MetricCard label="CPC" value={tiktokAds.current.cpc} previousValue={tiktokAds.previous.cpc} format={formatCurrency} invertColors isRate />
                 </div>
 
                 {/* Performance Row */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <MetricCard label="CPM" value={tiktokAds.current.cpm} previousValue={tiktokAds.previous.cpm} format={formatCurrency} invertColors />
+                  <MetricCard label="CPM" value={tiktokAds.current.cpm} previousValue={tiktokAds.previous.cpm} format={formatCurrency} invertColors isRate />
                   <MetricCard label="Video Views" value={tiktokAds.current.videoViews} previousValue={tiktokAds.previous.videoViews} />
                   <MetricCard label="Conversions" value={tiktokAds.current.conversions} previousValue={tiktokAds.previous.conversions} info="Conversion events tracked via TikTok Pixel" />
-                  <MetricCard label="ROAS" value={tiktokAds.current.roas} previousValue={tiktokAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} />
+                  <MetricCard label="ROAS" value={tiktokAds.current.roas} previousValue={tiktokAds.previous.roas} format={(v) => `${v.toFixed(2)}x`} isRate />
                 </div>
 
                 {/* All Campaigns Table */}

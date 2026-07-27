@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     CheckCircle2,
     TrendingDown,
+    TrendingUp,
     Crosshair,
     ChevronDown,
     ChevronUp,
@@ -100,6 +101,18 @@ const fmtX = (v: number | null | undefined) =>
 
 const fmtN = (v: number | null | undefined) =>
     v == null ? "—" : v.toLocaleString();
+
+// ─── Parse date range from bulk export filename ──────────────────────────────
+// Pattern: bulk-XXXX-YYYYMMDD-YYYYMMDD-NNNNN.xlsx or similar
+const parseDateRangeFromFilename = (filename: string): { from: string; to: string } | null => {
+    const match = filename.match(/(\d{8})-(\d{8})/);
+    if (!match) return null;
+    const fromRaw = match[1];
+    const toRaw = match[2];
+    const from = `${fromRaw.substring(0, 4)}-${fromRaw.substring(4, 6)}-${fromRaw.substring(6, 8)}`;
+    const to = `${toRaw.substring(0, 4)}-${toRaw.substring(4, 6)}-${toRaw.substring(6, 8)}`;
+    return { from, to };
+};
 
 const priorityColor = (priority: string) => {
     switch (String(priority).toLowerCase()) {
@@ -411,7 +424,7 @@ function buildPrintHTML(data: GoogleReportData, clientName: string, fileName: st
   </div>
 
   <div class="section">
-    <div class="section-title">Action Plan for the Next 7 Days</div>
+    <div class="section-title">Action Plan for the Next 14 Days</div>
     <ol>${actionBullets}</ol>
   </div>
 
@@ -434,6 +447,7 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
     const [file, setFile] = useState<File | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [report, setReport] = useState<GoogleReportData | null>(null);
+    const [previousReport, setPreviousReport] = useState<GoogleReportData | null>(null);
     const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -443,6 +457,7 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
     useEffect(() => {
         setFile(null);
         setReport(null);
+        setPreviousReport(null);
         setGeneratedAt(null);
         setIsAnalyzing(false);
         hasTriggeredAnalysis.current = false;
@@ -453,34 +468,42 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
         queryFn: async () => {
             const { data, error } = await supabase
                 .from("google_ads_reports" as any)
-                .select("parsed_data, generated_at, source_file_name, generation_status")
+                .select("parsed_data, generated_at, source_file_name, generation_status, report_period")
                 .eq("client_id", clientId)
                 .order("report_period", { ascending: false })
-                .limit(1)
-                .maybeSingle();
+                .limit(2);
 
             if (error) throw error;
-            return data as any;
+            return data as any[] || [];
         },
         enabled: !!clientId,
-        refetchInterval: (query) => (query.state.data as any)?.generation_status === 'pending' ? 5000 : false // poll if pending
+        refetchInterval: (query) => {
+            const rows = query.state.data as any[] | undefined;
+            return rows?.[0]?.generation_status === 'pending' ? 5000 : false;
+        }
     });
 
     useEffect(() => {
-        if (cachedData) {
-            if (cachedData.generation_status === 'pending') {
+        if (cachedData && cachedData.length > 0) {
+            const latest = cachedData[0];
+            const prev = cachedData.length > 1 ? cachedData[1] : null;
+
+            if (latest.generation_status === 'pending') {
                 setIsAnalyzing(true);
                 hasTriggeredAnalysis.current = true;
-            } else if (cachedData.generation_status === 'complete' && cachedData.parsed_data) {
+            } else if (latest.generation_status === 'complete' && latest.parsed_data) {
                 setIsAnalyzing(false);
-                setReport(cachedData.parsed_data as GoogleReportData);
-                if (cachedData.generated_at) {
-                    setGeneratedAt(new Date(cachedData.generated_at));
+                setReport(latest.parsed_data as GoogleReportData);
+                if (latest.generated_at) {
+                    setGeneratedAt(new Date(latest.generated_at));
                 }
-                if (cachedData.source_file_name && !file) {
-                    setFile(new File([""], cachedData.source_file_name, { type: "text/csv" }));
+                if (latest.source_file_name && !file) {
+                    setFile(new File([""], latest.source_file_name, { type: "text/csv" }));
                 }
-            } else if (cachedData.generation_status === 'failed') {
+                if (prev?.generation_status === 'complete' && prev?.parsed_data) {
+                    setPreviousReport(prev.parsed_data as GoogleReportData);
+                }
+            } else if (latest.generation_status === 'failed') {
                 setIsAnalyzing(false);
                 if (hasTriggeredAnalysis.current) {
                     toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
@@ -585,7 +608,8 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
                         fileName,
                         rawData: csvText,
                         exactTotals,
-                        reportPeriod: new Date().toISOString().substring(0, 7),
+                        reportPeriod: (() => { const dr = parseDateRangeFromFilename(fileName); return dr ? `${dr.from}_${dr.to}` : new Date().toISOString().substring(0, 7); })(),
+                        dateRange: parseDateRangeFromFilename(fileName),
                     }),
                 }
             );
@@ -783,23 +807,44 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
                     {!isAnalyzing && report && (
                         <div className="space-y-5">
 
-                            {/* KPI Bar */}
+                            {/* KPI Bar — with comparison if previous report exists */}
                             <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                                {[
-                                    { label: "Spend", value: fmt$(report.kpis.spend) },
-                                    { label: "Impressions", value: fmtN(report.kpis.impressions) },
-                                    { label: "Clicks", value: fmtN(report.kpis.clicks) },
-                                    { label: "CTR", value: fmtPct(report.kpis.ctr) },
-                                    { label: "Conversions", value: fmtN(report.kpis.conversions) },
-                                    { label: "Conv. Value", value: fmt$(report.kpis.convValue) },
-                                    { label: "ROAS", value: fmtX(report.kpis.roas), className: roasClass(report.kpis.roas) },
-                                    { label: "Cost / Conv.", value: report.kpis.costPerConv == null ? "N/A" : fmt$(report.kpis.costPerConv) },
-                                ].map(({ label, value, className }) => (
-                                    <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-                                        <p className={`text-base font-bold ${className ?? ""}`}>{value}</p>
-                                    </div>
-                                ))}
+                                {([
+                                    { label: "Spend", curr: report.kpis.spend, prev: previousReport?.kpis.spend, fmt: fmt$, good: "down" as const },
+                                    { label: "Impressions", curr: report.kpis.impressions, prev: previousReport?.kpis.impressions, fmt: fmtN, good: "up" as const },
+                                    { label: "Clicks", curr: report.kpis.clicks, prev: previousReport?.kpis.clicks, fmt: fmtN, good: "up" as const },
+                                    { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct, good: "up" as const },
+                                    { label: "Conversions", curr: report.kpis.conversions, prev: previousReport?.kpis.conversions, fmt: fmtN, good: "up" as const },
+                                    { label: "Conv. Value", curr: report.kpis.convValue, prev: previousReport?.kpis.convValue, fmt: fmt$, good: "up" as const },
+                                    { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, good: "up" as const, cls: roasClass(report.kpis.roas) },
+                                    { label: "Cost / Conv.", curr: report.kpis.costPerConv, prev: previousReport?.kpis.costPerConv, fmt: (v: number | null | undefined) => v == null ? "N/A" : fmt$(v), good: "down" as const },
+                                ]).map(({ label, curr, prev, fmt: fmtFn, good, cls }) => {
+                                    const change = curr != null && prev != null && prev !== 0
+                                        ? ((curr - prev) / Math.abs(prev)) * 100
+                                        : null;
+                                    const isPositive = change != null && ((good === 'up' && change > 0) || (good === 'down' && change < 0));
+                                    const isNegative = change != null && ((good === 'up' && change < 0) || (good === 'down' && change > 0));
+
+                                    return (
+                                        <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
+                                            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
+                                            <p className={`text-base font-bold ${cls ?? ""}`}>{fmtFn(curr)}</p>
+                                            {prev != null && (
+                                                <div className="mt-1.5 pt-1.5 border-t border-border/30 space-y-0.5">
+                                                    <p className="text-[9px] text-muted-foreground">prev: {fmtFn(prev)}</p>
+                                                    {change != null && change !== 0 && (
+                                                        <div className={`flex items-center justify-center gap-0.5 text-[10px] font-semibold ${
+                                                            isPositive ? 'text-emerald-400' : isNegative ? 'text-red-400' : 'text-muted-foreground'
+                                                        }`}>
+                                                            {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                                            <span>{change > 0 ? '+' : ''}{change.toFixed(1)}%</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
 
                             {/* Executive Summary */}
@@ -938,7 +983,7 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
                                 <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
                                     <div className="flex items-center gap-2 mb-3 text-emerald-400">
                                         <Target className="h-4 w-4" />
-                                        <span className="font-semibold text-sm">Action Plan for the Next 7 Days</span>
+                                        <span className="font-semibold text-sm">Action Plan for the Next 14 Days</span>
                                     </div>
                                     <ol className="space-y-2">
                                         {report.actionPlan?.map((action, i) => (

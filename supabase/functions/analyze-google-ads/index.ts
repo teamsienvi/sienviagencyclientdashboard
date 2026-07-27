@@ -12,6 +12,8 @@ const GOOGLE_ADS_PROMPT = `You are an expert Google Ads analyst. Analyze the fol
 
 IMPORTANT: You MUST respond with ONLY a valid JSON object — no markdown, no code fences, no text outside the JSON. Your response must start with { and end with }.
 
+This is a BIWEEKLY (14-day) report. Analyze trends across the full period.
+
 Your analysis must capture:
 - Spend (Use the EXACT pre-calculated total provided)
 - Impressions (Use the EXACT pre-calculated total provided)
@@ -33,7 +35,7 @@ Identify:
   - Conversion Health: a brief assessment of conversion tracking, conversion count, value, and blocker to scaling.
   - Account Constraint: a brief assessment of account status, bid strategy status (e.g., learning), and asset policies (e.g., limited by policy).
 - Key Issues To Fix: a list of issues containing "area" (e.g. Tracking, Policy, Structure, Intent), "currentSignal", "recommendedMove", and "priority" (e.g. High, Medium, Low).
-- Action Plan for the Next 7 Days: 5-6 bullet points of specific action items.
+- Action Plan for the Next 14 Days: 5-6 bullet points of specific action items.
 - Final Recommendation: 1 closing paragraph with a clear verdict.
 
 Return EXACTLY this JSON structure:
@@ -99,6 +101,7 @@ serve(async (req) => {
         const fileName: string = body.fileName || "report";
         const reportPeriod: string = body.reportPeriod || new Date().toISOString().substring(0, 7);
         const exactTotals = body.exactTotals || { spend: 0, impressions: 0, clicks: 0, conversions: 0, convValue: 0 };
+        const dateRange = body.dateRange || null;
 
         if (!clientId) throw new Error("clientId is required");
         if (!fileContent || fileContent.trim().length < 20) throw new Error("File appears empty or too small.");
@@ -120,15 +123,19 @@ serve(async (req) => {
             ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated for size ...]"
             : fileContent;
 
+        const dateRangeContext = dateRange
+            ? `\nREPORTING PERIOD: ${dateRange.from} to ${dateRange.to} (14-day biweekly window)\n`
+            : '';
+
         const preCalculatedContext = `
-────────────────────────────────────────────────────────────
+${"─".repeat(60)}
 PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
 - Spend: ${exactTotals.spend.toFixed(2)}
 - Impressions: ${exactTotals.impressions}
 - Clicks: ${exactTotals.clicks}
 - Conversions: ${exactTotals.conversions}
-- Conversion Value (Sales): ${exactTotals.convValue.toFixed(2)}
-────────────────────────────────────────────────────────────
+- Conversion Value (Sales): ${exactTotals.convValue.toFixed(2)}${dateRangeContext}
+${"─".repeat(60)}
 `;
 
         const userMessage = `${GOOGLE_ADS_PROMPT}\nClient: ${client.name}\nFile: ${fileName}\n\n${preCalculatedContext}\n\n────────────────────────────────────────────────────────────\nGOOGLE ADS DATA:\n${truncatedData}\n────────────────────────────────────────────────────────────`;

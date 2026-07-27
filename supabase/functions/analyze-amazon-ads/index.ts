@@ -14,6 +14,8 @@ const AMAZON_PROMPT = `You are an expert Amazon Ads analyst. Analyze the followi
 
 IMPORTANT: You MUST respond with ONLY a valid JSON object — no markdown, no code fences, no text outside the JSON. Your response must start with { and end with }.
 
+This is a BIWEEKLY (14-day) report. If a date range is provided, analyze trends across the full period.
+
 - Ad Sales (Use the EXACT pre-calculated total provided)
 - Ad Spend (Use the EXACT pre-calculated total provided)
 - ACoS = (Ad Spend / Ad Sales) * 100
@@ -30,10 +32,10 @@ Identify:
 - Top 6 search terms with highest spend but ZERO sales (these are wasting budget)
 
 Then write:
-- executiveSummary: 3-4 bullet points referencing the actual numbers from the data
-- clientNeedsToKnow: 1 honest paragraph about overall account health
+- executiveSummary: 3-4 bullet points referencing the actual numbers from the data. Include a mention of the 14-day reporting window.
+- clientNeedsToKnow: 1 honest paragraph about overall account health over the biweekly period
 - channelSnapshot: 1 paragraph about campaign type breakdown (Sponsored Products vs Brands vs Display, or whatever types are in the data)
-- actionPlan: 4-5 specific bullet points for the next 7 days, referencing actual campaign names from the data
+- actionPlan: 4-5 specific bullet points for the next 14 days, referencing actual campaign names from the data
 - finalRecommendation: 1 closing paragraph with a clear verdict
 
 Return EXACTLY this JSON structure (use null for any value you cannot determine):
@@ -94,6 +96,7 @@ serve(async (req) => {
         const fileName: string = body.fileName || "report";
         const reportPeriod: string = body.reportPeriod || new Date().toISOString().substring(0, 7);
         const exactTotals = body.exactTotals || { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
+        const dateRange = body.dateRange || null; // e.g. { from: '2026-07-13', to: '2026-07-26' }
 
         if (!clientId) throw new Error("clientId is required");
         if (!fileContent || fileContent.trim().length < 20) throw new Error("File appears empty or too small.");
@@ -115,6 +118,10 @@ serve(async (req) => {
             ? fileContent.substring(0, maxDataLength) + "\n\n[... data truncated for size ...]"
             : fileContent;
 
+        const dateRangeContext = dateRange
+            ? `\nREPORTING PERIOD: ${dateRange.from} to ${dateRange.to} (14-day biweekly window)\n`
+            : '';
+
         const preCalculatedContext = `
 ${"─".repeat(60)}
 PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
@@ -122,7 +129,7 @@ PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
 - Ad Sales: ${exactTotals.sales.toFixed(2)}
 - Orders: ${exactTotals.orders}
 - Clicks: ${exactTotals.clicks}
-- Impressions: ${exactTotals.impressions}
+- Impressions: ${exactTotals.impressions}${dateRangeContext}
 ${"─".repeat(60)}
 `;
 

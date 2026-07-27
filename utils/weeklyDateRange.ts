@@ -60,3 +60,43 @@ export const getPreviousReportingWeek = () => {
     dateRange: formatDateRange(prevStart, prevEnd),
   };
 };
+
+/**
+ * Get the biweekly (14-day) reporting period — the last TWO completed weeks.
+ * Week 2 = last completed week (Mon-Sun)
+ * Week 1 = the week before that
+ * Combined = full 14-day window
+ */
+export const getBiweeklyReportingPeriod = () => {
+  const week2 = getCurrentReportingWeek();
+  const week1 = getPreviousReportingWeek();
+
+  return {
+    week1: {
+      start: week1.start,
+      end: week1.end,
+      dateRange: week1.dateRange,
+    },
+    week2: {
+      start: week2.start,
+      end: week2.end,
+      dateRange: week2.dateRange,
+    },
+    combined: {
+      start: week1.start,
+      end: week2.end,
+      dateRange: formatDateRange(week1.start, week2.end),
+    },
+  };
+};
+
+/**
+ * Format a date range as "July 13 to July 26, 2026" style (for PDF report titles)
+ */
+export const formatDateRangeFull = (start: Date, end: Date): string => {
+  const sameYear = format(start, "yyyy") === format(end, "yyyy");
+  if (sameYear) {
+    return `${format(start, "MMMM d")} to ${format(end, "MMMM d, yyyy")}`;
+  }
+  return `${format(start, "MMMM d, yyyy")} to ${format(end, "MMMM d, yyyy")}`;
+};
