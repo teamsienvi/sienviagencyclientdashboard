@@ -153,12 +153,12 @@ function buildPrintHTML(
         if (!w1kpis) return '';
 
         const rows = [
-            { metric: 'Ad Sales', w1: w1kpis.adSales, w2: data.kpis.adSales, fmt: fmt$, unit: '%' },
-            { metric: 'Ad Spend', w1: w1kpis.adSpend, w2: data.kpis.adSpend, fmt: fmt$, unit: '%' },
-            { metric: 'Orders', w1: w1kpis.orders, w2: data.kpis.orders, fmt: fmtN, unit: '%' },
-            { metric: 'ACoS', w1: w1kpis.acos, w2: data.kpis.acos, fmt: fmtPct, unit: ' pts' },
-            { metric: 'ROAS', w1: w1kpis.roas, w2: data.kpis.roas, fmt: fmtX, unit: '%' },
-            { metric: 'CVR', w1: w1kpis.cvr, w2: data.kpis.cvr, fmt: fmtPct, unit: ' pts' },
+            { metric: 'Ad Sales', w1: w1kpis.adSales, w2: data.kpis.adSales, fmt: fmt$, unit: '%', good: 'up' },
+            { metric: 'Ad Spend', w1: w1kpis.adSpend, w2: data.kpis.adSpend, fmt: fmt$, unit: '%', good: 'down' },
+            { metric: 'Orders', w1: w1kpis.orders, w2: data.kpis.orders, fmt: fmtN, unit: '%', good: 'up' },
+            { metric: 'ACoS', w1: w1kpis.acos, w2: data.kpis.acos, fmt: fmtPct, unit: ' pts', good: 'down' },
+            { metric: 'ROAS', w1: w1kpis.roas, w2: data.kpis.roas, fmt: fmtX, unit: '%', good: 'up' },
+            { metric: 'CVR', w1: w1kpis.cvr, w2: data.kpis.cvr, fmt: fmtPct, unit: ' pts', good: 'up' },
         ];
         const tableRows = rows.map(r => {
             let changeStr = '—';
@@ -166,12 +166,16 @@ function buildPrintHTML(
             if (r.w1 != null && r.w2 != null) {
                 if (r.unit === ' pts') {
                     const diff = r.w2 - r.w1;
+                    const isGood = r.good === 'up' ? diff > 0 : diff < 0;
+                    const isBad = r.good === 'up' ? diff < 0 : diff > 0;
                     changeStr = `${diff > 0 ? '+' : ''}${diff.toFixed(2)}${r.unit}`;
-                    changeClass = diff > 0 ? 'green' : diff < 0 ? 'red' : '';
+                    changeClass = isGood ? 'green' : isBad ? 'red' : '';
                 } else if (r.w1 !== 0) {
                     const pct = ((r.w2 - r.w1) / Math.abs(r.w1)) * 100;
+                    const isGood = r.good === 'up' ? pct > 0 : pct < 0;
+                    const isBad = r.good === 'up' ? pct < 0 : pct > 0;
                     changeStr = `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
-                    changeClass = pct > 0 ? 'green' : pct < 0 ? 'red' : '';
+                    changeClass = isGood ? 'green' : isBad ? 'red' : '';
                 }
             }
             return `<tr><td>${r.metric}</td><td class="num">${r.fmt(r.w1)}</td><td class="num">${r.fmt(r.w2)}</td><td class="num ${changeClass}">${changeStr}</td></tr>`;
@@ -760,20 +764,20 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         {/* KPI Bar — with W1/W2 comparison if previous report exists */}
                         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
                             {([
-                                { label: "Ad Sales", curr: report.kpis.adSales, prev: previousReport?.kpis.adSales, fmt: fmt$ },
-                                { label: "Ad Spend", curr: report.kpis.adSpend, prev: previousReport?.kpis.adSpend, fmt: fmt$ },
-                                { label: "ACoS", curr: report.kpis.acos, prev: previousReport?.kpis.acos, fmt: fmtPct, cls: acosClass(report.kpis.acos) },
-                                { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, cls: roasClass(report.kpis.roas) },
-                                { label: "Orders", curr: report.kpis.orders, prev: previousReport?.kpis.orders, fmt: fmtN },
-                                { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct },
-                                { label: "CVR", curr: report.kpis.cvr, prev: previousReport?.kpis.cvr, fmt: fmtPct },
-                                { label: "Avg CPC", curr: report.kpis.avgCpc, prev: previousReport?.kpis.avgCpc, fmt: fmt$ },
-                            ] as { label: string; curr: number | null; prev?: number | null; fmt: (v: number | null | undefined) => string; cls?: string }[]).map(({ label, curr, prev, fmt: fmtFn, cls }) => {
+                                { label: "Ad Sales", curr: report.kpis.adSales, prev: previousReport?.kpis.adSales, fmt: fmt$, good: "up" },
+                                { label: "Ad Spend", curr: report.kpis.adSpend, prev: previousReport?.kpis.adSpend, fmt: fmt$, good: "down" },
+                                { label: "ACoS", curr: report.kpis.acos, prev: previousReport?.kpis.acos, fmt: fmtPct, good: "down", cls: acosClass(report.kpis.acos) },
+                                { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, good: "up", cls: roasClass(report.kpis.roas) },
+                                { label: "Orders", curr: report.kpis.orders, prev: previousReport?.kpis.orders, fmt: fmtN, good: "up" },
+                                { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct, good: "up" },
+                                { label: "CVR", curr: report.kpis.cvr, prev: previousReport?.kpis.cvr, fmt: fmtPct, good: "up" },
+                                { label: "Avg CPC", curr: report.kpis.avgCpc, prev: previousReport?.kpis.avgCpc, fmt: fmt$, good: "down" },
+                            ] as { label: string; curr: number | null; prev?: number | null; fmt: (v: number | null | undefined) => string; good: 'up' | 'down'; cls?: string }[]).map(({ label, curr, prev, fmt: fmtFn, good, cls }) => {
                                 const change = curr != null && prev != null && prev !== 0
                                     ? ((curr - prev) / Math.abs(prev)) * 100
                                     : null;
-                                const isPositive = change != null && change > 0;
-                                const isNegative = change != null && change < 0;
+                                const isPositive = change != null && ((good === 'up' && change > 0) || (good === 'down' && change < 0));
+                                const isNegative = change != null && ((good === 'up' && change < 0) || (good === 'down' && change > 0));
 
                                 return (
                                     <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
@@ -836,24 +840,28 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                         </TableHeader>
                                         <TableBody>
                                             {([
-                                                { metric: 'Ad Sales', w1: w1kpis.adSales, w2: report.kpis.adSales, fmt: fmt$, unit: '%' as const },
-                                                { metric: 'Ad Spend', w1: w1kpis.adSpend, w2: report.kpis.adSpend, fmt: fmt$, unit: '%' as const },
-                                                { metric: 'Orders', w1: w1kpis.orders, w2: report.kpis.orders, fmt: fmtN, unit: '%' as const },
-                                                { metric: 'ACoS', w1: w1kpis.acos, w2: report.kpis.acos, fmt: fmtPct, unit: 'pts' as const },
-                                                { metric: 'ROAS', w1: w1kpis.roas, w2: report.kpis.roas, fmt: fmtX, unit: '%' as const },
-                                                { metric: 'CVR', w1: w1kpis.cvr, w2: report.kpis.cvr, fmt: fmtPct, unit: 'pts' as const },
+                                                { metric: 'Ad Sales', w1: w1kpis.adSales, w2: report.kpis.adSales, fmt: fmt$, unit: '%' as const, good: 'up' },
+                                                { metric: 'Ad Spend', w1: w1kpis.adSpend, w2: report.kpis.adSpend, fmt: fmt$, unit: '%' as const, good: 'down' },
+                                                { metric: 'Orders', w1: w1kpis.orders, w2: report.kpis.orders, fmt: fmtN, unit: '%' as const, good: 'up' },
+                                                { metric: 'ACoS', w1: w1kpis.acos, w2: report.kpis.acos, fmt: fmtPct, unit: 'pts' as const, good: 'down' },
+                                                { metric: 'ROAS', w1: w1kpis.roas, w2: report.kpis.roas, fmt: fmtX, unit: '%' as const, good: 'up' },
+                                                { metric: 'CVR', w1: w1kpis.cvr, w2: report.kpis.cvr, fmt: fmtPct, unit: 'pts' as const, good: 'up' },
                                             ]).map((r) => {
                                                 let changeStr = '\u2014';
                                                 let changeClass = 'text-muted-foreground';
                                                 if (r.w1 != null && r.w2 != null) {
                                                     if (r.unit === 'pts') {
                                                         const diff = r.w2 - r.w1;
+                                                        const isGood = r.good === 'up' ? diff > 0 : diff < 0;
+                                                        const isBad = r.good === 'up' ? diff < 0 : diff > 0;
                                                         changeStr = `${diff > 0 ? '+' : ''}${diff.toFixed(2)} pts`;
-                                                        changeClass = diff > 0 ? 'text-emerald-400 bg-emerald-500/5' : diff < 0 ? 'text-red-400 bg-red-500/5' : 'text-muted-foreground';
+                                                        changeClass = isGood ? 'text-emerald-400 bg-emerald-500/5' : isBad ? 'text-red-400 bg-red-500/5' : 'text-muted-foreground';
                                                     } else if (r.w1 !== 0) {
                                                         const pct = ((r.w2 - r.w1) / Math.abs(r.w1)) * 100;
+                                                        const isGood = r.good === 'up' ? pct > 0 : pct < 0;
+                                                        const isBad = r.good === 'up' ? pct < 0 : pct > 0;
                                                         changeStr = `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`;
-                                                        changeClass = pct > 0 ? 'text-emerald-400 bg-emerald-500/5' : pct < 0 ? 'text-red-400 bg-red-500/5' : 'text-muted-foreground';
+                                                        changeClass = isGood ? 'text-emerald-400 bg-emerald-500/5' : isBad ? 'text-red-400 bg-red-500/5' : 'text-muted-foreground';
                                                     }
                                                 }
                                                 return (
