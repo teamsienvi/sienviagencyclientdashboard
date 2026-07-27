@@ -810,20 +810,20 @@ export function GoogleAdsReportCard({ clientId, clientName }: GoogleAdsReportCar
                             {/* KPI Bar — with comparison if previous report exists */}
                             <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
                                 {([
-                                    { label: "Spend", curr: report.kpis.spend, prev: previousReport?.kpis.spend, fmt: fmt$, good: "down" as const },
-                                    { label: "Impressions", curr: report.kpis.impressions, prev: previousReport?.kpis.impressions, fmt: fmtN, good: "up" as const },
-                                    { label: "Clicks", curr: report.kpis.clicks, prev: previousReport?.kpis.clicks, fmt: fmtN, good: "up" as const },
-                                    { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct, good: "up" as const },
-                                    { label: "Conversions", curr: report.kpis.conversions, prev: previousReport?.kpis.conversions, fmt: fmtN, good: "up" as const },
-                                    { label: "Conv. Value", curr: report.kpis.convValue, prev: previousReport?.kpis.convValue, fmt: fmt$, good: "up" as const },
-                                    { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, good: "up" as const, cls: roasClass(report.kpis.roas) },
-                                    { label: "Cost / Conv.", curr: report.kpis.costPerConv, prev: previousReport?.kpis.costPerConv, fmt: (v: number | null | undefined) => v == null ? "N/A" : fmt$(v), good: "down" as const },
-                                ]).map(({ label, curr, prev, fmt: fmtFn, good, cls }) => {
+                                    { label: "Spend", curr: report.kpis.spend, prev: previousReport?.kpis.spend, fmt: fmt$ },
+                                    { label: "Impressions", curr: report.kpis.impressions, prev: previousReport?.kpis.impressions, fmt: fmtN },
+                                    { label: "Clicks", curr: report.kpis.clicks, prev: previousReport?.kpis.clicks, fmt: fmtN },
+                                    { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct },
+                                    { label: "Conversions", curr: report.kpis.conversions, prev: previousReport?.kpis.conversions, fmt: fmtN },
+                                    { label: "Conv. Value", curr: report.kpis.convValue, prev: previousReport?.kpis.convValue, fmt: fmt$ },
+                                    { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, cls: roasClass(report.kpis.roas) },
+                                    { label: "Cost / Conv.", curr: report.kpis.costPerConv, prev: previousReport?.kpis.costPerConv, fmt: (v: number | null | undefined) => v == null ? "N/A" : fmt$(v) },
+                                ]).map(({ label, curr, prev, fmt: fmtFn, cls }) => {
                                     const change = curr != null && prev != null && prev !== 0
                                         ? ((curr - prev) / Math.abs(prev)) * 100
                                         : null;
-                                    const isPositive = change != null && ((good === 'up' && change > 0) || (good === 'down' && change < 0));
-                                    const isNegative = change != null && ((good === 'up' && change < 0) || (good === 'down' && change > 0));
+                                    const isPositive = change != null && change > 0;
+                                    const isNegative = change != null && change < 0;
 
                                     return (
                                         <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
