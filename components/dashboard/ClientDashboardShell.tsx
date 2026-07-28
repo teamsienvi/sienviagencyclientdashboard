@@ -569,7 +569,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     if (!metricoolPlatforms) return false;
     const name = client?.name?.trim();
     // If client has website analytics configured, it's not ads-only
-    if (client?.supabase_url || clientGa4PropertyId || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency"].includes(name || "")) return false;
+    if (client?.supabase_url || clientGa4PropertyId || connectedAccounts?.substack || ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Sienvi Agency", "PlayIQ"].includes(name || "")) return false;
     const platforms = metricoolPlatforms.map(p => p.platform);
     const adsPlatforms = ['meta_ads', 'google_ads', 'tiktok_ads'];
     const hasAnyAdsPlatform = platforms.some(p => adsPlatforms.includes(p));
@@ -598,8 +598,22 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     return senderClients.some(name => client.name.toLowerCase().includes(name.toLowerCase()));
   }, [client?.name]);
 
-  // Check if client has Web & E-Commerce features (hidden for all clients as requested)
-  const hasWebAndEcomm = false;
+  // Check if client has Web & E-Commerce features
+  const hasWebAndEcomm = useMemo(() => {
+    if (!client?.name) return false;
+    const name = client.name.trim();
+    if (clientGa4PropertyId) return true;
+    if (client?.supabase_url) return true;
+    if (connectedAccounts?.shopify) return true;
+    if (connectedAccounts?.substack) return true;
+    if (hasEmailCampaigns) return true;
+    const webEcommClients = [
+      "Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", 
+      "Sienvi Agency", "PlayIQ", "Serenity Scrolls", "Hwabelle", "OxiSure Tech",
+      "Billionaire Brother", "The Billionaire Brother", "Snarky A$$ Humans"
+    ];
+    return webEcommClients.some(cName => name.toLowerCase().includes(cName.toLowerCase()));
+  }, [client, clientGa4PropertyId, connectedAccounts, hasEmailCampaigns]);
 
 
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
@@ -775,23 +789,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         </CarouselItem>
                       )}
 
-                      {hasWebAndEcomm && (
-                        <CarouselItem>
-                          <AnalyticsSummaryCard
-                            clientId={clientId!}
-                            type="website"
-                            title="Web & E-Commerce Overview"
-                            icon={<Globe className="h-5 w-5 text-emerald-500" />}
-                            dateRange={dateRange}
-                            onDateRangeChange={(preset, customRange) => {
-                              setDateRange(preset);
-                              if (customRange) setCustomDateRange(customRange);
-                            }}
-                            customDateRange={customDateRange}
-                            isActive={activeTab === "analytics"}
-                          />
-                        </CarouselItem>
-                      )}
+                      {/* Web & E-Commerce Overview card removed as requested */}
 
                       {connectedAccounts?.ubersuggest && (
                         <CarouselItem>
@@ -1297,6 +1295,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                       </div>
+                      {(client.supabase_url || clientGa4PropertyId) && (
+                        <WebsiteAnalyticsSection clientId={clientId!} />
+                      )}
                   </div>
                 ) : null}
 
