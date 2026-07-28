@@ -163,27 +163,30 @@ export const MetricoolAnalyticsSection = ({
     }
   }, [syncState.lastSuccessAt, clientId, platform, queryClient]);
 
-  // Date range state - default to "7d" which uses the standardized reporting week
-  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
+  // Date range state - default to "14d"
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("14d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
 
   const getDateRange = () => {
     if (dateRangePreset === "custom" && customDateRange) {
       return { start: customDateRange.start, end: customDateRange.end };
     }
-    if (dateRangePreset === "30d" || dateRangePreset === "60d") {
-      const days = dateRangePreset === "60d" ? 60 : 30;
+    if (dateRangePreset === "14d" || dateRangePreset === "30d" || dateRangePreset === "60d" || dateRangePreset === "90d" || dateRangePreset === "365d") {
+      const days = dateRangePreset === "365d" ? 365 : dateRangePreset === "90d" ? 90 : dateRangePreset === "60d" ? 60 : dateRangePreset === "30d" ? 30 : 14;
       const today = new Date();
       return { start: subDays(today, days), end: today };
     }
-    // For 7d (default), use the standardized reporting week (last completed Mon-Sun)
+    // For 7d, use the standardized reporting week (last completed Mon-Sun)
     const { start, end } = getCurrentReportingWeek();
     return { start, end };
   };
 
   const getPrevPeriodLabel = () => {
+    if (dateRangePreset === "365d") return "prev year";
+    if (dateRangePreset === "90d") return "prev quarter";
     if (dateRangePreset === "60d") return "prev 60 days";
     if (dateRangePreset === "30d") return "prev 30 days";
+    if (dateRangePreset === "14d") return "prev 14 days";
     if (dateRangePreset === "custom") return "prev period";
     return "prev week";
   };

@@ -111,7 +111,7 @@ interface FacebookPage {
   picture_url: string | null;
 }
 
-type DateRangePreset = "7d" | "30d" | "60d" | "custom";
+type DateRangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "365d" | "custom";
 type MetaPlatform = "instagram" | "facebook";
 
 const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProps) => {
@@ -150,8 +150,8 @@ const MetaAnalyticsSection = ({ clientId, clientName }: MetaAnalyticsSectionProp
   const [instagramContentTab, setInstagramContentTab] = useState<"posts" | "reels">("posts");
   const [facebookContentTab, setFacebookContentTab] = useState<"posts" | "reels">("posts");
 
-  // Date range state - weekly reports reset every Tuesday
-  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("7d");
+  // Date range state
+  const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("14d");
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | undefined>();
 
   // Report-based comparison data (from CSV uploads)

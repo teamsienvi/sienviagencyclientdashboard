@@ -79,7 +79,7 @@ const getMonthFromDateRange = (dateRange: string): string => {
 
 import { DateRangeSelector } from "@/components/DateRangeSelector";
 
-type DateRangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "custom";
+type DateRangePreset = "7d" | "14d" | "30d" | "60d" | "90d" | "365d" | "custom";
 type RankingChoice = "all" | "engagement" | "reach" | "clicks";
 
 interface ClientDashboardShellProps {
@@ -598,17 +598,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     return senderClients.some(name => client.name.toLowerCase().includes(name.toLowerCase()));
   }, [client?.name]);
 
-  // Check if client has Web & E-Commerce features
-  const hasWebAndEcomm = useMemo(() => {
-    if (!client) return false;
-    return !!(
-      (!isAdsOnlyClient && client.supabase_url) || 
-      clientGa4PropertyId ||
-      ["Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", "Hwabelle", "Billionaire Brother", "The Billionaire Brother"].includes(client.name?.trim() || "") || 
-      connectedAccounts?.substack ||
-      hasEmailCampaigns
-    );
-  }, [client, isAdsOnlyClient, clientGa4PropertyId, connectedAccounts, hasEmailCampaigns]);
+  // Check if client has Web & E-Commerce features (hidden for all clients as requested)
+  const hasWebAndEcomm = false;
 
 
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
@@ -772,6 +763,10 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             title="Social Media Overview"
                             icon={<Share2 className="h-5 w-5 text-violet-500" />}
                             dateRange={dateRange}
+                            onDateRangeChange={(preset, customRange) => {
+                              setDateRange(preset);
+                              if (customRange) setCustomDateRange(customRange);
+                            }}
                             customDateRange={customDateRange}
                             isActive={activeTab === "analytics"}
                             liveFollowers={metricoolFollowers}
@@ -788,6 +783,10 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             title="Web & E-Commerce Overview"
                             icon={<Globe className="h-5 w-5 text-emerald-500" />}
                             dateRange={dateRange}
+                            onDateRangeChange={(preset, customRange) => {
+                              setDateRange(preset);
+                              if (customRange) setCustomDateRange(customRange);
+                            }}
                             customDateRange={customDateRange}
                             isActive={activeTab === "analytics"}
                           />
@@ -802,6 +801,10 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             title="SEO Performance Overview"
                             icon={<span className="text-xl leading-none">🔍</span>}
                             dateRange={dateRange}
+                            onDateRangeChange={(preset, customRange) => {
+                              setDateRange(preset);
+                              if (customRange) setCustomDateRange(customRange);
+                            }}
                             customDateRange={customDateRange}
                             isActive={activeTab === "analytics"}
                           />

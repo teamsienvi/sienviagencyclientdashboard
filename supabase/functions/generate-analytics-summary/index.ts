@@ -630,8 +630,7 @@ async function collectSocialData(
         sections.push("## Follower Trend (7 days)\n" + trendLines.join("\n"));
     }
     
-    // Fallback: if no Metricool follower timeline data, derive followers_gained from
-    // social_account_metrics (calculating difference between newest and oldest records in the window)
+    // Fallback: derive followers_gained from social_account_metrics
     if (metricsResult.followers_gained === 0 && metrics && metrics.length > 0) {
         let calculatedNewFollowers = 0;
         
@@ -639,39 +638,33 @@ async function collectSocialData(
         const metricsByPlatform: Record<string, any[]> = {};
         metrics.forEach((m: any) => {
             if (!isPlatformActive(m.platform)) return;
-            if (!metricsByPlatform[m.platform]) metricsByPlatform[m.platform] = [];
-            metricsByPlatform[m.platform].push(m);
+            const p = String(m.platform).toLowerCase();
+            if (!metricsByPlatform[p]) metricsByPlatform[p] = [];
+            metricsByPlatform[p].push(m);
         });
 
-        // For each platform, find the oldest and newest follower count in the recent metrics
-        for (const [platform, platformMetrics] of Object.entries(metricsByPlatform)) {
-            // Sort ascending by date to easily find first and last
+        // For each platform, calculate net gain against pre-period baseline or earliest snapshot
+        for (const [, platformMetrics] of Object.entries(metricsByPlatform)) {
             const sorted = [...platformMetrics].sort((a, b) => 
                 new Date(a.collected_at || 0).getTime() - new Date(b.collected_at || 0).getTime()
             );
-            
-            // First look for explicit new_followers (if Metricool provided it reliably)
+
+            // First check explicit new_followers if provided
             const sumNewFollowers = sorted.reduce((sum, m) => sum + (m.new_followers || 0), 0);
             
-            if (sumNewFollowers > 0) {
+            if (sumNewFollowers !== 0) {
                 calculatedNewFollowers += sumNewFollowers;
             } else {
-                // Otherwise calculate absolute difference between oldest and newest known followers
                 const validFollowerPoints = sorted.filter(m => m.followers != null && m.followers > 0);
-                if (validFollowerPoints.length >= 2) {
-                    const first = validFollowerPoints[0].followers;
-                    const last = validFollowerPoints[validFollowerPoints.length - 1].followers;
-                    const diff = last - first;
-                    if (diff > 0) {
-                        calculatedNewFollowers += diff;
-                    }
+                if (validFollowerPoints.length > 0) {
+                    const newest = validFollowerPoints[validFollowerPoints.length - 1].followers;
+                    const baseline = validFollowerPoints[0].followers;
+                    calculatedNewFollowers += (newest - baseline);
                 }
             }
         }
         
-        if (calculatedNewFollowers > 0) {
-            metricsResult.followers_gained = calculatedNewFollowers;
-        }
+        metricsResult.followers_gained = calculatedNewFollowers;
     }
 
     // 6. Identify Top Platform based on views/engagements

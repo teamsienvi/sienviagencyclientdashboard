@@ -23,6 +23,10 @@ import { useTopPerformingPosts } from "@/hooks/useTopPerformingPosts";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { useSyncState } from "@/hooks/useSyncState";
 
+import { PerformanceStoryModal } from "@/components/PerformanceStoryModal";
+import { DateRangeSelector } from "@/components/DateRangeSelector";
+import { DateRangePreset } from "@/utils/dashboardDateRange";
+
 interface SummaryData {
     strengths: string[];
     weaknesses: string[];
@@ -36,6 +40,7 @@ interface AnalyticsSummaryCardProps {
     title: string;
     icon: React.ReactNode;
     dateRange?: string;
+    onDateRangeChange?: (preset: DateRangePreset, customRange?: { start: Date; end: Date }) => void;
     customDateRange?: { start: Date; end: Date };
     isActive?: boolean;
     liveFollowers?: { followers: Record<string, number>; gained: Record<string, number> } | null;
@@ -47,7 +52,8 @@ export function AnalyticsSummaryCard({
     type, 
     title, 
     icon, 
-    dateRange = "7d", 
+    dateRange = "14d", 
+    onDateRangeChange,
     customDateRange, 
     isActive = true,
     liveFollowers,
@@ -220,22 +226,19 @@ export function AnalyticsSummaryCard({
         const fallbackViews = socialMetrics?.[plToLower]?.page_views || socialMetrics?.[plToLower]?.impressions || socialMetrics?.[plToLower]?.views || 0;
         const fallbackEngagements = socialMetrics?.[plToLower]?.engagements || 0;
         
-        const finalViews = existingData?.views || fallbackViews;
-        const finalEngagements = existingData?.engagements || fallbackEngagements;
+        const finalViews = existingData ? existingData.views : fallbackViews;
+        const finalEngagements = existingData ? existingData.engagements : fallbackEngagements;
 
-        // Use live followers if available, otherwise fallback to configured preset, DB metrics, or cached summary data
-        const configFollowers = configs?.find(c => c.platform === plToLower)?.followers;
-        const finalFollowers = liveFollowers?.followers?.[plToLower] ?? configFollowers ?? socialMetrics?.[plToLower]?.followers ?? existingData?.followers ?? 0;
-        const finalFollowersGained = liveFollowers?.gained?.[plToLower] ?? (
-            (existingData?.followersGained || 0) !== 0 
-                ? existingData.followersGained 
-                : (socialMetrics?.[plToLower]?.new_followers ?? 0)
-        );
+        // Prioritize live DB metrics from useSummaryMetrics hook over legacy static fallbacks
+        const configFollowers = configs?.find(c => String(c.platform).toLowerCase() === plToLower)?.followers;
+        const fallbackFollowers = liveFollowers?.followers?.[plToLower] ?? configFollowers ?? socialMetrics?.[plToLower]?.followers ?? 0;
+        const finalFollowers = (existingData && existingData.followers > 0) ? existingData.followers : fallbackFollowers;
+        const finalFollowersGained = existingData ? existingData.followersGained : (liveFollowers?.gained?.[plToLower] ?? (socialMetrics?.[plToLower]?.new_followers ?? 0));
 
         return {
             platform: plToLower,
             views: finalViews,
-            engagementRate: existingData?.engagementRate || (finalViews > 0 ? (finalEngagements / finalViews) * 100 : 0),
+            engagementRate: existingData ? existingData.engagementRate : (finalViews > 0 ? (finalEngagements / finalViews) * 100 : 0),
             engagements: finalEngagements,
             followers: finalFollowers,
             followersGained: finalFollowersGained
@@ -256,16 +259,24 @@ export function AnalyticsSummaryCard({
 
     const hasLiveMetrics = !!metricsData || !!socialMetrics;
 
-    const totalViews = type === 'social' 
-        ? (hasLiveMetrics ? (optimizedTotalViews || metricsData?.totalViews || 0) : (aiMetrics.total_views || 0)) 
+    // Use metricsData.totalViews directly as the authoritative source (same as Performance Story modal)
+    // Only fall back to optimized platform sums or topPosts if the hook returned nothing
+    const hookTotalViews = metricsData?.totalViews ?? 0;
+    const hookTotalEngagements = metricsData?.totalEngagements ?? 0;
+
+    const totalViews = type === 'social'
+        ? (hookTotalViews > 0 ? hookTotalViews : (optimizedTotalViews || (aiMetrics.total_views || 0)))
         : (aiMetrics.total_views || 0);
-        
+
     const totalEngagements = type === 'social'
-        ? (hasLiveMetrics ? (optimizedTotalEngagements || metricsData?.totalEngagements || 0) : (metricsData?.totalEngagements || 0))
+        ? (hookTotalEngagements > 0 ? hookTotalEngagements : (optimizedTotalEngagements || 0))
         : (metricsData?.totalEngagements || 0);
 
+    // followersGained must be consistent with per-platform breakdown.
+    // Use hook value first, then sum of platform breakdown (same data the table shows).
+    const hookFollowersGained = metricsData?.followersGained ?? 0;
     const followersGained = type === 'social'
-        ? (hasLiveMetrics ? optimizedTotalFollowersGained : (aiMetrics.followers_gained || 0))
+        ? (hookFollowersGained !== 0 ? hookFollowersGained : optimizedTotalFollowersGained)
         : (aiMetrics.followers_gained || 0);
 
     // Calculate accurate total current followers directly from live props if available
@@ -417,6 +428,26 @@ export function AnalyticsSummaryCard({
                             </div>
                         )}
                     </div>
+                    {onDateRangeChange && (
+                        /* Performance Story & Horizon Modal */
+                        <div className="flex items-center gap-2">
+                            <PerformanceStoryModal
+                                clientId={clientId}
+                                type={type}
+                                title={title}
+                                dateRange={(dateRange as DateRangePreset) || "14d"}
+                                customDateRange={customDateRange}
+                                onDateRangeChange={onDateRangeChange}
+                                totalViews={totalViews}
+                                totalEngagements={totalEngagements}
+                                followersGained={followersGained}
+                                totalFollowers={totalCurrentFollowers}
+                                platformData={optimizedPlatformData}
+                                timelineData={timelineData}
+                                topInsight={topInsight}
+                            />
+                        </div>
+                    )}
                     <Button
                         variant="outline"
                         size="sm"
@@ -508,22 +539,20 @@ export function AnalyticsSummaryCard({
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'social' ? 'Total Followers' : (type === 'ads' ? 'Total Conversions' : (type === 'seo' ? 'Total SEO Issues' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors')))}
+                                    {type === 'social' ? 'Audience Gained' : (type === 'ads' ? 'Total Conversions' : (type === 'seo' ? 'Total SEO Issues' : (aiMetrics.total_sales > 0 ? 'Total Sales' : 'Unique Visitors')))}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'social' 
-                                        ? formatNumber(totalCurrentFollowers || 0) 
+                                        ? (followersGained > 0 ? `+${formatNumber(followersGained)}` : formatNumber(followersGained)) 
                                         : (type === 'ads' ? formatNumber(aiMetrics.total_conversions || 0) : (type === 'seo' ? formatNumber(aiMetrics.unique_visitors || 0) : (aiMetrics.total_sales > 0 ? `$${formatNumber(aiMetrics.total_sales)}` : formatNumber(aiMetrics.unique_visitors || 0))))
                                     }
                                 </p>
                                 <div className="h-8 w-full mt-2 flex items-center">
                                     {type === 'social' ? (
-                                        followersGained >= 0 ? (
-                                            <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>
-                                                <TrendingUp className="h-3.5 w-3.5" /> 
-                                                {followersGained > 0 ? `+${formatNumber(followersGained)}` : "+0"} this period
-                                            </div>
-                                        ) : null
+                                        <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                                            <Users className="h-3.5 w-3.5 text-pink-500" />
+                                            {formatNumber(totalCurrentFollowers || 0)} total audience
+                                        </div>
                                     ) : type === 'seo' ? (
                                         <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
                                             <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
@@ -692,11 +721,9 @@ export function AnalyticsSummaryCard({
                                                             <span className="text-foreground">
                                                                 {formatNumber(plat.followers || 0)}
                                                             </span>
-                                                            {plat.followersGained >= 0 && (
-                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : "text-muted-foreground"}`}>
-                                                                    {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : "+0"}
-                                                                </span>
-                                                            )}
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : plat.followersGained < 0 ? "text-rose-500 font-semibold" : "text-muted-foreground"}`}>
+                                                                {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : plat.followersGained < 0 ? formatNumber(plat.followersGained) : "+0"}
+                                                            </span>
                                                         </div>
                                                     )}
                                                     <div className={type === 'social' ? "w-1/4 text-center font-medium" : "w-1/3 text-center font-medium"}>{plat.engagementRate.toFixed(1)}%</div>

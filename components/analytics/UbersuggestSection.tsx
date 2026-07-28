@@ -34,6 +34,39 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
     enabled: !!clientId && isActive && (!syncState.isSyncing || syncState.isDegraded),
   });
 
+  // Compute score change from historical snapshots (must be above early returns to avoid hooks ordering violation)
+  const scoreSnapshot = useMemo(() => {
+    const validScoreRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
+    if (validScoreRows.length < 2) return { change: null, previousScore: null, snapshotDate: null };
+
+    const currentRow = validScoreRows[validScoreRows.length - 1];
+    const previousRow = validScoreRows[validScoreRows.length - 2];
+    const change = currentRow.site_audit_score - previousRow.site_audit_score;
+    return {
+      change,
+      previousScore: previousRow.site_audit_score,
+      snapshotDate: new Date(previousRow.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    };
+  }, [allMetrics]);
+
+  // Build score history data for sparkline + timeline (must be above early returns)
+  const scoreHistoryData = useMemo(() => {
+    const validRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
+    const byDay = new Map<string, { score: number; fullDate: string }>();
+    validRows.forEach(m => {
+      const dateStr = new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      byDay.set(dateStr, {
+        score: m.site_audit_score,
+        fullDate: new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      });
+    });
+    const entries = Array.from(byDay.entries()).map(([date, d]) => ({ date, score: d.score, fullDate: d.fullDate }));
+    return entries.map((entry, i) => ({
+      ...entry,
+      change: i === 0 ? null : entry.score - entries[i - 1].score
+    }));
+  }, [allMetrics]);
+
   if (isLoading && (!allMetrics || (allMetrics as any[]).length === 0)) {
     return (
       <div className="flex justify-center items-center h-32 rounded-xl border bg-muted/30">
@@ -74,41 +107,6 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
     used: keywords.length, 
     limit: latest.raw_project_data?.limits?.keywords?.limit || 150 
   };
-
-  // Compute score change from historical snapshots (not relying on issues.score_change which is often null)
-  const scoreSnapshot = useMemo(() => {
-    const validScoreRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
-    if (validScoreRows.length < 2) return { change: issues?.score_change ?? null, previousScore: null, snapshotDate: null };
-
-    const currentRow = validScoreRows[validScoreRows.length - 1];
-    const previousRow = validScoreRows[validScoreRows.length - 2];
-    const change = currentRow.site_audit_score - previousRow.site_audit_score;
-    return {
-      change,
-      previousScore: previousRow.site_audit_score,
-      snapshotDate: new Date(previousRow.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    };
-  }, [allMetrics, issues]);
-
-  // Build score history data for sparkline + timeline
-  const scoreHistoryData = useMemo(() => {
-    const validRows = (allMetrics ?? []).filter(m => m.site_audit_score !== null && m.site_audit_score > 0);
-    // Deduplicate by date, keep last entry per day
-    const byDay = new Map<string, { score: number; fullDate: string }>();
-    validRows.forEach(m => {
-      const dateStr = new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      byDay.set(dateStr, {
-        score: m.site_audit_score,
-        fullDate: new Date(m.collected_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      });
-    });
-    const entries = Array.from(byDay.entries()).map(([date, d]) => ({ date, score: d.score, fullDate: d.fullDate }));
-    // Add change from previous snapshot
-    return entries.map((entry, i) => ({
-      ...entry,
-      change: i === 0 ? null : entry.score - entries[i - 1].score
-    }));
-  }, [allMetrics]);
 
   const scoreChange = scoreSnapshot.change;
 

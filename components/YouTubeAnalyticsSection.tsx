@@ -79,7 +79,7 @@ interface VideoData {
   engagement_rate: number;
 }
 
-type DateRange = "7d" | "30d" | "custom";
+type DateRange = "7d" | "14d" | "30d" | "60d" | "90d" | "365d" | "custom";
 
 interface YouTubeAnalyticsSectionProps {
   clientId: string;
@@ -92,7 +92,7 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState<YouTubeStats | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
-  const [dateRange, setDateRange] = useState<DateRange>("7d");
+  const [dateRange, setDateRange] = useState<DateRange>("14d");
   const [customDateRange, setCustomDateRange] = useState<{
     from: Date | undefined;
     to: Date | undefined;
@@ -116,20 +116,32 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
     switch (dateRange) {
       case "7d":
         return { start: subDays(now, 7), end: now };
+      case "14d":
+        return { start: subDays(now, 14), end: now };
       case "30d":
-        return { start: subMonths(now, 1), end: now };
+        return { start: subDays(now, 30), end: now };
+      case "60d":
+        return { start: subDays(now, 60), end: now };
+      case "90d":
+        return { start: subDays(now, 90), end: now };
+      case "365d":
+        return { start: subDays(now, 365), end: now };
       case "custom":
         return {
-          start: customDateRange.from || subDays(now, 7),
+          start: customDateRange.from || subDays(now, 14),
           end: customDateRange.to || now,
         };
       default:
-        return { start: subDays(now, 7), end: now };
+        return { start: subDays(now, 14), end: now };
     }
   };
 
   const getPrevPeriodLabel = () => {
+    if (dateRange === "365d") return "prev year";
+    if (dateRange === "90d") return "prev quarter";
+    if (dateRange === "60d") return "prev 60 days";
     if (dateRange === "30d") return "prev 30 days";
+    if (dateRange === "14d") return "prev 14 days";
     if (dateRange === "custom") return "prev period";
     return "prev week";
   };

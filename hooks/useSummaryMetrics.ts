@@ -29,7 +29,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 periodStartStr = customDateRange.start.toISOString().split("T")[0];
                 periodEndStr = customDateRange.end.toISOString().split("T")[0];
             } else {
-                const days = dateRange === "30d" ? 30 : dateRange === "60d" ? 60 : 7;
+                const days = dateRange === "365d" ? 365 : dateRange === "90d" ? 90 : dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : dateRange === "14d" ? 14 : 7;
                 const now = new Date();
                 const start = new Date(now);
                 start.setDate(start.getDate() - days);
@@ -44,80 +44,62 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
             fetchStartDate.setDate(fetchStartDate.getDate() - 2);
             const fetchStartStr = fetchStartDate.toISOString().split("T")[0];
 
-            const { data: metricsRaw, error } = await supabase
-                .from("social_content_metrics")
-                .select(`
-                    views,
-                    impressions,
-                    likes,
-                    comments,
-                    shares,
-                    period_end,
-                    collected_at,
-                    platform,
-                    social_content!inner (
-                        id,
-                        client_id,
-                        platform,
-                        published_at
-                    )
-                `)
-                .eq("social_content.client_id", clientId)
-                .order("collected_at", { ascending: false })
-                .limit(2000);
+            // 1. Query client's social_content rows directly (fast index lookup)
+            const { data: postsRaw, error: postsError } = await supabase
+                .from("social_content")
+                .select("id, platform, published_at, title, url, content_id")
+                .eq("client_id", clientId)
+                .limit(1000);
 
-        if (error || !metricsRaw || metricsRaw.length === 0) {
-            // Fallback: query via social_content.published_at if the join fails or returns empty
-                console.warn("Metrics primary query failed, using published_at fallback:", error?.message);
-                const { data: fallbackContent } = await supabase
-                    .from("social_content")
-                    .select(`
-                        platform,
-                        published_at,
-                        social_content_metrics (
-                            views,
-                            impressions,
-                            likes,
-                            comments,
-                            shares,
-                            collected_at
-                        )
-                    `)
-                    .eq("client_id", clientId)
-                    .limit(2000);
-
-                const posts = (fallbackContent || []).map(post => ({
-                    platform: post.platform,
-                    published_at: post.published_at,
-                    metrics: post.social_content_metrics || []
-                }));
-                return computeMetrics(posts, dateRange, periodStartStr, periodEndStr, clientId);
+            if (postsError || !postsRaw || postsRaw.length === 0) {
+                return computeMetrics([], dateRange, periodStartStr, periodEndStr, clientId);
             }
 
-            // Deduplicate: for the same content row (by social_content.id), keep only the latest metric snapshot
-            const groupedByContent: Record<string, any> = {};
-            metricsRaw.forEach((row: any) => {
-                // Use the actual content row ID for dedup — published_at string is not unique across clients
-                const key = row.social_content?.id || ((row.social_content?.published_at || "") + "_" + (row.social_content?.platform || row.platform));
-                const existing = groupedByContent[key];
-                if (!existing || (row.collected_at || "") > (existing.collected_at || "")) {
-                    groupedByContent[key] = row;
+            // 2. Query metrics for these posts in URL-safe batches of 100
+            const postIds = postsRaw.map(p => p.id);
+            const chunkSize = 100;
+            const metricsRaw: any[] = [];
+
+            for (let i = 0; i < postIds.length; i += chunkSize) {
+                const chunk = postIds.slice(i, i + chunkSize);
+                const { data: chunkMetrics } = await supabase
+                    .from("social_content_metrics")
+                    .select("social_content_id, views, impressions, likes, comments, shares, period_end, collected_at, platform")
+                    .in("social_content_id", chunk);
+                if (chunkMetrics && chunkMetrics.length > 0) {
+                    metricsRaw.push(...chunkMetrics);
                 }
+            }
+
+            // Group metrics by post ID
+            const posts = postsRaw.map(post => {
+                const postMetrics = metricsRaw.filter(m => m.social_content_id === post.id);
+                let postUrl = post.url || undefined;
+                if (!postUrl && post.content_id) {
+                    const plat = String(post.platform || "").toLowerCase();
+                    const cleanId = String(post.content_id).replace(/^(youtube|tiktok|fb|facebook|ig|instagram)_/i, "");
+                    if (plat === "youtube") postUrl = `https://www.youtube.com/watch?v=${cleanId}`;
+                    else if (plat === "tiktok") postUrl = `https://www.tiktok.com/video/${cleanId}`;
+                    else if (plat === "facebook") postUrl = `https://facebook.com/${cleanId}`;
+                    else if (plat === "instagram") postUrl = `https://www.instagram.com/p/${cleanId}`;
+                }
+                return {
+                    id: post.id,
+                    title: post.title || "Untitled Post",
+                    url: postUrl,
+                    platform: post.platform,
+                    published_at: post.published_at,
+                    metrics: postMetrics
+                };
             });
 
-            const normalizedPosts = Object.values(groupedByContent).map((row: any) => ({
-                platform: row.social_content?.platform || row.platform,
-                published_at: row.social_content?.published_at || null,
-                metrics: [row]
-            }));
-
-            return computeMetrics(normalizedPosts, dateRange, periodStartStr, periodEndStr, clientId);
+            return computeMetrics(posts, dateRange, periodStartStr, periodEndStr, clientId);
         },
         enabled: !!clientId,
-        staleTime: 5 * 60 * 1000, // 5 min
+        staleTime: 0, // Always fetch fresh metrics on horizon change
         gcTime: 7 * 24 * 60 * 60 * 1000,
-        refetchOnWindowFocus: isActive,
-        refetchOnMount: isActive,
+        refetchOnWindowFocus: false,
+        refetchOnMount: "always",
     });
 }
 
@@ -129,7 +111,7 @@ async function computeMetrics(
     periodEndStr: string,
     clientId: string
 ) {
-    const days = dateRange === "30d" ? 30 : dateRange === "60d" ? 60 : 7;
+    const days = dateRange === "365d" ? 365 : dateRange === "90d" ? 90 : dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : dateRange === "14d" ? 14 : 7;
 
     // Fetch Follower Timeline (fetch all to get accurate baseline before period)
     const { data: timelineDataRaw } = await supabase
@@ -175,50 +157,55 @@ async function computeMetrics(
                 : (beforePoints.length > 0 ? beforePoints[beforePoints.length - 1].followers : 0);
         });
     } else {
-        // Fallback to social_account_metrics if timeline is empty
+        // Always query social_account_metrics to compute exact horizon follower gains & current follower totals
         const { data: accountMetrics } = await supabase
             .from("social_account_metrics")
             .select("platform, followers, new_followers, collected_at")
             .eq("client_id", clientId)
-            .gte("collected_at", periodStartStr)
-            .lte("collected_at", periodEndStr)
             .order("collected_at", { ascending: true });
 
         if (accountMetrics && accountMetrics.length > 0) {
             const byPlatform: Record<string, any[]> = {};
             accountMetrics.forEach((m) => {
-                if (!byPlatform[m.platform]) byPlatform[m.platform] = [];
-                byPlatform[m.platform].push(m);
+                const plat = String(m.platform || "").toLowerCase();
+                if (!byPlatform[plat]) byPlatform[plat] = [];
+                byPlatform[plat].push(m);
             });
             
-            Object.values(byPlatform).forEach((points) => {
-                const platform = String(points[0].platform || "").toLowerCase();
-                // Sort descending by collected_at to get latest first
+            Object.entries(byPlatform).forEach(([platform, points]) => {
                 const sorted = [...points].sort((a, b) => 
-                    (b.collected_at || "").localeCompare(a.collected_at || "")
+                    (a.collected_at || "").localeCompare(b.collected_at || "")
                 );
-                const latest = sorted[0];
                 
-                // Use new_followers from the latest metric row — this is the accurate
-                // period gain reported by Metricool. The old approach of computing
-                // last_followers - first_followers gave wrong results when counts
-                // fluctuate within the period (e.g., YouTube 196-197 = -1 instead of +6).
-                if (latest.new_followers != null) {
-                    platformFollowers[platform] = latest.new_followers;
-                } else {
-                    // Only fall back to difference if new_followers is not available
-                    const validPoints = sorted.filter(p => p.followers != null && p.followers > 0);
-                    if (validPoints.length >= 2) {
-                        const oldest = validPoints[validPoints.length - 1].followers;
-                        const newest = validPoints[0].followers;
-                        platformFollowers[platform] = newest - oldest;
-                    } else {
-                        platformFollowers[platform] = 0;
-                    }
+                const inPeriod = sorted.filter(p => {
+                    const date = (p.collected_at || "").split("T")[0];
+                    return date >= periodStartStr && date <= periodEndStr;
+                });
+                const beforePeriod = sorted.filter(p => (p.collected_at || "").split("T")[0] < periodStartStr);
+
+                const validInPeriod = inPeriod.filter(p => p.followers != null && p.followers > 0);
+                const validBefore = beforePeriod.filter(p => p.followers != null && p.followers > 0);
+
+                let gain = 0;
+                if (validInPeriod.length > 0) {
+                    const newest = validInPeriod[validInPeriod.length - 1].followers;
+                    const baseline = validBefore.length > 0 
+                        ? validBefore[validBefore.length - 1].followers 
+                        : validInPeriod[0].followers;
+                    gain = newest - baseline;
+                } else if (inPeriod.length > 0) {
+                    const dailyMap: Record<string, number> = {};
+                    inPeriod.forEach(p => {
+                        const date = (p.collected_at || "").split("T")[0];
+                        if (p.new_followers != null) dailyMap[date] = p.new_followers;
+                    });
+                    gain = Object.values(dailyMap).reduce((acc, val) => acc + Number(val), 0);
                 }
+
+                platformFollowers[platform] = gain;
                 
                 // Set current followers from the latest row that has a valid count
-                const withFollowers = sorted.find(p => p.followers != null && p.followers > 0);
+                const withFollowers = [...sorted].reverse().find(p => p.followers != null && p.followers > 0);
                 if (withFollowers) {
                     platformCurrentFollowers[platform] = withFollowers.followers;
                 }
@@ -228,17 +215,17 @@ async function computeMetrics(
 
     let totalViews = 0;
     let totalEngagements = 0;
-    const pMap: Record<string, { views: number; engagements: number }> = {};
-    const timelineMap: Record<string, { date: string; views: number; engagement: number }> = {};
+    const pMap: Record<string, { views: number; engagements: number; postsPublished: number }> = {};
+    const timelineMap: Record<string, { date: string; views: number; engagement: number; [key: string]: any }> = {};
 
     // Use UTC midnight dates to ensure timezone-agnostic matching with DB timestamps
+    const startDate = new Date(periodStartStr + "T00:00:00Z");
     const endDate = new Date(periodEndStr + "T00:00:00Z");
-    for (let i = days; i >= 0; i--) {
-        const d = new Date(endDate);
-        d.setDate(d.getDate() - i);
+
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dStr = d.toISOString().split("T")[0];
         const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-        timelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0 };
+        timelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0, youtube: 0, tiktok: 0, facebook: 0, instagram: 0, x: 0, linkedin: 0 };
     }
 
     posts.forEach(post => {
@@ -257,21 +244,21 @@ async function computeMetrics(
             return date >= periodStartStr && date <= periodEndStr;
         });
 
-        // Filter points before the selected period
+        // Filter points before the selected period (needed for baseline calculation)
         const beforePoints = sortedMetrics.filter((m: any) => {
             const date = (m.collected_at || m.period_end || "").split("T")[0];
             return date < periodStartStr;
         });
 
+        const publishedDuringPeriod = postDate && postDate >= periodStartStr && postDate <= periodEndStr;
+
+        let postViews = 0;
+        let postEngagements = 0;
+
         if (periodPoints.length > 0) {
             const latest = periodPoints[periodPoints.length - 1];
             const latestViews = Math.max(latest.views || 0, latest.impressions || 0);
             const latestEngagements = (latest.likes || 0) + (latest.comments || 0) + (latest.shares || 0);
-
-            // Baseline is the last known count before the period,
-            // or if none exists and the post was published before the period, the first count inside the period.
-            // If the post was published during the period, its baseline is 0.
-            const publishedDuringPeriod = postDate && postDate >= periodStartStr && postDate <= periodEndStr;
 
             let baselineViews = 0;
             let baselineEngagements = 0;
@@ -284,28 +271,62 @@ async function computeMetrics(
                 baselineEngagements = (baseline.likes || 0) + (baseline.comments || 0) + (baseline.shares || 0);
             }
 
-            const postViews = Math.max(0, latestViews - baselineViews);
-            const postEngagements = Math.max(0, latestEngagements - baselineEngagements);
+            postViews = Math.max(0, latestViews - baselineViews);
+            postEngagements = Math.max(0, latestEngagements - baselineEngagements);
+        } else if (publishedDuringPeriod && sortedMetrics.length > 0) {
+            const latest = sortedMetrics[sortedMetrics.length - 1];
+            postViews = Math.max(latest.views || 0, latest.impressions || 0);
+            postEngagements = (latest.likes || 0) + (latest.comments || 0) + (latest.shares || 0);
+        }
 
-            const plat = post.platform || "unknown";
-            if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0 };
+        if (postViews > 0 || postEngagements > 0 || publishedDuringPeriod) {
+            const plat = (post.platform || "unknown").toLowerCase();
+            if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0, postsPublished: 0 };
 
             pMap[plat].views += postViews;
             pMap[plat].engagements += postEngagements;
+            pMap[plat].postsPublished += 1;
             totalViews += postViews;
             totalEngagements += postEngagements;
 
-            // Place in timeline by publish date (closest proxy for when impressions occurred)
-            if (postDate && timelineMap[postDate]) {
-                timelineMap[postDate].views += postViews;
-                timelineMap[postDate].engagement += postEngagements;
+            // Accumulate daily view increments into timelineMap by exact snapshot date (mDate)
+            for (let i = 0; i < sortedMetrics.length; i++) {
+                const m = sortedMetrics[i];
+                const mDate = (m.collected_at || m.period_end || "").split("T")[0];
+
+                if (mDate >= periodStartStr && mDate <= periodEndStr) {
+                    const curViews = Math.max(m.views || 0, m.impressions || 0);
+                    const curEng = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+
+                    let prevViews = 0;
+                    let prevEng = 0;
+
+                    if (i > 0) {
+                        const prevM = sortedMetrics[i - 1];
+                        prevViews = Math.max(prevM.views || 0, prevM.impressions || 0);
+                        prevEng = (prevM.likes || 0) + (prevM.comments || 0) + (prevM.shares || 0);
+                    }
+
+                    const incViews = Math.max(0, curViews - prevViews);
+                    const incEng = Math.max(0, curEng - prevEng);
+
+                    if (timelineMap[mDate]) {
+                        timelineMap[mDate].views += incViews;
+                        timelineMap[mDate].engagement += incEng;
+                        if (timelineMap[mDate][plat] != null) {
+                            timelineMap[mDate][plat] += incViews;
+                        } else {
+                            timelineMap[mDate][plat] = incViews;
+                        }
+                    }
+                }
             }
         }
     });
 
     // Also include platforms that have follower data but no posts
     Object.keys(platformFollowers).forEach(plat => {
-        if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0 };
+        if (!pMap[plat]) pMap[plat] = { views: 0, engagements: 0, postsPublished: 0 };
     });
 
     const platformData: PlatformMetric[] = Object.entries(pMap).map(([platform, stats]) => {
@@ -317,7 +338,8 @@ async function computeMetrics(
             engagements: stats.engagements, 
             engagementRate,
             followersGained: platformFollowers[plToLower] || 0,
-            followers: platformCurrentFollowers[plToLower] || 0
+            followers: platformCurrentFollowers[plToLower] || 0,
+            postsPublished: stats.postsPublished || 0
         };
     }).sort((a, b) => b.views - a.views);
 
@@ -325,5 +347,147 @@ async function computeMetrics(
     const totalFollowersGained = Object.values(platformFollowers).reduce((sum, val) => sum + val, 0);
     const totalCurrentFollowers = Object.values(platformCurrentFollowers).reduce((sum, val) => sum + val, 0);
 
-    return { totalViews, totalEngagements, platformData, followersGained: totalFollowersGained, totalCurrentFollowers, timelineData };
+    const topPosts = posts
+        .map((p: any) => {
+            const periodPoints = (p.metrics || []).filter((m: any) => {
+                const date = (m.collected_at || m.period_end || "").split("T")[0];
+                return date >= periodStartStr && date <= periodEndStr;
+            });
+            const latest = periodPoints.length > 0 ? periodPoints[periodPoints.length - 1] : null;
+            const pViews = latest ? Math.max(latest.views || 0, latest.impressions || 0) : 0;
+            const pEng = latest ? (latest.likes || 0) + (latest.comments || 0) + (latest.shares || 0) : 0;
+            const er = pViews > 0 ? (pEng / pViews) * 100 : 0;
+            const contrib = totalViews > 0 ? Math.round((pViews / totalViews) * 100) : 0;
+
+            return {
+                id: p.id || String(Math.random()),
+                platform: p.platform || "social",
+                publishedAt: p.published_at ? p.published_at.split("T")[0] : "",
+                title: p.title || "Untitled Post",
+                url: p.url || undefined,
+                currentValue: pViews,
+                engagements: pEng,
+                engagementRate: Number(er.toFixed(1)),
+                contributionToCurrentTotal: contrib,
+            };
+        })
+        .filter((p: any) => p.currentValue > 0 || p.url)
+        .sort((a: any, b: any) => b.currentValue - a.currentValue)
+        .slice(0, 5);
+
+    let cumulativeViews = 0;
+    posts.forEach(p => {
+        if (!p.metrics || p.metrics.length === 0) return;
+        const sorted = [...p.metrics].sort((a: any, b: any) => new Date(a.collected_at || 0).getTime() - new Date(b.collected_at || 0).getTime());
+        const latest = sorted[sorted.length - 1];
+        cumulativeViews += Math.max(latest.views || 0, latest.impressions || 0);
+    });
+
+    const finalViews = totalViews > 0 ? totalViews : cumulativeViews;
+
+    // === PRIOR PERIOD COMPUTATION ===
+    // Calculate prior period boundaries (same length, immediately preceding)
+    const periodStartDate = new Date(periodStartStr + "T00:00:00Z");
+    const periodEndDate = new Date(periodEndStr + "T00:00:00Z");
+    const periodLengthMs = periodEndDate.getTime() - periodStartDate.getTime();
+    const priorEndDate = new Date(periodStartDate.getTime() - 86400000); // day before current start
+    const priorStartDate = new Date(priorEndDate.getTime() - periodLengthMs);
+    const priorStartStr = priorStartDate.toISOString().split("T")[0];
+    const priorEndStr = priorEndDate.toISOString().split("T")[0];
+
+    let prevTotalViews = 0;
+    let prevTotalEngagements = 0;
+    let prevPostsPublished = 0;
+    const prevPMap: Record<string, { views: number; engagements: number; postsPublished: number }> = {};
+
+    posts.forEach(post => {
+        if (!post.metrics || post.metrics.length === 0) return;
+        const postDate = post.published_at ? post.published_at.split("T")[0] : null;
+        const sortedMetrics = [...post.metrics].sort((a: any, b: any) =>
+            new Date(a.collected_at || 0).getTime() - new Date(b.collected_at || 0).getTime()
+        );
+
+        const priorPeriodPoints = sortedMetrics.filter((m: any) => {
+            const date = (m.collected_at || m.period_end || "").split("T")[0];
+            return date >= priorStartStr && date <= priorEndStr;
+        });
+        const priorBeforePoints = sortedMetrics.filter((m: any) => {
+            const date = (m.collected_at || m.period_end || "").split("T")[0];
+            return date < priorStartStr;
+        });
+
+        const pubDuringPrior = postDate && postDate >= priorStartStr && postDate <= priorEndStr;
+        if (pubDuringPrior) prevPostsPublished++;
+
+        let pv = 0, pe = 0;
+
+        if (priorPeriodPoints.length > 0) {
+            const latest = priorPeriodPoints[priorPeriodPoints.length - 1];
+            const lv = Math.max(latest.views || 0, latest.impressions || 0);
+            const le = (latest.likes || 0) + (latest.comments || 0) + (latest.shares || 0);
+            let bv = 0, be = 0;
+            if (!pubDuringPrior) {
+                const bl = priorBeforePoints.length > 0
+                    ? priorBeforePoints[priorBeforePoints.length - 1]
+                    : priorPeriodPoints[0];
+                bv = Math.max(bl.views || 0, bl.impressions || 0);
+                be = (bl.likes || 0) + (bl.comments || 0) + (bl.shares || 0);
+            }
+            pv = Math.max(0, lv - bv);
+            pe = Math.max(0, le - be);
+        } else if (pubDuringPrior && sortedMetrics.length > 0) {
+            const latest = sortedMetrics[sortedMetrics.length - 1];
+            pv = Math.max(latest.views || 0, latest.impressions || 0);
+            pe = (latest.likes || 0) + (latest.comments || 0) + (latest.shares || 0);
+        }
+
+        if (pv > 0 || pe > 0 || pubDuringPrior) {
+            const plat = (post.platform || "unknown").toLowerCase();
+            if (!prevPMap[plat]) prevPMap[plat] = { views: 0, engagements: 0, postsPublished: 0 };
+            prevPMap[plat].views += pv;
+            prevPMap[plat].engagements += pe;
+            prevPMap[plat].postsPublished += 1;
+            prevTotalViews += pv;
+            prevTotalEngagements += pe;
+        }
+    });
+
+    // Prior follower snapshots
+    let prevFollowersStart = 0;
+    let prevFollowersEnd = 0;
+    Object.entries(platformCurrentFollowers).forEach(([plat]) => {
+        // We already have sorted account metrics — recompute prior baseline from them
+        // For simplicity, estimate from currentFollowers - gained
+        const curF = platformCurrentFollowers[plat] || 0;
+        const gained = platformFollowers[plat] || 0;
+        prevFollowersEnd += Math.max(0, curF - gained);
+        prevFollowersStart += Math.max(0, curF - gained);
+    });
+
+    const previousPlatformData = Object.entries(prevPMap).map(([platform, stats]) => ({
+        platform,
+        views: stats.views,
+        engagements: stats.engagements,
+        postsPublished: stats.postsPublished || 0,
+    }));
+
+    return {
+        totalViews: finalViews,
+        totalEngagements,
+        platformData,
+        followersGained: totalFollowersGained,
+        totalCurrentFollowers,
+        timelineData,
+        timelineMap,
+        topPosts,
+        // Prior period data
+        previousViews: prevTotalViews,
+        previousEngagements: prevTotalEngagements,
+        previousPlatformData,
+        previousPostsPublished: prevPostsPublished,
+        prevFollowersStart,
+        prevFollowersEnd,
+        // Current period posts published
+        postsPublished: Object.values(pMap).reduce((sum, p) => sum + (p.postsPublished || 0), 0),
+    };
 }
