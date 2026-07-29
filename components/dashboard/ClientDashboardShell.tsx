@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserClients } from "@/hooks/useClientAccess";
@@ -55,6 +55,7 @@ import {
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { UbersuggestSection } from "@/components/analytics/UbersuggestSection";
 import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
+import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSection";
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -101,6 +102,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // OxiSure Tech client ID — used to conditionally render the Retention App Sales section
+  const isOxiSureTech = clientId === '1a1edf9f-2ebe-4d40-a904-7295d5033401';
 
   // Realtime subscription: auto-invalidate top posts cache when background sync writes new data
   useSocialMetricsRealtime(clientId);
@@ -715,7 +719,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, isOxiSureTech].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -755,6 +759,16 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 >
                   <span className="text-base grayscale group-hover:scale-110 transition-transform">🔍</span>
                   <span>SEO DASHBOARD</span>
+                </button>
+              )}
+
+              {isOxiSureTech && (
+                <button
+                  onClick={() => scrollToSection("retention-app-sales")}
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-teal-500/5 border-r border-primary/10 last:border-r-0 group"
+                >
+                  <Smartphone className="h-4 w-4 text-teal-500 group-hover:scale-110 transition-transform" />
+                  <span>RETENTION APP SALES</span>
                 </button>
               )}
             </div>
@@ -1322,6 +1336,13 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         isActive={activeTab === "analytics"}
                       />
                     </div>
+                  </div>
+                )}
+
+                {/* OxiSure Retention App Sales */}
+                {isOxiSureTech && (
+                  <div className="mt-8 mb-8 scroll-mt-24 bg-teal-50 dark:bg-teal-500/5 border-2 border-teal-200 dark:border-teal-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="retention-app-sales">
+                    <OxiSureAppSalesSection />
                   </div>
                 )}
 
