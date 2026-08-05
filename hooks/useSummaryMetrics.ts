@@ -45,11 +45,13 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
             const fetchStartStr = fetchStartDate.toISOString().split("T")[0];
 
             // 1. Query client's social_content rows directly (fast index lookup)
+            // Order by published_at DESC so recent posts are always included even if limit is hit
             const { data: postsRaw, error: postsError } = await supabase
                 .from("social_content")
                 .select("id, platform, published_at, title, url, content_id")
                 .eq("client_id", clientId)
-                .limit(1000);
+                .order("published_at", { ascending: false })
+                .limit(2000);
 
             if (postsError || !postsRaw || postsRaw.length === 0) {
                 return computeMetrics([], dateRange, periodStartStr, periodEndStr, clientId);
