@@ -1309,9 +1309,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                       </div>
+                      {/* Website Traffic section hidden per request
                       {(client.supabase_url || clientGa4PropertyId) && (
                         <WebsiteAnalyticsSection clientId={clientId!} />
                       )}
+                      */}
                   </div>
                 ) : null}
 
