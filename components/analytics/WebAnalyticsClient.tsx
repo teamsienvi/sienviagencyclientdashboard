@@ -730,10 +730,34 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           <CardContent>
                             {trafficSources.length > 0 ? (
                               <div className="space-y-4">
-                                {trafficSources.map((item) => (
+                                {trafficSources.map((item) => {
+                                  const channelDescriptions: Record<string, string> = {
+                                    "Direct": "Visitors who typed your URL directly or used a bookmark — no referrer detected.",
+                                    "Unassigned": "Google Analytics couldn't classify this traffic into any channel — often from misconfigured UTM tags or unrecognized referrers.",
+                                    "Organic Search": "Visitors from unpaid search engine results (Google, Bing, etc.).",
+                                    "Organic Social": "Visitors from unpaid social media posts (Instagram, Facebook, TikTok, etc.).",
+                                    "Paid Search": "Visitors from paid search ads (Google Ads, Bing Ads, etc.).",
+                                    "Paid Social": "Visitors from paid social media ads.",
+                                    "Referral": "Visitors who clicked a link on another website to reach yours.",
+                                    "Email": "Visitors who clicked a link in an email campaign.",
+                                    "Display": "Visitors from display/banner ads on other websites.",
+                                    "Affiliates": "Visitors from affiliate partner links.",
+                                  };
+                                  const description = channelDescriptions[item.source] || null;
+                                  return (
                                   <div key={item.source} className="space-y-2">
                                     <div className="flex justify-between text-sm">
-                                      <span className="font-medium">{item.source}</span>
+                                      <span className="font-medium flex items-center gap-1.5">
+                                        {item.source}
+                                        {description && (
+                                          <span className="relative group/tip">
+                                            <Info className="h-3.5 w-3.5 text-muted-foreground/50 cursor-help" />
+                                            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-popover-foreground bg-popover border border-border rounded-lg shadow-lg w-56 opacity-0 pointer-events-none group-hover/tip:opacity-100 group-hover/tip:pointer-events-auto transition-opacity z-50 leading-relaxed">
+                                              {description}
+                                            </span>
+                                          </span>
+                                        )}
+                                      </span>
                                       <span className="text-muted-foreground">
                                         {item.visitors.toLocaleString()} ({item.percentage}%)
                                       </span>
@@ -755,7 +779,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                       </div>
                                     )}
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : (
                               <div className="py-8 text-center">
