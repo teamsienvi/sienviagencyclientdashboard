@@ -240,6 +240,10 @@ serve(async (req) => {
             lockMinutes = 5;
             workerFn = "sync-ubersuggest";
             workerPayload = { clientId };
+        } else if (platform === 'melcat') {
+            lockMinutes = 5;
+            workerFn = "sync-melcat-metrics";
+            workerPayload = { clientId };
         } else {
             console.log(`[orchestrate-sync] WARNING: Unknown module routing for ${platform}/${module}`);
             return new Response(JSON.stringify({ status: 'error', error: 'Unknown routing' }), { status: 400, headers: corsHeaders });

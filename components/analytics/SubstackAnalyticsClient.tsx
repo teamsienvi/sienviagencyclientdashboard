@@ -534,7 +534,9 @@ const SubstackAnalyticsClient = ({ clientId }: { clientId: string }) => {
                               {page.title || page.url}
                             </p>
                             {page.title && (
-                              <p className="text-xs text-muted-foreground truncate">{page.url}</p>
+                              <a href={page.url} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground truncate hover:underline hover:text-primary flex items-center gap-1">
+                                {page.url} <ExternalLink className="h-3 w-3 inline" />
+                              </a>
                             )}
                           </div>
                         </div>

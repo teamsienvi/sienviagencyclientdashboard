@@ -43,6 +43,21 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
     enabled: !!clientId,
   });
 
+  // Fetch GA4 config for website URL
+  const { data: ga4Config } = useQuery({
+    queryKey: ["ga4-config", clientId],
+    queryFn: async () => {
+      if (!clientId) return null;
+      const { data } = await supabase
+        .from("client_ga4_config" as any)
+        .select("website_url")
+        .eq("client_id", clientId)
+        .maybeSingle();
+      return (data as any);
+    },
+    enabled: !!clientId,
+  });
+
   // Fetch analytics for client
   const { data: analyticsData, isLoading: isLoadingAnalytics, error: analyticsError, refetch: refetchAnalytics } = useClientAnalytics({
     clientId: clientId || "",
@@ -54,6 +69,18 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
   const getTrackingEndpoint = () => {
     const baseUrl = client?.supabase_url || process.env.NEXT_PUBLIC_SUPABASE_URL;
     return `${baseUrl}/functions/v1/track-analytics`;
+  };
+
+  const constructUrl = (path: string) => {
+    if (!path) return '#';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const baseUrl = ga4Config?.website_url;
+    if (baseUrl) {
+       const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+       const cleanPath = path.startsWith('/') ? path : `/${path}`;
+       return `${cleanBase}${cleanPath}`;
+    }
+    return path;
   };
 
   // Test tracking function
@@ -968,7 +995,15 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                       {page.title && page.title !== page.url && (
                                         <span className="font-medium truncate max-w-[300px]" title={page.title}>{page.title}</span>
                                       )}
-                                      <span className={`truncate max-w-[300px] ${page.title && page.title !== page.url ? 'text-xs text-muted-foreground' : 'font-medium'}`} title={page.url}>{page.url}</span>
+                                      <a 
+                                        href={constructUrl(page.url)} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className={`truncate max-w-[300px] hover:underline flex items-center gap-1 ${page.title && page.title !== page.url ? 'text-xs text-muted-foreground hover:text-primary' : 'font-medium text-primary'}`} 
+                                        title={page.url}
+                                      >
+                                        {page.url} <ExternalLink className="h-3 w-3 inline" />
+                                      </a>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-6 text-sm">

@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserClients } from "@/hooks/useClientAccess";
@@ -541,7 +541,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any active social media platforms
   const hasSocialMedia = useMemo(() => {
-    if (client?.name === "Snarky A$$ Humans") return false;
 
     if (!metricoolPlatforms || !connectedAccounts) return false;
     
@@ -597,7 +596,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     const senderClients = [
       "Billionaire Brother", "Serenity Scrolls", "Father Figure Formula", "PlayIQ", "CheerCPT", "Snarky Humans", "The Billionaire Brother",
       "BlingyBag", "BSUE Brow & Lash", "Cissie Pryor Presents", "Luxxe Auto Accessories", "OxiSure Tech", "Snarky Pets", 
-      "The Haven At Deer Park", "Snarky A$$ Humans", "Sienvi Agency", "Ban Batu", "Hwabelle"
+      "The Haven At Deer Park", "Sienvi Agency", "Ban Batu", "Hwabelle"
     ];
     return senderClients.some(name => client.name.toLowerCase().includes(name.toLowerCase()));
   }, [client?.name]);
@@ -614,7 +613,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     const webEcommClients = [
       "Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", 
       "Sienvi Agency", "PlayIQ", "Serenity Scrolls", "Hwabelle", "OxiSure Tech",
-      "Billionaire Brother", "The Billionaire Brother", "Snarky A$$ Humans"
+      "Billionaire Brother", "The Billionaire Brother"
     ];
     return webEcommClients.some(cName => name.toLowerCase().includes(cName.toLowerCase()));
   }, [client, clientGa4PropertyId, connectedAccounts, hasEmailCampaigns]);
@@ -685,14 +684,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       <TrendingUp className="h-3.5 w-3.5" />
                       {connectedPlatformsCount} platforms
                     </span>
-                  )}
-                  {totalFollowers > 0 && (
-                    <div className="flex items-center gap-2">
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3.5 w-3.5" />
-                        {totalFollowers.toLocaleString()} followers
-                      </span>
-                    </div>
                   )}
                 </div>
               </div>
@@ -883,7 +874,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* Meta */}
-                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta || client.name === "Snarky A$$ Humans") && (
+                        {(metricoolPlatforms?.some(p => ['facebook', 'instagram'].includes(p.platform)) || connectedAccounts?.meta) && (
                           <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/meta-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
@@ -911,7 +902,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                         {/* TikTok */}
-                        {(metricoolPlatforms?.some(p => p.platform === 'tiktok') || client.name === "Snarky A$$ Humans") && (
+                        {(metricoolPlatforms?.some(p => p.platform === 'tiktok')) && (
                           <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/tiktok-metricool/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
@@ -1192,6 +1183,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </CardHeader>
                             <CardContent>
                               <Badge variant="secondary" className="bg-green-500/10 text-green-600">Connected</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+
+                        {/* MelCat Digital Products */}
+                        {client.name === "Snarky Pets" && (
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/melcat-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                                  <Cat className="h-5 w-5 text-orange-500" />
+                                </div>
+                                <div><CardTitle className="text-base">MelCat Digital</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-orange-500/10 text-orange-600">Big Mel Ecosystem</Badge>
                             </CardContent>
                           </Card>
                         )}

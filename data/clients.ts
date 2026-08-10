@@ -10,7 +10,7 @@ import sienviClientLogo from "@/assets/sienvi-agency-client-logo.jpg";
 import luxxeAutoLogo from "@/assets/luxxe-auto-logo.jpg";
 import playiqLogo from "@/assets/logos/playiq-logo.jpeg";
 import blingybagLogo from "@/assets/logos/blingybag-logo.jpeg";
-import snarkyassLogo from "@/assets/logos/snarkyass-logo.jpeg";
+
 import billionaireBrotherLogo from "@/assets/logos/billionaire-brother-logo.jpg";
 import hwabelleLogo from "@/assets/logos/hwabelle-logo.png";
 import cheercptLogo from "@/assets/logos/cheercpt-logo.jpeg";
@@ -171,11 +171,7 @@ export const clientsData: Client[] = [
     logo: blingybagLogo.src,
     reports: [],
   },
-  {
-    name: "Snarky A$$ Humans",
-    logo: snarkyassLogo.src,
-    reports: [],
-  },
+
   {
     name: "PlayIQ",
     logo: playiqLogo.src,
