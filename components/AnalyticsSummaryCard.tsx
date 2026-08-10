@@ -236,7 +236,11 @@ export function AnalyticsSummaryCard({
             ?? socialMetrics?.[plToLower]?.followers 
             ?? ((existingData && existingData.followers > 0) ? existingData.followers : 0);
         
-        const finalFollowersGained = existingData ? existingData.followersGained : (liveFollowers?.gained?.[plToLower] ?? (socialMetrics?.[plToLower]?.new_followers ?? 0));
+        const liveGained = liveFollowers?.gained?.[plToLower];
+        const dbGained = existingData ? existingData.followersGained : (socialMetrics?.[plToLower]?.new_followers ?? 0);
+        const finalFollowersGained = (liveGained !== undefined && liveGained !== null) 
+            ? liveGained 
+            : dbGained;
 
         return {
             platform: plToLower,
