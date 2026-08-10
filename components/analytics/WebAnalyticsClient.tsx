@@ -742,6 +742,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                     "Email": "Visitors who clicked a link in an email campaign.",
                                     "Display": "Visitors from display/banner ads on other websites.",
                                     "Affiliates": "Visitors from affiliate partner links.",
+                                    "AI Assistant": "Visitors arriving from AI chat interfaces like ChatGPT, Claude, or Perplexity.",
+                                    "Organic Shopping": "Visitors from unpaid product listings on shopping tabs (e.g., Google Shopping)."
                                   };
                                   const description = channelDescriptions[item.source] || null;
                                   return (
