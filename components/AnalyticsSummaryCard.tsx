@@ -231,8 +231,11 @@ export function AnalyticsSummaryCard({
 
         // Prioritize live DB metrics from useSummaryMetrics hook over legacy static fallbacks
         const configFollowers = configs?.find(c => String(c.platform).toLowerCase() === plToLower)?.followers;
-        const fallbackFollowers = liveFollowers?.followers?.[plToLower] ?? configFollowers ?? socialMetrics?.[plToLower]?.followers ?? 0;
-        const finalFollowers = (existingData && existingData.followers > 0) ? existingData.followers : fallbackFollowers;
+        const finalFollowers = liveFollowers?.followers?.[plToLower] 
+            ?? configFollowers 
+            ?? socialMetrics?.[plToLower]?.followers 
+            ?? ((existingData && existingData.followers > 0) ? existingData.followers : 0);
+        
         const finalFollowersGained = existingData ? existingData.followersGained : (liveFollowers?.gained?.[plToLower] ?? (socialMetrics?.[plToLower]?.new_followers ?? 0));
 
         return {

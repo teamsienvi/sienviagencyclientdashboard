@@ -692,11 +692,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         <Users className="h-3.5 w-3.5" />
                         {totalFollowers.toLocaleString()} followers
                       </span>
-                      {followerBreakdown.length > 0 && (
-                        <span className="text-muted-foreground/75 text-xs font-medium ml-1">
-                          ({followerBreakdown.map(b => `${PLATFORM_SHORT_NAMES[b.platform] || b.platform} ${Intl.NumberFormat('en-US', { notation: "compact", maximumFractionDigits: 1 }).format(b.count)}`).join(', ')})
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
