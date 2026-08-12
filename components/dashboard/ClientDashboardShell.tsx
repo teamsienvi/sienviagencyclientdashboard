@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat, Cpu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserClients } from "@/hooks/useClientAccess";
@@ -56,6 +56,7 @@ import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { UbersuggestSection } from "@/components/analytics/UbersuggestSection";
 import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
 import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSection";
+import { PlayIQAnalyticsSection } from "@/components/dashboard/PlayIQAnalyticsSection";
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -127,6 +128,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     },
     enabled: !!clientId,
   });
+
+  // PlayIQ client check
+  const isPlayIQ = client?.name === "PlayIQ";
 
   // Fetch Metricool platforms for this client
   const { data: metricoolPlatforms } = useQuery({
@@ -757,6 +761,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   <span>RETENTION APP SALES</span>
                 </button>
               )}
+
+
             </div>
 
             {/* Analytics Tab */}
@@ -830,6 +836,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </Carousel>
                 </div>
               </div>
+
+
 
               {/* Zone 3: Channel Drill-down Layer */}
               <div className="space-y-8 pt-4">
@@ -1165,6 +1173,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                             </CardHeader>
                             <CardContent>
                               <Badge variant="secondary" className="bg-green-500/10 text-green-600">Active</Badge>
+                            </CardContent>
+                          </Card>
+                        )}
+                        
+                        {/* PlayIQ Beta Testers Analytics */}
+                        {isPlayIQ && (
+                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm border-[#00c8ff]/30" onClick={() => router.push(`/playiq-analytics/${clientId}`)}>
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-[#00c8ff]/10 group-hover:bg-[#00c8ff]/20 transition-colors">
+                                  <Cpu className="h-5 w-5 text-[#00c8ff]" />
+                                </div>
+                                <div><CardTitle className="text-base">Beta Testers Analytics</CardTitle></div>
+                              </div>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+                            </CardHeader>
+                            <CardContent>
+                              <Badge variant="secondary" className="bg-[#00c8ff]/10 text-[#00c8ff]">Active</Badge>
                             </CardContent>
                           </Card>
                         )}
