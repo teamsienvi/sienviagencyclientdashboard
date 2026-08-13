@@ -21,7 +21,7 @@ export const ExecutiveSummary: React.FC<ExecutiveSummaryProps> = ({ comparison }
             <TrendingUp className="h-3.5 w-3.5" />
             Executive Performance Story ({currentPeriod.label})
           </span>
-          <span className="text-[10px] text-muted-foreground font-semibold">Factual Comparison</span>
+          <span className="text-[10px] text-muted-foreground font-semibold">Data-Driven Summary</span>
         </div>
         <p className="text-sm font-medium text-foreground/90 leading-relaxed">
           {executiveSummaryText}

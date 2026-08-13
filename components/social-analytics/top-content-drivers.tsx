@@ -17,6 +17,7 @@ export const TopContentDrivers: React.FC<TopContentDriversProps> = ({ comparison
       date: t.publishedAt,
       platform: t.platform,
       title: t.title,
+      url: t.url,
       views: t.currentValue,
       engagementRate: t.engagementRate,
       contributionPct: t.contributionToCurrentTotal,

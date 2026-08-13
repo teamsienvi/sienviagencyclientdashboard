@@ -26,7 +26,7 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
       <div className="flex items-center justify-between gap-1">
         <span className="text-xs font-semibold text-foreground/80 flex items-center gap-1.5 truncate">
           <Users className="h-4 w-4 text-violet-500 shrink-0" />
-          <span className="truncate">Audience Baselines</span>
+          <span className="truncate">Audience Growth</span>
         </span>
         <Badge
           className={
@@ -45,16 +45,16 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
             <span className="text-2xl font-bold tracking-tight text-foreground">
               {netChange != null && netChange > 0 ? `+${formatNum(netChange)}` : formatNum(netChange)}
             </span>
-            <span className="text-[11px] text-muted-foreground font-medium truncate">Net Delta</span>
+            <span className="text-[11px] text-muted-foreground font-medium truncate">Net Change</span>
           </div>
 
           <div className="p-2.5 rounded-xl bg-muted/40 border border-border/40 text-xs space-y-1">
             <div className="flex justify-between items-center gap-2">
-              <span className="text-muted-foreground truncate">Start Baseline:</span>
+              <span className="text-muted-foreground truncate">Followers at Start:</span>
               <span className="font-semibold shrink-0">{formatNum(previousBoundaryCount)}</span>
             </div>
             <div className="flex justify-between items-center gap-2">
-              <span className="text-muted-foreground truncate">End Snapshot:</span>
+              <span className="text-muted-foreground truncate">Followers at End:</span>
               <span className="font-semibold shrink-0">{formatNum(currentBoundaryCount)}</span>
             </div>
           </div>
@@ -66,7 +66,7 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
             <span>Follower Baseline Unavailable</span>
           </div>
           <p className="text-amber-800/80 dark:text-amber-300/80 leading-relaxed">
-            Net follower delta requires verified boundary snapshots at both start and end dates. Displaying baseline status (—).
+            Net follower change requires follower count data at both the start and end of the period.
           </p>
         </div>
       )}
@@ -74,7 +74,7 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
       {missingPlatforms.length > 0 && (
         <p className="text-[10px] text-muted-foreground flex items-center gap-1">
           <Info className="h-3 w-3 text-muted-foreground" />
-          Uncollected boundary channels: {missingPlatforms.join(", ")}
+          Missing follower data: {missingPlatforms.join(", ")}
         </p>
       )}
     </div>

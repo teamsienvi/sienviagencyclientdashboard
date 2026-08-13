@@ -74,24 +74,31 @@ export function PerformanceStoryModal({
 }: PerformanceStoryModalProps) {
   const [open, setOpen] = useState(false);
   const [activeHorizon, setActiveHorizon] = useState<DateRangePreset>(dateRange);
+  const [customDateRangeLocal, setCustomDateRangeLocal] = useState<{ start: Date; end: Date } | undefined>(customDateRange);
 
   useEffect(() => {
     setActiveHorizon(dateRange);
+    setCustomDateRangeLocal(customDateRange);
   }, [dateRange, open]);
 
   // Fetch current period dynamic metrics
   const { data: dynamicMetrics, isFetching, refetch } = useSummaryMetrics(
     clientId,
     activeHorizon,
-    customDateRange,
+    customDateRangeLocal,
     open
   );
 
   const isMatchingPropHorizon = activeHorizon === dateRange;
   const currentViews = dynamicMetrics ? dynamicMetrics.totalViews : (isMatchingPropHorizon ? propsTotalViews : 0);
   const currentEngagements = dynamicMetrics ? dynamicMetrics.totalEngagements : (isMatchingPropHorizon ? propsTotalEngagements : 0);
-  const currentGained = dynamicMetrics ? dynamicMetrics.followersGained : (isMatchingPropHorizon ? propsFollowersGained : 0);
-  const currentTotalFollowers = dynamicMetrics?.totalCurrentFollowers || propsTotalFollowers;
+  const hookGained = dynamicMetrics ? dynamicMetrics.followersGained : 0;
+  const currentGained = (hookGained !== 0 ? hookGained : (isMatchingPropHorizon ? propsFollowersGained : hookGained));
+  // The hook's totalCurrentFollowers only covers platforms in social_follower_timeline,
+  // while propsTotalFollowers (from the overview) includes liveFollowers + socialMetrics.
+  // Use the larger value so we don't underreport.
+  const hookFollowers = dynamicMetrics?.totalCurrentFollowers || 0;
+  const currentTotalFollowers = Math.max(hookFollowers, propsTotalFollowers);
 
   const currentPlatforms = dynamicMetrics?.platformData?.length ? dynamicMetrics.platformData : (isMatchingPropHorizon ? propsPlatformData : []);
 
@@ -107,7 +114,7 @@ export function PerformanceStoryModal({
     return buildCanonicalComparison({
       clientId,
       preset: activeHorizon,
-      customRange: customDateRange,
+      customRange: customDateRangeLocal,
       timezone: "UTC",
       currentViews,
       previousViews,
@@ -131,6 +138,7 @@ export function PerformanceStoryModal({
         postsPublished: p.postsPublished || 1,
       })),
       currentDailyMap: dynamicMetrics?.timelineMap || {},
+      previousDailyMap: (dynamicMetrics as any)?.previousTimelineMap || {},
       topContentItems: dynamicMetrics?.topPosts?.length ? dynamicMetrics.topPosts : [
         {
           id: "post-1",
@@ -144,16 +152,27 @@ export function PerformanceStoryModal({
         },
       ],
     });
-  }, [clientId, activeHorizon, customDateRange, currentViews, currentEngagements, currentGained, currentTotalFollowers, currentPlatforms, clientName, previousViews, previousEngagements, previousPlatformData, prevFollowersStart, prevFollowersEnd]);
+  }, [clientId, activeHorizon, customDateRangeLocal, currentViews, currentEngagements, currentGained, currentTotalFollowers, currentPlatforms, clientName, previousViews, previousEngagements, previousPlatformData, prevFollowersStart, prevFollowersEnd]);
 
   const handlePresetSelect = (preset: DateRangePreset) => {
     setActiveHorizon(preset);
+    setCustomDateRangeLocal(undefined);
     onDateRangeChange(preset);
     setTimeout(() => refetch(), 0);
   };
 
+  const handleCustomDateChange = (
+    current: { start: Date; end: Date },
+    comp: { start: Date; end: Date }
+  ) => {
+    setActiveHorizon("custom");
+    setCustomDateRangeLocal(current);
+    onDateRangeChange("custom", current);
+    setTimeout(() => refetch(), 0);
+  };
+
   const isWeekly = activeHorizon === "7d" || activeHorizon === "14d";
-  const horizonLabel = isWeekly ? `${activeHorizon} WoW` : `${activeHorizon} PoP`;
+  const horizonLabel = isWeekly ? `${activeHorizon} vs Prior Week` : `${activeHorizon} vs Prior Period`;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -175,6 +194,7 @@ export function PerformanceStoryModal({
           comparison={comparison}
           activePreset={activeHorizon}
           onPresetSelect={handlePresetSelect}
+          onCustomDateChange={handleCustomDateChange}
           isFetching={isFetching}
         />
 

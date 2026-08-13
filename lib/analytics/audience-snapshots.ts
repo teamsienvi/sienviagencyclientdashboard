@@ -62,7 +62,7 @@ export const resolveAudienceSnapshots = (
     netChange,
     previousPeriodNetChange,
     status: "available",
-    statusLabel: "Boundary Baseline Verified",
+    statusLabel: "Follower Data Available",
     coverageCount,
     missingPlatforms,
   };

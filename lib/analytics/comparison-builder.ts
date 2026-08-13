@@ -200,6 +200,7 @@ export const buildCanonicalComparison = (
     date: p.publishedAt,
     platform: p.platform,
     title: p.title,
+    url: p.url,
     views: p.currentValue,
     engagements: p.engagements,
     engagementRate: p.engagementRate,
@@ -287,7 +288,11 @@ export const buildCanonicalComparison = (
       comparisonType,
       preset,
       rangeCompleteness: current.isComplete ? "complete" : "partial",
-      dataCompleteness: "complete",
+      dataCompleteness: channels.length === 0
+        ? "partial"
+        : channels.some((c) => c.dataStatus === "disconnected" || c.dataStatus === "unavailable")
+          ? "mixed"
+          : "complete",
       calculationVersion: "v2.0_reconciled",
       adaptiveGranularity,
     },

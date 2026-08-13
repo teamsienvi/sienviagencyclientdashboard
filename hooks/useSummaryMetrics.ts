@@ -107,7 +107,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
 
 // Shared computation logic used by both primary and fallback paths
 async function computeMetrics(
-    posts: Array<{ platform: string; published_at: string | null; metrics: any[] }>,
+    posts: Array<{ id?: string; platform: string; title?: string; url?: string; published_at: string | null; metrics: any[] }>,
     dateRange: string,
     periodStartStr: string,
     periodEndStr: string,
@@ -124,6 +124,7 @@ async function computeMetrics(
 
     const platformFollowers: Record<string, number> = {};
     const platformCurrentFollowers: Record<string, number> = {};
+    const platformBaselineFollowers: Record<string, number> = {};
     
     if (timelineDataRaw && timelineDataRaw.length > 0) {
         const byPlatform: Record<string, any[]> = {};
@@ -150,8 +151,13 @@ async function computeMetrics(
                 const diff = last - baseline;
                 
                 platformFollowers[platform] = diff;
+                platformBaselineFollowers[platform] = baseline;
             } else {
                 platformFollowers[platform] = 0;
+                // If no period data, baseline is the latest before-period point
+                platformBaselineFollowers[platform] = beforePoints.length > 0
+                    ? beforePoints[beforePoints.length - 1].followers
+                    : 0;
             }
             // Always set current followers to the absolute latest point within the period we have
             platformCurrentFollowers[platform] = periodPoints.length > 0 
@@ -205,6 +211,13 @@ async function computeMetrics(
                 }
 
                 platformFollowers[platform] = gain;
+
+                // Set baseline followers (start of period)
+                if (validBefore.length > 0) {
+                    platformBaselineFollowers[platform] = validBefore[validBefore.length - 1].followers;
+                } else if (validInPeriod.length > 0) {
+                    platformBaselineFollowers[platform] = validInPeriod[0].followers;
+                }
                 
                 // Set current followers from the latest row that has a valid count
                 const withFollowers = [...sorted].reverse().find(p => p.followers != null && p.followers > 0);
@@ -348,6 +361,7 @@ async function computeMetrics(
     const timelineData = Object.values(timelineMap);
     const totalFollowersGained = Object.values(platformFollowers).reduce((sum, val) => sum + val, 0);
     const totalCurrentFollowers = Object.values(platformCurrentFollowers).reduce((sum, val) => sum + val, 0);
+    const totalBaselineFollowers = Object.values(platformBaselineFollowers).reduce((sum, val) => sum + val, 0);
 
     const topPosts = posts
         .map((p: any) => {
@@ -402,6 +416,14 @@ async function computeMetrics(
     let prevPostsPublished = 0;
     const prevPMap: Record<string, { views: number; engagements: number; postsPublished: number }> = {};
 
+    // Build a day-by-day timeline for the prior period (mirrors timelineMap logic)
+    const previousTimelineMap: Record<string, { date: string; views: number; engagement: number; [key: string]: any }> = {};
+    for (let d = new Date(priorStartDate); d <= priorEndDate; d.setDate(d.getDate() + 1)) {
+        const dStr = d.toISOString().split("T")[0];
+        const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+        previousTimelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0, youtube: 0, tiktok: 0, facebook: 0, instagram: 0, x: 0, linkedin: 0 };
+    }
+
     posts.forEach(post => {
         if (!post.metrics || post.metrics.length === 0) return;
         const postDate = post.published_at ? post.published_at.split("T")[0] : null;
@@ -451,6 +473,39 @@ async function computeMetrics(
             prevPMap[plat].postsPublished += 1;
             prevTotalViews += pv;
             prevTotalEngagements += pe;
+
+            // Accumulate daily view increments into previousTimelineMap
+            for (let i = 0; i < sortedMetrics.length; i++) {
+                const m = sortedMetrics[i];
+                const mDate = (m.collected_at || m.period_end || "").split("T")[0];
+
+                if (mDate >= priorStartStr && mDate <= priorEndStr) {
+                    const curViews = Math.max(m.views || 0, m.impressions || 0);
+                    const curEng = (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+
+                    let prevViewsBaseline = 0;
+                    let prevEngBaseline = 0;
+
+                    if (i > 0) {
+                        const prevM = sortedMetrics[i - 1];
+                        prevViewsBaseline = Math.max(prevM.views || 0, prevM.impressions || 0);
+                        prevEngBaseline = (prevM.likes || 0) + (prevM.comments || 0) + (prevM.shares || 0);
+                    }
+
+                    const incViews = Math.max(0, curViews - prevViewsBaseline);
+                    const incEng = Math.max(0, curEng - prevEngBaseline);
+
+                    if (previousTimelineMap[mDate]) {
+                        previousTimelineMap[mDate].views += incViews;
+                        previousTimelineMap[mDate].engagement += incEng;
+                        if (previousTimelineMap[mDate][plat] != null) {
+                            previousTimelineMap[mDate][plat] += incViews;
+                        } else {
+                            previousTimelineMap[mDate][plat] = incViews;
+                        }
+                    }
+                }
+            }
         }
     });
 
@@ -479,8 +534,10 @@ async function computeMetrics(
         platformData,
         followersGained: totalFollowersGained,
         totalCurrentFollowers,
+        totalBaselineFollowers,
         timelineData,
         timelineMap,
+        previousTimelineMap,
         topPosts,
         // Prior period data
         previousViews: prevTotalViews,

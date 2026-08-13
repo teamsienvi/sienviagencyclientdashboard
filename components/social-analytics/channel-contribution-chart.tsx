@@ -30,7 +30,7 @@ export const ChannelContributionChart: React.FC<ChannelContributionChartProps> =
           </p>
         </div>
         <Badge className={totalDelta >= 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 text-xs"}>
-          Total WoW Delta: {totalDelta >= 0 ? "+" : ""}{formatNum(totalDelta)}
+          Net Change: {totalDelta >= 0 ? "+" : ""}{formatNum(totalDelta)}
         </Badge>
       </div>
 

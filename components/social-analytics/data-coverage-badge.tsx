@@ -26,7 +26,7 @@ export const DataCoverageBadge: React.FC<DataCoverageBadgeProps> = ({
         }
       >
         <Clock className="h-3 w-3 mr-1" />
-        {rangeCompleteness === "complete" ? "Complete Range" : "Partial Current Range"}
+        {rangeCompleteness === "complete" ? "Date Range Complete" : "Partial Date Range"}
       </Badge>
 
       {/* 2. Metric Coverage */}
@@ -37,19 +37,19 @@ export const DataCoverageBadge: React.FC<DataCoverageBadgeProps> = ({
             : "bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/30 text-[10px]"
         }
       >
-        {dataCompleteness === "complete" ? "Full Coverage" : "Partial Coverage"}
+        {dataCompleteness === "complete" ? "All Platforms Reporting" : "Some Platforms Missing"}
       </Badge>
 
       {/* 3. Reconciled Gate Badge */}
       {reconciled ? (
         <Badge className="bg-purple-500/10 text-purple-600 dark:text-purple-300 border-purple-500/30 text-[10px] gap-1 font-bold">
           <ShieldCheck className="h-3 w-3 text-purple-500" />
-          <span>Factual Reconciled</span>
+          <span>Math Verified</span>
         </Badge>
       ) : (
         <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-300 border-amber-500/30 text-[10px] gap-1 font-bold">
           <AlertTriangle className="h-3 w-3 text-amber-500" />
-          <span>Unreconciled Variance</span>
+          <span>Totals Mismatch</span>
         </Badge>
       )}
     </div>
