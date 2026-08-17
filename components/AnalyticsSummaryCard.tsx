@@ -212,6 +212,7 @@ export function AnalyticsSummaryCard({
     // We want to combine platformData with any other platforms present in liveFollowers or socialMetrics.
     const allPlatforms = new Set<string>();
     platformData.forEach(p => allPlatforms.add(String(p.platform).toLowerCase()));
+    configs?.forEach(c => allPlatforms.add(String(c.platform).toLowerCase()));
     
     if (liveFollowers?.followers) {
         Object.keys(liveFollowers.followers).forEach(p => allPlatforms.add(p.toLowerCase()));
@@ -719,7 +720,7 @@ export function AnalyticsSummaryCard({
                                         </div>
                                         <div className="flex flex-col gap-1">
                                             {optimizedPlatformData.filter(plat => 
-                                                plat.engagements > 0 || plat.views > 0
+                                                plat.engagements > 0 || plat.views > 0 || plat.followersGained > 0
                                             ).map((plat, idx) => (
                                                 <div key={idx} className="flex items-center text-sm py-2 px-2 hover:bg-muted/40 rounded-lg group">
                                                     <div className={type === 'social' ? "w-1/4 flex items-center gap-2" : "w-1/3 flex items-center gap-2"}>
