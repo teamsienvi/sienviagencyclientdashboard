@@ -61,65 +61,8 @@ export function useTopPerformingPosts(
 
       if (contentError) throw contentError;
       
-      // Query 2: Posts with metrics collected in the period (regardless of publish date)
-      // This catches YouTube videos published weeks ago that still received views this period
-      const { data: metricsFromPeriod } = await supabase
-        .from("social_content_metrics")
-        .select(`
-          views,
-          impressions,
-          reach,
-          likes,
-          comments,
-          shares,
-          period_end,
-          collected_at,
-          platform,
-          social_content!inner (
-            id,
-            client_id,
-            platform,
-            published_at,
-            url,
-            title
-          )
-        `)
-        .eq("social_content.client_id", clientId)
-        .gte("period_end", periodStartStr)
-        .lte("period_end", periodEndStr)
-        .limit(2000);
-
-      // Query 3: Get latest YouTube metrics regardless of period (YouTube views are cumulative)
-      // This ensures YouTube videos with high all-time views appear alongside other platforms
-      const { data: ytLatestMetrics } = await supabase
-        .from("social_content_metrics")
-        .select(`
-          views,
-          impressions,
-          reach,
-          likes,
-          comments,
-          shares,
-          period_end,
-          collected_at,
-          platform,
-          social_content!inner (
-            id,
-            client_id,
-            platform,
-            published_at,
-            url,
-            title
-          )
-        `)
-        .eq("social_content.client_id", clientId)
-        .eq("social_content.platform", "youtube")
-        .gt("views", 0)
-        .order("views", { ascending: false })
-        .limit(50);
-
-      // Merge all result sets
-      const allMetrics = [...(metricsRaw || []), ...(metricsFromPeriod || []), ...(ytLatestMetrics || [])];
+      // Merge result sets (now only relying on Query 1 which strictly filters by published_at)
+      const allMetrics = [...(metricsRaw || [])];
 
       if (allMetrics.length === 0) {
         // Fallback: query via published_at directly
