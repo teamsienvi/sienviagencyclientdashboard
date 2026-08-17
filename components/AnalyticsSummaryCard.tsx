@@ -550,7 +550,7 @@ export function AnalyticsSummaryCard({
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
                                     {type === 'social' 
-                                        ? (followersGained > 0 ? `+${formatNumber(followersGained)}` : formatNumber(followersGained)) 
+                                        ? (followersGained > 0 ? `+${formatNumber(followersGained)}` : "0") 
                                         : (type === 'ads' ? formatNumber(aiMetrics.total_conversions || 0) : (type === 'seo' ? formatNumber(aiMetrics.unique_visitors || 0) : (aiMetrics.total_sales > 0 ? `$${formatNumber(aiMetrics.total_sales)}` : formatNumber(aiMetrics.unique_visitors || 0))))
                                     }
                                 </p>
