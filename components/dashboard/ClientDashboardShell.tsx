@@ -752,7 +752,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {isOxiSureTech && (
+              {/* {isOxiSureTech && (
                 <button
                   onClick={() => scrollToSection("retention-app-sales")}
                   className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-teal-500/5 border-r border-primary/10 last:border-r-0 group"
@@ -760,7 +760,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   <Smartphone className="h-4 w-4 text-teal-500 group-hover:scale-110 transition-transform" />
                   <span>RETENTION APP SALES</span>
                 </button>
-              )}
+              )} */}
 
 
             </div>
@@ -1371,12 +1371,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
-                {/* OxiSure Retention App Sales */}
-                {isOxiSureTech && (
+                {/* OxiSure Retention App Sales - Hidden */}
+                {/* {isOxiSureTech && (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-teal-50 dark:bg-teal-500/5 border-2 border-teal-200 dark:border-teal-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="retention-app-sales">
                     <OxiSureAppSalesSection />
                   </div>
-                )}
+                )} */}
 
               </div>
             </TabsContent>
