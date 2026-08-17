@@ -255,13 +255,15 @@ export function AnalyticsSummaryCard({
 
     let optimizedTotalViews = 0;
     let optimizedTotalEngagements = 0;
-    let optimizedTotalFollowersGained = 0;
+    let optimizedPositiveFollowersGained = 0;
 
     if (type === 'social') {
         optimizedPlatformData.forEach(plat => {
             optimizedTotalViews += plat.views;
             optimizedTotalEngagements += plat.engagements;
-            optimizedTotalFollowersGained += (plat.followersGained || 0);
+            if (plat.followersGained > 0) {
+                optimizedPositiveFollowersGained += plat.followersGained;
+            }
         });
     }
 
@@ -280,12 +282,11 @@ export function AnalyticsSummaryCard({
         ? (hookTotalEngagements > 0 ? hookTotalEngagements : (optimizedTotalEngagements || 0))
         : (metricsData?.totalEngagements || 0);
 
-    // followersGained must be consistent with per-platform breakdown.
-    // Use hook value first, then sum of platform breakdown (same data the table shows).
-    const hookFollowersGained = metricsData?.followersGained ?? 0;
+    // followersGained must be 100% consistent with the platform breakdown table.
+    // Sum only positive gains so negative drops are never displayed and numbers match identically.
     const followersGained = type === 'social'
-        ? (hookFollowersGained !== 0 ? hookFollowersGained : optimizedTotalFollowersGained)
-        : (aiMetrics.followers_gained || 0);
+        ? optimizedPositiveFollowersGained
+        : Math.max(0, aiMetrics.followers_gained || 0);
 
     // Calculate accurate total current followers directly from live props if available
     let totalCurrentFollowers = type === 'social' ? (metricsData?.totalCurrentFollowers || aiMetrics.total_followers || 0) : 0;
