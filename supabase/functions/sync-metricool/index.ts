@@ -242,7 +242,7 @@ serve(async (req) => {
           period_start: startDate,
           period_end: endDate,
           followers: accountMetrics.followers || null,
-          new_followers: accountMetrics.newFollowers || null,
+          new_followers: accountMetrics.newFollowers != null && accountMetrics.newFollowers > 0 ? accountMetrics.newFollowers : null,
           engagement_rate: accountMetrics.engagementRate || null,
           total_content: accountMetrics.totalContent || null,
           collected_at: new Date().toISOString(),

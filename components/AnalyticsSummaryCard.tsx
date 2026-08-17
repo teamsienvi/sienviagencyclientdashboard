@@ -561,10 +561,12 @@ export function AnalyticsSummaryCard({
                                             {formatNumber(totalCurrentFollowers || 0)} total audience
                                         </div>
                                     ) : type === 'seo' ? (
-                                        <div className={`text-xs font-medium flex items-center gap-1.5 ${followersGained > 0 ? "text-emerald-600" : followersGained < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
-                                            <TrendingUp className={`h-3.5 w-3.5 ${followersGained < 0 && "rotate-180"}`} /> 
-                                            {followersGained > 0 ? `+${followersGained}` : followersGained < 0 ? followersGained : "+0"} score change
+                                        followersGained > 0 ? (
+                                        <div className="text-xs font-medium flex items-center gap-1.5 text-emerald-600">
+                                            <TrendingUp className="h-3.5 w-3.5" /> 
+                                            +{followersGained} score change
                                         </div>
+                                        ) : null
                                     ) : (
                                         <div className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">
                                             {type === 'ads' ? <Target className="h-3.5 w-3.5" /> : (aiMetrics.total_sales > 0 ? <ShoppingBag className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />)}
@@ -728,9 +730,11 @@ export function AnalyticsSummaryCard({
                                                             <span className="text-foreground">
                                                                 {formatNumber(plat.followers || 0)}
                                                             </span>
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 ${plat.followersGained > 0 ? "text-emerald-500" : plat.followersGained < 0 ? "text-rose-500 font-semibold" : "text-muted-foreground"}`}>
-                                                                {plat.followersGained > 0 ? `+${formatNumber(plat.followersGained)}` : plat.followersGained < 0 ? formatNumber(plat.followersGained) : "+0"}
+                                                            {plat.followersGained > 0 && (
+                                                            <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/50 text-emerald-500">
+                                                                +{formatNumber(plat.followersGained)}
                                                             </span>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className={type === 'social' ? "w-1/4 text-center font-medium" : "w-1/3 text-center font-medium"}>{plat.engagementRate.toFixed(1)}%</div>

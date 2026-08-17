@@ -625,7 +625,7 @@ serve(async (req) => {
                 period_start: from,
                 period_end: to,
                 followers,
-                new_followers: newFollowers,
+                new_followers: newFollowers != null ? Math.max(0, newFollowers) : null,
                 engagement_rate: engagementRate,
                 total_content: totalContent,
                 collected_at: new Date().toISOString(),

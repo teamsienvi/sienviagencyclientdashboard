@@ -390,7 +390,7 @@ serve(async (req) => {
           period_start: startDate,
           period_end: endDate,
           followers: followers,
-          new_followers: newFollowers,
+          new_followers: newFollowers != null && newFollowers > 0 ? newFollowers : null,
           engagement_rate: engagementRate,
           total_content: rows.length,
           collected_at: new Date().toISOString(),

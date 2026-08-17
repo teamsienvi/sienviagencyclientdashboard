@@ -41,12 +41,14 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
 
       {isAvailable && currentBoundaryCount != null && previousBoundaryCount != null ? (
         <div className="space-y-2">
-          <div className="flex items-baseline justify-between gap-1">
-            <span className="text-2xl font-bold tracking-tight text-foreground">
-              {netChange != null && netChange > 0 ? `+${formatNum(netChange)}` : formatNum(netChange)}
-            </span>
-            <span className="text-[11px] text-muted-foreground font-medium truncate">Net Change</span>
-          </div>
+          {netChange != null && netChange > 0 && (
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="text-2xl font-bold tracking-tight text-foreground">
+                +{formatNum(netChange)}
+              </span>
+              <span className="text-[11px] text-muted-foreground font-medium truncate">Net Change</span>
+            </div>
+          )}
 
           <div className="p-2.5 rounded-xl bg-muted/40 border border-border/40 text-xs space-y-1">
             <div className="flex justify-between items-center gap-2">

@@ -34,6 +34,7 @@ interface WeeklyYouTubeData {
   avgViewDuration: number;
   engagementPct: number | null;
   videos: VideoData[];
+  allVideos: VideoData[];
 }
 
 interface YouTubeResponse {
@@ -320,6 +321,7 @@ serve(async (req) => {
         avgViewDuration: 0,
         engagementPct: null,
         videos: [],
+        allVideos: [],
       };
 
       const timelineParams = {
@@ -462,6 +464,7 @@ serve(async (req) => {
 
         result.videos = periodVideos;
         result.videosCount = periodVideos.length;
+        result.allVideos = allVideos;
 
         // Aggregate from CSV only as fallback if timeline APIs didn't provide data
         let totalWatchTime = 0;
@@ -525,7 +528,7 @@ serve(async (req) => {
             period_start: from,
             period_end: to,
             followers: currentData.totalSubscribers,
-            new_followers: currentData.subscribersGained,
+            new_followers: currentData.subscribersGained > 0 ? currentData.subscribersGained : 0,
             engagement_rate: currentData.engagementPct,
             total_content: currentData.videosCount,
             collected_at: new Date().toISOString(),
@@ -537,10 +540,12 @@ serve(async (req) => {
       }
     }
 
-    // Persist video content to social_content + social_content_metrics for Top Performing Posts
-    if (currentData.videos.length > 0) {
+    // Persist ALL video content to social_content + social_content_metrics for Top Performing Posts
+    // Use allVideos (not just period-published videos) so older videos with fresh metrics are included
+    const videosToPerist = currentData.allVideos.length > 0 ? currentData.allVideos : currentData.videos;
+    if (videosToPerist.length > 0) {
       try {
-        for (const video of currentData.videos) {
+        for (const video of videosToPerist) {
           if (!video.title && !video.url) continue;
 
           // Generate stable content_id from URL or title
@@ -599,7 +604,7 @@ serve(async (req) => {
               );
           }
         }
-        console.log(`Persisted ${currentData.videos.length} YouTube videos to social_content`);
+        console.log(`Persisted ${videosToPerist.length} YouTube videos to social_content`);
       } catch (persistContentErr) {
         console.error("Error persisting YouTube content:", persistContentErr);
         errors.push(`persist content: ${persistContentErr}`);

@@ -381,7 +381,7 @@ async function collectSocialData(
                         const parts = [`- ${m.platform}:`];
                         if (m.followers != null) parts.push(`${m.followers.toLocaleString()} followers`);
                         if (m.engagement_rate != null) parts.push(`${m.engagement_rate}% engagement rate`);
-                        if (m.new_followers != null) parts.push(`${m.new_followers} new followers this period`);
+                        if (m.new_followers != null && m.new_followers > 0) parts.push(`${m.new_followers} new followers this period`);
                         if (m.total_content != null) parts.push(`${m.total_content} total posts`);
                         return parts.join(" ");
                     }
@@ -422,7 +422,7 @@ async function collectSocialData(
                             if (p.followers != null) parts.push(`${p.followers.toLocaleString()} followers`);
                             if (p.engagement_rate != null) parts.push(`${p.engagement_rate}% engagement`);
                             if (p.total_content != null) parts.push(`${p.total_content} posts published`);
-                            if (p.new_followers != null) parts.push(`${p.new_followers} new followers`);
+                            if (p.new_followers != null && p.new_followers > 0) parts.push(`${p.new_followers} new followers`);
                             return parts.join(" ");
                         }
                     )
@@ -664,7 +664,7 @@ async function collectSocialData(
             }
         }
         
-        metricsResult.followers_gained = calculatedNewFollowers;
+        metricsResult.followers_gained = Math.max(0, calculatedNewFollowers);
     }
 
     // 6. Identify Top Platform based on views/engagements
