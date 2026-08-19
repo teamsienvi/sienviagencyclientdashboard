@@ -585,7 +585,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
-    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents") return false;
+    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents" || client?.name === "CheerCPT" || client?.name === "HAIRtamin") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && hasAmazonOrdersAnalytics(client.name)) return true;

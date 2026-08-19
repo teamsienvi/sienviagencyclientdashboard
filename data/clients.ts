@@ -16,6 +16,8 @@ import hwabelleLogo from "@/assets/logos/hwabelle-logo.png";
 import cheercptLogo from "@/assets/logos/cheercpt-logo.jpeg";
 
 
+import hairtaminLogo from "@/assets/logos/hairtamin-logo.png";
+
 export interface Report {
   dateRange: string;
   link: string;
@@ -194,6 +196,11 @@ export const clientsData: Client[] = [
   {
     name: "CheerCPT",
     logo: cheercptLogo.src,
+    reports: [],
+  },
+  {
+    name: "HAIRtamin",
+    logo: hairtaminLogo.src,
     reports: [],
   },
 ];

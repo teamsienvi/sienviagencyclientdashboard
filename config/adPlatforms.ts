@@ -31,6 +31,7 @@ const CLIENT_AD_PLATFORMS: Record<string, AdPlatform[]> = {
   "Sienvi Agency": [],
   "The Billionaire Brother": [],
   "CheerCPT": [],
+  "HAIRtamin": [],
 };
 
 const DEFAULT_AD_PLATFORMS: AdPlatform[] = ["meta", "google", "tiktok", "amazon"];
