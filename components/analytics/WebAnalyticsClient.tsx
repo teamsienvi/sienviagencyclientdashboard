@@ -23,7 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
   const router = useRouter();  
   const { isAdmin, isAuthenticated } = useAuth();
-  const [dateRange, setDateRange] = useState<DateRangePreset>("7d");
+  const [dateRange, setDateRange] = useState<DateRangePreset>("30d");
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 

@@ -208,10 +208,6 @@ serve(async (req) => {
       avgSessionDuration = parseFloat(row[4].value) || 0;
     }
 
-    if (totalSessions === 0 && totalPageViews === 0) {
-      return new Response(JSON.stringify({ ok: false, errorType: 'no_data', error: 'No analytics data found for this date range in GA4.', clientId, clientName: client.name }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
     // Parse Traffic Sources with Breakdown
     const trafficSourcesMap = new Map<string, any>();
     

@@ -154,7 +154,7 @@ const getDateRange = (
 
 export const useClientAnalytics = ({
   clientId,
-  dateRange = "7d",
+  dateRange = "30d",
   startDate,
   endDate,
   enabled = true,
@@ -206,7 +206,7 @@ export const useClientAnalytics = ({
 
 export const useMultipleClientAnalytics = (
   clientIds: string[],
-  dateRange: DateRangePreset = "7d"
+  dateRange: DateRangePreset = "30d"
 ) => {
   const dates = getDateRange(dateRange);
 
