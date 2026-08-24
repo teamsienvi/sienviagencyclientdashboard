@@ -177,24 +177,31 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       prevEndStr = format(prevEnd, 'yyyy-MM-dd');
     }
 
-    // Fetch the MOST RECENT account metrics by period_end (not collected_at)
-    // collected_at reflects when the row was written, which can be out of order
-    // after a backfill sync. period_end reflects the actual reporting period.
+    // Fetch recent account metrics by period_end, then filter for weekly-span rows.
+    // The table has BOTH weekly periods (5-8 day span, from Metricool weekly syncs) AND
+    // daily rolling 30-day windows. We want weekly rows for accurate per-week data.
     const { data: latestMetrics } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", "youtube")
       .order("period_end", { ascending: false })
-      .limit(2);
+      .limit(20);
 
-    // Latest period is current, second-latest is previous (for comparison)
-    const currentFollowers = latestMetrics?.[0]?.followers || 0;
-    // Use the actual new_followers value from the database (populated by Metricool's
-    // subscribersGained timeline), rather than subtracting adjacent rows which can
-    // be inaccurate when periods overlap or have gaps.
-    const dbNewFollowers = latestMetrics?.[0]?.new_followers;
-    const previousFollowers = latestMetrics?.[1]?.followers || latestMetrics?.[0]?.followers || 0;
+    // Filter to weekly-span rows (5-8 days between period_start and period_end)
+    const weeklyRows = (latestMetrics || []).filter(m => {
+      if (!m.period_start || !m.period_end) return false;
+      const span = Math.round(
+        (new Date(m.period_end).getTime() - new Date(m.period_start).getTime()) / 86400000
+      );
+      return span >= 5 && span <= 8;
+    });
+    // Fallback to all rows if no weekly rows exist
+    const rows = weeklyRows.length >= 2 ? weeklyRows : (latestMetrics || []);
+
+    const currentFollowers = rows[0]?.followers || 0;
+    const dbNewFollowers = rows[0]?.new_followers;
+    const previousFollowers = rows[1]?.followers || rows[0]?.followers || 0;
     const newFollowers = dbNewFollowers != null && dbNewFollowers > 0
       ? dbNewFollowers
       : (currentFollowers - previousFollowers);
