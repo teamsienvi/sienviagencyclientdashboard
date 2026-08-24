@@ -115,167 +115,119 @@ async function computeMetrics(
 ) {
     const days = dateRange === "365d" ? 365 : dateRange === "90d" ? 90 : dateRange === "60d" ? 60 : dateRange === "30d" ? 30 : dateRange === "14d" ? 14 : 7;
 
-    // Fetch Follower Timeline (fetch all to get accurate baseline before period)
-    const { data: timelineDataRaw } = await supabase
-        .from("social_follower_timeline")
-        .select("platform, date, followers")
-        .eq("client_id", clientId)
-        .order("date", { ascending: true });
-
     const platformFollowers: Record<string, number> = {};
     const platformCurrentFollowers: Record<string, number> = {};
     const platformBaselineFollowers: Record<string, number> = {};
-    
-    if (timelineDataRaw && timelineDataRaw.length > 0) {
+
+    // Query social_account_metrics to compute exact horizon follower gains & current follower totals.
+    // We sort and filter by period_end to ensure accurate reporting per timeframe.
+    const { data: accountMetrics } = await supabase
+        .from("social_account_metrics")
+        .select("platform, followers, new_followers, period_start, period_end, collected_at")
+        .eq("client_id", clientId)
+        .order("period_end", { ascending: true });
+
+    if (accountMetrics && accountMetrics.length > 0) {
         const byPlatform: Record<string, any[]> = {};
-        timelineDataRaw.forEach((f) => {
-            if (!byPlatform[f.platform]) byPlatform[f.platform] = [];
-            byPlatform[f.platform].push(f);
+        accountMetrics.forEach((m) => {
+            const plat = String(m.platform || "").toLowerCase();
+            if (!byPlatform[plat]) byPlatform[plat] = [];
+            byPlatform[plat].push(m);
         });
-        Object.values(byPlatform).forEach((points) => {
-            // Ensure platform matching is case-insensitive
-            const platform = String(points[0].platform || "").toLowerCase();
+        
+        Object.entries(byPlatform).forEach(([platform, points]) => {
+            const sorted = [...points].sort((a, b) => 
+                (a.period_end || "").localeCompare(b.period_end || "")
+            );
 
-            // Split into points before the period and points within the period
-            const beforePoints = points.filter(p => p.date < periodStartStr);
-            const periodPoints = points.filter(p => p.date >= periodStartStr && p.date <= periodEndStr);
-            
-            if (periodPoints.length > 0) {
-                // Baseline is the last known follower count BEFORE the period,
-                // or if none exists, the first count inside the period.
-                const baseline = beforePoints.length > 0 
-                    ? beforePoints[beforePoints.length - 1].followers 
-                    : periodPoints[0].followers;
-                    
-                const last = periodPoints[periodPoints.length - 1].followers;
-                const diff = last - baseline;
-                
-                platformFollowers[platform] = diff;
-                platformBaselineFollowers[platform] = baseline;
-            } else {
-                platformFollowers[platform] = 0;
-                // If no period data, baseline is the latest before-period point
-                platformBaselineFollowers[platform] = beforePoints.length > 0
-                    ? beforePoints[beforePoints.length - 1].followers
-                    : 0;
-            }
-            // Always set current followers to the absolute latest point within the period we have
-            platformCurrentFollowers[platform] = periodPoints.length > 0 
-                ? periodPoints[periodPoints.length - 1].followers 
-                : (beforePoints.length > 0 ? beforePoints[beforePoints.length - 1].followers : 0);
-        });
-    } else {
-        // Always query social_account_metrics to compute exact horizon follower gains & current follower totals
-        // Use period_start/period_end for ordering and filtering instead of collected_at,
-        // because backfill syncs can write all rows at the same time, making collected_at unreliable.
-        const { data: accountMetrics } = await supabase
-            .from("social_account_metrics")
-            .select("platform, followers, new_followers, period_start, period_end, collected_at")
-            .eq("client_id", clientId)
-            .order("period_end", { ascending: true });
+            // Helper: compute the span in days between period_start and period_end
+            const getSpanDays = (p: any) => {
+                if (!p.period_start || !p.period_end) return 0;
+                return Math.round(
+                    (new Date(p.period_end).getTime() - new Date(p.period_start).getTime()) / 86400000
+                );
+            };
 
-        if (accountMetrics && accountMetrics.length > 0) {
-            const byPlatform: Record<string, any[]> = {};
-            accountMetrics.forEach((m) => {
-                const plat = String(m.platform || "").toLowerCase();
-                if (!byPlatform[plat]) byPlatform[plat] = [];
-                byPlatform[plat].push(m);
+            // Separate weekly rows (5-8 day span) from rolling 30-day windows.
+            // The table stores BOTH types, and summing across overlapping 30-day
+            // windows causes massive over-counting (e.g., +72 instead of 0).
+            const weeklyRows = sorted.filter(p => {
+                const span = getSpanDays(p);
+                return span >= 5 && span <= 8;
             });
             
-            Object.entries(byPlatform).forEach(([platform, points]) => {
-                const sorted = [...points].sort((a, b) => 
-                    (a.period_end || "").localeCompare(b.period_end || "")
-                );
+            // Filter to rows whose period_end falls within the selected date range
+            const weeklyInPeriod = weeklyRows.filter(p => {
+                const date = (p.period_end || "").split("T")[0];
+                return date >= periodStartStr && date <= periodEndStr;
+            });
+            const weeklyBefore = weeklyRows.filter(p => 
+                (p.period_end || "").split("T")[0] < periodStartStr
+            );
 
-                // Helper: compute the span in days between period_start and period_end
-                const getSpanDays = (p: any) => {
-                    if (!p.period_start || !p.period_end) return 0;
-                    return Math.round(
-                        (new Date(p.period_end).getTime() - new Date(p.period_start).getTime()) / 86400000
-                    );
-                };
+            // Also compute the full set (all spans) as fallback for platforms
+            // that don't have weekly-span rows
+            const allInPeriod = sorted.filter(p => {
+                const date = (p.period_end || "").split("T")[0];
+                return date >= periodStartStr && date <= periodEndStr;
+            });
+            const allBefore = sorted.filter(p => 
+                (p.period_end || "").split("T")[0] < periodStartStr
+            );
 
-                // Separate weekly rows (5-8 day span) from rolling 30-day windows.
-                // The table stores BOTH types, and summing across overlapping 30-day
-                // windows causes massive over-counting (e.g., +72 instead of 0).
-                const weeklyRows = sorted.filter(p => {
-                    const span = getSpanDays(p);
-                    return span >= 5 && span <= 8;
-                });
-                
-                // Filter to rows whose period_end falls within the selected date range
-                const weeklyInPeriod = weeklyRows.filter(p => {
-                    const date = (p.period_end || "").split("T")[0];
-                    return date >= periodStartStr && date <= periodEndStr;
-                });
-                const weeklyBefore = weeklyRows.filter(p => 
-                    (p.period_end || "").split("T")[0] < periodStartStr
-                );
+            // Choose the best set: prefer weekly rows if available
+            const useWeekly = weeklyRows.length > 0;
+            const inPeriod = useWeekly ? weeklyInPeriod : allInPeriod;
+            const beforePeriod = useWeekly ? weeklyBefore : allBefore;
 
-                // Also compute the full set (all spans) as fallback for platforms
-                // that don't have weekly-span rows
-                const allInPeriod = sorted.filter(p => {
-                    const date = (p.period_end || "").split("T")[0];
-                    return date >= periodStartStr && date <= periodEndStr;
-                });
-                const allBefore = sorted.filter(p => 
-                    (p.period_end || "").split("T")[0] < periodStartStr
-                );
+            const validInPeriod = inPeriod.filter(p => p.followers != null && p.followers > 0);
+            const validBefore = beforePeriod.filter(p => p.followers != null && p.followers > 0);
 
-                // Choose the best set: prefer weekly rows if available
-                const useWeekly = weeklyRows.length > 0;
-                const inPeriod = useWeekly ? weeklyInPeriod : allInPeriod;
-                const beforePeriod = useWeekly ? weeklyBefore : allBefore;
-
-                const validInPeriod = inPeriod.filter(p => p.followers != null && p.followers > 0);
-                const validBefore = beforePeriod.filter(p => p.followers != null && p.followers > 0);
-
-                let gain = 0;
-                if (validInPeriod.length > 0) {
-                    // Use the most recent in-period row's new_followers if available
-                    const newest = validInPeriod[validInPeriod.length - 1];
+            let gain = 0;
+            if (validInPeriod.length > 0) {
+                // Use the most recent in-period row's new_followers if available
+                const newest = validInPeriod[validInPeriod.length - 1];
+                if (newest.new_followers != null && newest.new_followers > 0) {
+                    gain = newest.new_followers;
+                } else {
+                    // Fallback: diff between newest in-period and baseline
+                    const baseline = validBefore.length > 0 
+                        ? validBefore[validBefore.length - 1].followers 
+                        : validInPeriod[0].followers;
+                    gain = newest.followers - baseline;
+                }
+            } else if (allInPeriod.length > 0) {
+                // No weekly rows in period; use the most recent rolling row's new_followers
+                const validAll = allInPeriod.filter(p => p.followers != null && p.followers > 0);
+                if (validAll.length > 0) {
+                    const newest = validAll[validAll.length - 1];
                     if (newest.new_followers != null && newest.new_followers > 0) {
                         gain = newest.new_followers;
                     } else {
-                        // Fallback: diff between newest in-period and baseline
-                        const baseline = validBefore.length > 0 
-                            ? validBefore[validBefore.length - 1].followers 
-                            : validInPeriod[0].followers;
+                        const allValidBefore = allBefore.filter(p => p.followers != null && p.followers > 0);
+                        const baseline = allValidBefore.length > 0
+                            ? allValidBefore[allValidBefore.length - 1].followers
+                            : validAll[0].followers;
                         gain = newest.followers - baseline;
                     }
-                } else if (allInPeriod.length > 0) {
-                    // No weekly rows in period; use the most recent rolling row's new_followers
-                    const validAll = allInPeriod.filter(p => p.followers != null && p.followers > 0);
-                    if (validAll.length > 0) {
-                        const newest = validAll[validAll.length - 1];
-                        if (newest.new_followers != null && newest.new_followers > 0) {
-                            gain = newest.new_followers;
-                        } else {
-                            const allValidBefore = allBefore.filter(p => p.followers != null && p.followers > 0);
-                            const baseline = allValidBefore.length > 0
-                                ? allValidBefore[allValidBefore.length - 1].followers
-                                : validAll[0].followers;
-                            gain = newest.followers - baseline;
-                        }
-                    }
                 }
+            }
 
-                platformFollowers[platform] = gain;
+            platformFollowers[platform] = gain;
 
-                // Set baseline followers (start of period)
-                if (validBefore.length > 0) {
-                    platformBaselineFollowers[platform] = validBefore[validBefore.length - 1].followers;
-                } else if (validInPeriod.length > 0) {
-                    platformBaselineFollowers[platform] = validInPeriod[0].followers;
-                }
-                
-                // Set current followers from the latest row (any span) that has a valid count
-                const withFollowers = [...sorted].reverse().find(p => p.followers != null && p.followers > 0);
-                if (withFollowers) {
-                    platformCurrentFollowers[platform] = withFollowers.followers;
-                }
-            });
-        }
+            // Set baseline followers (start of period)
+            if (validBefore.length > 0) {
+                platformBaselineFollowers[platform] = validBefore[validBefore.length - 1].followers;
+            } else if (validInPeriod.length > 0) {
+                platformBaselineFollowers[platform] = validInPeriod[0].followers;
+            }
+            
+            // Set current followers from the latest row (any span) that has a valid count
+            const withFollowers = [...sorted].reverse().find(p => p.followers != null && p.followers > 0);
+            if (withFollowers) {
+                platformCurrentFollowers[platform] = withFollowers.followers;
+            }
+        });
     }
 
     let totalViews = 0;
