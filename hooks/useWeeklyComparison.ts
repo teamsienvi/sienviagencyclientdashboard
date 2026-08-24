@@ -74,25 +74,39 @@ export const useWeeklyComparison = (clientId: string, platform?: PlatformType) =
 
       for (const plat of platforms) {
         // Fetch account metrics for both periods
-        const { data: currentMetrics } = await supabase
+        // Fetch multiple rows and filter for weekly-span periods (5-8 days)
+        // to avoid picking up overlapping 30-day rolling window rows
+        const { data: currentMetricsList } = await supabase
           .from("social_account_metrics")
           .select("*")
           .eq("client_id", clientId)
           .eq("platform", plat)
           .gte("period_start", periods.current.start)
           .lte("period_end", periods.current.end)
-          .order("collected_at", { ascending: false })
-          .limit(1);
+          .order("period_end", { ascending: false });
 
-        const { data: previousMetrics } = await supabase
+        // Prefer weekly-span rows (5-8 day span)
+        const filterWeekly = (rows: any[]) => {
+          const weekly = (rows || []).filter(r => {
+            if (!r.period_start || !r.period_end) return false;
+            const span = Math.round((new Date(r.period_end).getTime() - new Date(r.period_start).getTime()) / 86400000);
+            return span >= 5 && span <= 8;
+          });
+          return weekly.length > 0 ? weekly : (rows || []);
+        };
+
+        const currentMetrics = filterWeekly(currentMetricsList || []).slice(0, 1);
+
+        const { data: previousMetricsList } = await supabase
           .from("social_account_metrics")
           .select("*")
           .eq("client_id", clientId)
           .eq("platform", plat)
           .gte("period_start", periods.previous.start)
           .lte("period_end", periods.previous.end)
-          .order("collected_at", { ascending: false })
-          .limit(1);
+          .order("period_end", { ascending: false });
+
+        const previousMetrics = filterWeekly(previousMetricsList || []).slice(0, 1);
 
         // Fetch content for both periods to calculate views/likes/posts
         const { data: currentContent } = await supabase

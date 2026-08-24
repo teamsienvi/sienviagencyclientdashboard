@@ -146,12 +146,29 @@ export default function DynamicReportShell({ reportId }: { reportId: string }) {
 
       const { data: allMetrics } = await supabase
         .from("social_account_metrics")
-        .select("platform, followers")
+        .select("platform, followers, period_start, period_end")
         .eq("client_id", reportData.client_id)
-        .order("collected_at", { ascending: false });
+        .order("period_end", { ascending: false });
 
       const followerMap: Record<string, number> = {};
-      if (allMetrics) { for (const m of allMetrics) { if (!followerMap[m.platform]) followerMap[m.platform] = m.followers || 0; } }
+      if (allMetrics) {
+        for (const m of allMetrics) {
+          if (followerMap[m.platform]) continue;
+          // Prefer weekly-span rows (5-8 days) over rolling 30-day windows
+          const span = m.period_start && m.period_end
+            ? Math.round((new Date(m.period_end).getTime() - new Date(m.period_start).getTime()) / 86400000)
+            : 0;
+          if (span >= 5 && span <= 8) {
+            followerMap[m.platform] = m.followers || 0;
+          }
+        }
+        // Fallback: fill in any platforms that didn't have weekly rows
+        for (const m of allMetrics) {
+          if (!followerMap[m.platform] && m.followers) {
+            followerMap[m.platform] = m.followers;
+          }
+        }
+      }
 
       let allTopPosts: TopPost[] = topPostsData || [];
       const existingPostUrls = new Set(allTopPosts.map(p => p.link?.toLowerCase()).filter(Boolean));
@@ -205,10 +222,17 @@ export default function DynamicReportShell({ reportId }: { reportId: string }) {
     if (!report?.client_id) return;
     setRefreshingFollowers(true);
     try {
-      const { data: latestMetrics } = await supabase.from("social_account_metrics").select("platform, followers").eq("client_id", report.client_id).order("collected_at", { ascending: false });
+      const { data: latestMetrics } = await supabase.from("social_account_metrics").select("platform, followers, period_start, period_end").eq("client_id", report.client_id).order("period_end", { ascending: false });
       if (latestMetrics && latestMetrics.length > 0) {
         const fm: Record<string, number> = {};
-        latestMetrics.forEach(m => { if (!fm[m.platform]) fm[m.platform] = m.followers || 0; });
+        // Prefer weekly-span rows
+        latestMetrics.forEach(m => {
+          if (fm[m.platform]) return;
+          const span = m.period_start && m.period_end ? Math.round((new Date(m.period_end).getTime() - new Date(m.period_start).getTime()) / 86400000) : 0;
+          if (span >= 5 && span <= 8) fm[m.platform] = m.followers || 0;
+        });
+        // Fallback for platforms without weekly rows
+        latestMetrics.forEach(m => { if (!fm[m.platform] && m.followers) fm[m.platform] = m.followers; });
         setTopPosts(prev => prev.map(p => { const k = p.platform.toLowerCase(); if (p.followers === 0 && fm[k]) return { ...p, followers: fm[k] }; return p; }));
       }
     } catch (err) { console.error("Error refreshing:", err); } finally { setRefreshingFollowers(false); }
