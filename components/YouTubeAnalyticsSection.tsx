@@ -177,20 +177,27 @@ const YouTubeAnalyticsSection = ({ clientId, clientName, channelHandle: propChan
       prevEndStr = format(prevEnd, 'yyyy-MM-dd');
     }
 
-    // Fetch the MOST RECENT account metrics (regardless of period)
-    // This ensures we always get the latest subscriber count
+    // Fetch the MOST RECENT account metrics by period_end (not collected_at)
+    // collected_at reflects when the row was written, which can be out of order
+    // after a backfill sync. period_end reflects the actual reporting period.
     const { data: latestMetrics } = await supabase
       .from("social_account_metrics")
       .select("*")
       .eq("client_id", clientId)
       .eq("platform", "youtube")
-      .order("collected_at", { ascending: false })
+      .order("period_end", { ascending: false })
       .limit(2);
 
-    // Latest record is current, second-latest is previous (for comparison)
+    // Latest period is current, second-latest is previous (for comparison)
     const currentFollowers = latestMetrics?.[0]?.followers || 0;
+    // Use the actual new_followers value from the database (populated by Metricool's
+    // subscribersGained timeline), rather than subtracting adjacent rows which can
+    // be inaccurate when periods overlap or have gaps.
+    const dbNewFollowers = latestMetrics?.[0]?.new_followers;
     const previousFollowers = latestMetrics?.[1]?.followers || latestMetrics?.[0]?.followers || 0;
-    const newFollowers = currentFollowers - previousFollowers;
+    const newFollowers = dbNewFollowers != null && dbNewFollowers > 0
+      ? dbNewFollowers
+      : (currentFollowers - previousFollowers);
     const followerChangePercent = previousFollowers > 0
       ? ((newFollowers / previousFollowers) * 100)
       : 0;

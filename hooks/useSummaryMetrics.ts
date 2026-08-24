@@ -166,11 +166,13 @@ async function computeMetrics(
         });
     } else {
         // Always query social_account_metrics to compute exact horizon follower gains & current follower totals
+        // Use period_start/period_end for ordering and filtering instead of collected_at,
+        // because backfill syncs can write all rows at the same time, making collected_at unreliable.
         const { data: accountMetrics } = await supabase
             .from("social_account_metrics")
-            .select("platform, followers, new_followers, collected_at")
+            .select("platform, followers, new_followers, period_start, period_end, collected_at")
             .eq("client_id", clientId)
-            .order("collected_at", { ascending: true });
+            .order("period_end", { ascending: true });
 
         if (accountMetrics && accountMetrics.length > 0) {
             const byPlatform: Record<string, any[]> = {};
@@ -182,29 +184,37 @@ async function computeMetrics(
             
             Object.entries(byPlatform).forEach(([platform, points]) => {
                 const sorted = [...points].sort((a, b) => 
-                    (a.collected_at || "").localeCompare(b.collected_at || "")
+                    (a.period_end || "").localeCompare(b.period_end || "")
                 );
                 
+                // Filter by period_end date range instead of collected_at
                 const inPeriod = sorted.filter(p => {
-                    const date = (p.collected_at || "").split("T")[0];
+                    const date = (p.period_end || "").split("T")[0];
                     return date >= periodStartStr && date <= periodEndStr;
                 });
-                const beforePeriod = sorted.filter(p => (p.collected_at || "").split("T")[0] < periodStartStr);
+                const beforePeriod = sorted.filter(p => (p.period_end || "").split("T")[0] < periodStartStr);
 
                 const validInPeriod = inPeriod.filter(p => p.followers != null && p.followers > 0);
                 const validBefore = beforePeriod.filter(p => p.followers != null && p.followers > 0);
 
                 let gain = 0;
                 if (validInPeriod.length > 0) {
-                    const newest = validInPeriod[validInPeriod.length - 1].followers;
-                    const baseline = validBefore.length > 0 
-                        ? validBefore[validBefore.length - 1].followers 
-                        : validInPeriod[0].followers;
-                    gain = newest - baseline;
+                    // First try to sum new_followers from in-period rows (most accurate)
+                    const hasNewFollowers = validInPeriod.some(p => p.new_followers != null && p.new_followers > 0);
+                    if (hasNewFollowers) {
+                        gain = validInPeriod.reduce((acc, p) => acc + (p.new_followers || 0), 0);
+                    } else {
+                        // Fallback: diff between newest in-period and baseline
+                        const newest = validInPeriod[validInPeriod.length - 1].followers;
+                        const baseline = validBefore.length > 0 
+                            ? validBefore[validBefore.length - 1].followers 
+                            : validInPeriod[0].followers;
+                        gain = newest - baseline;
+                    }
                 } else if (inPeriod.length > 0) {
                     const dailyMap: Record<string, number> = {};
                     inPeriod.forEach(p => {
-                        const date = (p.collected_at || "").split("T")[0];
+                        const date = (p.period_end || "").split("T")[0];
                         if (p.new_followers != null) dailyMap[date] = p.new_followers;
                     });
                     gain = Object.values(dailyMap).reduce((acc, val) => acc + Number(val), 0);
