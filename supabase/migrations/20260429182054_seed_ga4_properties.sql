@@ -14,7 +14,7 @@ SELECT id, '535204928', 'https://blingybag.com', true FROM public.clients WHERE 
 ON CONFLICT (client_id) DO UPDATE SET ga4_property_id = EXCLUDED.ga4_property_id;
 
 INSERT INTO public.client_ga4_config (client_id, ga4_property_id, website_url, is_active)
-SELECT id, '535211553', 'https://oxisuretech.com', true FROM public.clients WHERE name ILIKE '%OxiSure Tech%'
+SELECT id, '535211553', 'https://oxisuretechsolutions.com', true FROM public.clients WHERE name ILIKE '%OxiSure Tech%'
 ON CONFLICT (client_id) DO UPDATE SET ga4_property_id = EXCLUDED.ga4_property_id;
 
 INSERT INTO public.client_ga4_config (client_id, ga4_property_id, website_url, is_active)
