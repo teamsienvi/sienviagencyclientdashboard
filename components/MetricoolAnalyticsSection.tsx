@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus, Globe, User } from "lucide-react";
+import { RefreshCw, Settings, Users, Eye, Heart, MessageCircle, Share2, TrendingUp, ExternalLink, Save, AlertCircle, Play, Clock, ArrowUp, ArrowDown, Minus, Globe, User, Briefcase, Award, Building2, Layers } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar } from "recharts";
 import { toast } from "sonner";
 import { format, subDays, startOfDay, endOfDay, parseISO, formatDistanceToNow } from "date-fns";
@@ -108,6 +108,11 @@ interface ContentWithMetrics {
 interface DemographicsData {
   gender?: { male: number; female: number; unknown?: number };
   countries?: Array<{ country: string; percentage: number }>;
+  industries?: Array<{ industry: string; percentage: number }>;
+  seniority?: Array<{ seniority: string; percentage: number }>;
+  jobFunctions?: Array<{ function: string; percentage: number }>;
+  companySizes?: Array<{ range: string; percentage: number }>;
+  ageGroups?: Array<{ range: string; percentage: number }>;
 }
 
 const parseMetricoolNumber = (value: unknown): number => {
@@ -327,7 +332,8 @@ export const MetricoolAnalyticsSection = ({
   });
 
   // Automatically fetch live followers for LinkedIn/Pinterest using metricool-social-weekly
-  useQuery({
+  // Automatically fetch live followers for LinkedIn/Pinterest using metricool-social-weekly
+  const { data: linkedinWeeklyResponse } = useQuery({
     queryKey: ["metricool-linkedin-live-followers", clientId, platform, dateRangePreset, customDateRange?.start?.toISOString(), customDateRange?.end?.toISOString()],
     queryFn: async () => {
       if (!config) return null;
@@ -355,56 +361,56 @@ export const MetricoolAnalyticsSection = ({
         },
       });
 
-      if (!error && data?.success && data?.data?.current?.followersDebug?.lastPoint) {
-        const currentFollowers = data.data.current.followersDebug.lastPoint.value;
-        if (currentFollowers !== null && currentFollowers !== undefined) {
-          setLiveFollowers(currentFollowers);
-        }
-
-        // Set timeline if available
-        if (data.data.current.followersTimeline?.length > 0) {
-          const formattedTimeline = data.data.current.followersTimeline.map((point: { dateTime: string; value: number }) => ({
-            date: format(new Date(point.dateTime), "MMM d"),
-            followers: point.value ?? 0,
-          }));
-          setFollowerTimeline(formattedTimeline);
-        }
-
-        // Get previous period followers
-        if (data.data.previous?.followersDebug?.lastPoint) {
-          const prevFollowers = data.data.previous.followersDebug.lastPoint.value;
-          if (prevFollowers !== null && prevFollowers !== undefined) {
-            setPrevMetrics(prev => ({
-              ...prev,
-              followers: prevFollowers,
-              engagement_rate: prev?.engagement_rate ?? null,
-              total_content: prev?.total_content ?? null,
-              total_views: prev?.total_views ?? null,
-              total_likes: prev?.total_likes ?? null,
-            }));
-          }
-        } else if (data.data.current?.followersDebug?.firstPoint) {
-          // Fallback: use firstPoint of current period when previous period has no data
-          const periodStartFollowers = data.data.current.followersDebug.firstPoint.value;
-          if (periodStartFollowers !== null && periodStartFollowers !== undefined) {
-            setPrevMetrics(prev => ({
-              ...prev,
-              followers: periodStartFollowers,
-              engagement_rate: prev?.engagement_rate ?? null,
-              total_content: prev?.total_content ?? null,
-              total_views: prev?.total_views ?? null,
-              total_likes: prev?.total_likes ?? null,
-            }));
-          }
-        }
-      }
-
       return data;
     },
     enabled: !!config && (platform === "linkedin" || platform === "pinterest") && isActive,
     staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
     gcTime: 7 * 24 * 60 * 60 * 1000,
   });
+
+  useEffect(() => {
+    if (linkedinWeeklyResponse?.success && linkedinWeeklyResponse?.data?.current) {
+      const current = linkedinWeeklyResponse.data.current;
+      const currentFollowers = current.followersDebug?.lastPoint?.value ??
+        (current.followersTimeline?.length > 0
+          ? current.followersTimeline[current.followersTimeline.length - 1]?.value
+          : null);
+
+      if (currentFollowers !== null && currentFollowers !== undefined) {
+        setLiveFollowers(currentFollowers);
+      }
+
+      if (current.followersTimeline?.length > 0) {
+        const formattedTimeline = current.followersTimeline.map((point: { dateTime: string; value: number }) => ({
+          date: format(new Date(point.dateTime), "MMM d"),
+          followers: point.value ?? 0,
+        }));
+        setFollowerTimeline(formattedTimeline);
+      }
+
+      const previous = linkedinWeeklyResponse.data.previous;
+      if (previous?.followersDebug?.lastPoint?.value !== undefined) {
+        const prevFollowers = previous.followersDebug.lastPoint.value;
+        setPrevMetrics(prev => ({
+          ...prev,
+          followers: prevFollowers,
+          engagement_rate: prev?.engagement_rate ?? null,
+          total_content: prev?.total_content ?? null,
+          total_views: prev?.total_views ?? null,
+          total_likes: prev?.total_likes ?? null,
+        }));
+      } else if (current?.followersDebug?.firstPoint?.value !== undefined) {
+        setPrevMetrics(prev => ({
+          ...prev,
+          followers: current.followersDebug.firstPoint.value,
+          engagement_rate: prev?.engagement_rate ?? null,
+          total_content: prev?.total_content ?? null,
+          total_views: prev?.total_views ?? null,
+          total_likes: prev?.total_likes ?? null,
+        }));
+      }
+    }
+  }, [linkedinWeeklyResponse]);
 
   // Fetch latest account metrics with date range
   const { data: accountMetrics, isLoading: metricsLoading, isFetching: isFetchingAccount, refetch: refetchMetrics } = useQuery({
@@ -721,7 +727,7 @@ export const MetricoolAnalyticsSection = ({
         };
       }
 
-      if (data.countries && Array.isArray(data.countries)) {
+      if (data.countries) {
         // Translate country codes to full names for display
         const countryCodeToName: Record<string, string> = {
           US: "United States", GB: "United Kingdom", CA: "Canada", AU: "Australia",
@@ -739,15 +745,41 @@ export const MetricoolAnalyticsSection = ({
           MA: "Morocco", JO: "Jordan", LB: "Lebanon", IQ: "Iraq", QA: "Qatar",
           KW: "Kuwait", BH: "Bahrain", OM: "Oman", OTHERS: "Others",
         };
-        result.countries = (data.countries as Array<{ country: string; percentage: number }>).map(c => ({
-          country: countryCodeToName[c.country] || c.country,
-          percentage: c.percentage,
-        }));
+
+        if (Array.isArray(data.countries)) {
+          result.countries = (data.countries as Array<{ country: string; percentage: number }>).map(c => ({
+            country: countryCodeToName[c.country] || c.country,
+            percentage: c.percentage,
+          }));
+        } else if (typeof data.countries === "object") {
+          const raw = data.countries as any;
+          if (Array.isArray(raw.countries)) {
+            result.countries = raw.countries.map((c: any) => ({
+              country: countryCodeToName[c.country] || c.country,
+              percentage: c.percentage,
+            }));
+          }
+          if (Array.isArray(raw.industries)) {
+            result.industries = raw.industries;
+          }
+          if (Array.isArray(raw.seniority)) {
+            result.seniority = raw.seniority;
+          }
+          if (Array.isArray(raw.job_functions || raw.jobFunctions)) {
+            result.jobFunctions = raw.job_functions || raw.jobFunctions;
+          }
+          if (Array.isArray(raw.company_sizes || raw.companySizes)) {
+            result.companySizes = raw.company_sizes || raw.companySizes;
+          }
+          if (Array.isArray(raw.age_groups || raw.ageGroups)) {
+            result.ageGroups = raw.age_groups || raw.ageGroups;
+          }
+        }
       }
 
       return result;
     },
-    enabled: !!config && platform === "tiktok" && isActive,
+    enabled: !!config && ["tiktok", "instagram", "facebook", "linkedin"].includes(platform) && isActive,
     staleTime: FRESHNESS_POLICIES.social.staleThresholdMs,
     gcTime: 7 * 24 * 60 * 60 * 1000,
   });
@@ -913,6 +945,21 @@ export const MetricoolAnalyticsSection = ({
               clientId, // enable persistence
             },
           })
+          : platform === "linkedin"
+          ? supabase.functions.invoke("metricool-json", {
+            body: {
+              path: "/api/v2/analytics/timelines",
+              params: {
+                from: fromUTC,
+                to: toUTC,
+                metric: "followers",
+                network: "linkedin",
+                subject: "account",
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+              },
+            },
+          })
           : supabase.functions.invoke("metricool-aggregation", {
             body: {
               from: fromUTC,
@@ -928,7 +975,6 @@ export const MetricoolAnalyticsSection = ({
       // Fetch followers for previous period (for WoW comparison)
       // prevPeriodStart, prevPeriodEnd, prevFromUTC, prevToUTC already declared above
 
-
       const prevFollowersPromise =
         platform === "tiktok"
           ? supabase.functions.invoke("metricool-tiktok-followers", {
@@ -939,6 +985,21 @@ export const MetricoolAnalyticsSection = ({
               userId: config.user_id,
               blogId: config.blog_id,
               clientId, // enable persistence
+            },
+          })
+          : platform === "linkedin"
+          ? supabase.functions.invoke("metricool-json", {
+            body: {
+              path: "/api/v2/analytics/timelines",
+              params: {
+                from: prevFromUTC,
+                to: prevToUTC,
+                metric: "followers",
+                network: "linkedin",
+                subject: "account",
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+              },
             },
           })
           : supabase.functions.invoke("metricool-aggregation", {
@@ -954,7 +1015,11 @@ export const MetricoolAnalyticsSection = ({
           });
 
       // Fetch demographics data using the distribution endpoint
-      const genderDemographicsPromise = platform === "tiktok"
+      const isTikTokOrIG = platform === "tiktok" || platform === "instagram";
+      const isFB = platform === "facebook";
+      const isLI = platform === "linkedin";
+
+      const genderDemographicsPromise = isTikTokOrIG
         ? supabase.functions.invoke("metricool-distribution", {
             body: {
               metric: "gender",
@@ -970,10 +1035,11 @@ export const MetricoolAnalyticsSection = ({
         : Promise.resolve({ data: null, error: null });
 
       // Fetch country demographics
-      const countryDemographicsPromise = platform === "tiktok"
+      const countryMetric = isFB ? "page_follows_country" : "country";
+      const countryDemographicsPromise = (isTikTokOrIG || isFB || isLI)
         ? supabase.functions.invoke("metricool-distribution", {
             body: {
-              metric: "country",
+              metric: countryMetric,
               network: platform,
               subject: "account",
               from: fromUTC,
@@ -1059,9 +1125,11 @@ export const MetricoolAnalyticsSection = ({
             persistedFollowers = values[values.length - 1]?.value ?? null;
           }
         } else if ((platform === "linkedin" || platform === "pinterest") && followersData?.success) {
-          // LinkedIn aggregation format: { success: true, data: number | { value: number } | { total: number } }
           const aggData = followersData.data;
-          if (typeof aggData === 'number') {
+          const timelineValues = aggData?.data?.[0]?.values || (Array.isArray(aggData) ? aggData : null);
+          if (timelineValues && Array.isArray(timelineValues) && timelineValues.length > 0) {
+            persistedFollowers = timelineValues[timelineValues.length - 1]?.value ?? null;
+          } else if (typeof aggData === 'number') {
             persistedFollowers = aggData;
           } else if (aggData?.value !== undefined) {
             persistedFollowers = aggData.value;
@@ -1086,7 +1154,10 @@ export const MetricoolAnalyticsSection = ({
           }
         } else if ((platform === "linkedin" || platform === "pinterest") && prevFollowersData?.success) {
           const aggData = prevFollowersData.data;
-          if (typeof aggData === 'number') {
+          const timelineValues = aggData?.data?.[0]?.values || (Array.isArray(aggData) ? aggData : null);
+          if (timelineValues && Array.isArray(timelineValues) && timelineValues.length > 0) {
+            persistedPrevFollowers = timelineValues[timelineValues.length - 1]?.value ?? null;
+          } else if (typeof aggData === 'number') {
             persistedPrevFollowers = aggData;
           } else if (aggData?.value !== undefined) {
             persistedPrevFollowers = aggData.value;
@@ -1734,8 +1805,436 @@ export const MetricoolAnalyticsSection = ({
         </Card>
       )}
 
-      {/* Account Metrics Overview - 6 cards like other platforms */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* Demographics & Professional Breakdown Section */}
+      {["tiktok", "instagram", "facebook", "linkedin"].includes(platform) && currentIsBusiness && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b pb-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold tracking-tight">Demographics</h3>
+              <Badge variant="secondary" className="text-xs font-normal">
+                {platform === "linkedin"
+                  ? "Audience & Professional Breakdown"
+                  : "Audience Demographics"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground hidden sm:block">
+              {platform === "linkedin"
+                ? "Geographic, industry, and role distribution of your network"
+                : "Audience gender, geography, and age distribution"}
+            </p>
+          </div>
+
+          {/* Main Top Row: Gender & Countries / Primary Demographics */}
+          <div className={`grid grid-cols-1 ${platform === "tiktok" || platform === "instagram" ? "md:grid-cols-2" : (platform === "linkedin" && demographics?.industries && demographics.industries.length > 0 ? "md:grid-cols-2" : "md:grid-cols-1")} gap-4`}>
+            {/* Gender Distribution (TikTok & Instagram) */}
+            {(platform === "tiktok" || platform === "instagram") && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Gender Distribution
+                  </CardTitle>
+                  <CardDescription>
+                    Follower breakdown by gender
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {demographics?.gender && (demographics.gender.male > 0 || demographics.gender.female > 0) ? (
+                    <div className="flex items-center justify-center gap-8">
+                      <div className="h-[180px] w-[180px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: "Male", value: demographics.gender.male, fill: "#3b82f6" },
+                                { name: "Female", value: demographics.gender.female, fill: "#ec4899" },
+                                ...(demographics.gender.unknown && demographics.gender.unknown > 0
+                                  ? [{ name: "Unknown", value: demographics.gender.unknown, fill: "#94a3b8" }]
+                                  : []),
+                              ]}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={2}
+                              dataKey="value"
+                            />
+                            <Tooltip
+                              formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
+                              contentStyle={{
+                                backgroundColor: 'hsl(var(--background))',
+                                border: '1px solid hsl(var(--border))',
+                                borderRadius: '8px',
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+                          <span className="text-sm">Male: {demographics.gender.male.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#ec4899" }} />
+                          <span className="text-sm">Female: {demographics.gender.female.toFixed(1)}%</span>
+                        </div>
+                        {demographics.gender.unknown && demographics.gender.unknown > 0 && (
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#94a3b8" }} />
+                            <span className="text-sm">Unknown: {demographics.gender.unknown.toFixed(1)}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-8">
+                      {platform === "tiktok" 
+                        ? "No gender data available. TikTok requires at least 100 followers to share demographic insights."
+                        : "No gender data available for this period. Requires an active Professional/Creator profile with sufficient audience insights."}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Country Distribution */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  Top Follower Countries
+                </CardTitle>
+                <CardDescription>
+                  {platform === "facebook" 
+                    ? "Follower geographical distribution (Meta deprecated Page-level gender/age metrics in late 2024)"
+                    : platform === "linkedin"
+                    ? "Follower breakdown by geographic location"
+                    : "Follower breakdown by location"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {demographics?.countries && demographics.countries.length > 0 ? (
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={demographics.countries.slice(0, 5)}
+                        layout="vertical"
+                        margin={{ left: 60, right: 20 }}
+                      >
+                        <XAxis type="number" tickFormatter={(v) => `${v}%`} />
+                        <YAxis
+                          dataKey="country"
+                          type="category"
+                          tick={{ fontSize: 12 }}
+                          width={65}
+                        />
+                        <Tooltip
+                          content={({ active, payload, label }: any) => {
+                            if (active && payload && payload.length) {
+                              const isOthers = ["others", "other", "unknown"].includes((label || "").toLowerCase());
+                              return (
+                                <div className="bg-background border rounded-lg p-3 shadow-md max-w-[250px] text-left">
+                                  <p className="font-medium mb-1 text-sm">{label}</p>
+                                  <p className="text-sm">
+                                    <span className="text-muted-foreground mr-1">Followers:</span>
+                                    {Number(payload[0].value).toFixed(1)}%
+                                  </p>
+                                  {isOthers && (
+                                    <div className="mt-3 text-xs text-muted-foreground pt-2 border-t space-y-2 leading-relaxed">
+                                      <p>In Metricool, "Others" represents the combined total of followers from all countries not explicitly listed in your top rankings.</p>
+                                      <p><strong>Minority Markets:</strong> It bundles every country that has too small a percentage to earn its own slice.</p>
+                                      <p><strong>Data Cleanup:</strong> It prevents the chart from becoming cluttered with dozens of tiny segments.</p>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                        <Bar
+                          dataKey="percentage"
+                          fill="#10b981"
+                          radius={[0, 4, 4, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {platform === "tiktok"
+                      ? "No country data available. TikTok requires at least 100 followers to share geographical insights."
+                      : "No country demographic data available for this period."}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* LinkedIn Industry Breakdown */}
+            {platform === "linkedin" && demographics?.industries && demographics.industries.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Briefcase className="h-5 w-5 text-indigo-500" />
+                    Top Industries
+                  </CardTitle>
+                  <CardDescription>
+                    Follower distribution across industry sectors
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={demographics.industries.slice(0, 5)}
+                        layout="vertical"
+                        margin={{ left: 80, right: 20 }}
+                      >
+                        <XAxis type="number" tickFormatter={(v) => `${v}%`} />
+                        <YAxis
+                          dataKey="industry"
+                          type="category"
+                          tick={{ fontSize: 11 }}
+                          width={110}
+                        />
+                        <Tooltip
+                          formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
+                          contentStyle={{
+                            backgroundColor: 'hsl(var(--background))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                          }}
+                        />
+                        <Bar
+                          dataKey="percentage"
+                          fill="#6366f1"
+                          radius={[0, 4, 4, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* LinkedIn Extra Professional Dimensions (Job Functions & Seniority) */}
+          {platform === "linkedin" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Seniority Levels */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Award className="h-4 w-4 text-sky-500" />
+                    Seniority Levels
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Experience tier breakdown
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {demographics?.seniority && demographics.seniority.length > 0 ? (
+                    <div className="h-[180px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={demographics.seniority.slice(0, 5)}
+                          layout="vertical"
+                          margin={{ left: 60, right: 15 }}
+                        >
+                          <XAxis type="number" tickFormatter={(v) => `${v}%`} />
+                          <YAxis
+                            dataKey="seniority"
+                            type="category"
+                            tick={{ fontSize: 11 }}
+                            width={65}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--background))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px',
+                            }}
+                          />
+                          <Bar
+                            dataKey="percentage"
+                            fill="#0ea5e9"
+                            radius={[0, 4, 4, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      No seniority data available.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Job Functions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-purple-500" />
+                    Job Functions
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Professional roles & departments
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {demographics?.jobFunctions && demographics.jobFunctions.length > 0 ? (
+                    <div className="h-[180px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={demographics.jobFunctions.slice(0, 5)}
+                          layout="vertical"
+                          margin={{ left: 80, right: 15 }}
+                        >
+                          <XAxis type="number" tickFormatter={(v) => `${v}%`} />
+                          <YAxis
+                            dataKey="function"
+                            type="category"
+                            tick={{ fontSize: 11 }}
+                            width={95}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--background))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px',
+                            }}
+                          />
+                          <Bar
+                            dataKey="percentage"
+                            fill="#8b5cf6"
+                            radius={[0, 4, 4, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      No job function data available.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Company Size */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-amber-500" />
+                    Company Size
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Organization staff count
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {demographics?.companySizes && demographics.companySizes.length > 0 ? (
+                    <div className="h-[180px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={demographics.companySizes.slice(0, 5)}
+                          layout="vertical"
+                          margin={{ left: 80, right: 15 }}
+                        >
+                          <XAxis type="number" tickFormatter={(v) => `${v}%`} />
+                          <YAxis
+                            dataKey="range"
+                            type="category"
+                            tick={{ fontSize: 10 }}
+                            width={95}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
+                            contentStyle={{
+                              backgroundColor: 'hsl(var(--background))',
+                              border: '1px solid hsl(var(--border))',
+                              borderRadius: '8px',
+                            }}
+                          />
+                          <Bar
+                            dataKey="percentage"
+                            fill="#f59e0b"
+                            radius={[0, 4, 4, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-6">
+                      No company size data available.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Age Group Distribution (TikTok & Instagram if available) */}
+          {(platform === "tiktok" || platform === "instagram") && demographics?.ageGroups && demographics.ageGroups.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-pink-500" />
+                  Age Distribution
+                </CardTitle>
+                <CardDescription>
+                  Follower audience breakdown by age group
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[200px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={demographics.ageGroups}
+                      margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
+                    >
+                      <XAxis dataKey="range" />
+                      <YAxis tickFormatter={(v) => `${v}%`} />
+                      <Tooltip
+                        formatter={(value: number) => [`${value.toFixed(1)}%`, "Followers"]}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--background))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                        }}
+                      />
+                      <Bar
+                        dataKey="percentage"
+                        fill="#ec4899"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Account Metrics Overview Category */}
+      <div className="space-y-4 pt-2">
+        <div className="flex items-center justify-between border-b pb-2">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold tracking-tight">Performance Overview</h3>
+            <Badge variant="secondary" className="text-xs font-normal">
+              Key Metrics
+            </Badge>
+          </div>
+        </div>
+
+        {/* Account Metrics Overview - 6 cards like other platforms */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -1924,150 +2423,7 @@ export const MetricoolAnalyticsSection = ({
           </CardContent>
         </Card>
       </div>
-
-
-
-      {/* Demographics Section - TikTok */}
-      {platform === "tiktok" && currentIsBusiness && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Gender Distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Gender Distribution
-              </CardTitle>
-              <CardDescription>
-                Follower breakdown by gender
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {demographics?.gender && (demographics.gender.male > 0 || demographics.gender.female > 0) ? (
-                <div className="flex items-center justify-center gap-8">
-                  <div className="h-[180px] w-[180px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "Male", value: demographics.gender.male, fill: "#3b82f6" },
-                            { name: "Female", value: demographics.gender.female, fill: "#ec4899" },
-                            ...(demographics.gender.unknown && demographics.gender.unknown > 0
-                              ? [{ name: "Unknown", value: demographics.gender.unknown, fill: "#94a3b8" }]
-                              : []),
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
-                          paddingAngle={2}
-                          dataKey="value"
-                        >
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number) => [`${value.toFixed(1)}%`, ""]}
-                          contentStyle={{
-                            backgroundColor: 'hsl(var(--background))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
-                      <span className="text-sm">Male: {demographics.gender.male.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#ec4899" }} />
-                      <span className="text-sm">Female: {demographics.gender.female.toFixed(1)}%</span>
-                    </div>
-                    {demographics.gender.unknown && demographics.gender.unknown > 0 && (
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: "#94a3b8" }} />
-                        <span className="text-sm">Unknown: {demographics.gender.unknown.toFixed(1)}%</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No gender data available. TikTok requires at least 100 followers to share demographic insights.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Country Distribution */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Globe className="h-5 w-5" />
-                Top Countries
-              </CardTitle>
-              <CardDescription>
-                Follower breakdown by location
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {demographics?.countries && demographics.countries.length > 0 ? (
-                <div className="h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={demographics.countries.slice(0, 5)}
-                      layout="vertical"
-                      margin={{ left: 60, right: 20 }}
-                    >
-                      <XAxis type="number" tickFormatter={(v) => `${v}%`} />
-                      <YAxis
-                        dataKey="country"
-                        type="category"
-                        tick={{ fontSize: 12 }}
-                        width={55}
-                      />
-                      <Tooltip
-                        content={({ active, payload, label }: any) => {
-                          if (active && payload && payload.length) {
-                            const isOthers = ["others", "other", "unknown"].includes((label || "").toLowerCase());
-                            return (
-                              <div className="bg-background border rounded-lg p-3 shadow-md max-w-[250px] text-left">
-                                <p className="font-medium mb-1 text-sm">{label}</p>
-                                <p className="text-sm">
-                                  <span className="text-muted-foreground mr-1">Followers:</span>
-                                  {Number(payload[0].value).toFixed(1)}%
-                                </p>
-                                {isOthers && (
-                                  <div className="mt-3 text-xs text-muted-foreground pt-2 border-t space-y-2 leading-relaxed">
-                                    <p>In Metricool, "Others" represents the combined total of followers from all countries not explicitly listed in your top rankings.</p>
-                                    <p><strong>Minority Markets:</strong> It bundles every country that has too small a percentage to earn its own slice.</p>
-                                    <p><strong>Data Cleanup:</strong> It prevents the chart from becoming cluttered with dozens of tiny segments.</p>
-                                    <p><strong>Privacy:</strong> It includes users whose locations couldn't be verified by TikTok.</p>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        }}
-                      />
-                      <Bar
-                        dataKey="percentage"
-                        fill="#10b981"
-                        radius={[0, 4, 4, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No country data available. TikTok requires at least 100 followers to share geographical insights.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      </div>
 
       {/* Content Table */}
       <Card>

@@ -167,8 +167,80 @@ serve(async (req) => {
         );
       }
 
-      const data = await response.json();
-      console.log("Metricool LinkedIn distribution response:", JSON.stringify(data));
+      // Persist demographics for supported networks (LinkedIn)
+      if (clientId) {
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const supabase = createClient(supabaseUrl, supabaseKey);
+
+          const periodStart = toDateOnly(from);
+          const periodEnd = toDateOnly(to);
+          const parsedData = parseCountries(data);
+
+          if (parsedData && parsedData.length > 0) {
+            const { data: existing } = await supabase
+              .from("social_account_demographics")
+              .select("gender_male, gender_female, gender_unknown, countries")
+              .eq("client_id", clientId)
+              .eq("platform", "linkedin")
+              .eq("period_start", periodStart)
+              .eq("period_end", periodEnd)
+              .limit(1)
+              .maybeSingle();
+
+            let currentPayload: any = {};
+            if (existing?.countries) {
+              if (typeof existing.countries === "object" && !Array.isArray(existing.countries)) {
+                currentPayload = { ...existing.countries };
+              } else if (Array.isArray(existing.countries)) {
+                currentPayload = { countries: existing.countries };
+              }
+            }
+
+            if (metric === "country" || linkedInSubject === "followerCountsByGeoCountry") {
+              currentPayload.countries = parsedData;
+            } else if (metric === "industry" || linkedInSubject === "followerCountsByIndustry") {
+              currentPayload.industries = parsedData.map((item: any) => ({ industry: item.country, percentage: item.percentage }));
+            } else if (metric === "seniority" || linkedInSubject === "followerCountsBySeniority") {
+              currentPayload.seniority = parsedData.map((item: any) => ({ seniority: item.country, percentage: item.percentage }));
+            } else if (metric === "function" || linkedInSubject === "followerCountsByFunction") {
+              currentPayload.job_functions = parsedData.map((item: any) => ({ function: item.country, percentage: item.percentage }));
+            } else if (metric === "staff_count" || linkedInSubject === "followerCountsByStaffCountRange") {
+              currentPayload.company_sizes = parsedData.map((item: any) => {
+                let range = item.country;
+                if (range === "+10000") range = "10,001+ employees";
+                else if (range === "1") range = "1 employee (Self-employed)";
+                else if (["11-50", "51-200", "2-10", "201-500", "501-1000", "1001-5000", "5001-10000"].includes(range)) range = `${range} employees`;
+                return { range, percentage: item.percentage };
+              });
+            }
+
+            await supabase
+              .from("social_account_demographics")
+              .delete()
+              .eq("client_id", clientId)
+              .eq("platform", "linkedin")
+              .eq("period_start", periodStart)
+              .eq("period_end", periodEnd);
+
+            await supabase.from("social_account_demographics").insert({
+              client_id: clientId,
+              platform: "linkedin",
+              period_start: periodStart,
+              period_end: periodEnd,
+              gender_male: existing?.gender_male ?? null,
+              gender_female: existing?.gender_female ?? null,
+              gender_unknown: existing?.gender_unknown ?? null,
+              countries: currentPayload,
+              collected_at: new Date().toISOString(),
+            });
+            console.log(`Persisted LinkedIn ${metric} demographics for period`, periodStart, periodEnd);
+          }
+        } catch (e) {
+          console.error("Error persisting LinkedIn demographics:", e);
+        }
+      }
 
       return new Response(JSON.stringify({ success: true, data }), {
         status: 200,
@@ -176,7 +248,7 @@ serve(async (req) => {
       });
     }
 
-    // For TikTok and other platforms, use original logic
+    // For TikTok, Facebook, Instagram and other platforms, use original logic
     const url = new URL(`${METRICOOL_BASE_URL}/api/v2/analytics/distribution`);
     url.searchParams.set("metric", metric);
     url.searchParams.set("network", network);
@@ -215,9 +287,8 @@ serve(async (req) => {
     const data = await response.json();
     console.log("Metricool distribution response:", JSON.stringify(data));
 
-    // Optional: persist TikTok demographics (manual sync)
-    // We persist only for TikTok because other networks have different schemas/constraints.
-    if (clientId && network === "tiktok" && (metric === "gender" || metric === "country")) {
+    // Optional: persist demographics across supported networks (manual sync)
+    if (clientId && ["tiktok", "instagram", "facebook", "linkedin"].includes(network)) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -226,61 +297,65 @@ serve(async (req) => {
         const periodStart = toDateOnly(from);
         const periodEnd = toDateOnly(to);
 
-        const { data: existing } = await supabase
-          .from("social_account_demographics")
-          .select("gender_male, gender_female, gender_unknown, countries")
-          .eq("client_id", clientId)
-          .eq("platform", "tiktok")
-          .eq("period_start", periodStart)
-          .eq("period_end", periodEnd)
-          .limit(1)
-          .maybeSingle();
+        const isCountryMetric = ["country", "page_follows_country", "followersByCountry"].includes(metric);
+        const isGenderMetric = metric === "gender";
 
-        const existingCountries = (existing?.countries ?? null) as any;
-
-        const parsedGender = metric === "gender" ? parseGender(data) : null;
-        const parsedCountries = metric === "country" ? parseCountries(data) : null;
-
-        const merged = {
-          client_id: clientId,
-          platform: "tiktok",
-          period_start: periodStart,
-          period_end: periodEnd,
-          gender_male: parsedGender ? parsedGender.male : (existing?.gender_male ?? null),
-          gender_female: parsedGender ? parsedGender.female : (existing?.gender_female ?? null),
-          gender_unknown: parsedGender ? parsedGender.unknown : (existing?.gender_unknown ?? null),
-          countries: parsedCountries ? (parsedCountries.length > 0 ? parsedCountries : null) : (existingCountries ?? null),
-          collected_at: new Date().toISOString(),
-        };
-
-        const hasAnything =
-          merged.gender_male !== null ||
-          merged.gender_female !== null ||
-          merged.gender_unknown !== null ||
-          (Array.isArray(merged.countries) && merged.countries.length > 0);
-
-        if (hasAnything) {
-          // delete-then-insert avoids unique constraint mismatch issues across environments
-          await supabase
+        if (isCountryMetric || isGenderMetric) {
+          const { data: existing } = await supabase
             .from("social_account_demographics")
-            .delete()
+            .select("gender_male, gender_female, gender_unknown, countries")
             .eq("client_id", clientId)
-            .eq("platform", "tiktok")
+            .eq("platform", network)
             .eq("period_start", periodStart)
-            .eq("period_end", periodEnd);
+            .eq("period_end", periodEnd)
+            .limit(1)
+            .maybeSingle();
 
-          const { error: insertError } = await supabase.from("social_account_demographics").insert(merged);
+          const existingCountries = (existing?.countries ?? null) as any;
 
-          if (insertError) {
-            console.error("Failed to persist TikTok demographics:", insertError);
+          const parsedGender = isGenderMetric ? parseGender(data) : null;
+          const parsedCountries = isCountryMetric ? parseCountries(data) : null;
+
+          const merged = {
+            client_id: clientId,
+            platform: network,
+            period_start: periodStart,
+            period_end: periodEnd,
+            gender_male: parsedGender ? parsedGender.male : (existing?.gender_male ?? null),
+            gender_female: parsedGender ? parsedGender.female : (existing?.gender_female ?? null),
+            gender_unknown: parsedGender ? parsedGender.unknown : (existing?.gender_unknown ?? null),
+            countries: parsedCountries ? (parsedCountries.length > 0 ? parsedCountries : null) : (existingCountries ?? null),
+            collected_at: new Date().toISOString(),
+          };
+
+          const hasAnything =
+            merged.gender_male !== null ||
+            merged.gender_female !== null ||
+            merged.gender_unknown !== null ||
+            (Array.isArray(merged.countries) && merged.countries.length > 0);
+
+          if (hasAnything) {
+            await supabase
+              .from("social_account_demographics")
+              .delete()
+              .eq("client_id", clientId)
+              .eq("platform", network)
+              .eq("period_start", periodStart)
+              .eq("period_end", periodEnd);
+
+            const { error: insertError } = await supabase.from("social_account_demographics").insert(merged);
+
+            if (insertError) {
+              console.error(`Failed to persist ${network} demographics:`, insertError);
+            } else {
+              console.log(`Persisted ${network} demographics for period`, periodStart, periodEnd);
+            }
           } else {
-            console.log("Persisted TikTok demographics for period", periodStart, periodEnd);
+            console.log("No demographics values to persist for", network, metric);
           }
-        } else {
-          console.log("No demographics values to persist for", metric);
         }
       } catch (e) {
-        console.error("Error persisting TikTok demographics:", e);
+        console.error(`Error persisting ${network} demographics:`, e);
       }
     }
 

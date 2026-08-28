@@ -49,14 +49,24 @@ if (authError) {
 }
 console.log("✓ Authenticated successfully.");
 
-// ── All clients (matched from tmp_bulk_sync.mjs + DB) ─────────────
-const ALL_CLIENTS = [
+// ── All active clients (queried dynamically from DB) ───────────────
+const { data: dbClients, error: clientsError } = await supabase
+  .from('clients')
+  .select('id, name')
+  .order('name');
+
+if (clientsError || !dbClients || dbClients.length === 0) {
+  console.warn("⚠ Warning fetching clients from DB, falling back to static list:", clientsError?.message);
+}
+
+const ALL_CLIENTS = (dbClients && dbClients.length > 0) ? dbClients : [
   { id: 'cf4bf738-9cc2-421b-bdc0-7344b88b0dad', name: 'Ban Batu'                 },
   { id: '79099b9d-0281-4a95-8076-dcff0fd128a4', name: 'BlingyBag'                },
   { id: '973e8407-bf7f-45ca-bd73-a26acc3ad9e3', name: 'BSUE Brow & Lash'         },
   { id: '18614cdc-35fb-4c4f-abb4-f26842574b0f', name: 'CheerCPT'                 },
   { id: 'edfc083a-77f7-4c83-b6e0-a32bfc0553a1', name: 'Cissie Pryor Presents'    },
   { id: '95791e88-87cd-4621-af7e-df46f5ad93ac', name: 'Father Figure Formula'    },
+  { id: '6c14388a-b7da-48fe-a8e4-57172f1f862a', name: 'HAIRtamin'                },
   { id: '0771b432-d720-4d0f-a964-ee6c7edcd116', name: 'Hwabelle'                 },
   { id: '3177cefc-46cc-4790-8a20-65b160103077', name: 'Luxxe Auto Accessories'  },
   { id: '1a1edf9f-2ebe-4d40-a904-7295d5033401', name: 'OxiSure Tech'             },
@@ -185,6 +195,18 @@ async function phase1BulkSyncAll() {
     }
   } else {
     console.warn('  ⚠ bulk-sync-all returned unexpected response:', JSON.stringify(data).slice(0, 500));
+  }
+
+  console.log('\n  ── sync-meta-agency (Meta OAuth pages & Instagram accounts) ──');
+  const resMeta = await callFn('sync-meta-agency', {}, 'sync-meta-agency', true);
+  if (resMeta.ok) {
+    console.log(`  ✓ sync-meta-agency complete:`, resMeta.data?.success ? 'Success' : JSON.stringify(resMeta.data).slice(0, 200));
+  }
+
+  console.log('\n  ── sync-youtube-bulk (YouTube Channel metrics) ──');
+  const resYt = await callFn('sync-youtube-bulk', {}, 'sync-youtube-bulk', true);
+  if (resYt.ok) {
+    console.log(`  ✓ sync-youtube-bulk complete:`, resYt.data?.success ? 'Success' : JSON.stringify(resYt.data).slice(0, 200));
   }
 
   await sleep(3000); // Let DB writes settle

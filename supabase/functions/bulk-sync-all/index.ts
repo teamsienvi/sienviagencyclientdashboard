@@ -496,8 +496,8 @@ serve(async (req) => {
           }
         }
 
-        // 5. Fetch and persist demographics (gender, country) for TikTok
-        if (platform === "tiktok") {
+        // 5. Fetch and persist demographics across supported platforms (TikTok, Facebook, LinkedIn, Instagram)
+        if (["tiktok", "facebook", "linkedin", "instagram"].includes(platform)) {
           try {
             // Demographics need 30-day window
             const thirtyDaysAgo = new Date();
@@ -505,8 +505,6 @@ serve(async (req) => {
             const demoFrom = formatDate(thirtyDaysAgo);
             const demoTo = formatDate(new Date());
 
-            // Use /api/v2/analytics/distribution endpoint (not aggregation)
-            // This matches the working metricool-distribution edge function
             const demoParams = buildParams(userId, blogId, platform, demoFrom, demoTo);
 
             let genderMale: number | null = null;
@@ -514,72 +512,160 @@ serve(async (req) => {
             let genderUnknown: number | null = null;
             let countries: any[] = [];
 
-            // Fetch gender demographics via distribution endpoint
-            try {
-              const genderData = await fetchMetricool("/api/v2/analytics/distribution", {
-                ...demoParams,
-                metric: "gender",
-                subject: "account",
-              });
+            // 5a. Fetch gender demographics for TikTok and Instagram
+            if (platform === "tiktok" || platform === "instagram") {
+              try {
+                const genderData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  metric: "gender",
+                  subject: "account",
+                });
 
-              if (genderData && Array.isArray(genderData.data)) {
-                for (const item of genderData.data) {
-                  const label = String(item.label ?? item.name ?? item.key ?? item.id ?? "").toLowerCase();
-                  const value = item.percentage ?? item.value ?? item.count ?? 0;
+                if (genderData && Array.isArray(genderData.data)) {
+                  for (const item of genderData.data) {
+                    const label = String(item.label ?? item.name ?? item.key ?? item.id ?? "").toLowerCase();
+                    const value = item.percentage ?? item.value ?? item.count ?? 0;
 
-                  if (label === "m" || (label.includes("male") && !label.includes("female"))) {
-                    genderMale = value;
-                  } else if (label === "f" || label.includes("female")) {
-                    genderFemale = value;
-                  } else if (label === "u" || label.includes("unknown") || label.includes("other")) {
-                    genderUnknown = value;
+                    if (label === "m" || (label.includes("male") && !label.includes("female"))) {
+                      genderMale = value;
+                    } else if (label === "f" || label.includes("female")) {
+                      genderFemale = value;
+                    } else if (label === "u" || label.includes("unknown") || label.includes("other")) {
+                      genderUnknown = value;
+                    }
                   }
+                } else if (genderData?.male !== undefined || genderData?.female !== undefined) {
+                  genderMale = genderData.male || 0;
+                  genderFemale = genderData.female || 0;
+                  genderUnknown = genderData.unknown || 0;
                 }
-              } else if (genderData?.male !== undefined || genderData?.female !== undefined) {
-                genderMale = genderData.male || 0;
-                genderFemale = genderData.female || 0;
-                genderUnknown = genderData.unknown || 0;
+                console.log(`  ${platform} gender: M=${genderMale}% F=${genderFemale}%`);
+              } catch (e: any) {
+                console.error(`  Error fetching gender for ${clientName} (${platform}):`, e.message);
               }
-              console.log(`  ${platform} gender: M=${genderMale}% F=${genderFemale}%`);
-            } catch (e: any) {
-              console.error(`  Error fetching gender for ${clientName}:`, e.message);
             }
 
-            // Fetch country demographics via distribution endpoint
-            try {
-              const countryData = await fetchMetricool("/api/v2/analytics/distribution", {
-                ...demoParams,
-                metric: "country",
-                subject: "account",
-              });
+            // 5b. Fetch country demographics & LinkedIn multi-dimensional breakdowns
+            let industries: any[] = [];
+            let seniority: any[] = [];
+            let jobFunctions: any[] = [];
+            let companySizes: any[] = [];
+            let ageGroups: any[] = [];
 
-              if (countryData && Array.isArray(countryData.data)) {
-                countries = countryData.data
-                  .map((item: any) => ({
-                    country: item.country || item.code || item.key || item.name || item.label || "Unknown",
-                    percentage: item.percentage || item.value || 0,
-                  }))
-                  .filter((c: any) => c.percentage > 0)
-                  .sort((a: any, b: any) => b.percentage - a.percentage)
-                  .slice(0, 10);
-              } else if (Array.isArray(countryData)) {
-                countries = countryData
-                  .map((item: any) => ({
-                    country: item.country || item.code || item.key || item.name || item.label || "Unknown",
-                    percentage: item.percentage || item.value || 0,
-                  }))
-                  .filter((c: any) => c.percentage > 0)
-                  .sort((a: any, b: any) => b.percentage - a.percentage)
-                  .slice(0, 10);
+            if (platform === "linkedin") {
+              try {
+                // Countries
+                const countryData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  subject: "followerCountsByGeoCountry",
+                });
+                if (countryData && Array.isArray(countryData.data)) {
+                  countries = countryData.data
+                    .map((item: any) => ({
+                      country: item.country || item.code || item.key || item.name || item.label || "Unknown",
+                      percentage: item.percentage || item.value || item.count || 0,
+                    }))
+                    .filter((c: any) => c.percentage > 0)
+                    .sort((a: any, b: any) => b.percentage - a.percentage);
+                }
+
+                // Industries
+                const industryData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  subject: "followerCountsByIndustry",
+                });
+                if (industryData && Array.isArray(industryData.data)) {
+                  industries = industryData.data
+                    .map((item: any) => ({
+                      industry: item.industry || item.key || item.label || item.name || "Unknown",
+                      percentage: item.percentage || item.value || item.count || 0,
+                    }))
+                    .filter((c: any) => c.percentage > 0)
+                    .sort((a: any, b: any) => b.percentage - a.percentage);
+                }
+
+                // Seniority
+                const seniorityData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  subject: "followerCountsBySeniority",
+                });
+                if (seniorityData && Array.isArray(seniorityData.data)) {
+                  seniority = seniorityData.data
+                    .map((item: any) => ({
+                      seniority: item.seniority || item.key || item.label || item.name || "Unknown",
+                      percentage: item.percentage || item.value || item.count || 0,
+                    }))
+                    .filter((c: any) => c.percentage > 0)
+                    .sort((a: any, b: any) => b.percentage - a.percentage);
+                }
+
+                // Job Functions
+                const functionData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  subject: "followerCountsByFunction",
+                });
+                if (functionData && Array.isArray(functionData.data)) {
+                  jobFunctions = functionData.data
+                    .map((item: any) => ({
+                      function: item.function || item.key || item.label || item.name || "Unknown",
+                      percentage: item.percentage || item.value || item.count || 0,
+                    }))
+                    .filter((c: any) => c.percentage > 0)
+                    .sort((a: any, b: any) => b.percentage - a.percentage);
+                }
+
+                // Company Sizes
+                const staffData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  subject: "followerCountsByStaffCountRange",
+                });
+                if (staffData && Array.isArray(staffData.data)) {
+                  companySizes = staffData.data
+                    .map((item: any) => {
+                      let range = item.range || item.key || item.label || item.name || "Unknown";
+                      if (range === "+10000") range = "10,001+ employees";
+                      else if (range === "1") range = "1 employee (Self-employed)";
+                      else if (["11-50", "51-200", "2-10", "201-500", "501-1000", "1001-5000", "5001-10000"].includes(range)) range = `${range} employees`;
+                      return {
+                        range,
+                        percentage: item.percentage || item.value || item.count || 0,
+                      };
+                    })
+                    .filter((c: any) => c.percentage > 0)
+                    .sort((a: any, b: any) => b.percentage - a.percentage);
+                }
+                console.log(`  LinkedIn breakdowns: ${countries.length} countries, ${industries.length} industries, ${seniority.length} seniority`);
+              } catch (e: any) {
+                console.error(`  Error fetching LinkedIn breakdowns for ${clientName}:`, e.message);
               }
-              console.log(`  ${platform} countries: ${countries.length} found`);
-            } catch (e: any) {
-              console.error(`  Error fetching countries for ${clientName}:`, e.message);
+            } else {
+              try {
+                const countryMetric = platform === "facebook" ? "page_follows_country" : "country";
+                const countryData = await fetchMetricool("/api/v2/analytics/distribution", {
+                  ...demoParams,
+                  metric: countryMetric,
+                  subject: "account",
+                });
+
+                if (countryData && Array.isArray(countryData.data)) {
+                  countries = countryData.data
+                    .map((item: any) => ({
+                      country: item.country || item.code || item.key || item.name || item.label || "Unknown",
+                      percentage: item.percentage || item.value || item.count || 0,
+                    }))
+                    .filter((c: any) => c.percentage > 0)
+                    .sort((a: any, b: any) => b.percentage - a.percentage)
+                    .slice(0, 15);
+                }
+                console.log(`  ${platform} countries: ${countries.length} found`);
+              } catch (e: any) {
+                console.error(`  Error fetching countries for ${clientName} (${platform}):`, e.message);
+              }
             }
 
             // Only persist if we actually got new data — otherwise leave existing demographics intact
-            if (genderMale !== null || genderFemale !== null || countries.length > 0) {
-              // Delete existing record for this period, then insert fresh
+            const hasData = genderMale !== null || genderFemale !== null || countries.length > 0 || industries.length > 0;
+            if (hasData) {
               await supabase
                 .from("social_account_demographics")
                 .delete()
@@ -587,6 +673,16 @@ serve(async (req) => {
                 .eq("platform", platform)
                 .eq("period_start", from)
                 .eq("period_end", to);
+
+              const payloadToPersist = platform === "linkedin"
+                ? {
+                    countries,
+                    industries,
+                    seniority,
+                    job_functions: jobFunctions,
+                    company_sizes: companySizes,
+                  }
+                : (countries.length > 0 ? countries : null);
 
               const { error: demoError } = await supabase.from("social_account_demographics").insert({
                 client_id: clientId,
@@ -596,20 +692,20 @@ serve(async (req) => {
                 gender_male: genderMale,
                 gender_female: genderFemale,
                 gender_unknown: genderUnknown,
-                countries: countries.length > 0 ? countries : null,
+                countries: payloadToPersist,
                 collected_at: new Date().toISOString(),
               });
 
               if (demoError) {
                 console.error(`  Error persisting demographics:`, demoError);
               } else {
-                console.log(`  ✓ Demographics saved`);
+                console.log(`  ✓ Demographics saved for ${platform}`);
               }
             } else {
-              console.log(`  ⚠ No demographics data returned — keeping existing records`);
+              console.log(`  ⚠ No demographics data returned for ${platform} — keeping existing records`);
             }
           } catch (e: any) {
-            console.error(`  Error in demographics sync for ${clientName}:`, e.message);
+            console.error(`  Error in demographics sync for ${clientName} (${platform}):`, e.message);
           }
         }
 

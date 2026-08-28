@@ -195,62 +195,75 @@ serve(async (req) => {
       await new Promise(r => setTimeout(r, 500));
     }
 
-    // 3b. TIKTOK DEMOGRAPHICS SYNC VIA METRICOOL
-    console.log("\n=== Syncing TikTok Demographics (Metricool) ===");
-    const { data: tiktokMetricoolConfigs } = await supabase
+    // 3b. SOCIAL DEMOGRAPHICS SYNC VIA METRICOOL (TikTok, Facebook, LinkedIn, Instagram)
+    console.log("\n=== Syncing Social Demographics (Metricool) ===");
+    const { data: demographicConfigs } = await supabase
       .from("client_metricool_config")
-      .select(`client_id, user_id, blog_id, clients(name)`)
-      .eq("platform", "tiktok")
+      .select(`client_id, user_id, blog_id, platform, clients(name)`)
+      .in("platform", ["tiktok", "facebook", "linkedin", "instagram"])
       .eq("is_active", true);
 
-    for (const config of tiktokMetricoolConfigs || []) {
+    for (const config of demographicConfigs || []) {
       const clientName = (config.clients as any)?.name || config.client_id;
-      console.log(`Syncing TikTok demographics for ${clientName}`);
+      const platform = config.platform;
+      console.log(`Syncing ${platform} demographics for ${clientName}`);
 
       try {
-        // Sync gender demographics
-        const { error: genderError } = await supabase.functions.invoke("metricool-distribution", {
-          body: {
-            metric: "gender",
-            network: "tiktok",
-            subject: "account",
-            from: `${periods.current.start}T00:00:00`,
-            to: `${periods.current.end}T23:59:59`,
-            userId: config.user_id,
-            blogId: config.blog_id || undefined,
-            clientId: config.client_id, // enables persistence
-          },
-        });
-        if (genderError) {
-          console.error(`  ✗ Gender demographics failed: ${genderError.message}`);
-        } else {
-          console.log(`  ✓ Gender demographics synced`);
+        if (platform === "linkedin") {
+          // Sync all LinkedIn professional dimensions
+          const liMetrics = ["country", "industry", "seniority", "function", "staff_count"];
+          for (const metric of liMetrics) {
+            await supabase.functions.invoke("metricool-distribution", {
+              body: {
+                metric,
+                network: "linkedin",
+                subject: "account",
+                from: `${periods.current.start}T00:00:00`,
+                to: `${periods.current.end}T23:59:59`,
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+                clientId: config.client_id, // enables persistence
+              },
+            });
+            await new Promise(r => setTimeout(r, 200));
+          }
+          console.log(`  ✓ LinkedIn professional dimensions synced for ${clientName}`);
+        } else if (platform === "tiktok" || platform === "instagram") {
+          // Sync gender, country, and age
+          for (const metric of ["gender", "country", "age"]) {
+            await supabase.functions.invoke("metricool-distribution", {
+              body: {
+                metric,
+                network: platform,
+                subject: "account",
+                from: `${periods.current.start}T00:00:00`,
+                to: `${periods.current.end}T23:59:59`,
+                userId: config.user_id,
+                blogId: config.blog_id || undefined,
+                clientId: config.client_id,
+              },
+            });
+            await new Promise(r => setTimeout(r, 200));
+          }
+          console.log(`  ✓ ${platform} demographics synced for ${clientName}`);
+        } else if (platform === "facebook") {
+          // Sync Facebook page follows country
+          await supabase.functions.invoke("metricool-distribution", {
+            body: {
+              metric: "page_follows_country",
+              network: "facebook",
+              subject: "account",
+              from: `${periods.current.start}T00:00:00`,
+              to: `${periods.current.end}T23:59:59`,
+              userId: config.user_id,
+              blogId: config.blog_id || undefined,
+              clientId: config.client_id,
+            },
+          });
+          console.log(`  ✓ Facebook country demographics synced for ${clientName}`);
         }
-
-        await new Promise(r => setTimeout(r, 300));
-
-        // Sync country demographics
-        const { error: countryError } = await supabase.functions.invoke("metricool-distribution", {
-          body: {
-            metric: "country",
-            network: "tiktok",
-            subject: "account",
-            from: `${periods.current.start}T00:00:00`,
-            to: `${periods.current.end}T23:59:59`,
-            userId: config.user_id,
-            blogId: config.blog_id || undefined,
-            clientId: config.client_id, // enables persistence
-          },
-        });
-        if (countryError) {
-          console.error(`  ✗ Country demographics failed: ${countryError.message}`);
-        } else {
-          console.log(`  ✓ Country demographics synced`);
-        }
-
-        await new Promise(r => setTimeout(r, 300));
       } catch (err: any) {
-        console.error(`  ✗ Demographics sync failed for ${clientName}: ${err.message}`);
+        console.error(`  ✗ Demographics sync failed for ${clientName} (${platform}): ${err.message}`);
       }
     }
 
