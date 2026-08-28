@@ -502,12 +502,17 @@ export function AnalyticsSummaryCard({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
-                                    {type === 'ads' ? `Ad Spend (${dateRangeLabel})` : type === 'seo' ? `Tracked Keywords` : `Total Views (${dateRangeLabel})`}
+                                    {type === 'ads' ? `Ad Spend (${dateRangeLabel})` : type === 'seo' ? (aiMetrics.gsc_clicks ? `Search Clicks` : `Tracked Keywords`) : `Total Views (${dateRangeLabel})`}
                                 </p>
                                 <p className="text-3xl font-bold tracking-tight mb-2">
-                                    {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : type === 'seo' ? formatNumber(aiMetrics.total_views || 0) : formatNumber(totalViews)}
+                                    {type === 'ads' ? `$${formatNumber(aiMetrics.total_spend || 0)}` : type === 'seo' ? (aiMetrics.gsc_clicks ? formatNumber(aiMetrics.gsc_clicks) : formatNumber(aiMetrics.total_views || 0)) : formatNumber(totalViews)}
                                 </p>
-                                {timelineData.length > 0 && (
+                                {type === 'seo' && aiMetrics.gsc_impressions ? (
+                                    <div className="text-xs font-medium text-muted-foreground flex items-center gap-1.5 mt-2">
+                                        <Eye className="h-3.5 w-3.5 text-blue-500" />
+                                        {formatNumber(aiMetrics.gsc_impressions)} impressions
+                                    </div>
+                                ) : timelineData.length > 0 ? (
                                     <div className="h-8 w-full mt-2">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <AreaChart data={timelineData}>
@@ -521,7 +526,7 @@ export function AnalyticsSummaryCard({
                                             </AreaChart>
                                         </ResponsiveContainer>
                                     </div>
-                                )}
+                                ) : null}
                             </div>
                             <div className="bg-card border border-border/80 rounded-xl p-5 shadow-xs">
                                 <p className="text-sm font-semibold text-foreground mb-3">
@@ -563,11 +568,16 @@ export function AnalyticsSummaryCard({
                                             {formatNumber(totalCurrentFollowers || 0)} total audience
                                         </div>
                                     ) : type === 'seo' ? (
-                                        followersGained > 0 ? (
-                                        <div className="text-xs font-medium flex items-center gap-1.5 text-emerald-600">
-                                            <TrendingUp className="h-3.5 w-3.5" /> 
-                                            +{followersGained} score change
-                                        </div>
+                                        aiMetrics.gsc_ctr ? (
+                                            <div className="text-xs font-medium flex items-center gap-1.5 text-emerald-600">
+                                                <Target className="h-3.5 w-3.5" />
+                                                {(aiMetrics.gsc_ctr).toFixed(2)}% CTR (Avg Pos {(aiMetrics.gsc_position || 0).toFixed(1)})
+                                            </div>
+                                        ) : followersGained > 0 ? (
+                                            <div className="text-xs font-medium flex items-center gap-1.5 text-emerald-600">
+                                                <TrendingUp className="h-3.5 w-3.5" /> 
+                                                +{followersGained} score change
+                                            </div>
                                         ) : null
                                     ) : (
                                         <div className="text-xs font-medium text-emerald-600 flex items-center gap-1.5">

@@ -1187,7 +1187,7 @@ async function collectSeoData(
                 if (kws !== null) organicKeywordsCount = kws.toLocaleString();
             }
 
-            let output = `## SEO Technical Audit\n` +
+            let output = `## SEO Technical Audit (Ubersuggest)\n` +
                 `- Site Health Score: ${newestScore ?? "N/A"} (started at ${oldestScore ?? "N/A"} this period, change: ${scoreDiff >= 0 ? '+' : ''}${scoreDiff})\n` +
                 `- Total Site Issues: ${newestIssuesCount} (started at ${oldestIssuesCount}, change: ${issuesDiff >= 0 ? '+' : ''}${issuesDiff})\n`;
 
@@ -1208,7 +1208,91 @@ async function collectSeoData(
 
             sections.push(output);
         } else {
-            sections.push("No SEO metric updates found in the specified timeframe.");
+            sections.push("No Ubersuggest SEO metric updates found in the specified timeframe.");
+        }
+
+        // ─── Google Search Console Performance Data ───
+        const { data: gscRows, error: gscErr } = await supabase
+            .from("report_gsc_metrics")
+            .select("*")
+            .eq("client_id", clientId)
+            .order("collected_at", { ascending: false })
+            .limit(1);
+
+        if (!gscErr && gscRows && gscRows.length > 0) {
+            const gsc = gscRows[0];
+            const daily = Array.isArray(gsc.daily_breakdown) ? gsc.daily_breakdown : [];
+            const topQueries = Array.isArray(gsc.top_queries) ? gsc.top_queries : [];
+            const topPages = Array.isArray(gsc.top_pages) ? gsc.top_pages : [];
+            const devices = Array.isArray(gsc.device_breakdown) ? gsc.device_breakdown : [];
+            const countries = Array.isArray(gsc.country_breakdown) ? gsc.country_breakdown : [];
+
+            // Calculate 7-day metrics from daily breakdown if available
+            let gscClicks = gsc.total_clicks || 0;
+            let gscImpressions = gsc.total_impressions || 0;
+            let gscCtr = parseFloat(gsc.avg_ctr) || 0;
+            let gscPosition = parseFloat(gsc.avg_position) || 0;
+            let windowLabel = `${gsc.date_range_start} to ${gsc.date_range_end}`;
+            let trendStr = "";
+
+            if (daily.length >= 7) {
+                const last7Daily = daily.slice(-7);
+                const last7Clicks = last7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+                const last7Impressions = last7Daily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+                const last7Ctr = last7Impressions > 0 ? (last7Clicks / last7Impressions) * 100 : 0;
+                const last7Pos = last7Daily.length > 0 ? (last7Daily.reduce((s: number, d: any) => s + (d.position || 0), 0) / last7Daily.length) : 0;
+
+                const prev7Daily = daily.slice(-14, -7);
+                const prev7Clicks = prev7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+                const clicksTrend = prev7Clicks > 0 ? ((last7Clicks - prev7Clicks) / prev7Clicks) * 100 : 0;
+
+                gscClicks = last7Clicks;
+                gscImpressions = last7Impressions;
+                gscCtr = last7Ctr;
+                gscPosition = last7Pos;
+                windowLabel = `Last 7 Days (${last7Daily[0]?.date} to ${last7Daily[last7Daily.length - 1]?.date})`;
+                trendStr = ` (previous 7-day period had ${prev7Clicks.toLocaleString()} clicks, ${clicksTrend >= 0 ? '+' : ''}${clicksTrend.toFixed(1)}% change)`;
+            }
+
+            let gscOutput = `## Google Search Console (Organic Search Performance - Last 7 Days)\n` +
+                `- Reporting Window: ${windowLabel}\n` +
+                `- 7-Day Organic Search Clicks: ${gscClicks.toLocaleString()}${trendStr}\n` +
+                `- 7-Day Organic Search Impressions: ${gscImpressions.toLocaleString()}\n` +
+                `- 7-Day Average Search CTR: ${gscCtr.toFixed(2)}%\n` +
+                `- 7-Day Average Search Ranking Position: ${gscPosition.toFixed(1)}\n` +
+                `- Full Historical Reference (90-Day Total): ${(gsc.total_clicks || 0).toLocaleString()} clicks, ${(gsc.total_impressions || 0).toLocaleString()} impressions\n`;
+
+            if (topQueries.length > 0) {
+                gscOutput += `\n- Top Organic Search Queries Driving Clicks (Top ${Math.min(10, topQueries.length)}):\n` +
+                    topQueries.slice(0, 10).map((q: any) => `  * "${q.query}": ${q.clicks?.toLocaleString()} clicks, ${q.impressions?.toLocaleString()} impressions, ${q.ctr?.toFixed(1)}% CTR, avg position ${q.position?.toFixed(1)}`).join('\n') + `\n`;
+            }
+
+            if (topPages.length > 0) {
+                gscOutput += `\n- Top Ranking Landing Pages Driving Traffic (Top ${Math.min(5, topPages.length)}):\n` +
+                    topPages.slice(0, 5).map((p: any) => `  * ${p.page}: ${p.clicks?.toLocaleString()} clicks, ${p.impressions?.toLocaleString()} impressions, ${p.ctr?.toFixed(1)}% CTR, position ${p.position?.toFixed(1)}`).join('\n') + `\n`;
+            }
+
+            if (devices.length > 0) {
+                const totalDevClicks = devices.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+                gscOutput += `\n- Device Traffic Breakdown:\n` +
+                    devices.map((d: any) => `  * ${d.device}: ${(d.clicks || 0).toLocaleString()} clicks (${totalDevClicks > 0 ? ((d.clicks / totalDevClicks) * 100).toFixed(1) : 0}%), ${(d.impressions || 0).toLocaleString()} impressions`).join('\n') + `\n`;
+            }
+
+            if (countries.length > 0) {
+                gscOutput += `\n- Top Country Search Markets:\n` +
+                    countries.slice(0, 5).map((c: any) => `  * ${c.country}: ${(c.clicks || 0).toLocaleString()} clicks, ${(c.impressions || 0).toLocaleString()} impressions`).join('\n') + `\n`;
+            }
+
+            sections.push(gscOutput);
+
+            // Enrich metrics with 7-day figures
+            metricsResult.gsc_clicks = gscClicks;
+            metricsResult.gsc_impressions = gscImpressions;
+            metricsResult.gsc_ctr = gscCtr;
+            metricsResult.gsc_position = gscPosition;
+            if (metricsResult.total_views === 0) {
+                metricsResult.total_views = gscClicks;
+            }
         }
     } catch (err) {
         console.error("Error collecting SEO data for summary:", err);
@@ -1227,6 +1311,7 @@ function extractPlatforms(data: string): string[] {
         "instagram", "facebook", "tiktok", "youtube",
         "linkedin", "pinterest", "threads", "snapchat",
         "meta ads", "google ads", "tiktok ads", "amazon ads",
+        "google search console", "ubersuggest"
     ];
     const lower = data.toLowerCase();
     const found = safePlatforms.filter((p) => lower.includes(p));

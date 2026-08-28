@@ -18,6 +18,7 @@ interface UbersuggestSectionProps {
 export function UbersuggestSection({ clientId, dateRange = "30d", customDateRange, isActive = true }: UbersuggestSectionProps) {
   const syncState = useSyncState(clientId, "seo", "ubersuggest");
   const [scoreHistoryExpanded, setScoreHistoryExpanded] = useState(false);
+  const [showAllKeywords, setShowAllKeywords] = useState(false);
 
   const { data: allMetrics, isLoading, isFetching } = useQuery({
     queryKey: ["client-seo-metrics", clientId],
@@ -632,7 +633,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {keywords.map((kw: any, idx: number) => {
+                    {keywords.slice(0, showAllKeywords ? keywords.length : 10).map((kw: any, idx: number) => {
                       const improved = kw.desktop_change > 0 || (!kw.desktop_old && kw.desktop_new);
                       const dropped = kw.desktop_change < 0 || (kw.desktop_old && !kw.desktop_new);
                       const isPending = kw.desktop_new === null && kw.desktop_old === null && kw.volume === null;
@@ -681,6 +682,26 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                     })}
                   </tbody>
                 </table>
+                {keywords.length > 10 && (
+                  <div className="px-5 py-3 border-t">
+                    <button
+                      onClick={() => setShowAllKeywords(!showAllKeywords)}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors py-1"
+                    >
+                      {showAllKeywords ? (
+                        <>
+                          <ChevronUp className="h-3.5 w-3.5" />
+                          Show Less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3.5 w-3.5" />
+                          See All {keywords.length} Keywords
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
         )}
       </div>

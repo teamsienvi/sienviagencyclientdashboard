@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { UbersuggestSection } from "@/components/analytics/UbersuggestSection";
+import { GSCSection } from "@/components/analytics/GSCSection";
 import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
 import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSection";
 import { PlayIQAnalyticsSection } from "@/components/dashboard/PlayIQAnalyticsSection";
@@ -219,6 +220,13 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         .eq("is_active", true)
         .limit(1);
 
+      // Check GSC data
+      const { data: gscData } = await supabase
+        .from("report_gsc_metrics" as any)
+        .select("id")
+        .eq("client_id", clientId)
+        .limit(1);
+
       return {
         x: xData && xData.length > 0,
         xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
@@ -228,6 +236,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         metaAds: metaAdsData && metaAdsData.length > 0,
         substack: substackData && substackData.length > 0,
         ubersuggest: ubersuggestData && ubersuggestData.length > 0,
+        gsc: gscData && gscData.length > 0,
       };
     },
     enabled: !!clientId,
@@ -709,7 +718,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, isOxiSureTech].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, connectedAccounts?.gsc, isOxiSureTech].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -749,6 +758,16 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 >
                   <span className="text-base grayscale group-hover:scale-110 transition-transform">🔍</span>
                   <span>SEO DASHBOARD</span>
+                </button>
+              )}
+
+              {connectedAccounts?.gsc && (
+                <button
+                  onClick={() => scrollToSection("gsc")}
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-emerald-500/5 border-r border-primary/10 last:border-r-0 group"
+                >
+                  <span className="text-base group-hover:scale-110 transition-transform">📊</span>
+                  <span>SEARCH CONSOLE</span>
                 </button>
               )}
 
@@ -1365,6 +1384,28 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         clientId={clientId!} 
                         dateRange={dateRange as any} 
                         customDateRange={customDateRange} 
+                        isActive={activeTab === "analytics"}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Google Search Console */}
+                {connectedAccounts?.gsc && (
+                  <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="gsc">
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
+                      <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
+                         <span className="text-xl leading-none">📊</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-xl text-emerald-950 dark:text-emerald-100 tracking-tight">Google Search Console</h3>
+                        <p className="text-sm text-emerald-600/80 dark:text-emerald-300/70 mt-1">Search queries, clicks, impressions, and page rankings</p>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-6 bg-card/50 rounded-xl p-1 md:p-4">
+                      <GSCSection 
+                        clientId={clientId!} 
                         isActive={activeTab === "analytics"}
                       />
                     </div>
