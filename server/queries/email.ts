@@ -1,5 +1,7 @@
 "use server";
 
+import { fetchSmartleadEmailMetrics, isSmartleadClient } from "./smartlead";
+
 export interface EmailCampaignAggregate {
   totalSent: number;
   deliveryRate: number;
@@ -26,7 +28,7 @@ export interface EmailCampaignDetail {
   openRate: number;
   clickRate: number;
   sequenceData?: {
-    emails?: { subject: string; previewText?: string; body: string }[];
+    emails?: { subject: string; previewText?: string; body: string; delay_in_days?: number }[];
     schedules?: (string | null)[];
     recipients?: { email: string; name?: string }[];
     is_testing?: boolean;
@@ -44,11 +46,25 @@ export interface EmailCampaignMetricsResponse {
 }
 
 /**
- * Calls the Sienvi Sender serverless API endpoint to fetch campaign clicks and delivery metrics.
- * Decoupled from Sienvi Sender's direct database credentials.
- * Authorizes using the shared `x-api-key` header.
+ * Fetches campaign metrics for a client brand.
+ * 1. Checks Smartlead API directly for cold outreach clients (e.g. PlayIQ, Billionaire Brother, FFF)
+ *    filtering only campaigns updated on or after August 26, 2026.
+ * 2. Falls back to Sienvi Sender Next.js serverless API endpoint for other sender-managed brands.
  */
 export async function getEmailCampaignMetrics(clientName: string): Promise<EmailCampaignMetricsResponse> {
+  // Check Smartlead directly for relevant clients
+  if (isSmartleadClient(clientName)) {
+    try {
+      const smartleadData = await fetchSmartleadEmailMetrics(clientName);
+      if (smartleadData && smartleadData.success && smartleadData.campaigns.length > 0) {
+        return smartleadData;
+      }
+    } catch (slErr: any) {
+      console.warn(`[Smartlead] Query failed for ${clientName}, attempting sender API fallback:`, slErr?.message || slErr);
+    }
+  }
+
+  // Fallback / standard route: Sienvi Sender serverless API
   const senderApiUrl = process.env.SENDER_API_URL || 'http://localhost:3000';
   const targetEndpoint = `${senderApiUrl}/api/campaign-analytics?clientName=${encodeURIComponent(clientName)}`;
 
@@ -66,6 +82,12 @@ export async function getEmailCampaignMetrics(clientName: string): Promise<Email
     });
 
     if (!res.ok) {
+      // If Sender API is unreachable, try Smartlead one more time before failing
+      const slFallback = await fetchSmartleadEmailMetrics(clientName);
+      if (slFallback && slFallback.success && slFallback.campaigns.length > 0) {
+        return slFallback;
+      }
+
       const errText = await res.text();
       console.error(`Sienvi Sender API responded with status ${res.status}:`, errText);
       return createEmptyResponse(clientName, `API Error: ${res.statusText}`);
@@ -140,6 +162,12 @@ export async function getEmailCampaignMetrics(clientName: string): Promise<Email
     return data;
 
   } catch (error: any) {
+    // If connection failed to Sender API, try Smartlead fallback
+    const slFallback = await fetchSmartleadEmailMetrics(clientName);
+    if (slFallback && slFallback.success && slFallback.campaigns.length > 0) {
+      return slFallback;
+    }
+
     console.error(`Failed to connect to Sienvi Sender API at ${targetEndpoint}:`, error.message);
     return createEmptyResponse(clientName, `Connection Failed: ${error.message}`);
   }

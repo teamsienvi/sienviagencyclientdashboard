@@ -88,6 +88,13 @@ const EmailAnalyticsClient = ({
     }));
   }, [funnelSteps]);
 
+  const isSmartlead = useMemo(() => {
+    return campaigns.some(c => c.type === 'Cold Outreach') || 
+      ["PlayIQ", "Billionaire Brother", "The Billionaire Brother", "Father Figure Formula"].some(n => 
+        clientName.toLowerCase().includes(n.toLowerCase())
+      );
+  }, [campaigns, clientName]);
+
   return (
     <AnalyticsPageLayout
       clientId={clientId}
@@ -103,9 +110,11 @@ const EmailAnalyticsClient = ({
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800">
               <Mail className="h-3.5 w-3.5 mr-1.5" />
-              Sienvi Sender Connected
+              {isSmartlead ? "Smartlead Cold Outreach" : "Sienvi Sender Connected"}
             </Badge>
-            <span className="text-xs text-muted-foreground">• Live metrics from Resend engine</span>
+            <span className="text-xs text-muted-foreground">
+              {isSmartlead ? "• Live cold campaign metrics & sequences" : "• Live metrics from Resend engine"}
+            </span>
           </div>
 
           <Button 
@@ -161,7 +170,7 @@ const EmailAnalyticsClient = ({
                   <div className="text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
                     {aggregates.deliveryRate}%
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">Success rate from Resend</p>
+                  <p className="text-xs text-muted-foreground mt-1">Success rate from Smartlead</p>
                 </CardContent>
               </Card>
 
@@ -434,7 +443,7 @@ const EmailAnalyticsClient = ({
                         </div>
                         <div className="pt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                          <span>Verified domain under Resend engine</span>
+                          <span>{isSmartlead ? "Connected through Smartlead Outreach Engine" : "Verified domain under Resend engine"}</span>
                         </div>
                       </CardContent>
                     </Card>
