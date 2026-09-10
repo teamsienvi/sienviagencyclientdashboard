@@ -2,6 +2,7 @@ import React from "react";
 import type { CanonicalComparisonResponse } from "@/lib/analytics/comparison-contract.ts";
 import { DataStatusBadge } from "./data-status-badge";
 import { formatNum, formatPercentagePointDelta } from "@/lib/analytics/formatting.ts";
+import { getChannelColor } from "@/lib/analytics/channel-colors";
 
 interface PlatformComparisonTableProps {
   comparison: CanonicalComparisonResponse;
@@ -9,16 +10,6 @@ interface PlatformComparisonTableProps {
 
 export const PlatformComparisonTable: React.FC<PlatformComparisonTableProps> = ({ comparison }) => {
   const { channels } = comparison;
-
-  const channelColors: Record<string, string> = {
-    youtube: "#ef4444",
-    tiktok: "#f43f5e",
-    facebook: "#3b82f6",
-    instagram: "#d946ef",
-    x: "#64748b",
-    linkedin: "#0a66c2",
-    other: "#a855f7",
-  };
 
   return (
     <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-xs space-y-3">
@@ -46,7 +37,7 @@ export const PlatformComparisonTable: React.FC<PlatformComparisonTableProps> = (
           </thead>
           <tbody className="divide-y divide-border/40">
             {channels.map((plat) => {
-              const color = channelColors[plat.platform.toLowerCase()] || "#8b5cf6";
+              const color = getChannelColor(plat.platform);
               const isPositiveViews = plat.signedDelta >= 0;
               const isPositiveShare = plat.shareDeltaPp >= 0;
 

@@ -2,6 +2,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import type { CanonicalComparisonResponse } from "@/lib/analytics/comparison-contract.ts";
 import { formatNum } from "@/lib/analytics/formatting.ts";
+import { getChannelColor } from "@/lib/analytics/channel-colors";
 
 interface SignedWaterfallChartProps {
   comparison: CanonicalComparisonResponse;
@@ -12,16 +13,6 @@ export const SignedWaterfallChart: React.FC<SignedWaterfallChartProps> = ({ comp
   const prevTotal = totals.views.previousValue || 0;
   const curTotal = totals.views.currentValue || 0;
   const netDelta = totals.views.absoluteDelta || 0;
-
-  const channelColors: Record<string, string> = {
-    youtube: "#ef4444",
-    tiktok: "#f43f5e",
-    facebook: "#3b82f6",
-    instagram: "#d946ef",
-    x: "#64748b",
-    linkedin: "#0a66c2",
-    other: "#a855f7",
-  };
 
   // Separate positive and negative contributors for waterfall presentation
   const negativeContributors = channels.filter((c) => c.signedDelta < 0);
@@ -62,7 +53,7 @@ export const SignedWaterfallChart: React.FC<SignedWaterfallChartProps> = ({ comp
 
         {/* Row 2: Negative Contributors (e.g. -115 Other/Unattributed/Prior-Only) */}
         {negativeContributors.map((ch) => {
-          const color = channelColors[ch.platform] || "#f43f5e";
+          const color = getChannelColor(ch.platform);
           const pct = Math.round((Math.abs(ch.signedDelta) / maxVal) * 100);
 
           return (
@@ -85,7 +76,7 @@ export const SignedWaterfallChart: React.FC<SignedWaterfallChartProps> = ({ comp
 
         {/* Row 3: Positive Contributors (e.g. +313 FB, +132 TT, +90 YT, +46 IG) */}
         {positiveContributors.map((ch) => {
-          const color = channelColors[ch.platform] || "#3b82f6";
+          const color = getChannelColor(ch.platform);
           const pct = Math.round((ch.signedDelta / maxVal) * 100);
 
           return (

@@ -20,13 +20,14 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
   } = audience;
 
   const isAvailable = status === "available";
+  const isVisitors = statusLabel?.toLowerCase().includes("visitor") || statusLabel?.toLowerCase().includes("user") || statusLabel?.toLowerCase().includes("ga4");
 
   return (
     <div className="bg-card border border-border/60 rounded-2xl p-4 shadow-xs space-y-3 min-w-0 overflow-hidden flex flex-col justify-between">
       <div className="flex items-center justify-between gap-1">
         <span className="text-xs font-semibold text-foreground/80 flex items-center gap-1.5 truncate">
           <Users className="h-4 w-4 text-violet-500 shrink-0" />
-          <span className="truncate">Audience Growth</span>
+          <span className="truncate">{isVisitors ? "Unique Visitors" : "Audience Growth"}</span>
         </span>
         <Badge
           className={
@@ -41,10 +42,10 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
 
       {isAvailable && currentBoundaryCount != null && previousBoundaryCount != null ? (
         <div className="space-y-2">
-          {netChange != null && netChange > 0 && (
+          {netChange != null && (
             <div className="flex items-baseline justify-between gap-1">
-              <span className="text-2xl font-bold tracking-tight text-foreground">
-                +{formatNum(netChange)}
+              <span className={`text-2xl font-bold tracking-tight ${netChange >= 0 ? "text-foreground" : "text-rose-600 dark:text-rose-400"}`}>
+                {netChange > 0 ? "+" : ""}{formatNum(netChange)}
               </span>
               <span className="text-[11px] text-muted-foreground font-medium truncate">Net Change</span>
             </div>
@@ -52,11 +53,11 @@ export const AudienceStatusCard: React.FC<AudienceStatusProps> = ({ audience }) 
 
           <div className="p-2.5 rounded-xl bg-muted/40 border border-border/40 text-xs space-y-1">
             <div className="flex justify-between items-center gap-2">
-              <span className="text-muted-foreground truncate">Followers at Start:</span>
+              <span className="text-muted-foreground truncate">{isVisitors ? "Prior Period Users:" : "Followers at Start:"}</span>
               <span className="font-semibold shrink-0">{formatNum(previousBoundaryCount)}</span>
             </div>
             <div className="flex justify-between items-center gap-2">
-              <span className="text-muted-foreground truncate">Followers at End:</span>
+              <span className="text-muted-foreground truncate">{isVisitors ? "Current Period Users:" : "Followers at End:"}</span>
               <span className="font-semibold shrink-0">{formatNum(currentBoundaryCount)}</span>
             </div>
           </div>

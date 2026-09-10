@@ -21,6 +21,8 @@ export interface DailyBreakdown {
   visitors?: number;
   sessions?: number;
   pageViews: number;
+  bounceRate?: number;
+  avgDuration?: number;
 }
 
 export interface TopPage {

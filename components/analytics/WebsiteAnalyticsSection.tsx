@@ -10,7 +10,7 @@ import { Loader2, Users, Eye, Clock, TrendingDown, Activity, Globe, Info, Extern
 import { format, subDays } from "date-fns";
 
 export function WebsiteAnalyticsSection({ clientId }: { clientId: string }) {
-  const [dateRange, setDateRange] = useState<string>("30d");
+  const [dateRange, setDateRange] = useState<string>("7d");
 
   // Fetch GA4 config for external link
   const { data: ga4Config } = useQuery({

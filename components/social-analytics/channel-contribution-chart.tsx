@@ -2,6 +2,7 @@ import React from "react";
 import { Badge } from "@/components/ui/badge";
 import type { SocialAnalyticsComparison } from "@/types/social-analytics";
 import { formatNum } from "@/lib/analytics/formatting.ts";
+import { getChannelColor } from "@/lib/analytics/channel-colors";
 
 interface ChannelContributionChartProps {
   comparison: SocialAnalyticsComparison;
@@ -11,22 +12,13 @@ export const ChannelContributionChart: React.FC<ChannelContributionChartProps> =
   const { channelBreakdown, metrics } = comparison;
   const totalDelta = metrics.views.absoluteDelta;
 
-  const channelColors: Record<string, string> = {
-    youtube: "#ef4444",
-    tiktok: "#f43f5e",
-    facebook: "#3b82f6",
-    instagram: "#d946ef",
-    x: "#64748b",
-    linkedin: "#0a66c2",
-  };
-
   return (
     <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-xs space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h4 className="text-base font-bold tracking-tight text-foreground">Channel Delta Contribution Waterfall</h4>
           <p className="text-xs text-muted-foreground">
-            How each social channel contributed to the net view change ({totalDelta >= 0 ? "+" : ""}{formatNum(totalDelta)} views)
+            How each traffic channel contributed to the net view change ({totalDelta >= 0 ? "+" : ""}{formatNum(totalDelta)} views)
           </p>
         </div>
         <Badge className={totalDelta >= 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs" : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 text-xs"}>
@@ -40,7 +32,7 @@ export const ChannelContributionChart: React.FC<ChannelContributionChartProps> =
           const absVal = Math.abs(ch.absoluteDelta);
           const maxDelta = Math.max(1, ...channelBreakdown.map((c) => Math.abs(c.absoluteDelta)));
           const widthPct = Math.round((absVal / maxDelta) * 100);
-          const color = channelColors[ch.platform.toLowerCase()] || "#8b5cf6";
+          const color = getChannelColor(ch.platform);
 
           return (
             <div key={ch.platform} className="space-y-1">

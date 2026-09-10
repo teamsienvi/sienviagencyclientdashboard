@@ -58,7 +58,7 @@ function parsePct(s) {
 }
 
 // ── Read all CSV files ──
-const BASE = "C:/Users/Iris/Downloads/hairtamin_gsc_export";
+const BASE = "C:/Users/Iris/Downloads/hairtamin_gsc_extract";
 
 const chartRaw = parseCSV(readFileSync(`${BASE}/Chart.csv`, "utf-8"));
 const queriesRaw = parseCSV(readFileSync(`${BASE}/Queries.csv`, "utf-8"));

@@ -208,7 +208,6 @@ export const ClientManagement = () => {
                   value={formData.supabase_url}
                   onChange={(e) => setFormData({ ...formData, supabase_url: e.target.value })}
                   placeholder="https://xyz123.supabase.co"
-                  required
                 />
               </div>
               <div className="space-y-2">

@@ -1,6 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Award, Zap, AlertTriangle, Play, ExternalLink } from "lucide-react";
+import { Award, Zap, AlertTriangle, Play, Globe, Search, ExternalLink } from "lucide-react";
 import type { SocialAnalyticsComparison } from "@/types/social-analytics";
 import { formatNum } from "@/lib/analytics/formatting.ts";
 
@@ -25,6 +25,7 @@ export const TopContentDrivers: React.FC<TopContentDriversProps> = ({ comparison
     lowVolumeWarnings: [],
   };
   const { scaleLeader = "None", efficiencyLeader = "None", topDriverPosts = [], lowVolumeWarnings = [] } = drivers;
+  const isWebsite = topDriverPosts.some((p: any) => p.platform?.toLowerCase() === "website" || p.platform?.toLowerCase().includes("search"));
 
   return (
     <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-xs space-y-4">
@@ -35,7 +36,9 @@ export const TopContentDrivers: React.FC<TopContentDriversProps> = ({ comparison
           <h4 className="text-base font-bold tracking-tight text-foreground flex items-center gap-2">
             <span>What Drove the Change? (Drivers & Leaders)</span>
           </h4>
-          <p className="text-xs text-muted-foreground">Content drivers and platform leadership analysis</p>
+          <p className="text-xs text-muted-foreground">
+            {isWebsite ? "Top product landing pages, search queries, and traffic source leadership analysis" : "Content drivers and platform leadership analysis"}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -67,67 +70,93 @@ export const TopContentDrivers: React.FC<TopContentDriversProps> = ({ comparison
       {/* Top Driver Content Posts List */}
       <div>
         <h5 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
-          Top Driver Content Posts (by Reach Contribution)
+          {isWebsite ? "Top Landing Pages & Search Drivers (by Traffic Contribution)" : "Top Driver Content Posts (by Reach Contribution)"}
         </h5>
         {topDriverPosts.length > 0 ? (
           <div className="space-y-2.5">
-            {topDriverPosts.map((post) => (
-              <div
-                key={post.id}
-                className="p-3 rounded-xl bg-muted/30 border border-border/40 hover:border-violet-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 overflow-hidden"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="p-2 rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0">
-                    <Play className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <Badge className="text-[10px] uppercase font-bold px-1.5 py-0 bg-violet-500/20 text-violet-700 dark:text-violet-300 border-none shrink-0">
-                        {post.platform}
-                      </Badge>
-                      <span className="text-[11px] text-muted-foreground shrink-0">{post.date}</span>
+            {topDriverPosts.map((post: any) => {
+              const platLower = String(post.platform || "").toLowerCase();
+              const isPostWeb = platLower === "website";
+              const isSearchConsole = platLower.includes("search") || platLower.includes("gsc");
+              
+              return (
+                <div
+                  key={post.id}
+                  className="p-3 rounded-xl bg-muted/30 border border-border/40 hover:border-violet-500/30 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 overflow-hidden"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`p-2 rounded-lg shrink-0 ${
+                      isSearchConsole
+                        ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                        : isPostWeb
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                    }`}>
+                      {isSearchConsole ? (
+                        <Search className="h-4 w-4" />
+                      ) : isPostWeb ? (
+                        <Globe className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
                     </div>
-                    {post.url ? (
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <Badge className={`text-[10px] uppercase font-bold px-1.5 py-0 border-none shrink-0 ${
+                          isSearchConsole
+                            ? "bg-blue-500/20 text-blue-700 dark:text-blue-300"
+                            : isPostWeb
+                            ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                            : "bg-violet-500/20 text-violet-700 dark:text-violet-300"
+                        }`}>
+                          {post.platform}
+                        </Badge>
+                        {post.date && <span className="text-[11px] text-muted-foreground shrink-0">{post.date}</span>}
+                      </div>
+                      {post.url ? (
+                        <a
+                          href={post.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-foreground hover:text-violet-600 dark:hover:text-violet-400 flex items-center gap-1.5 transition-colors group/link min-w-0"
+                        >
+                          <span className="truncate">{post.title}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0 text-violet-500 group-hover/link:translate-x-0.5 transition-transform" />
+                        </a>
+                      ) : (
+                        <p className="text-xs font-semibold text-foreground truncate">{post.title}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 text-xs">
+                    <div className="text-left sm:text-right shrink-0">
+                      <p className="font-bold text-foreground">
+                        {formatNum(post.views)} {isSearchConsole ? "clicks" : "views"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground font-medium">
+                        {post.engagementRate.toFixed(1)}% {isSearchConsole ? "CTR" : "ER"} ({post.contributionPct}% share)
+                      </p>
+                    </div>
+                    {post.url && (
                       <a
                         href={post.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs font-semibold text-foreground hover:text-violet-600 dark:hover:text-violet-400 flex items-center gap-1.5 transition-colors group/link min-w-0"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 px-2.5 py-1 rounded-lg transition-all shrink-0"
                       >
-                        <span className="truncate">{post.title}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0 text-violet-500 group-hover/link:translate-x-0.5 transition-transform" />
+                        <span>View</span>
+                        <ExternalLink className="h-3 w-3" />
                       </a>
-                    ) : (
-                      <p className="text-xs font-semibold text-foreground truncate">{post.title}</p>
                     )}
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 text-xs">
-                  <div className="text-left sm:text-right shrink-0">
-                    <p className="font-bold text-foreground">{formatNum(post.views)} views</p>
-                    <p className="text-[11px] text-muted-foreground font-medium">
-                      {post.engagementRate.toFixed(1)}% ER ({post.contributionPct}% share)
-                    </p>
-                  </div>
-                  {post.url && (
-                    <a
-                      href={post.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-violet-700 dark:text-violet-300 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 px-2.5 py-1 rounded-lg transition-all shrink-0"
-                    >
-                      <span>View</span>
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground italic py-2">
-            No specific post drivers available for this period.
+            No specific drivers available for this period.
           </p>
         )}
       </div>
@@ -135,3 +164,4 @@ export const TopContentDrivers: React.FC<TopContentDriversProps> = ({ comparison
     </div>
   );
 };
+

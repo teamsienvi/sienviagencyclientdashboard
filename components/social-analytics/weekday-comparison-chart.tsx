@@ -74,6 +74,9 @@ export const WeekdayComparisonChart: React.FC<WeekdayComparisonChartProps> = ({ 
     return null;
   };
 
+  const primaryLabel = comparison?.totals?.views?.label?.replace("Total ", "") || comparison?.metrics?.views?.label?.replace("Total ", "") || "Views";
+  const secondaryLabel = comparison?.totals?.engagements?.label?.replace("Total ", "") || comparison?.metrics?.engagements?.label?.replace("Total ", "") || "Engagements";
+
   return (
     <div className="bg-card border border-border/60 rounded-2xl p-5 shadow-xs space-y-4">
       
@@ -99,7 +102,7 @@ export const WeekdayComparisonChart: React.FC<WeekdayComparisonChartProps> = ({ 
             }`}
           >
             <Eye className="h-3.5 w-3.5 text-violet-500" />
-            <span>Views</span>
+            <span>{primaryLabel}</span>
           </button>
           <button
             onClick={() => setMetricKey("engagements")}
@@ -110,7 +113,7 @@ export const WeekdayComparisonChart: React.FC<WeekdayComparisonChartProps> = ({ 
             }`}
           >
             <Zap className="h-3.5 w-3.5 text-pink-500" />
-            <span>Engagements</span>
+            <span>{secondaryLabel}</span>
           </button>
         </div>
       </div>

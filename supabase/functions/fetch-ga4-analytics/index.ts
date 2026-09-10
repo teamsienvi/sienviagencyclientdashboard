@@ -224,6 +224,8 @@ serve(async (req) => {
         { name: 'activeUsers' },
         { name: 'sessions' },
         { name: 'screenPageViews' },
+        { name: 'bounceRate' },
+        { name: 'averageSessionDuration' },
       ],
       orderBys: [{ dimension: { dimensionName: 'date' } }],
     });
@@ -231,11 +233,15 @@ serve(async (req) => {
     const dailyBreakdown = (dailyReport.rows || []).map((row: any) => {
       const dateStr = row.dimensionValues[0].value; // YYYYMMDD
       const formatted = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`;
+      const dailyBounce = parseFloat(row.metricValues[3]?.value || '0') * 100;
+      const dailyDuration = parseFloat(row.metricValues[4]?.value || '0');
       return {
         date: formatted,
         visitors: parseInt(row.metricValues[0].value, 10),
         sessions: parseInt(row.metricValues[1].value, 10),
         pageViews: parseInt(row.metricValues[2].value, 10),
+        bounceRate: Math.round(dailyBounce * 10) / 10,
+        avgDuration: Math.round(dailyDuration),
       };
     });
 

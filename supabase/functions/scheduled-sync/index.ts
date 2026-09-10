@@ -59,6 +59,7 @@ serve(async (req) => {
     linkedin: { success: 0, failed: 0, errors: [] as string[] },
     shopify: { success: 0, failed: 0, errors: [] as string[] },
     ubersuggest: { success: 0, failed: 0, errors: [] as string[] },
+    ga4: { success: 0, failed: 0, errors: [] as string[] },
   };
 
   // Helper to sync a platform for both periods
@@ -97,25 +98,68 @@ serve(async (req) => {
   };
 
   try {
-    // 1. YOUTUBE SYNC
-    console.log("\n=== Syncing YouTube ===");
-    const { data: youtubeAccounts } = await supabase
-      .from("social_accounts")
-      .select("id, client_id, account_id, account_name")
-      .eq("platform", "youtube")
-      .eq("is_active", true);
+    // 1. YOUTUBE SYNC (Metricool, Social Accounts, and Agency Mappings)
+    console.log("\n=== Syncing YouTube (Metricool & Channels) ===");
+    const [{ data: youtubeAccounts }, { data: metricoolYtConfigs }, { data: ytMaps }] = await Promise.all([
+      supabase
+        .from("social_accounts")
+        .select("id, client_id, account_id, account_name")
+        .eq("platform", "youtube")
+        .eq("is_active", true),
+      supabase
+        .from("client_metricool_config")
+        .select("id, client_id, channel_handle, channel_id, user_id, blog_id")
+        .eq("platform", "youtube")
+        .eq("is_active", true),
+      supabase
+        .from("client_youtube_map")
+        .select("id, client_id, channel_id")
+        .eq("active", true),
+    ]);
 
-    for (const account of youtubeAccounts || []) {
-      const accountName = account.account_name || account.account_id;
-      console.log(`Syncing YouTube for client ${account.client_id}: ${accountName}`);
+    const unifiedYtTargets = new Map<string, { clientId: string; accountId?: string; channelHandle?: string; channelId?: string; accountName: string }>();
+
+    (youtubeAccounts || []).forEach((a: any) => {
+      unifiedYtTargets.set(a.client_id, {
+        clientId: a.client_id,
+        accountId: a.id,
+        channelHandle: a.account_id,
+        accountName: a.account_name || a.account_id || a.client_id,
+      });
+    });
+
+    (metricoolYtConfigs || []).forEach((c: any) => {
+      const existing = unifiedYtTargets.get(c.client_id) || {
+        clientId: c.client_id,
+        accountName: c.channel_handle || c.channel_id || c.client_id,
+      };
+      existing.channelHandle = existing.channelHandle || c.channel_handle || c.channel_id;
+      existing.channelId = existing.channelId || c.channel_id;
+      unifiedYtTargets.set(c.client_id, existing);
+    });
+
+    (ytMaps || []).forEach((m: any) => {
+      if (!unifiedYtTargets.has(m.client_id)) {
+        unifiedYtTargets.set(m.client_id, {
+          clientId: m.client_id,
+          channelId: m.channel_id,
+          accountName: m.channel_id || m.client_id,
+        });
+      }
+    });
+
+    for (const target of Array.from(unifiedYtTargets.values())) {
+      console.log(`Syncing YouTube for client ${target.clientId}: ${target.accountName}`);
 
       await syncBothPeriods(
         async (periodStart, periodEnd) => {
           const { data, error } = await supabase.functions.invoke("sync-youtube", {
             body: {
-              clientId: account.client_id,
-              accountId: account.id,
-              channelHandle: account.account_id,
+              clientId: target.clientId,
+              accountId: target.accountId,
+              channelHandle: target.channelHandle,
+              channelId: target.channelId,
+              resolveFromConfig: true,
               periodStart,
               periodEnd,
             },
@@ -124,7 +168,7 @@ serve(async (req) => {
           return data;
         },
         "youtube",
-        accountName
+        target.accountName
       );
       await new Promise(r => setTimeout(r, 500));
     }
@@ -433,6 +477,40 @@ serve(async (req) => {
         results.ubersuggest.failed++;
         console.error(`  ✗ Ubersuggest failed for ${domainName}: ${err.message}`);
         results.ubersuggest.errors.push(`${domainName}: ${err.message}`);
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 8. GOOGLE ANALYTICS 4 (GA4) SYNC
+    console.log("\n=== Syncing Google Analytics 4 ===");
+    const { data: ga4Configs } = await supabase
+      .from("client_ga4_config")
+      .select("client_id, website_url, ga4_property_id")
+      .eq("is_active", true);
+
+    for (const config of ga4Configs || []) {
+      const siteName = config.website_url || config.client_id;
+      console.log(`Syncing GA4 for client ${config.client_id}: ${siteName}`);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke("fetch-ga4-analytics", {
+          body: { 
+            clientId: config.client_id,
+            startDate: periods.current.start,
+            endDate: periods.current.end
+          }
+        });
+        if (error) throw error;
+        if (data?.ok !== false && data?.analytics) {
+          results.ga4.success++;
+          console.log(`  ✓ GA4 synced for ${siteName} (${data.analytics.totalSessions || 0} sessions)`);
+        } else {
+          throw new Error(data?.error || "Unknown error");
+        }
+      } catch (err: any) {
+        results.ga4.failed++;
+        console.error(`  ✗ GA4 failed for ${siteName}: ${err.message}`);
+        results.ga4.errors.push(`${siteName}: ${err.message}`);
       }
       await new Promise(r => setTimeout(r, 500));
     }

@@ -44,6 +44,12 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
             fetchStartDate.setDate(fetchStartDate.getDate() - 2);
             const fetchStartStr = fetchStartDate.toISOString().split("T")[0];
 
+            // HAIRtamin and Web/GA4/GSC-first clients route directly to computeWebOrGA4Metrics
+            const isHairtamin = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a";
+            if (isHairtamin) {
+                return computeWebOrGA4Metrics(clientId, dateRange, periodStartStr, periodEndStr);
+            }
+
             // 1. Query client's social_content rows directly (fast index lookup)
             // Order by published_at DESC so recent posts are always included even if limit is hit
             const { data: postsRaw, error: postsError } = await supabase
@@ -54,7 +60,7 @@ export function useSummaryMetrics(clientId: string, dateRange: string = "7d", cu
                 .limit(2000);
 
             if (postsError || !postsRaw || postsRaw.length === 0) {
-                return computeMetrics([], dateRange, periodStartStr, periodEndStr, clientId);
+                return computeWebOrGA4Metrics(clientId, dateRange, periodStartStr, periodEndStr);
             }
 
             // 2. Query metrics for these posts in URL-safe batches of 100
@@ -552,3 +558,329 @@ async function computeMetrics(
         postsPublished: Object.values(pMap).reduce((sum, p) => sum + (p.postsPublished || 0), 0),
     };
 }
+
+async function computeWebOrGA4Metrics(
+    clientId: string,
+    dateRange: string,
+    periodStartStr: string,
+    periodEndStr: string
+) {
+    const periodStartDate = new Date(periodStartStr + "T00:00:00Z");
+    const periodEndDate = new Date(periodEndStr + "T00:00:00Z");
+    const periodLengthMs = periodEndDate.getTime() - periodStartDate.getTime();
+    const priorEndDate = new Date(periodStartDate.getTime() - 86400000);
+    const priorStartDate = new Date(priorEndDate.getTime() - periodLengthMs);
+    const priorStartStr = priorStartDate.toISOString().split("T")[0];
+    const priorEndStr = priorEndDate.toISOString().split("T")[0];
+
+    // 1. Fetch GA4 config and GSC report data in parallel
+    const [{ data: ga4Config }, { data: gscData }] = await Promise.all([
+        supabase
+            .from("client_ga4_config" as any)
+            .select("website_url, ga4_property_id")
+            .eq("client_id", clientId)
+            .eq("is_active", true)
+            .maybeSingle(),
+        supabase
+            .from("report_gsc_metrics" as any)
+            .select("*")
+            .eq("client_id", clientId)
+            .order("collected_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+    ]);
+
+    // Process GSC metrics if available (HAIRtamin only)
+    const isHairtaminClient = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a";
+    let gscCurClicks = 0;
+    let gscCurImpressions = 0;
+    let gscCurCtr = 0;
+    let gscPrevClicks = 0;
+    let gscPrevImpressions = 0;
+    let gscPrevCtr = 0;
+    let gscTopQueries: any[] = [];
+    let gscTopPages: any[] = [];
+    let hasGsc = false;
+
+    if (gscData && isHairtaminClient) {
+        hasGsc = true;
+        const daily = Array.isArray(gscData.daily_breakdown) ? gscData.daily_breakdown : [];
+        gscTopQueries = Array.isArray(gscData.top_queries) ? gscData.top_queries : [];
+        gscTopPages = Array.isArray(gscData.top_pages) ? gscData.top_pages : [];
+
+        // Current period GSC
+        const curDaily = daily.filter((d: any) => d.date >= periodStartStr && d.date <= periodEndStr);
+        if (curDaily.length > 0) {
+            gscCurClicks = curDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+            gscCurImpressions = curDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+            gscCurCtr = gscCurImpressions > 0 ? (gscCurClicks / gscCurImpressions) * 100 : 0;
+        } else {
+            gscCurClicks = gscData.total_clicks || 0;
+            gscCurImpressions = gscData.total_impressions || 0;
+            gscCurCtr = parseFloat(gscData.avg_ctr) || 0;
+        }
+
+        // Previous period GSC
+        const prevDaily = daily.filter((d: any) => d.date >= priorStartStr && d.date <= priorEndStr);
+        if (prevDaily.length > 0) {
+            gscPrevClicks = prevDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+            gscPrevImpressions = prevDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+            gscPrevCtr = gscPrevImpressions > 0 ? (gscPrevClicks / gscPrevImpressions) * 100 : 0;
+        } else {
+            gscPrevClicks = Math.round(gscCurClicks * 0.95);
+            gscPrevImpressions = Math.round(gscCurImpressions * 0.95);
+            gscPrevCtr = gscCurCtr;
+        }
+    }
+
+    if (ga4Config) {
+        try {
+            const [curResp, prevResp] = await Promise.all([
+                supabase.functions.invoke("fetch-ga4-analytics", {
+                    body: { clientId, startDate: periodStartStr, endDate: periodEndStr },
+                }),
+                supabase.functions.invoke("fetch-ga4-analytics", {
+                    body: { clientId, startDate: priorStartStr, endDate: priorEndStr },
+                }),
+            ]);
+
+            const curAnalytics = curResp.data?.analytics;
+            const prevAnalytics = prevResp.data?.analytics;
+
+            if (curAnalytics || prevAnalytics || hasGsc) {
+                const curBounce = curAnalytics?.summary?.bounceRate ?? 45;
+                const curEngRate = Math.max(0, 100 - curBounce);
+                const totalSessions = curAnalytics?.summary?.totalSessions || 0;
+                const totalPageViews = curAnalytics?.summary?.totalPageViews || 0;
+                const totalViews = totalSessions > 0 ? totalSessions : totalPageViews;
+                const totalEngagements = Math.round(totalSessions * (curEngRate / 100));
+
+                const prevBounce = prevAnalytics?.summary?.bounceRate ?? 45;
+                const prevEngRate = Math.max(0, 100 - prevBounce);
+                const prevTotalSessions = prevAnalytics?.summary?.totalSessions || 0;
+                const prevTotalPageViews = prevAnalytics?.summary?.totalPageViews || 0;
+                const prevTotalViews = prevTotalSessions > 0 ? prevTotalSessions : prevTotalPageViews;
+                const prevTotalEngagements = Math.round(prevTotalSessions * (prevEngRate / 100));
+
+                const curSources = curAnalytics?.trafficSources || [];
+                const platformData: PlatformMetric[] = curSources.map((s: any) => {
+                    const views = s.sessions || 0;
+                    const engagements = Math.round(views * (curEngRate / 100));
+                    return {
+                        platform: s.source,
+                        views,
+                        engagements,
+                        engagementRate: Number(curEngRate.toFixed(1)),
+                        followersGained: 0,
+                        followers: 0,
+                        postsPublished: 0,
+                    };
+                });
+
+                const prevSources = prevAnalytics?.trafficSources || [];
+                const previousPlatformData = prevSources.map((s: any) => {
+                    const views = s.sessions || 0;
+                    const engagements = Math.round(views * (prevEngRate / 100));
+                    return {
+                        platform: s.source,
+                        views,
+                        engagements,
+                        postsPublished: 0,
+                    };
+                });
+
+                // Add Google Search Console platform entry if GSC data is connected
+                if (hasGsc) {
+                    const gscEngagements = Math.round(gscCurClicks * (Math.max(1, gscCurCtr) / 100));
+                    platformData.push({
+                        platform: "Google Search Console",
+                        views: gscCurClicks,
+                        engagements: gscEngagements,
+                        engagementRate: Number(gscCurCtr.toFixed(1)),
+                        followersGained: 0,
+                        followers: 0,
+                        postsPublished: gscTopQueries.length || gscTopPages.length || 0,
+                    });
+
+                    const prevGscEngagements = Math.round(gscPrevClicks * (Math.max(1, gscPrevCtr) / 100));
+                    previousPlatformData.push({
+                        platform: "Google Search Console",
+                        views: gscPrevClicks,
+                        engagements: prevGscEngagements,
+                        postsPublished: gscTopQueries.length || 0,
+                    });
+                }
+
+                platformData.sort((a: any, b: any) => b.views - a.views);
+
+                // Build timelineMap
+                const timelineMap: Record<string, { date: string; views: number; engagement: number; [key: string]: any }> = {};
+                for (let d = new Date(periodStartDate); d <= periodEndDate; d.setDate(d.getDate() + 1)) {
+                    const dStr = d.toISOString().split("T")[0];
+                    const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+                    timelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0 };
+                }
+                (curAnalytics?.dailyBreakdown || []).forEach((day: any) => {
+                    if (timelineMap[day.date]) {
+                        const dayBounce = day.bounceRate != null ? day.bounceRate : curBounce;
+                        const dayEngRate = Math.max(0, 100 - dayBounce);
+                        const dayViews = day.sessions || day.pageViews || 0;
+                        timelineMap[day.date].views = dayViews;
+                        timelineMap[day.date].engagement = Math.round(dayViews * (dayEngRate / 100));
+                    }
+                });
+
+                // Build previousTimelineMap
+                const previousTimelineMap: Record<string, { date: string; views: number; engagement: number; [key: string]: any }> = {};
+                for (let d = new Date(priorStartDate); d <= priorEndDate; d.setDate(d.getDate() + 1)) {
+                    const dStr = d.toISOString().split("T")[0];
+                    const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+                    previousTimelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0 };
+                }
+                (prevAnalytics?.dailyBreakdown || []).forEach((day: any) => {
+                    if (previousTimelineMap[day.date]) {
+                        const dayBounce = day.bounceRate != null ? day.bounceRate : prevBounce;
+                        const dayEngRate = Math.max(0, 100 - dayBounce);
+                        const dayViews = day.sessions || day.pageViews || 0;
+                        previousTimelineMap[day.date].views = dayViews;
+                        previousTimelineMap[day.date].engagement = Math.round(dayViews * (dayEngRate / 100));
+                    }
+                });
+
+                // Top pages and top Search Console queries as content drivers
+                const siteBase = (ga4Config as any)?.website_url || "https://hairtamin.com";
+                const landingPagePosts = (curAnalytics?.topPages || []).map((page: any, idx: number) => {
+                    const pViews = page.views || 0;
+                    const contrib = totalViews > 0 ? Math.round((pViews / totalViews) * 100) : 0;
+                    const cleanUrl = page.url?.startsWith("http")
+                        ? page.url
+                        : `${siteBase.replace(/\/$/, "")}${page.url?.startsWith("/") ? "" : "/"}${page.url}`;
+                    return {
+                        id: page.url || `page-${idx}`,
+                        platform: "Website",
+                        publishedAt: "",
+                        title: page.title || page.url,
+                        url: cleanUrl,
+                        currentValue: pViews,
+                        engagements: Math.round(pViews * (curEngRate / 100)),
+                        engagementRate: Number(curEngRate.toFixed(1)),
+                        contributionToCurrentTotal: contrib,
+                    };
+                });
+
+                const gscQueryPosts = gscTopQueries.slice(0, 3).map((q: any, idx: number) => {
+                    const clicks = q.clicks || 0;
+                    const ctr = typeof q.ctr === "number" ? q.ctr : (parseFloat(q.ctr) || 0);
+                    const posStr = q.position ? ` (Pos ${typeof q.position === "number" ? q.position.toFixed(1) : q.position})` : "";
+                    const contrib = totalViews > 0 ? Math.round((clicks / totalViews) * 100) : 0;
+                    return {
+                        id: `gsc-query-${idx}-${q.query}`,
+                        platform: "Google Search Console",
+                        publishedAt: "",
+                        title: `Search Query: "${q.query}"${posStr}`,
+                        url: `${siteBase.replace(/\/$/, "")}/search?q=${encodeURIComponent(q.query)}`,
+                        currentValue: clicks,
+                        engagements: Math.round(clicks * (Math.max(1, ctr) / 100)),
+                        engagementRate: Number(ctr.toFixed(1)),
+                        contributionToCurrentTotal: contrib,
+                    };
+                });
+
+                const topPosts = [...landingPagePosts.slice(0, 4), ...gscQueryPosts].slice(0, 6);
+
+                return {
+                    totalViews,
+                    totalEngagements,
+                    platformData,
+                    followersGained: 0,
+                    totalCurrentFollowers: 0,
+                    totalBaselineFollowers: 0,
+                    timelineData: Object.values(timelineMap),
+                    timelineMap,
+                    previousTimelineMap,
+                    topPosts,
+                    previousViews: prevTotalViews,
+                    previousEngagements: prevTotalEngagements,
+                    previousPlatformData,
+                    previousPostsPublished: previousPlatformData.length,
+                    prevFollowersStart: null,
+                    prevFollowersEnd: null,
+                    postsPublished: platformData.length,
+                };
+            }
+        } catch (e) {
+            console.error("Error fetching GA4 metrics for summary:", e);
+        }
+    } else if (hasGsc) {
+        // GSC-only standalone client
+        const gscEngagements = Math.round(gscCurClicks * (Math.max(1, gscCurCtr) / 100));
+        const prevGscEngagements = Math.round(gscPrevClicks * (Math.max(1, gscPrevCtr) / 100));
+        const platformData: PlatformMetric[] = [{
+            platform: "Google Search Console",
+            views: gscCurClicks,
+            engagements: gscEngagements,
+            engagementRate: Number(gscCurCtr.toFixed(1)),
+            followersGained: 0,
+            followers: 0,
+            postsPublished: gscTopQueries.length || 0,
+        }];
+
+        const previousPlatformData = [{
+            platform: "Google Search Console",
+            views: gscPrevClicks,
+            engagements: prevGscEngagements,
+            postsPublished: gscTopQueries.length || 0,
+        }];
+
+        const timelineMap: Record<string, { date: string; views: number; engagement: number }> = {};
+        for (let d = new Date(periodStartDate); d <= periodEndDate; d.setDate(d.getDate() + 1)) {
+            const dStr = d.toISOString().split("T")[0];
+            const dFormatted = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+            timelineMap[dStr] = { date: dFormatted, views: 0, engagement: 0 };
+        }
+        if (gscData && Array.isArray(gscData.daily_breakdown)) {
+            gscData.daily_breakdown.forEach((day: any) => {
+                if (timelineMap[day.date]) {
+                    timelineMap[day.date].views = day.clicks || 0;
+                    timelineMap[day.date].engagement = Math.round((day.clicks || 0) * ((day.ctr || 5) / 100));
+                }
+            });
+        }
+
+        const topPosts = gscTopQueries.slice(0, 5).map((q: any, idx: number) => ({
+            id: `gsc-query-${idx}`,
+            platform: "Google Search Console",
+            publishedAt: "",
+            title: `Query: "${q.query}" (Rank ${typeof q.position === "number" ? q.position.toFixed(1) : q.position})`,
+            url: undefined,
+            currentValue: q.clicks || 0,
+            engagements: Math.round((q.clicks || 0) * (((q.ctr || 5)) / 100)),
+            engagementRate: Number((q.ctr || 0).toFixed(1)),
+            contributionToCurrentTotal: gscCurClicks > 0 ? Math.round(((q.clicks || 0) / gscCurClicks) * 100) : 0,
+        }));
+
+        return {
+            totalViews: gscCurClicks,
+            totalEngagements: gscEngagements,
+            platformData,
+            followersGained: 0,
+            totalCurrentFollowers: 0,
+            totalBaselineFollowers: 0,
+            timelineData: Object.values(timelineMap),
+            timelineMap,
+            previousTimelineMap: {},
+            topPosts,
+            previousViews: gscPrevClicks,
+            previousEngagements: prevGscEngagements,
+            previousPlatformData,
+            previousPostsPublished: 1,
+            prevFollowersStart: null,
+            prevFollowersEnd: null,
+            postsPublished: 1,
+        };
+    }
+
+    // Default fallback to standard computeMetrics
+    return computeMetrics([], dateRange, periodStartStr, periodEndStr, clientId);
+}
+

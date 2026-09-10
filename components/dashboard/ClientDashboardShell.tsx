@@ -55,6 +55,7 @@ import {
 import { AllTimeTopPostsModal } from "@/components/AllTimeTopPostsModal";
 import { UbersuggestSection } from "@/components/analytics/UbersuggestSection";
 import { GSCSection } from "@/components/analytics/GSCSection";
+import { GA4InlineSection } from "@/components/analytics/GA4InlineSection";
 import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
 import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSection";
 import { PlayIQAnalyticsSection } from "@/components/dashboard/PlayIQAnalyticsSection";
@@ -91,6 +92,7 @@ interface ClientDashboardShellProps {
 
 export default function ClientDashboardShell({ clientId }: ClientDashboardShellProps) {
   const router = useRouter();
+  const { isAdmin } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [metricRankingChoice, setMetricRankingChoice] = useState<RankingChoice>("all");
   
@@ -631,6 +633,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     return webEcommClients.some(cName => name.toLowerCase().includes(cName.toLowerCase()));
   }, [client, clientGa4PropertyId, connectedAccounts, hasEmailCampaigns]);
 
+  const isHairtamin = useMemo(() => {
+    return clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a" || (client?.name ? client.name.toLowerCase().includes("hairtamin") : false);
+  }, [clientId, client?.name]);
+
+  const showSearchConsole = isHairtamin && (connectedAccounts?.gsc || isAdmin);
 
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
     ? clientReports.reports[clientReports.reports.length - 1] 
@@ -718,7 +725,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, connectedAccounts?.gsc, isOxiSureTech].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, showSearchConsole, isOxiSureTech].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -761,12 +768,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {connectedAccounts?.gsc && (
+              {showSearchConsole && (
                 <button
                   onClick={() => scrollToSection("gsc")}
                   className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-emerald-500/5 border-r border-primary/10 last:border-r-0 group"
                 >
-                  <span className="text-base group-hover:scale-110 transition-transform">📊</span>
+                  <span className="text-base group-hover:scale-110 transition-transform">🔍</span>
                   <span>SEARCH CONSOLE</span>
                 </button>
               )}
@@ -1390,12 +1397,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
+
+
                 {/* Google Search Console */}
-                {connectedAccounts?.gsc && (
+                {showSearchConsole && (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="gsc">
                     <div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
                       <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20 flex items-center justify-center">
-                         <span className="text-xl leading-none">📊</span>
+                         <span className="text-xl leading-none">🔍</span>
                       </div>
                       <div>
                         <h3 className="font-semibold text-xl text-emerald-950 dark:text-emerald-100 tracking-tight">Google Search Console</h3>

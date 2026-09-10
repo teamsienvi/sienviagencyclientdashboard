@@ -3,13 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Search, TrendingUp, TrendingDown, MousePointerClick, Eye, Target, Globe,
-  Smartphone, Monitor, Tablet, ChevronDown, ChevronUp, ExternalLink, Info
+  Smartphone, Monitor, Tablet, ChevronDown, ChevronUp, ExternalLink, Info, Upload
 } from "lucide-react";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, PieChart, Pie, Cell
 } from "recharts";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { GSCUploadModal } from "@/components/analytics/GSCUploadModal";
 
 interface GSCSectionProps {
   clientId: string;
@@ -27,7 +29,8 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
   const [showAllQueries, setShowAllQueries] = useState(false);
   const [showAllPages, setShowAllPages] = useState(false);
   const [showAllCountries, setShowAllCountries] = useState(false);
-  const [dateFilter, setDateFilter] = useState<"7d" | "14d" | "30d" | "90d" | "all">("all");
+  const [dateFilter, setDateFilter] = useState<"7d" | "14d" | "30d" | "90d" | "all">("7d");
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
 
   const { data: gscData, isLoading } = useQuery({
     queryKey: ["client-gsc-metrics", clientId],
@@ -56,10 +59,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
   const filteredDaily = useMemo(() => {
     if (dateFilter === "all" || allDailyBreakdown.length === 0) return allDailyBreakdown;
     const days = filterDays[dateFilter];
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    return allDailyBreakdown.filter((d: any) => d.date >= cutoffStr);
+    return allDailyBreakdown.slice(-days);
   }, [allDailyBreakdown, dateFilter]);
 
   // Recalculate KPIs from filtered daily data
@@ -78,7 +78,32 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     );
   }
 
-  if (!metrics) return null;
+  if (!metrics) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-card/40 border border-emerald-500/20 rounded-2xl">
+        <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-full mb-3">
+          <Search className="h-6 w-6" />
+        </div>
+        <h4 className="font-semibold text-base text-foreground">No Google Search Console Data Yet</h4>
+        <p className="text-sm text-muted-foreground max-w-md mt-1 mb-5">
+          Upload your GSC export ZIP or CSVs to unlock search query analytics, click & impression charts, and page rankings.
+        </p>
+        <Button
+          onClick={() => setIsUploadOpen(true)}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+        >
+          <Upload className="h-4 w-4" />
+          Upload GSC Export (ZIP / CSV)
+        </Button>
+
+        <GSCUploadModal
+          clientId={clientId}
+          isOpen={isUploadOpen}
+          onClose={() => setIsUploadOpen(false)}
+        />
+      </div>
+    );
+  }
 
   const topQueries = (metrics.top_queries || []) as any[];
   const topPages = (metrics.top_pages || []) as any[];
@@ -142,20 +167,32 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
-          {dateFilterOptions.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setDateFilter(opt.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                dateFilter === opt.value
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-0.5">
+            {dateFilterOptions.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setDateFilter(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  dateFilter === opt.value
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsUploadOpen(true)}
+            className="h-8 text-xs border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 gap-1.5"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Upload CSV / ZIP
+          </Button>
         </div>
       </div>
 
@@ -417,6 +454,13 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
           </div>
         </div>
       )}
+
+      {/* Upload Modal */}
+      <GSCUploadModal
+        clientId={clientId}
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+      />
     </div>
   );
 }

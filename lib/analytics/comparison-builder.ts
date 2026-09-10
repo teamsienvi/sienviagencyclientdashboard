@@ -91,20 +91,24 @@ export const buildCanonicalComparison = (
     });
   }
 
+  const isHairtamin = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a" || (input as any).clientName?.toLowerCase().includes("hairtamin") || (input as any).isHairtamin;
+
   // 2. Metrics Totals
   const viewsDelta = currentViews - previousViews;
   const viewsRel = previousViews > 0 ? Number(((viewsDelta / previousViews) * 100).toFixed(1)) : (currentViews > 0 ? 100 : 0);
 
   const viewsMetric: ReconciledMetric = {
     key: "views",
-    label: "Total Views",
+    label: isHairtamin ? "Total Sessions" : "Total Views",
     currentValue: currentViews,
     previousValue: previousViews,
     absoluteDelta: viewsDelta,
     relativeDelta: viewsRel,
     percentagePointDelta: null,
     isAvailable: true,
-    metricDefinition: METRIC_DEFINITIONS.views.definition,
+    metricDefinition: isHairtamin
+      ? "Total user sessions recorded across all traffic acquisition channels (GA4)."
+      : METRIC_DEFINITIONS.views.definition,
   };
 
   const engDelta = currentEngagements - previousEngagements;
@@ -112,14 +116,16 @@ export const buildCanonicalComparison = (
 
   const engagementsMetric: ReconciledMetric = {
     key: "engagements",
-    label: "Total Engagements",
+    label: isHairtamin ? "Engaged Sessions" : "Total Engagements",
     currentValue: currentEngagements,
     previousValue: previousEngagements,
     absoluteDelta: engDelta,
     relativeDelta: engRel,
     percentagePointDelta: null,
     isAvailable: true,
-    metricDefinition: "Sum of Likes + Comments + Shares across channels.",
+    metricDefinition: isHairtamin
+      ? "Sessions that lasted longer than 10 seconds, had a conversion event, or had 2+ page views."
+      : "Sum of Likes + Comments + Shares across channels.",
   };
 
   // 3. Engagement Rate Metric
@@ -130,19 +136,32 @@ export const buildCanonicalComparison = (
 
   const erMetric: ReconciledMetric = {
     key: "engagementRate",
-    label: "Avg Engagement Rate",
+    label: isHairtamin ? "Session Engagement Rate" : "Avg Engagement Rate",
     currentValue: Number(curER.toFixed(1)),
     previousValue: Number(prevER.toFixed(1)),
     absoluteDelta: Number((curER - prevER).toFixed(1)),
     relativeDelta: erRel,
     percentagePointDelta: erPp,
     isAvailable: true,
-    metricDefinition: METRIC_DEFINITIONS.engagementRate.definition,
-    denominatorDefinition: METRIC_DEFINITIONS.engagementRate.denominator,
+    metricDefinition: isHairtamin
+      ? "Percentage of engaged sessions (100% - Bounce Rate)."
+      : METRIC_DEFINITIONS.engagementRate.definition,
+    denominatorDefinition: isHairtamin
+      ? "Engaged Sessions / Total Sessions"
+      : METRIC_DEFINITIONS.engagementRate.denominator,
   };
 
   // 4. Audience Snapshots
-  const audience = resolveAudienceSnapshots({
+  const audience = (isHairtamin && startFollowersSnapshot && endFollowersSnapshot) ? {
+    currentBoundaryCount: endFollowersSnapshot,
+    previousBoundaryCount: startFollowersSnapshot,
+    netChange: endFollowersSnapshot - startFollowersSnapshot,
+    previousPeriodNetChange: (prevStartFollowersSnapshot && prevEndFollowersSnapshot) ? (prevEndFollowersSnapshot - prevStartFollowersSnapshot) : null,
+    status: "available" as const,
+    statusLabel: "Active Visitors (GA4)",
+    coverageCount: currentChannels.length,
+    missingPlatforms: [],
+  } : resolveAudienceSnapshots({
     startSnapshot: startFollowersSnapshot,
     endSnapshot: endFollowersSnapshot,
     prevStartSnapshot: prevStartFollowersSnapshot,
@@ -163,9 +182,11 @@ export const buildCanonicalComparison = (
 
   const publishing = {
     uniqueContentItems: contentItemsCount,
-    platformPublishingEvents: publishingEventsCount,
-    platformNativePosts: publishingEventsCount,
-    contentItemsDefinition: METRIC_DEFINITIONS.contentItems.definition,
+    platformPublishingEvents: isHairtamin ? currentChannels.length : publishingEventsCount,
+    platformNativePosts: isHairtamin ? currentChannels.length : publishingEventsCount,
+    contentItemsDefinition: isHairtamin
+      ? "Active traffic acquisition channels monitored in GA4"
+      : METRIC_DEFINITIONS.contentItems.definition,
   };
 
   // 7. Channel Share Points for charts
@@ -240,7 +261,8 @@ export const buildCanonicalComparison = (
     followersMetric as any,
     postsMetric as any,
     drivers,
-    channelDeltaInputs
+    channelDeltaInputs,
+    { isHairtamin, isWebsite: isHairtamin }
   ).map((rec) => ({
     ruleId: rec.id,
     title: rec.title,
@@ -249,7 +271,7 @@ export const buildCanonicalComparison = (
     confidence: "high" as const,
     action: rec.action,
     type: rec.type,
-    suppressedReason: audience.status !== "available" && rec.type === "improve_conversion" ? "Suppressed due to missing follower baseline snapshot" : null,
+    suppressedReason: !isHairtamin && audience.status !== "available" && rec.id === "improve_conversion" ? "Suppressed due to missing follower baseline snapshot" : null,
   })).filter(r => !r.suppressedReason);
 
   // 10. Reconciliation
@@ -269,7 +291,8 @@ export const buildCanonicalComparison = (
     channelDeltaInputs,
     driverPosts,
     current.label,
-    comparisonType === "wow_split"
+    comparisonType === "wow_split",
+    isHairtamin
   );
 
   const defaultStatuses: Array<{ platform: string; label: string; status: PlatformDataStatus }> = [

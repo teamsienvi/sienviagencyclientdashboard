@@ -27,8 +27,8 @@ serve(async (req) => {
 
     const { periodStart, periodEnd } = await req.json();
 
-    // Get all clients with YouTube accounts
-    const { data: youtubeAccounts, error: accountsError } = await supabase
+    // 1. Get YouTube accounts from social_accounts
+    const { data: youtubeAccounts } = await supabase
       .from("social_accounts")
       .select(`
         id,
@@ -40,30 +40,88 @@ serve(async (req) => {
       .eq("platform", "youtube")
       .eq("is_active", true);
 
-    if (accountsError) {
-      throw new Error(`Failed to fetch YouTube accounts: ${accountsError.message}`);
-    }
+    // 2. Get YouTube configs from client_metricool_config
+    const { data: metricoolYtConfigs } = await supabase
+      .from("client_metricool_config")
+      .select(`
+        id,
+        client_id,
+        channel_handle,
+        channel_id,
+        clients!inner(id, name, is_active)
+      `)
+      .eq("platform", "youtube")
+      .eq("is_active", true);
 
-    const activeAccounts = youtubeAccounts?.filter((a: any) => a.clients?.is_active) || [];
-    console.log(`Found ${activeAccounts.length} active YouTube accounts to sync`);
+    // 3. Get YouTube mappings from client_youtube_map
+    const { data: ytMaps } = await supabase
+      .from("client_youtube_map")
+      .select(`
+        id,
+        client_id,
+        channel_id,
+        clients!inner(id, name, is_active)
+      `)
+      .eq("active", true);
+
+    // Build unified target list of clients to sync
+    const targetClients = new Map<string, { clientId: string; clientName: string; accountId?: string; channelHandle?: string; channelId?: string }>();
+
+    (youtubeAccounts || []).forEach((a: any) => {
+      if (a.clients?.is_active) {
+        targetClients.set(a.client_id, {
+          clientId: a.client_id,
+          clientName: a.clients?.name || "Unknown",
+          accountId: a.id,
+          channelHandle: a.account_id,
+        });
+      }
+    });
+
+    (metricoolYtConfigs || []).forEach((c: any) => {
+      if (c.clients?.is_active) {
+        const existing = targetClients.get(c.client_id) || {
+          clientId: c.client_id,
+          clientName: c.clients?.name || "Unknown",
+        };
+        existing.channelHandle = existing.channelHandle || c.channel_handle || c.channel_id;
+        existing.channelId = existing.channelId || c.channel_id;
+        targetClients.set(c.client_id, existing);
+      }
+    });
+
+    (ytMaps || []).forEach((m: any) => {
+      if (m.clients?.is_active && !targetClients.has(m.client_id)) {
+        targetClients.set(m.client_id, {
+          clientId: m.client_id,
+          clientName: m.clients?.name || "Unknown",
+          channelId: m.channel_id,
+        });
+      }
+    });
+
+    const activeAccounts = Array.from(targetClients.values());
+    console.log(`Found ${activeAccounts.length} active YouTube accounts across Metricool and Social Accounts to sync`);
 
     const results: any[] = [];
 
     for (const account of activeAccounts) {
-      const clientId = account.client_id;
-      const clientData = account.clients as any;
-      const clientName = clientData?.name || "Unknown";
-      const channelHandle = account.account_id;
+      const clientId = account.clientId;
+      const clientName = account.clientName;
+      const channelHandle = account.channelHandle;
+      const channelId = account.channelId;
 
-      console.log(`Syncing YouTube for ${clientName} (${channelHandle})...`);
+      console.log(`Syncing YouTube for ${clientName} (${channelHandle || channelId || "Metricool config"})...`);
 
       try {
-        // Call the sync-youtube function
+        // Call the sync-youtube function with auto-resolve enabled
         const { data, error } = await supabase.functions.invoke("sync-youtube", {
           body: {
             clientId,
-            accountId: account.id,
+            accountId: account.accountId,
             channelHandle,
+            channelId,
+            resolveFromConfig: true,
             periodStart,
             periodEnd,
           },

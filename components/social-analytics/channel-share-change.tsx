@@ -1,6 +1,7 @@
 import React from "react";
 import type { SocialAnalyticsComparison } from "@/types/social-analytics";
 import { formatPercentagePointDelta } from "@/lib/analytics/formatting.ts";
+import { getChannelColor } from "@/lib/analytics/channel-colors";
 
 interface ChannelShareChangeProps {
   comparison: SocialAnalyticsComparison;
@@ -13,7 +14,7 @@ export const ChannelShareChange: React.FC<ChannelShareChangeProps> = ({ comparis
     currentSharePct: c.currentShare,
     previousSharePct: c.previousShare,
     shareDeltaPp: c.shareDeltaPp,
-    color: c.platform === "youtube" ? "#ef4444" : c.platform === "tiktok" ? "#f43f5e" : c.platform === "facebook" ? "#3b82f6" : c.platform === "instagram" ? "#d946ef" : "#8b5cf6",
+    color: getChannelColor(c.platform),
   }));
 
   return (

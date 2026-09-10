@@ -94,6 +94,7 @@ const PLATFORM_MODULES = [
   { platform: 'shopify',  module: 'shopify'      },  // Shopify e-commerce
   { platform: 'lms',      module: 'lms'          },  // LMS analytics
   { platform: 'seo',      module: 'seo'          },  // Ubersuggest SEO
+  { platform: 'ga4',      module: 'website'      },  // Google Analytics 4
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────

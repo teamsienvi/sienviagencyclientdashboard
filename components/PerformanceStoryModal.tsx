@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "@/components/ui/button";
-import { Sparkles, ArrowUpRight, Eye, Zap, Send } from "lucide-react";
+import { Sparkles, ArrowUpRight, Eye, Zap, Send, Globe, Share2 } from "lucide-react";
 import { DateRangePreset } from "@/utils/dashboardDateRange";
 import { useSummaryMetrics } from "@/hooks/useSummaryMetrics";
 import { buildCanonicalComparison } from "@/lib/analytics/comparison-builder.ts";
@@ -89,18 +89,44 @@ export function PerformanceStoryModal({
     open
   );
 
+  const isHairtamin = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a" || clientName?.toLowerCase().includes("hairtamin");
+
   const isMatchingPropHorizon = activeHorizon === dateRange;
   const currentViews = dynamicMetrics ? dynamicMetrics.totalViews : (isMatchingPropHorizon ? propsTotalViews : 0);
   const currentEngagements = dynamicMetrics ? dynamicMetrics.totalEngagements : (isMatchingPropHorizon ? propsTotalEngagements : 0);
-  const hookGained = dynamicMetrics ? dynamicMetrics.followersGained : 0;
-  const currentGained = (hookGained !== 0 ? hookGained : (isMatchingPropHorizon ? propsFollowersGained : hookGained));
+  
+  // Authoritative follower gain alignment:
+  // When viewing the active overview horizon (e.g. 7d), use propsFollowersGained (live Metricool + social sync)
+  // so the modal matches the Overview card (+5) identically.
+  const hookGained = dynamicMetrics?.followersGained ?? 0;
+  const currentGained = isMatchingPropHorizon && propsFollowersGained !== 0
+    ? propsFollowersGained
+    : (propsFollowersGained > 0 && hookGained <= 1 ? propsFollowersGained : Math.max(hookGained, propsFollowersGained));
+
   // The hook's totalCurrentFollowers only covers platforms in social_follower_timeline,
   // while propsTotalFollowers (from the overview) includes liveFollowers + socialMetrics.
   // Use the larger value so we don't underreport.
   const hookFollowers = dynamicMetrics?.totalCurrentFollowers || 0;
   const currentTotalFollowers = Math.max(hookFollowers, propsTotalFollowers);
 
-  const currentPlatforms = dynamicMetrics?.platformData?.length ? dynamicMetrics.platformData : (isMatchingPropHorizon ? propsPlatformData : []);
+  const currentPlatforms = useMemo(() => {
+    if (!dynamicMetrics?.platformData?.length) {
+      return isMatchingPropHorizon ? propsPlatformData : [];
+    }
+    return dynamicMetrics.platformData.map((dp) => {
+      const propMatch = propsPlatformData.find(
+        (pp) => String(pp.platform).toLowerCase() === String(dp.platform).toLowerCase()
+      );
+      if (!propMatch) return dp;
+      return {
+        ...dp,
+        followers: propMatch.followers > 0 ? propMatch.followers : dp.followers,
+        followersGained: (isMatchingPropHorizon && propMatch.followersGained !== undefined)
+          ? propMatch.followersGained
+          : (dp.followersGained || propMatch.followersGained || 0),
+      };
+    });
+  }, [dynamicMetrics?.platformData, propsPlatformData, isMatchingPropHorizon]);
 
   // Real prior-period data from useSummaryMetrics (no more fake multipliers!)
   const previousViews = (dynamicMetrics as any)?.previousViews ?? 0;
@@ -113,6 +139,8 @@ export function PerformanceStoryModal({
   const comparison = useMemo(() => {
     return buildCanonicalComparison({
       clientId,
+      clientName,
+      isHairtamin,
       preset: activeHorizon,
       customRange: customDateRangeLocal,
       timezone: "UTC",
@@ -207,7 +235,7 @@ export function PerformanceStoryModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 w-full min-w-0">
             <MetricDeltaCard
               metric={comparison.totals.views as any}
-              icon={<Eye className="h-4 w-4" />}
+              icon={isHairtamin ? <Globe className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             />
             <MetricDeltaCard
               metric={comparison.engagement.rate as any}
@@ -218,7 +246,7 @@ export function PerformanceStoryModal({
             <MetricDeltaCard
               metric={{
                 key: "posts",
-                label: "Publishing Events",
+                label: isHairtamin ? "Active Channels" : "Publishing Events",
                 currentValue: comparison.publishing.platformPublishingEvents,
                 previousValue: comparison.publishing.platformPublishingEvents,
                 absoluteDelta: 0,
@@ -228,7 +256,7 @@ export function PerformanceStoryModal({
                 status: "normal",
                 denominatorLabel: comparison.publishing.contentItemsDefinition,
               } as any}
-              icon={<Send className="h-4 w-4" />}
+              icon={isHairtamin ? <Share2 className="h-4 w-4" /> : <Send className="h-4 w-4" />}
             />
           </div>
 

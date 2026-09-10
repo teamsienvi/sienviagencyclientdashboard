@@ -868,6 +868,57 @@ async function collectWebsiteData(
             }
         }
 
+        // 0d. Check for Google Search Console data (report_gsc_metrics) - HAIRtamin only
+        const isHairtaminClient = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a";
+        if (isHairtaminClient) {
+            const { data: gscRows } = await supabase
+                .from("report_gsc_metrics")
+                .select("*")
+                .eq("client_id", clientId)
+                .order("collected_at", { ascending: false })
+                .limit(1);
+
+            if (gscRows && gscRows.length > 0) {
+                const gsc = gscRows[0];
+                const daily = Array.isArray(gsc.daily_breakdown) ? gsc.daily_breakdown : [];
+                const topQueries = Array.isArray(gsc.top_queries) ? gsc.top_queries : [];
+                const topPages = Array.isArray(gsc.top_pages) ? gsc.top_pages : [];
+                
+                let gscClicks = gsc.total_clicks || 0;
+                let gscImpressions = gsc.total_impressions || 0;
+                let gscCtr = parseFloat(gsc.avg_ctr) || 0;
+                let gscPosition = parseFloat(gsc.avg_position) || 0;
+
+                if (daily.length >= 7) {
+                    const matchingDaily = daily.filter((d: any) => d.date >= startStr && d.date <= endStr);
+                    if (matchingDaily.length > 0) {
+                        gscClicks = matchingDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+                        gscImpressions = matchingDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+                        gscCtr = gscImpressions > 0 ? (gscClicks / gscImpressions) * 100 : 0;
+                        gscPosition = matchingDaily.reduce((s: number, d: any) => s + (d.position || 0), 0) / matchingDaily.length;
+                    }
+                }
+
+                let gscOutput = `## Google Search Console (Organic Search Visibility) (${startStr} to ${endStr})\n` +
+                    `- Total Search Clicks: ${gscClicks.toLocaleString()}\n` +
+                    `- Total Search Impressions: ${gscImpressions.toLocaleString()}\n` +
+                    `- Average Search CTR: ${gscCtr.toFixed(2)}%\n` +
+                    `- Average Ranking Position: ${gscPosition.toFixed(1)}\n`;
+
+                if (topQueries.length > 0) {
+                    gscOutput += `- Top Ranked Search Queries:\n` +
+                        topQueries.slice(0, 5).map((q: any) => `  - "${q.query}": ${q.clicks} clicks, ${q.impressions} impr, CTR ${typeof q.ctr === 'number' ? q.ctr.toFixed(1) : q.ctr}%, Pos ${typeof q.position === 'number' ? q.position.toFixed(1) : q.position}`).join('\n') + '\n';
+                }
+
+                if (topPages.length > 0) {
+                    gscOutput += `- Top Performing Landing Pages in Search:\n` +
+                        topPages.slice(0, 5).map((p: any) => `  - ${p.page}: ${p.clicks} clicks, ${p.impressions} impr`).join('\n') + '\n';
+                }
+
+                sections.push(gscOutput);
+            }
+        }
+
         // Website analytics data is stored in the agency's own Supabase
         // (the track-analytics edge function inserts into web_analytics_page_views
         //  and web_analytics_sessions using the agency's client_id)
@@ -1211,13 +1262,16 @@ async function collectSeoData(
             sections.push("No Ubersuggest SEO metric updates found in the specified timeframe.");
         }
 
-        // ─── Google Search Console Performance Data ───
-        const { data: gscRows, error: gscErr } = await supabase
-            .from("report_gsc_metrics")
-            .select("*")
-            .eq("client_id", clientId)
-            .order("collected_at", { ascending: false })
-            .limit(1);
+        // ─── Google Search Console Performance Data (HAIRtamin Only) ───
+        const isHairtaminClient = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a";
+        const { data: gscRows, error: gscErr } = isHairtaminClient
+            ? await supabase
+                .from("report_gsc_metrics")
+                .select("*")
+                .eq("client_id", clientId)
+                .order("collected_at", { ascending: false })
+                .limit(1)
+            : { data: null, error: null };
 
         if (!gscErr && gscRows && gscRows.length > 0) {
             const gsc = gscRows[0];

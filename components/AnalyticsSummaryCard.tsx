@@ -52,7 +52,7 @@ export function AnalyticsSummaryCard({
     type, 
     title, 
     icon, 
-    dateRange = "14d", 
+    dateRange = "7d", 
     onDateRangeChange,
     customDateRange, 
     isActive = true,
@@ -76,6 +76,8 @@ export function AnalyticsSummaryCard({
     useEffect(() => {
         if (prevSyncing.current && !isSyncing) {
             queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId, type] });
+            queryClient.invalidateQueries({ queryKey: ["summary-metrics", clientId] });
+            queryClient.invalidateQueries({ queryKey: ["ga4-analytics", clientId] });
         }
         prevSyncing.current = isSyncing;
     }, [isSyncing, queryClient, clientId, type]);
@@ -152,7 +154,7 @@ export function AnalyticsSummaryCard({
     };
     const bounds = getPeriodBounds();
     
-    const { data: metricsData, isLoading: isLoadingMetrics, isFetching: isFetchingMetrics } = useSummaryMetrics(isSocial ? clientId : "", dateRange, customDateRange, isActive);
+    const { data: metricsData, isLoading: isLoadingMetrics, isFetching: isFetchingMetrics } = useSummaryMetrics(clientId, dateRange, customDateRange, isActive);
 
     // 3. Fetch Top Posts
     const { data: topPosts, isLoading: isLoadingTopPosts } = useTopPerformingPosts(isSocial ? clientId : undefined, dateRange, 4, customDateRange);
@@ -274,13 +276,13 @@ export function AnalyticsSummaryCard({
     const hookTotalViews = metricsData?.totalViews ?? 0;
     const hookTotalEngagements = metricsData?.totalEngagements ?? 0;
 
-    const totalViews = type === 'social'
-        ? (hookTotalViews > 0 ? hookTotalViews : (optimizedTotalViews || (aiMetrics.total_views || 0)))
-        : (aiMetrics.total_views || 0);
+    const totalViews = hookTotalViews > 0
+        ? hookTotalViews
+        : (type === 'social' ? (optimizedTotalViews || (aiMetrics.total_views || 0)) : (aiMetrics.total_views || 0));
 
-    const totalEngagements = type === 'social'
-        ? (hookTotalEngagements > 0 ? hookTotalEngagements : (optimizedTotalEngagements || 0))
-        : (metricsData?.totalEngagements || 0);
+    const totalEngagements = hookTotalEngagements > 0
+        ? hookTotalEngagements
+        : (type === 'social' ? (optimizedTotalEngagements || 0) : (metricsData?.totalEngagements || 0));
 
     // followersGained must be 100% consistent with the platform breakdown table.
     // Sum only positive gains so negative drops are never displayed and numbers match identically.
@@ -444,7 +446,8 @@ export function AnalyticsSummaryCard({
                                 clientId={clientId}
                                 type={type}
                                 title={title}
-                                dateRange={(dateRange as DateRangePreset) || "14d"}
+                                clientName={title}
+                                dateRange={(dateRange as DateRangePreset) || "7d"}
                                 customDateRange={customDateRange}
                                 onDateRangeChange={onDateRangeChange}
                                 totalViews={totalViews}

@@ -244,6 +244,17 @@ serve(async (req) => {
             lockMinutes = 5;
             workerFn = "sync-melcat-metrics";
             workerPayload = { clientId };
+        } else if (platform === 'ga4' || platform === 'website' || module === 'ga4' || module === 'website') {
+            lockMinutes = 5;
+            workerFn = "fetch-ga4-analytics";
+            const now = new Date();
+            const to = now.toISOString().split('T')[0];
+            const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            workerPayload = {
+                clientId,
+                startDate: from,
+                endDate: to
+            };
         } else {
             console.log(`[orchestrate-sync] WARNING: Unknown module routing for ${platform}/${module}`);
             return new Response(JSON.stringify({ status: 'error', error: 'Unknown routing' }), { status: 400, headers: corsHeaders });
