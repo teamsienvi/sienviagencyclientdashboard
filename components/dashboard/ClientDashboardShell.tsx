@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat, Cpu
+  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat, Cpu, Flame
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserClients } from "@/hooks/useClientAccess";
@@ -59,6 +59,7 @@ import { GA4InlineSection } from "@/components/analytics/GA4InlineSection";
 import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
 import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSection";
 import { PlayIQAnalyticsSection } from "@/components/dashboard/PlayIQAnalyticsSection";
+import { TrendingKeywordsSection } from "@/components/analytics/TrendingKeywordsSection";
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -778,17 +779,20 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {/* {isOxiSureTech && (
+              {isOxiSureTech && (
                 <button
-                  onClick={() => scrollToSection("retention-app-sales")}
-                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-teal-500/5 border-r border-primary/10 last:border-r-0 group"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(new CustomEvent("expand-trending-radar"));
+                    }
+                    scrollToSection("trending-radar");
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 px-4 text-sm font-bold transition-all hover:bg-violet-500/10 border-r border-primary/10 last:border-r-0 group text-violet-600 dark:text-violet-400"
                 >
-                  <Smartphone className="h-4 w-4 text-teal-500 group-hover:scale-110 transition-transform" />
-                  <span>RETENTION APP SALES</span>
+                  <Flame className="h-4 w-4 text-violet-500 fill-violet-500/20 group-hover:scale-110 transition-transform" />
+                  <span>TRENDING RADAR</span>
                 </button>
-              )} */}
-
-
+              )}
             </div>
 
             {/* Analytics Tab */}
@@ -1421,12 +1425,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
-                {/* OxiSure Retention App Sales - Hidden */}
-                {/* {isOxiSureTech && (
-                  <div className="mt-8 mb-8 scroll-mt-24 bg-teal-50 dark:bg-teal-500/5 border-2 border-teal-200 dark:border-teal-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="retention-app-sales">
-                    <OxiSureAppSalesSection />
+                {/* Trending & Content Radar Section (Piloted on OxiSure Tech) */}
+                {isOxiSureTech && (
+                  <div className="mt-8 mb-8 scroll-mt-24" id="trending-radar">
+                    <TrendingKeywordsSection clientId={clientId!} clientName={client.name} />
                   </div>
-                )} */}
+                )}
 
               </div>
             </TabsContent>
