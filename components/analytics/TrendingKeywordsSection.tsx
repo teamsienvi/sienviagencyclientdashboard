@@ -35,14 +35,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface TrendingKeywordsSectionProps {
   clientId: string;
   clientName?: string;
+  defaultCollapsed?: boolean;
 }
 
-export function TrendingKeywordsSection({ clientId, clientName = "OxiSure Tech" }: TrendingKeywordsSectionProps) {
+export function TrendingKeywordsSection({
+  clientId,
+  clientName = "OxiSure Tech",
+  defaultCollapsed = true,
+}: TrendingKeywordsSectionProps) {
   const [selectedGeo, setSelectedGeo] = useState<string>("worldwide");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copiedAll, setCopiedAll] = useState<boolean>(false);
   const [activeSubTab, setActiveSubTab] = useState<string>("radar");
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(true);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(defaultCollapsed);
 
   React.useEffect(() => {
     const handleExpand = () => setIsCollapsed(false);

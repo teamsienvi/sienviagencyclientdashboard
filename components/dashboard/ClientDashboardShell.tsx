@@ -1428,7 +1428,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 {/* Trending & Content Radar Section (Piloted on OxiSure Tech) */}
                 {isOxiSureTech && (
                   <div className="mt-8 mb-8 scroll-mt-24" id="trending-radar">
-                    <TrendingKeywordsSection clientId={clientId!} clientName={client.name} />
+                    <TrendingKeywordsSection clientId={clientId!} clientName={client.name} defaultCollapsed={true} />
                   </div>
                 )}
 
