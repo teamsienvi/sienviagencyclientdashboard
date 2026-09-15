@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabaseUrl = process.env.PLAYIQ_SUPABASE_URL;
+  const supabaseUrl = process.env.PLAYIQ_SUPABASE_URL || "https://scdbhpcnqihaswaijptx.supabase.co";
   const supabaseKey = process.env.PLAYIQ_SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
@@ -35,8 +35,9 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    const pendingCount = (allApps || []).filter((a: any) => a.status === 'pending').length;
     const totalCount = allApps?.length || 0;
+    const pendingCount = (allApps || []).filter((a: any) => a.status === 'pending').length;
+    const paidCount = (allApps || []).filter((a: any) => a.status === 'paid' || a.status === 'fulfilled_promo').length;
     
     // Calculate source breakdown
     let emailCount = 0;
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
       metrics: {
         totalCount,
         pendingCount,
-        paidCount: (allApps || []).filter((a: any) => a.status === 'paid').length,
+        paidCount,
         sourceBreakdown: {
           emailCount,
           socialCount,
