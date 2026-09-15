@@ -57,9 +57,25 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    const totalCount = allApps?.length || 0;
-    const pendingCount = (allApps || []).filter((a: any) => a.status === 'pending').length;
-    const paidCount = (allApps || []).filter((a: any) => a.status === 'paid' || a.status === 'fulfilled_promo').length;
+    const processedApps = (allApps || []).map((app: any) => {
+      const emailLower = (app.email || '').toLowerCase().trim();
+      const nameLower = (app.parent_full_name || '').toLowerCase().trim();
+      const isTest = app.source === 'test_account' || 
+        emailLower === 'teamsienvitest@gmail.com' || 
+        emailLower === 'jimboyaquino12@gmail.com' || 
+        nameLower.includes('test') || 
+        emailLower.includes('test@');
+      return {
+        ...app,
+        is_test: isTest
+      };
+    });
+
+    const totalCount = processedApps.length;
+    const testCount = processedApps.filter(a => a.is_test).length;
+    const genuineCount = totalCount - testCount;
+    const pendingCount = processedApps.filter((a: any) => a.status === 'pending').length;
+    const paidCount = processedApps.filter((a: any) => a.status === 'paid' || a.status === 'fulfilled_promo').length;
     
     // Calculate source breakdown
     let emailCount = 0;
@@ -67,7 +83,7 @@ export async function GET(request: NextRequest) {
     let otherCount = 0;
     const otherBreakdown: Record<string, number> = {};
 
-    (allApps || []).forEach((app: any) => {
+    processedApps.forEach((app: any) => {
       let s = (app.source || 'direct_traffic').toLowerCase();
       if (s === 'web_form') s = 'direct_traffic';
 
@@ -82,9 +98,11 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json({
-      applications: allApps || [],
+      applications: processedApps,
       metrics: {
         totalCount,
+        testCount,
+        genuineCount,
         pendingCount,
         paidCount,
         sourceBreakdown: {

@@ -60,6 +60,11 @@ export function PlayIQAnalyticsSection({ clientId }: PlayIQAnalyticsSectionProps
           </div>
           <div>
             <p className="text-4xl font-black">{metrics.totalCount} <span className="text-sm text-muted-foreground font-normal">/ 50</span></p>
+            {metrics.testCount > 0 && (
+              <p className="text-[11px] font-mono text-muted-foreground mt-1">
+                {metrics.genuineCount} genuine · <span className="text-amber-500 dark:text-amber-400 font-semibold">{metrics.testCount} test</span>
+              </p>
+            )}
           </div>
         </div>
         
@@ -144,9 +149,18 @@ export function PlayIQAnalyticsSection({ clientId }: PlayIQAnalyticsSectionProps
               <tbody>
                 {applications.map((app: any) => (
                   <tr key={app.id} className="border-b last:border-0 hover:bg-muted/10 transition-colors">
-                    <td className="px-6 py-4 font-medium flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs text-muted-foreground"><Users className="w-3 h-3" /></div>
-                      {app.parent_full_name || 'Unknown Parent'}
+                    <td className="px-6 py-4 font-medium">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-xs text-muted-foreground flex-shrink-0">
+                          <Users className="w-3 h-3" />
+                        </div>
+                        <span className="font-semibold">{app.parent_full_name || 'Unknown Parent'}</span>
+                        {app.is_test && (
+                          <span className="px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider rounded border border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono whitespace-nowrap">
+                            TEST ACCOUNT
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground text-xs font-sans">
                       <a href={`mailto:${app.email}`} className="hover:text-primary transition-colors">{app.email}</a>
@@ -157,7 +171,11 @@ export function PlayIQAnalyticsSection({ clientId }: PlayIQAnalyticsSectionProps
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-2 py-1 text-[10px] uppercase font-bold tracking-widest border border-muted bg-muted/50 rounded-sm">
+                      <span className={`px-2 py-1 text-[10px] uppercase font-bold tracking-widest border rounded-sm ${
+                        app.source === 'test_account' 
+                          ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400' 
+                          : 'border-muted bg-muted/50'
+                      }`}>
                         {app.source === 'web_form' || !app.source ? 'direct_traffic' : app.source}
                       </span>
                     </td>
