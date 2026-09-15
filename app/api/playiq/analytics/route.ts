@@ -1,22 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUserContext } from "@/lib/auth/guards";
 import { createClient } from "@supabase/supabase-js";
+import { supabase as agencyDb } from "@/integrations/supabase/client";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  // Guard: Must be authenticated
+  // Guard: Must be authenticated in client dashboard
   const ctx = await getCurrentUserContext();
   if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabaseUrl = process.env.PLAYIQ_SUPABASE_URL || "https://scdbhpcnqihaswaijptx.supabase.co";
-  const supabaseKey = process.env.PLAYIQ_SUPABASE_SERVICE_ROLE_KEY;
+  let supabaseUrl = process.env.PLAYIQ_SUPABASE_URL;
+  let supabaseKey = process.env.PLAYIQ_SUPABASE_SERVICE_ROLE_KEY;
 
+  // Fallback: If env vars not directly in Vercel environment, fetch from agency clients table
   if (!supabaseUrl || !supabaseKey) {
+    try {
+      const { data: clientRecord } = await agencyDb
+        .from("clients")
+        .select("supabase_url, api_key")
+        .ilike("name", "%PlayIQ%")
+        .maybeSingle();
+
+      if (clientRecord && clientRecord.supabase_url && clientRecord.api_key) {
+        supabaseUrl = clientRecord.supabase_url;
+        supabaseKey = clientRecord.api_key;
+      }
+    } catch (e) {
+      console.warn("[playiq-analytics] Failed to fetch credentials from clients table:", e);
+    }
+  }
+
+  // Hard fallback default if still missing
+  supabaseUrl = supabaseUrl || "https://scdbhpcnqihaswaijptx.supabase.co";
+
+  if (!supabaseKey) {
     return NextResponse.json(
-      { error: "PlayIQ database configuration missing" },
+      { error: "PlayIQ database credentials not configured" },
       { status: 500 }
     );
   }
