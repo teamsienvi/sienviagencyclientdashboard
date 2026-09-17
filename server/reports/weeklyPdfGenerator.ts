@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
-import type { ClientBrandTheme } from "../../config/clientBrandThemes.ts";
-import { DEFAULT_BRAND_THEME } from "../../config/clientBrandThemes.ts";
+import type { ClientBrandTheme } from "../../config/clientBrandThemes";
+import { DEFAULT_BRAND_THEME } from "../../config/clientBrandThemes";
 
 export interface RankedContentItem {
   title: string;
