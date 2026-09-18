@@ -331,20 +331,26 @@ export async function GET(req: NextRequest) {
       summaryByType[t] = s;
     }
 
-    // Pick the primary summary: prefer social if available, else website, else seo, else any
-    const primarySummary = summaryByType["social"] || summaryByType["website"] || summaryByType["seo"] || summaryRows[0] || null;
+    // Pick the primary summary: only consider types the client actually has configured
+    const allowedTypes: string[] = [];
+    if (hasSocial) allowedTypes.push("social");
+    if (hasWebEcomm) allowedTypes.push("website");
+    if (hasSeo) allowedTypes.push("seo");
+    if (hasAds) allowedTypes.push("ads");
+    // Fallback: if nothing is configured, allow any type so the report isn't completely empty
+    if (allowedTypes.length === 0) allowedTypes.push("social", "website", "seo");
+
+    const primarySummary = allowedTypes.map(t => summaryByType[t]).find(Boolean) || summaryRows[0] || null;
     const rawAiSummary = primarySummary?.summary_data || null;
     const aiMetrics = rawAiSummary?.metrics || {};
 
-    // Merge insights from all summary types for a richer teardown
+    // Merge insights ONLY from summary types the client actually uses
     const mergedStrengths: string[] = [];
     const mergedWeaknesses: string[] = [];
     const mergedActions: string[] = [];
     const mergedHighlights: string[] = [];
     
-    // Priority order: social first (if exists), then website, then seo
-    const typeOrder = ["social", "website", "seo", "ads"];
-    for (const t of typeOrder) {
+    for (const t of allowedTypes) {
       const s = summaryByType[t]?.summary_data;
       if (!s) continue;
       if (s.strengths) mergedStrengths.push(...s.strengths);
