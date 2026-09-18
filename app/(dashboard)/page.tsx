@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth/guards";
-import { getActiveClients, getActiveMetricoolConfigs, getUserClientAssignment } from "@/server/queries";
+import { getActiveClients, getArchivedClients, getActiveMetricoolConfigs, getUserClientAssignment } from "@/server/queries";
 import DashboardClientShell from "@/components/dashboard/DashboardClientShell";
 
 export const metadata = {
@@ -26,14 +26,16 @@ export default async function DashboardIndex() {
   }
 
   // Admin: fetch data and render the interactive dashboard shell
-  const [dbClients, metricoolConfigs] = await Promise.all([
+  const [dbClients, archivedClients, metricoolConfigs] = await Promise.all([
     getActiveClients(),
+    getArchivedClients(),
     getActiveMetricoolConfigs(),
   ]);
 
   return (
     <DashboardClientShell
       dbClients={dbClients}
+      archivedDbClients={archivedClients}
       metricoolConfigs={metricoolConfigs}
     />
   );

@@ -20,6 +20,25 @@ export async function getActiveClients() {
 }
 
 /**
+ * Fetch all archived (inactive) clients.
+ * Used by the admin dashboard to show the archived section.
+ */
+export async function getArchivedClients() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name, logo_url")
+    .eq("is_active", false)
+    .order("name");
+
+  if (error) {
+    console.error("getArchivedClients error:", error);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
  * Fetch active Metricool configs for rendering platform badges.
  */
 export async function getActiveMetricoolConfigs() {

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, TrendingUp, FileText, Eye, Youtube, Twitter, Music2, Linkedin } from "lucide-react";
+import { Calendar, ExternalLink, ChevronRight, ArrowRight, ImageIcon, Upload, TrendingUp, FileText, Eye, Youtube, Twitter, Music2, Linkedin, Archive, Loader2 } from "lucide-react";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -19,9 +19,11 @@ import { toast } from "sonner";
 interface ClientCardProps {
   client: Client;
   clientIndex: number;
-  clientId?: string; // Database ID for YouTube analytics
-  websiteAnalyticsId?: string; // Database ID for website analytics (only if supabase_url is set)
-  metricoolPlatforms?: string[]; // Platforms with Metricool config (e.g., ['tiktok', 'linkedin'])
+  clientId?: string;
+  websiteAnalyticsId?: string;
+  metricoolPlatforms?: string[];
+  onArchive?: () => void;
+  isArchiving?: boolean;
 }
 
 // Helper to extract month from date range (e.g., "Nov 24-30" -> "November")
@@ -48,7 +50,7 @@ const getMonthFromDateRange = (dateRange: string): string => {
   return dateRange;
 };
 
-export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, metricoolPlatforms }: ClientCardProps) => {
+export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, metricoolPlatforms, onArchive, isArchiving }: ClientCardProps) => {
   const router = useRouter();
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   
@@ -133,7 +135,28 @@ export const ClientCard = ({ client, clientIndex, clientId, websiteAnalyticsId, 
               </p>
             </div>
           </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+          <div className="flex items-center gap-2">
+            {onArchive && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`Archive ${client.name}? You can restore it later from the Archived section.`)) {
+                    onArchive();
+                  }
+                }}
+                disabled={isArchiving}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
+                title={`Archive ${client.name}`}
+              >
+                {isArchiving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Archive className="h-4 w-4" />
+                )}
+              </button>
+            )}
+            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+          </div>
         </div>
         
         {/* Quick Stats */}
