@@ -60,6 +60,7 @@ import { useSocialMetricsRealtime } from "@/hooks/useSocialMetricsRealtime";
 import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSection";
 import { PlayIQAnalyticsSection } from "@/components/dashboard/PlayIQAnalyticsSection";
 import { TrendingKeywordsSection } from "@/components/analytics/TrendingKeywordsSection";
+import { DownloadWeeklyPdfButton } from "@/components/reports/DownloadWeeklyPdfButton";
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -707,6 +708,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                     </span>
                   )}
                 </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 self-start md:self-auto">
+                <DownloadWeeklyPdfButton clientId={clientId} clientName={client.name} />
               </div>
             </div>
           </div>
@@ -1482,6 +1488,23 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       </Button>
                     </div>
                   )}
+
+                  {/* Current Week Live Export Card */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl border border-primary/20 bg-primary/5 gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
+                          Live Auto-Generated
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">Monday – Sunday Cycle</span>
+                      </div>
+                      <p className="font-semibold text-foreground">Current Weekly Performance Report (PDF)</p>
+                      <p className="text-xs text-muted-foreground">
+                        Export live audited metrics across connected channels with custom brand styling.
+                      </p>
+                    </div>
+                    <DownloadWeeklyPdfButton clientId={clientId} clientName={client.name} variant="default" />
+                  </div>
 
                   {/* Browse by Month */}
                   <div className="space-y-3">
