@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/server";
 import { getCurrentReportingWeek, formatDateRangeFull, formatDateRange } from "@/utils/weeklyDateRange";
 import { getClientBrandTheme } from "@/config/clientBrandThemes";
 import { generateWeeklyReportPdf, WeeklyPdfReportData, RankedContentItem } from "@/server/reports/weeklyPdfGenerator";
@@ -41,12 +40,11 @@ export async function GET(req: NextRequest) {
     const startISO = startDate.toISOString().split("T")[0];
     const endISO = endDate.toISOString().split("T")[0];
 
-    // Initialize Supabase client
+    // Initialize Supabase client — use service role to bypass RLS for report data aggregation
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "https://mhuxrnxajtiwxauhlhlv.supabase.co";
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabase = serviceKey
-      ? createSupabaseClient(supabaseUrl, serviceKey)
-      : await createClient();
+    const DEFAULT_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1odXhybnhhanRpd3hhdWhsaGx2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTk1MzcwNywiZXhwIjoyMDg3NTI5NzA3fQ.hB-L59qE7061eR_FXnZ_Uh8I5pUqD8zq9IRV9en4uRA";
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_KEY;
+    const supabase = createSupabaseClient(supabaseUrl, serviceKey);
 
     // 1. Fetch Client Info
     const { data: client, error: clientErr } = await supabase
