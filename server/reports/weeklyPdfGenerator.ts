@@ -81,10 +81,11 @@ const truncateAtWord = (text: string, maxLen: number): string => {
 
 /** Strip emojis / special unicode and normalize whitespace for clean PDF text */
 const cleanForPdf = (text: string): string => {
-  // Remove common emoji ranges (surrogate pairs) and variation selectors
+  // Remove common emoji ranges — ES5-compatible (no 'u' flag)
   return text
-    .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "")  // surrogate pairs (emoji)
+    .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, "")  // ALL surrogate pairs (covers emoji, flags, symbols in supplementary planes)
     .replace(/[\u2600-\u27BF\uFE00-\uFE0F\u200D\u20E3]/g, "")  // misc symbols & modifiers
+    .replace(/[\u2702-\u27B0]/g, "")  // dingbats
     .replace(/\s+/g, " ")
     .trim();
 };
@@ -421,7 +422,9 @@ export async function generateWeeklyReportPdf(data: WeeklyPdfReportData): Promis
     y += 14;
 
     // ── 2. Top Content (With Clickable Interactive Hyperlinks!) ──
-    doc.fontSize(9.5).font("Helvetica-Bold").fillColor(C.textDark).text("Top Content (Click Title to Open Post)", MARGIN, y);
+    const isWebOnlyReport = data.platforms.length === 0;
+    const contentSectionTitle = isWebOnlyReport ? "Top Pages & Search Queries" : "Top Content (Click Title to Open Post)";
+    doc.fontSize(9.5).font("Helvetica-Bold").fillColor(C.textDark).text(contentSectionTitle, MARGIN, y);
     doc.rect(MARGIN, y + 13, 24, 2).fill(C.primary);
     drawHLine(y + 14, C.border, 0.5);
     y += 22;
@@ -430,7 +433,9 @@ export async function generateWeeklyReportPdf(data: WeeklyPdfReportData): Promis
     doc.roundedRect(MARGIN, y, CONTENT_W, 18, 3).fill(C.darkSurface);
 
     let cx = MARGIN + 6;
-    const contentHeaders = ["CONTENT TITLE (CLICK TO VIEW)", "PLATFORM", "VIEWS", "ENGAGEMENTS", "ENG. RATE", "DATE"];
+    const contentHeaders = isWebOnlyReport
+      ? ["PAGE / QUERY", "SOURCE", "PAGE VIEWS", "SESSIONS", "ENG. RATE", ""]
+      : ["CONTENT TITLE (CLICK TO VIEW)", "PLATFORM", "VIEWS", "ENGAGEMENTS", "ENG. RATE", "DATE"];
     doc.fontSize(6.5).font("Helvetica-Bold").fillColor(C.white);
     for (let i = 0; i < contentHeaders.length; i++) {
       doc.text(contentHeaders[i], cx, y + 5, { width: contentColW[i] });
@@ -439,9 +444,12 @@ export async function generateWeeklyReportPdf(data: WeeklyPdfReportData): Promis
     y += 21;
 
     const postsToShow = (data.topContent || []).slice(0, 7);
+    const noContentMessage = isWebOnlyReport
+      ? "No website pages or search queries recorded for this reporting period."
+      : "No published creative assets recorded for this date horizon.";
     if (postsToShow.length === 0) {
       doc.roundedRect(MARGIN, y, CONTENT_W, 24, 2).fillAndStroke(C.white, C.border);
-      doc.fontSize(7.5).font("Helvetica").fillColor(C.textMuted).text("No published creative assets recorded for this date horizon.", MARGIN + 10, y + 7);
+      doc.fontSize(7.5).font("Helvetica").fillColor(C.textMuted).text(noContentMessage, MARGIN + 10, y + 7);
       y += 26;
     } else {
       postsToShow.forEach((post, i) => {

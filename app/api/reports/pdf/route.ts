@@ -82,7 +82,8 @@ export async function GET(req: NextRequest) {
       supabase.from("client_meta_ads_config").select("id").eq("client_id", clientId).eq("is_active", true),
       supabase.from("client_ubersuggest_config" as any).select("id").eq("client_id", clientId).eq("is_active", true),
       supabase.from("report_gsc_metrics" as any).select("id").eq("client_id", clientId).limit(1),
-      supabase.from("analytics_summaries" as any).select("summary_data, generated_at, type, period_start, period_end").eq("client_id", clientId).order("generated_at", { ascending: false }).limit(10),
+      // Prefer summaries whose period overlaps the current reporting week; fall back to latest
+      supabase.from("analytics_summaries" as any).select("summary_data, generated_at, type, period_start, period_end").eq("client_id", clientId).gte("period_end", startISO).lte("period_start", endISO).order("generated_at", { ascending: false }).limit(10),
       supabase.from("social_account_metrics").select("platform, followers, new_followers, period_start, period_end, views, impressions, engagements, collected_at").eq("client_id", clientId).order("collected_at", { ascending: false }).limit(200),
     ]);
 
@@ -320,8 +321,17 @@ export async function GET(req: NextRequest) {
     platformBreakdown.sort((a, b) => b.followers - a.followers || b.views - a.views);
 
     // 6. Extract Real AI Teardown from analytics_summaries
-    // Fetch all types and merge: prefer social for social clients, website/seo for others
-    const summaryRows = (latestSummaryRow as any[]) || [];
+    // Prefer period-matching rows; if the filtered query returned nothing, fall back to latest available
+    let summaryRows = (latestSummaryRow as any[]) || [];
+    if (summaryRows.length === 0) {
+      const { data: fallbackSummaries } = await supabase
+        .from("analytics_summaries" as any)
+        .select("summary_data, generated_at, type, period_start, period_end")
+        .eq("client_id", clientId)
+        .order("generated_at", { ascending: false })
+        .limit(10);
+      summaryRows = (fallbackSummaries as any[]) || [];
+    }
     
     // Group summaries by type, picking the best (period-closest) entry per type
     const summaryByType: Record<string, any> = {};
@@ -398,6 +408,98 @@ export async function GET(req: NextRequest) {
       highlights: mergedHighlights.length > 0 ? mergedHighlights : (rawAiSummary?.highlights || []),
     };
 
+    // 6b. For web-only clients, fetch top pages / GSC queries to fill the Top Content section
+    const isWebOnly = platformBreakdown.length === 0;
+    const webTopPages: RankedContentItem[] = [];
+    if (isWebOnly) {
+      // Try GA4 top pages
+      if (ga4Config?.ga4_property_id) {
+        try {
+          const { data: ga4Data } = await supabase.functions.invoke("fetch-ga4-analytics", {
+            body: { clientId, startDate: startISO, endDate: endISO },
+          });
+          const topPages = ga4Data?.analytics?.topPages || ga4Data?.topPages || [];
+          topPages.slice(0, 7).forEach((p: any, idx: number) => {
+            webTopPages.push({
+              title: p.title || p.path || p.url || `Page ${idx + 1}`,
+              platform: "Website",
+              views: p.views || p.pageViews || 0,
+              engagements: p.sessions || p.engagedSessions || 0,
+              engagementRate: p.avgDuration ? Math.min(p.avgDuration / 60 * 10, 100) : 0,
+              reachTier: "",
+              engagementTier: "",
+              performanceTier: "",
+              totalScore: 0,
+              postUrl: p.url || "",
+            });
+          });
+        } catch (e) {
+          console.warn("Failed to fetch GA4 top pages for PDF:", e);
+        }
+      }
+
+      // Try Substack top pages
+      const { data: substackConfig } = await supabase
+        .from("client_substack_config")
+        .select("id")
+        .eq("client_id", clientId)
+        .eq("is_active", true)
+        .maybeSingle();
+      if (substackConfig) {
+        try {
+          const { data: subData } = await supabase.functions.invoke("fetch-substack-ga4", {
+            body: { clientId, startDate: startISO, endDate: endISO },
+          });
+          const subPages = subData?.analytics?.topPages || subData?.topPages || [];
+          subPages.slice(0, 5).forEach((p: any, idx: number) => {
+            webTopPages.push({
+              title: p.title || p.url || `Article ${idx + 1}`,
+              platform: "Newsletter",
+              views: p.views || p.pageViews || 0,
+              engagements: p.sessions || 0,
+              engagementRate: 0,
+              reachTier: "",
+              engagementTier: "",
+              performanceTier: "",
+              totalScore: 0,
+              postUrl: p.url || "",
+            });
+          });
+        } catch (e) {
+          console.warn("Failed to fetch Substack top pages for PDF:", e);
+        }
+      }
+
+      // Try GSC top queries
+      const { data: gscRows } = await supabase
+        .from("report_gsc_metrics" as any)
+        .select("top_queries")
+        .eq("client_id", clientId)
+        .order("collected_at", { ascending: false })
+        .limit(1);
+      if (gscRows && gscRows.length > 0) {
+        const topQueries = Array.isArray(gscRows[0].top_queries) ? gscRows[0].top_queries : [];
+        topQueries.slice(0, 5).forEach((q: any) => {
+          webTopPages.push({
+            title: `"${q.query}"`,
+            platform: "Search (GSC)",
+            views: q.impressions || 0,
+            engagements: q.clicks || 0,
+            engagementRate: typeof q.ctr === "number" ? q.ctr : 0,
+            reachTier: "",
+            engagementTier: "",
+            performanceTier: "",
+            totalScore: 0,
+          });
+        });
+      }
+
+      // Sort web pages by views DESC
+      webTopPages.sort((a, b) => b.views - a.views);
+    }
+
+    const finalTopContent = isWebOnly && webTopPages.length > 0 ? webTopPages : topContentList;
+
     // 7. Assemble Report Data Payload
     const reportData: WeeklyPdfReportData = {
       client: {
@@ -424,7 +526,7 @@ export async function GET(req: NextRequest) {
       },
       aiTeardown,
       platforms: platformBreakdown,
-      topContent: topContentList,
+      topContent: finalTopContent,
       ecosystem: {
         hasSocial,
         hasAds,

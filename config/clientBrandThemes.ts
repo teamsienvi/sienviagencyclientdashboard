@@ -75,6 +75,21 @@ export const CLIENT_BRAND_THEMES: Record<string, ClientBrandTheme> = {
     tagline: "Unfiltered Humor, Graphic Apparel & Lifestyle Gifts",
   },
 
+  // Alias: DB name uses "Snarky A$$ Humans"
+  "Snarky A$$ Humans": {
+    primary: "#D97706",
+    primaryLight: "#FBBF24",
+    primaryDark: "#92400E",
+    secondary: "#EF4444",
+    surface: "#0F172A",
+    textLight: "#FFFFFF",
+    textDark: "#1E293B",
+    badgeBg: "#FEF3C7",
+    badgeText: "#92400E",
+    websiteUrl: "snarkyhumans.com",
+    tagline: "Unfiltered Humor, Graphic Apparel & Lifestyle Gifts",
+  },
+
   // Snarky Pets — Playful Comic Orange & Warm Slate
   "Snarky Pets": {
     primary: "#EA580C",
