@@ -81,10 +81,44 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
 
   const dailyBreakdown = (analytics.dailyBreakdown || []) as any[];
   const trafficSources = (analytics.trafficSources || []) as any[];
-  const deviceBreakdown = (analytics.deviceBreakdown || []) as any[];
-  const topPages = (analytics.topPages || []) as any[];
-  const countries = (analytics.countries || []) as any[];
+  // Normalize and aggregate topPages
+  const rawTopPages = (analytics.topPages || (analytics as any).top_pages || []) as any[];
+  const aggregatedTopPagesMap = new Map<string, { url: string; path: string; views: number; title: string | null }>();
+  rawTopPages.forEach((page: any) => {
+    let url = String(page.url || page.path || page.page_path || '/').trim();
+    if (!url || url.includes('127.0.0.1') || url.includes('localhost') || url.includes('lovable_test')) return;
+    if (url.includes('/sandbox/modern/')) {
+      const parts = url.split('/sandbox/modern/');
+      url = parts[1] ? '/' + parts[1] : '';
+    } else if (url.startsWith('/web-pixels@') || url.includes('/sandbox/')) {
+      return;
+    }
+    url = url.replace(/<\/?[^>]+(>|$)/g, '');
+    try {
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        url = new URL(url).pathname;
+      } else if (url.includes('?')) {
+        url = url.split('?')[0];
+      }
+    } catch (_) {}
+    if (url.length > 1 && url.endsWith('/')) url = url.slice(0, -1);
+    if (!url || url === '/**') url = '/';
+    if (!url.startsWith('/')) url = '/' + url;
 
+    const views = Number(page.views ?? page.count ?? 0) || 0;
+    const rawTitle = page.display_name || page.title || null;
+    const title = (rawTitle && rawTitle !== '(not set)' && rawTitle !== url && !rawTitle.startsWith('http')) ? rawTitle : null;
+
+    if (!aggregatedTopPagesMap.has(url)) {
+      aggregatedTopPagesMap.set(url, { url, path: url, views, title });
+    } else {
+      const item = aggregatedTopPagesMap.get(url)!;
+      item.views += views;
+      if (!item.title && title) item.title = title;
+    }
+  });
+
+  const topPages = Array.from(aggregatedTopPagesMap.values()).sort((a, b) => b.views - a.views);
   const visiblePages = showAllPages ? topPages.slice(0, 30) : topPages.slice(0, 10);
   const visibleCountries = showAllCountries ? countries.slice(0, 30) : countries.slice(0, 10);
 
@@ -163,14 +197,16 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           icon={<Users className="h-4 w-4 text-blue-600" />}
           label="Unique Visitors"
           value={uniqueVisitors.toLocaleString()}
+          subtext="👤 Distinct people"
           trend={visitorsTrend}
           trendLabel="vs prev 7d"
           color="blue"
         />
         <KPICard
           icon={<Activity className="h-4 w-4 text-emerald-600" />}
-          label="Sessions"
+          label="Total Sessions"
           value={totalSessions.toLocaleString()}
+          subtext="🚪 Browsing visits"
           trend={sessionsTrend}
           trendLabel="vs prev 7d"
           color="emerald"
@@ -179,12 +215,14 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           icon={<Eye className="h-4 w-4 text-violet-600" />}
           label="Page Views"
           value={totalPageViews.toLocaleString()}
+          subtext="📄 Total page loads"
           color="violet"
         />
         <KPICard
           icon={<TrendingDown className="h-4 w-4 text-amber-600" />}
           label="Bounce Rate"
           value={`${bounceRate.toFixed(1)}%`}
+          subtext="📉 Single-page visits"
           color="amber"
           invertTrend
         />
@@ -192,12 +230,14 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           icon={<Clock className="h-4 w-4 text-cyan-600" />}
           label="Avg. Duration"
           value={formatDuration(avgDuration)}
+          subtext="⏱️ Time per visit"
           color="cyan"
         />
         <KPICard
           icon={<Eye className="h-4 w-4 text-pink-600" />}
           label="Pages / Session"
           value={pagesPerSession.toFixed(1)}
+          subtext="📄 Views per visit"
           color="pink"
         />
       </div>
@@ -312,14 +352,14 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <ExternalLink className="h-4 w-4 text-blue-500" />
             Top Pages
-            <span className="text-xs text-muted-foreground font-normal">({topPages.length} total)</span>
+            <span className="text-xs text-muted-foreground font-normal">({topPages.length} total · Total page loads per URL)</span>
           </h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="pb-2 pr-4">Page</th>
-                  <th className="pb-2 text-right">Views</th>
+                  <th className="pb-2 text-right">Page Views (Loads)</th>
                 </tr>
               </thead>
               <tbody>
@@ -353,12 +393,13 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
             <Globe className="h-4 w-4 text-violet-500" />
             Top Countries
+            <span className="text-xs text-muted-foreground font-normal">(Unique visitors / people)</span>
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
             {visibleCountries.map((c: any, i: number) => (
               <div key={i} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/30 border border-border/30">
                 <span className="truncate max-w-[120px]">{c.country}</span>
-                <span className="font-semibold text-blue-600 ml-2">{c.count?.toLocaleString()}</span>
+                <span className="font-semibold text-blue-600 ml-2">{c.count?.toLocaleString()} people</span>
               </div>
             ))}
           </div>
@@ -379,11 +420,12 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
 
 // ── KPI Card sub-component ──
 function KPICard({
-  icon, label, value, trend, trendLabel, color, invertTrend
+  icon, label, value, subtext, trend, trendLabel, color, invertTrend
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
+  subtext?: string;
   trend?: number;
   trendLabel?: string;
   color: string;
@@ -403,9 +445,12 @@ function KPICard({
     <div className={`p-3 rounded-xl border bg-gradient-to-br ${colorMap[color] || colorMap.blue}`}>
       <div className="flex items-center gap-2 mb-1">
         {icon}
-        <span className="text-xs text-muted-foreground">{label}</span>
+        <span className="text-xs text-muted-foreground font-medium">{label}</span>
       </div>
       <p className="text-xl font-bold">{value}</p>
+      {subtext && (
+        <p className="text-[10px] text-muted-foreground mt-0.5">{subtext}</p>
+      )}
       {trend !== undefined && trend !== 0 && (
         <div className={`flex items-center gap-1 mt-1 text-xs ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
           {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}

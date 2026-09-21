@@ -166,10 +166,10 @@ serve(async (req) => {
       // 5. Top Pages
       runGA4Report(cleanPropertyId, accessToken, {
         dateRanges,
-        dimensions: [{ name: 'pagePath' }],
+        dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
         metrics: [{ name: 'screenPageViews' }],
         orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-        limit: 10
+        limit: 50
       }),
       // 6. Countries
       runGA4Report(cleanPropertyId, accessToken, {
@@ -265,9 +265,65 @@ serve(async (req) => {
     }).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
     // Parse Top Pages
-    const topPages = (topPagesData.rows || []).map((row: any) => {
-      return { path: row.dimensionValues[0].value, views: parseInt(row.metricValues[0].value) };
-    });
+    const topPagesMap = new Map<string, { url: string; path: string; views: number; title: string | null }>();
+
+    for (const row of topPagesData.rows || []) {
+      const rawPath = (row.dimensionValues[0]?.value || '').trim();
+      const rawTitle = row.dimensionValues[1]?.value || null;
+      const views = parseInt(row.metricValues[0]?.value || '0', 10);
+
+      if (!rawPath || rawPath.includes('127.0.0.1') || rawPath.includes('localhost') || rawPath.includes('lovable_test')) {
+        continue;
+      }
+
+      let cleanPath = rawPath;
+      if (cleanPath.includes('/sandbox/modern/')) {
+        const parts = cleanPath.split('/sandbox/modern/');
+        cleanPath = parts[1] ? '/' + parts[1] : '';
+      } else if (cleanPath.startsWith('/web-pixels@') || cleanPath.includes('/sandbox/')) {
+        continue;
+      }
+
+      cleanPath = cleanPath.replace(/<\/?[^>]+(>|$)/g, '');
+
+      try {
+        if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+          const u = new URL(cleanPath);
+          cleanPath = u.pathname;
+        } else if (cleanPath.includes('?')) {
+          cleanPath = cleanPath.split('?')[0];
+        }
+      } catch (_) {}
+
+      if (cleanPath.length > 1 && cleanPath.endsWith('/')) {
+        cleanPath = cleanPath.slice(0, -1);
+      }
+      if (!cleanPath || cleanPath === '/**') cleanPath = '/';
+      if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
+
+      const cleanTitle = (rawTitle && rawTitle !== '(not set)' && rawTitle !== cleanPath && rawTitle !== rawPath)
+        ? rawTitle
+        : null;
+
+      if (!topPagesMap.has(cleanPath)) {
+        topPagesMap.set(cleanPath, {
+          url: cleanPath,
+          path: cleanPath,
+          views: views,
+          title: cleanTitle,
+        });
+      } else {
+        const existing = topPagesMap.get(cleanPath)!;
+        existing.views += views;
+        if (!existing.title && cleanTitle) {
+          existing.title = cleanTitle;
+        }
+      }
+    }
+
+    const topPages = Array.from(topPagesMap.values())
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 20);
 
     // Parse Countries
     const countries = (countriesData.rows || []).map((row: any) => {

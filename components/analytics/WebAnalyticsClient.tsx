@@ -203,20 +203,79 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
       };
     }) : undefined;
 
-  // Normalize topPages - handle both url and path formats, filter out dashboard/admin paths
-  const dashboardPaths = ['/admin', '/client/', '/login', '/reset-password', '/web-analytics', '/youtube-analytics', '/tiktok-analytics', '/x-analytics', '/meta-analytics', '/linkedin-analytics', '/analytics/', '/report/'];
-  // Merge topPages and top_pages formats
+  // Normalize topPages - handle both url and path formats, clean paths, filter out dashboard/admin paths, and aggregate duplicates
+  const internalDashboardPaths = ['/admin', '/client/', '/reset-password', '/web-analytics', '/youtube-analytics', '/tiktok-analytics', '/x-analytics', '/meta-analytics', '/linkedin-analytics', '/analytics/', '/report/'];
   const rawTopPages = analytics?.topPages || (analytics as any)?.top_pages || [];
-  const normalizedTopPages = rawTopPages
-    ?.map((page: any) => ({
-      url: page.url || page.path || page.page_path || '/',
-      views: page.views ?? page.count ?? 0,
-      uniqueVisitors: page.uniqueVisitors ?? page.unique_visitors ?? undefined,
-      title: page.display_name || page.title || null,
-    }))
-    .filter((page: any) =>
-      !dashboardPaths.some((dashPath: string) => page.url.startsWith(dashPath))
-    );
+  
+  const aggregatedPagesMap = new Map<string, { url: string; views: number; uniqueVisitors?: number; title: string | null }>();
+
+  (rawTopPages || []).forEach((page: any) => {
+    let url = String(page.url || page.path || page.page_path || '/').trim();
+    if (!url) return;
+
+    // Filter out localhost / test events
+    if (url.includes('127.0.0.1') || url.includes('localhost') || url.includes('lovable_test')) {
+      return;
+    }
+
+    // Filter out internal agency dashboard pages
+    if (internalDashboardPaths.some((dashPath: string) => url.startsWith(dashPath))) {
+      return;
+    }
+
+    // Handle Shopify web-pixels telemetry
+    if (url.includes('/sandbox/modern/')) {
+      const parts = url.split('/sandbox/modern/');
+      url = parts[1] ? '/' + parts[1] : '';
+    } else if (url.startsWith('/web-pixels@') || url.includes('/sandbox/')) {
+      return;
+    }
+
+    // Strip HTML artifacts e.g. </div
+    url = url.replace(/<\/?[^>]+(>|$)/g, '');
+
+    // Normalize URL pathname
+    try {
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        const parsed = new URL(url);
+        url = parsed.pathname;
+      } else if (url.includes('?')) {
+        url = url.split('?')[0];
+      }
+    } catch (_) {}
+
+    if (url.length > 1 && url.endsWith('/')) {
+      url = url.slice(0, -1);
+    }
+    if (!url || url === '/**') url = '/';
+    if (!url.startsWith('/')) url = '/' + url;
+
+    const views = Number(page.views ?? page.count ?? 0) || 0;
+    const unique = page.uniqueVisitors ?? page.unique_visitors ?? undefined;
+    const rawTitle = page.display_name || page.title || null;
+    const title = (rawTitle && rawTitle !== '(not set)' && rawTitle !== url && !rawTitle.startsWith('http')) ? rawTitle : null;
+
+    if (!aggregatedPagesMap.has(url)) {
+      aggregatedPagesMap.set(url, {
+        url,
+        views,
+        uniqueVisitors: unique !== undefined ? Number(unique) : undefined,
+        title,
+      });
+    } else {
+      const item = aggregatedPagesMap.get(url)!;
+      item.views += views;
+      if (unique !== undefined) {
+        item.uniqueVisitors = (item.uniqueVisitors || 0) + Number(unique);
+      }
+      if (!item.title && title) {
+        item.title = title;
+      }
+    }
+  });
+
+  const normalizedTopPages = Array.from(aggregatedPagesMap.values())
+    .sort((a, b) => b.views - a.views);
 
   const normalizedAnalytics = analytics
     ? {
@@ -505,7 +564,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             {normalizedAnalytics.visitors.toLocaleString()}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Total unique visitors this period
+                            👤 Number of distinct people (unique devices)
                           </p>
                         </CardContent>
                       </Card>
@@ -519,7 +578,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             {normalizedAnalytics.totalSessions.toLocaleString()}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {normalizedAnalytics.pagesPerVisit.toFixed(1)} pages per session
+                            🚪 Total website visits ({normalizedAnalytics.pagesPerVisit.toFixed(1)} pages/visit)
                           </p>
                         </CardContent>
                       </Card>
@@ -533,7 +592,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             {formatDuration(normalizedAnalytics.avgDuration)}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Time on site
+                            ⏱️ Average time spent on site per visit
                           </p>
                         </CardContent>
                       </Card>
@@ -547,7 +606,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             {normalizedAnalytics.bounceRate.toFixed(1)}%
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Single page visits
+                            📉 Single-page visits without interaction
                           </p>
                         </CardContent>
                       </Card>
@@ -567,7 +626,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             {normalizedAnalytics.pagesPerVisit.toFixed(1)}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Avg pages viewed per session
+                            📄 Average pages viewed per browsing session
                           </p>
                         </CardContent>
                       </Card>
@@ -582,7 +641,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                               {normalizedAnalytics.avgScrollDepth.toFixed(0)}%
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                              How far visitors scroll on average
+                              📜 How far visitors scroll down on average
                             </p>
                           </CardContent>
                         </Card>
@@ -594,7 +653,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                   {normalizedAnalytics?.airbnbClicks !== undefined && normalizedAnalytics.airbnbClicks > 0 && (
                     <Card className="border-accent/30 bg-gradient-to-br from-accent/5 to-transparent">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Airbnb Clicks</CardTitle>
+                        <CardTitle className="text-sm font-medium">Airbnb Outbound Clicks</CardTitle>
                         <ExternalLink className="h-4 w-4 text-accent" />
                       </CardHeader>
                       <CardContent>
@@ -602,7 +661,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           {normalizedAnalytics.airbnbClicks.toLocaleString()}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Outbound clicks to Airbnb listings
+                          🖱️ Physical clicks on outbound Airbnb booking links
                         </p>
                       </CardContent>
                     </Card>
@@ -612,7 +671,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                   {normalizedAnalytics?.amazonClicks !== undefined && normalizedAnalytics.amazonClicks > 0 && (
                     <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-transparent">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Amazon Clicks</CardTitle>
+                        <CardTitle className="text-sm font-medium">Amazon Outbound Clicks</CardTitle>
                         <ExternalLink className="h-4 w-4 text-orange-500" />
                       </CardHeader>
                       <CardContent>
@@ -620,7 +679,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           {normalizedAnalytics.amazonClicks.toLocaleString()}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Outbound clicks to Amazon
+                          🖱️ Physical clicks on outbound Amazon product links
                         </p>
                       </CardContent>
                     </Card>
@@ -752,7 +811,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           <CardHeader>
                             <div>
                               <CardTitle>Traffic Sources</CardTitle>
-                              <CardDescription>Where your visitors come from</CardDescription>
+                              <CardDescription>Where your visits come from (total sessions per channel)</CardDescription>
                             </div>
                           </CardHeader>
                           <CardContent>
@@ -788,8 +847,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                           </span>
                                         )}
                                       </span>
-                                      <span className="text-muted-foreground">
-                                        {item.visitors.toLocaleString()} ({item.percentage}%)
+                                      <span className="text-muted-foreground text-xs">
+                                        <span className="font-medium text-foreground">{item.visitors.toLocaleString()} visits</span> ({item.percentage}%)
                                       </span>
                                     </div>
                                     <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -803,7 +862,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                         {item.breakdown.map((b: any, idx: number) => (
                                           <div key={idx} className="flex justify-between text-xs text-muted-foreground">
                                             <span className="truncate pr-2">- {b.name}</span>
-                                            <span>{b.sessions.toLocaleString()}</span>
+                                            <span>{b.sessions.toLocaleString()} visits</span>
                                           </div>
                                         ))}
                                       </div>
@@ -830,7 +889,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                           <CardHeader>
                             <div>
                               <CardTitle>Device Breakdown</CardTitle>
-                              <CardDescription>Devices used by visitors</CardDescription>
+                              <CardDescription>Devices used during website visits (sessions)</CardDescription>
                             </div>
                           </CardHeader>
                           <CardContent>
@@ -840,8 +899,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                   <div key={item.device} className="space-y-2">
                                     <div className="flex justify-between text-sm">
                                       <span>{item.device}</span>
-                                      <span className="text-muted-foreground">
-                                        {item.visitors.toLocaleString()} ({item.percentage}%)
+                                      <span className="text-muted-foreground text-xs">
+                                        <span className="font-medium text-foreground">{item.visitors.toLocaleString()} visits</span> ({item.percentage}%)
                                       </span>
                                     </div>
                                     <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -880,25 +939,28 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             <CardHeader>
                               <div>
                                 <CardTitle>Browser Breakdown</CardTitle>
-                                <CardDescription>Browsers used by visitors</CardDescription>
+                                <CardDescription>Browsers used during website visits (sessions)</CardDescription>
                               </div>
                             </CardHeader>
                             <CardContent>
                               <div className="space-y-4">
                                 {normalizedAnalytics.browsers.map((item: any, index: number) => {
                                   const colors = ["bg-primary", "bg-green-500", "bg-blue-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"];
+                                  const totalBrowserVisits = normalizedAnalytics.browsers.reduce((s: number, b: any) => s + (b.count || b.visitors || b.sessions || 0), 0);
+                                  const count = item.count || item.visitors || item.sessions || 0;
+                                  const pct = totalBrowserVisits > 0 ? Math.round((count / totalBrowserVisits) * 1000) / 10 : 0;
                                   return (
                                     <div key={item.browser} className="space-y-2">
                                       <div className="flex justify-between text-sm">
                                         <span>{item.browser}</span>
-                                        <span className="text-muted-foreground">
-                                          {(item.sessions || 0).toLocaleString()} ({item.percentage}%)
+                                        <span className="text-muted-foreground text-xs">
+                                          <span className="font-medium text-foreground">{count.toLocaleString()} visits</span> ({pct}%)
                                         </span>
                                       </div>
                                       <div className="h-2 bg-muted rounded-full overflow-hidden">
                                         <div
                                           className={`h-full ${colors[index % colors.length]} rounded-full`}
-                                          style={{ width: `${item.percentage}%` }}
+                                          style={{ width: `${pct}%` }}
                                         />
                                       </div>
                                     </div>
@@ -982,14 +1044,14 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                         <CardHeader>
                           <div>
                             <CardTitle>Top Pages</CardTitle>
-                            <CardDescription>Most visited pages on the website</CardDescription>
+                            <CardDescription>Total page loads and views per URL</CardDescription>
                           </div>
                         </CardHeader>
                         <CardContent>
                           {normalizedAnalytics?.topPages && normalizedAnalytics.topPages.length > 0 ? (
                             <div className="space-y-4">
                               {normalizedAnalytics.topPages.slice(0, 10).map((page: any, index: number) => (
-                                <div key={page.url} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                                <div key={`${page.url}-${index}`} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                                   <div className="flex items-center gap-3">
                                     <span className="text-muted-foreground w-6">{index + 1}.</span>
                                     <div className="flex flex-col">
@@ -1009,9 +1071,9 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                                   </div>
                                   <div className="flex items-center gap-6 text-sm">
                                     {page.uniqueVisitors !== undefined && (
-                                      <span className="text-muted-foreground">{page.uniqueVisitors.toLocaleString()} visitors</span>
+                                      <span className="text-muted-foreground">{page.uniqueVisitors.toLocaleString()} people</span>
                                     )}
-                                    <span className="font-medium">{page.views.toLocaleString()} views</span>
+                                    <span className="font-medium text-primary">{page.views.toLocaleString()} page views</span>
                                   </div>
                                 </div>
                               ))}

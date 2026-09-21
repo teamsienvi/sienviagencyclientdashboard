@@ -187,6 +187,7 @@ serve(async (req) => {
       console.log(`Country breakdown from local for ${clientId}: ${metric}, ${items.length} countries`);
     }
 
+
     return new Response(
       JSON.stringify({
         metric,

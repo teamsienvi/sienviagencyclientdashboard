@@ -945,7 +945,10 @@ async function collectWebsiteData(
 
                 pageViews.forEach((pv: any) => {
                     if (pv.device_type) devices[pv.device_type] = (devices[pv.device_type] || 0) + 1;
-                    if (pv.country) countries[pv.country] = (countries[pv.country] || 0) + 1;
+                    if (pv.country) {
+                        const c = pv.country.trim();
+                        countries[c] = (countries[c] || 0) + 1;
+                    }
                     if (pv.referrer) {
                         try {
                             const host = new URL(pv.referrer).hostname;

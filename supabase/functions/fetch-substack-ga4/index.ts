@@ -233,14 +233,60 @@ serve(async (req) => {
       dimensions: [{ name: 'pagePath' }, { name: 'pageTitle' }],
       metrics: [{ name: 'screenPageViews' }],
       orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
-      limit: 15,
+      limit: 50,
     });
 
-    const topPages = (pagesReport.rows || []).map((row: any) => ({
-      url: row.dimensionValues[0].value,
-      views: parseInt(row.metricValues[0].value, 10),
-      title: row.dimensionValues[1]?.value || null,
-    }));
+    const topPagesMap = new Map<string, { url: string; views: number; title: string | null }>();
+
+    for (const row of pagesReport.rows || []) {
+      const rawPath = (row.dimensionValues[0]?.value || '').trim();
+      const rawTitle = row.dimensionValues[1]?.value || null;
+      const views = parseInt(row.metricValues[0]?.value || '0', 10);
+
+      if (!rawPath || rawPath.includes('127.0.0.1') || rawPath.includes('localhost') || rawPath.includes('lovable_test')) {
+        continue;
+      }
+
+      let cleanPath = rawPath;
+      cleanPath = cleanPath.replace(/<\/?[^>]+(>|$)/g, '');
+
+      try {
+        if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+          const u = new URL(cleanPath);
+          cleanPath = u.pathname;
+        } else if (cleanPath.includes('?')) {
+          cleanPath = cleanPath.split('?')[0];
+        }
+      } catch (_) {}
+
+      if (cleanPath.length > 1 && cleanPath.endsWith('/')) {
+        cleanPath = cleanPath.slice(0, -1);
+      }
+      if (!cleanPath || cleanPath === '/**') cleanPath = '/';
+      if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
+
+      const cleanTitle = (rawTitle && rawTitle !== '(not set)' && rawTitle !== cleanPath && rawTitle !== rawPath)
+        ? rawTitle
+        : null;
+
+      if (!topPagesMap.has(cleanPath)) {
+        topPagesMap.set(cleanPath, {
+          url: cleanPath,
+          views: views,
+          title: cleanTitle,
+        });
+      } else {
+        const existing = topPagesMap.get(cleanPath)!;
+        existing.views += views;
+        if (!existing.title && cleanTitle) {
+          existing.title = cleanTitle;
+        }
+      }
+    }
+
+    const topPages = Array.from(topPagesMap.values())
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 20);
 
     // ── 6. Country breakdown ──
     const countryReport = await runReport(accessToken, propertyId, {

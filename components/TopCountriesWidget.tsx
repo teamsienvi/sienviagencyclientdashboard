@@ -86,6 +86,7 @@ export const TopCountriesWidget = ({ clientId, dateRange, countriesData }: TopCo
         value: c.count || c.value || 0 
       })).sort((a,b) => b.value - a.value)
     : (data?.items || []);
+
   const total = items.reduce((sum, i) => sum + i.value, 0);
   const top = items.slice(0, 10);
 
@@ -127,15 +128,12 @@ export const TopCountriesWidget = ({ clientId, dateRange, countriesData }: TopCo
             <p className="text-xs text-muted-foreground mt-1">
               Data will appear once visitors with country info arrive
             </p>
-            <div className="mt-4 text-xs text-left bg-black/50 p-2 rounded overflow-auto max-h-32">
-              Debug countriesData: {JSON.stringify(countriesData)}
-              <br/>Debug items: {JSON.stringify(items)}
-            </div>
           </div>
         ) : (
           <div className="space-y-3">
             {top.map((item, index) => {
               const pct = total > 0 ? Math.round((item.value / total) * 1000) / 10 : 0;
+              const unitLabel = metric === 'visitors' ? 'people' : metric === 'pageviews' ? 'page views' : 'visits';
               return (
                 <div key={item.country} className="space-y-1.5">
                   <div className="flex justify-between text-sm">
@@ -143,8 +141,8 @@ export const TopCountriesWidget = ({ clientId, dateRange, countriesData }: TopCo
                       <span>{getFlag(item.country)}</span>
                       <span>{getCountryLabel(item.country)}</span>
                     </span>
-                    <span className="text-muted-foreground">
-                      {item.value.toLocaleString()} ({pct}%)
+                    <span className="text-muted-foreground text-xs">
+                      <span className="font-medium text-foreground">{item.value.toLocaleString()} {unitLabel}</span> ({pct}%)
                     </span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
