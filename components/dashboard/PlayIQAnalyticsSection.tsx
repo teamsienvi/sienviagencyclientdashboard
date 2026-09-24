@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Users, Truck, Activity, Filter, ExternalLink, Cpu } from "lucide-react";
+import { Users, Ticket, Activity, Filter, ExternalLink, Cpu } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -68,11 +68,11 @@ export function PlayIQAnalyticsSection({ clientId }: PlayIQAnalyticsSectionProps
           </div>
         </div>
         
-        {/* Orders Pending */}
+        {/* Promo Redeemed */}
         <div className="rounded-xl p-6 border-b-[3px] border-b-amber-400 bg-card border shadow-sm flex flex-col justify-between h-full">
           <div className="flex items-center gap-4 mb-4">
-            <div className="text-amber-400"><Truck className="w-5 h-5" /></div>
-            <p className="text-xs font-mono tracking-widest text-muted-foreground uppercase">Orders Pending</p>
+            <div className="text-amber-400"><Ticket className="w-5 h-5" /></div>
+            <p className="text-xs font-mono tracking-widest text-muted-foreground uppercase">Promo Redeemed</p>
           </div>
           <div>
             <p className="text-4xl font-black">{metrics.paidCount}</p>
