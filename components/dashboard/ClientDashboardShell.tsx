@@ -1285,20 +1285,37 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
 
-                        {/* Email Campaigns (Sienvi Sender) */}
+                        {/* Email Campaigns (Sienvi Sender / Smartlead Cold) */}
                         {hasEmailCampaigns && (
-                          <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/email-analytics/${clientId}`)}>
+                          <Card 
+                            className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" 
+                            onClick={() => router.push(`/email-analytics/${clientId}${isPlayIQ || isOxiSureTech ? '?view=lead-performance' : ''}`)}
+                          >
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
                                 <div className="p-2.5 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
                                   <Mail className="h-5 w-5 text-blue-500" />
                                 </div>
-                                <div><CardTitle className="text-base">Email Campaigns</CardTitle></div>
+                                <div>
+                                  <CardTitle className="text-base">
+                                    {isPlayIQ || isOxiSureTech ? "Lead Performance & Outreach" : "Email Campaigns"}
+                                  </CardTitle>
+                                </div>
                               </div>
                               <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
                             </CardHeader>
-                            <CardContent>
-                              <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">Active</Badge>
+                            <CardContent className="flex items-center gap-2">
+                              {isPlayIQ ? (
+                                <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600">
+                                  Smartlead Cold (39.7% Open)
+                                </Badge>
+                              ) : isOxiSureTech ? (
+                                <Badge variant="secondary" className="bg-teal-500/10 text-teal-600">
+                                  Lead Pipeline (1,815 Verified)
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="bg-blue-500/10 text-blue-600">Active</Badge>
+                              )}
                             </CardContent>
                           </Card>
                         )}

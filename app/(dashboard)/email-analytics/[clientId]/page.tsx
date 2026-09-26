@@ -1,6 +1,7 @@
 import { requireClientAccess } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { getEmailCampaignMetrics } from "@/server/queries/email";
+import { getLeadPerformanceReport } from "@/server/queries/leadPerformance";
 import EmailAnalyticsClient from "@/components/analytics/EmailAnalyticsClient";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +12,13 @@ export const metadata = {
 
 export default async function EmailAnalyticsRoute({
   params,
+  searchParams,
 }: {
   params: Promise<{ clientId: string }>;
+  searchParams?: Promise<{ view?: string; recency?: string }>;
 }) {
   const { clientId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   
   // Security boundary guard: limits access to administrators or mapped client users
   await requireClientAccess(clientId);
@@ -36,8 +40,16 @@ export default async function EmailAnalyticsRoute({
     );
   }
 
-  // Fetch metrics dynamically from Sienvi Sender Next.js API (fully decoupled)
-  const initialData = await getEmailCampaignMetrics(client.name);
+  const isColdClient = ["playiq", "oxisure"].some((k) => client.name.toLowerCase().includes(k));
+  const defaultView = isColdClient ? "lead-performance" : "overview";
+  const currentView = resolvedSearchParams.view || defaultView;
+  const currentRecency = resolvedSearchParams.recency || "all";
+
+  // Fetch metrics dynamically in parallel
+  const [initialData, leadPerformanceData] = await Promise.all([
+    getEmailCampaignMetrics(client.name),
+    getLeadPerformanceReport(client.name, currentRecency),
+  ]);
 
   return (
     <EmailAnalyticsClient 
@@ -45,6 +57,9 @@ export default async function EmailAnalyticsRoute({
       clientName={client.name} 
       clientLogo={client.logo_url}
       initialData={initialData} 
+      initialLeadPerformanceData={leadPerformanceData}
+      initialView={currentView}
+      initialRecency={currentRecency}
     />
   );
 }

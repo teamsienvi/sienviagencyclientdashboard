@@ -9,12 +9,15 @@ import { Button } from "@/components/ui/button";
 import { 
   Loader2, Mail, Send, CheckCircle2, Eye, MousePointerClick, 
   RefreshCw, BarChart3, Info, AlertCircle, Calendar, ChevronRight, ExternalLink,
-  ChevronDown, ChevronUp, User, Clock, Sparkles, Inbox
+  ChevronDown, ChevronUp, User, Clock, Sparkles, Inbox, Flame
 } from "lucide-react";
 import { format } from "date-fns";
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Cell } from "recharts";
 import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/analytics/NextAnalyticsPageLayout";
 import { getEmailCampaignMetrics, EmailCampaignMetricsResponse, EmailCampaignDetail } from "@/server/queries/email";
+import { getLeadPerformanceReport } from "@/server/queries/leadPerformance";
+import type { LeadPerformanceReportData } from "@/types/leadPerformance";
+import { LeadPerformanceReportView } from "./LeadPerformanceReportView";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +31,9 @@ interface EmailAnalyticsClientProps {
   clientName: string;
   clientLogo: string | null;
   initialData: EmailCampaignMetricsResponse;
+  initialLeadPerformanceData?: LeadPerformanceReportData;
+  initialView?: string;
+  initialRecency?: string;
 }
 
 const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#ec4899"];
@@ -36,9 +42,14 @@ const EmailAnalyticsClient = ({
   clientId, 
   clientName, 
   clientLogo, 
-  initialData 
+  initialData,
+  initialLeadPerformanceData,
+  initialView = "overview",
+  initialRecency = "all",
 }: EmailAnalyticsClientProps) => {
   const router = useRouter();
+  const [currentView, setCurrentView] = useState<string>(initialView);
+  const [recency, setRecency] = useState<string>(initialRecency);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<EmailCampaignDetail | null>(null);
   const [expandedEmailIndex, setExpandedEmailIndex] = useState<number | null>(0);
@@ -58,8 +69,8 @@ const EmailAnalyticsClient = ({
     return CLIENT_SENDERS[clientName] || { email: "sender@sienvi.com", name: "Sienvi Sender", replyTo: "teamsienvi@gmail.com" };
   }, [clientName]);
 
-  // Tanstack query to support client-side manual polling/refreshes
-  const { data: metricsData, refetch } = useQuery({
+  // Tanstack query for standard email campaign metrics
+  const { data: metricsData, refetch: refetchMetrics } = useQuery({
     queryKey: ["email-analytics", clientName],
     queryFn: async () => {
       const data = await getEmailCampaignMetrics(clientName);
@@ -69,10 +80,43 @@ const EmailAnalyticsClient = ({
     refetchInterval: 300000, // Auto-refresh every 5 minutes
   });
 
+  // Tanstack query for Lead Performance Report
+  const { 
+    data: leadReportData, 
+    refetch: refetchLeadReport, 
+    isFetching: isFetchingLeadReport 
+  } = useQuery({
+    queryKey: ["lead-performance-report", clientName, recency],
+    queryFn: async () => {
+      const data = await getLeadPerformanceReport(clientName, recency);
+      return data;
+    },
+    initialData: initialLeadPerformanceData,
+    staleTime: 60000,
+  });
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await refetch();
+    await Promise.all([refetchMetrics(), refetchLeadReport()]);
     setIsRefreshing(false);
+  };
+
+  const handleViewChange = (newView: string) => {
+    setCurrentView(newView);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("view", newView);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
+
+  const handleRecencyChange = (newRecency: string) => {
+    setRecency(newRecency);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("recency", newRecency);
+      window.history.replaceState({}, "", url.toString());
+    }
   };
 
   const aggregates = metricsData?.aggregates;
@@ -105,29 +149,78 @@ const EmailAnalyticsClient = ({
       isLoading={false}
     >
       <div className="space-y-6">
-        {/* Top Header Controls */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800">
-              <Mail className="h-3.5 w-3.5 mr-1.5" />
-              {isSmartlead ? "Smartlead Cold Outreach" : "Sienvi Sender Connected"}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              {isSmartlead ? "• Live cold campaign metrics & sequences" : "• Live metrics from Resend engine"}
-            </span>
-          </div>
-
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleRefresh} 
-            disabled={isRefreshing}
-            className="gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all self-end"
+        {/* Navigation View Switcher */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+          <Button
+            variant={currentView === "overview" ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleViewChange("overview")}
+            className="gap-2 h-9 text-xs"
           >
-            <RefreshCw className={`h-4 w-4 text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? 'Syncing...' : 'Sync Live Data'}
+            <Mail className="h-4 w-4" />
+            Campaign Overview
+          </Button>
+
+          <Button
+            variant={currentView === "lead-performance" ? "default" : "outline"}
+            size="sm"
+            onClick={() => handleViewChange("lead-performance")}
+            className={`gap-2 h-9 text-xs ${
+              currentView === "lead-performance"
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Flame className="h-4 w-4 text-rose-500" />
+            Lead Performance Report
+            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] bg-rose-500/10 text-rose-600">
+              Smartlead Cold
+            </Badge>
           </Button>
         </div>
+
+        {currentView === "lead-performance" ? (
+          leadReportData ? (
+            <LeadPerformanceReportView
+              clientId={clientId}
+              clientName={clientName}
+              data={leadReportData}
+              recency={recency}
+              onRecencyChange={handleRecencyChange}
+              isRefreshing={isFetchingLeadReport}
+              onRefresh={refetchLeadReport}
+            />
+          ) : (
+            <div className="py-24 text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground mb-4" />
+              <p className="text-sm text-muted-foreground">Loading Lead Performance Report...</p>
+            </div>
+          )
+        ) : (
+          <>
+            {/* Top Header Controls */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800">
+                  <Mail className="h-3.5 w-3.5 mr-1.5" />
+                  {isSmartlead ? "Smartlead Cold Outreach" : "Sienvi Sender Connected"}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  {isSmartlead ? "• Live cold campaign metrics & sequences" : "• Live metrics from Resend engine"}
+                </span>
+              </div>
+
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRefresh} 
+                disabled={isRefreshing}
+                className="gap-2 h-9 border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all self-end"
+              >
+                <RefreshCw className={`h-4 w-4 text-primary ${isRefreshing ? 'animate-spin' : ''}`} />
+                {isRefreshing ? 'Syncing...' : 'Sync Live Data'}
+              </Button>
+            </div>
 
         {/* Error / Offline Alert */}
         {error && (
@@ -369,6 +462,8 @@ const EmailAnalyticsClient = ({
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground mb-4" />
             <p className="text-sm text-muted-foreground">Synchronizing campaign metrics...</p>
           </div>
+        )}
+          </>
         )}
       </div>
 
