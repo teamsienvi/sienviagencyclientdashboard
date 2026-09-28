@@ -312,10 +312,13 @@ async function computeMetrics(
             totalViews += postViews;
             totalEngagements += postEngagements;
 
-            // Accumulate daily view increments into timelineMap by exact snapshot date (mDate)
+            // Accumulate daily view increments into timelineMap by exact snapshot date or published date
             for (let i = 0; i < sortedMetrics.length; i++) {
                 const m = sortedMetrics[i];
-                const mDate = (m.collected_at || m.period_end || "").split("T")[0];
+                // If this is the initial snapshot of a post published in the current period, attribute its views to postDate so the chart shows the real daily performance across the week!
+                const mDate = (i === 0 && publishedDuringPeriod && postDate)
+                    ? postDate
+                    : (m.collected_at || m.period_end || "").split("T")[0];
 
                 if (mDate >= periodStartStr && mDate <= periodEndStr) {
                     const curViews = Math.max(m.views || 0, m.impressions || 0);
