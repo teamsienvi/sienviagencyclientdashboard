@@ -302,52 +302,110 @@ ${(data.contentBriefs?.newsletterAngles || [])
             {/* TAB 1: SEARCH & SOCIAL TREND RADAR */}
             <TabsContent value="radar" className="space-y-6 animate-in fade-in-50 duration-200">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(data.trendingKeywords || []).map((item: any, idx: number) => (
-                  <Card key={idx} className="group hover:border-violet-500/40 hover:shadow-md transition-all rounded-2xl overflow-hidden bg-card/80 backdrop-blur-sm">
-                    <CardHeader className="p-5 pb-3">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                            item.isBreakout
-                              ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {item.isBreakout ? "🔥 Breakout" : item.source}
-                        </Badge>
-                        <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                          <TrendingUp className="h-3 w-3" />
-                          {item.growth}
-                        </span>
-                      </div>
-                      <CardTitle className="text-base font-semibold text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors leading-snug">
-                        {item.keyword}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="p-5 pt-0 space-y-3">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t">
-                        <span className="flex items-center gap-1">
-                          <Activity className="h-3.5 w-3.5 text-muted-foreground/70" />
-                          Vol: <strong className="text-foreground">{item.searchVolume}</strong>
-                        </span>
-                        <Badge variant="secondary" className="text-[10px] font-medium bg-muted">
-                          {item.intent}
-                        </Badge>
-                      </div>
+                {(data.trendingKeywords || []).map((item: any, idx: number) => {
+                  const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(item.keyword)}`;
+                  const googleTrendsUrl = `https://trends.google.com/trends/explore?q=${encodeURIComponent(item.keyword)}&geo=${selectedGeo === "worldwide" ? "" : selectedGeo.toUpperCase()}`;
+                  
+                  return (
+                    <Card key={idx} className="group hover:border-violet-500/40 hover:shadow-md transition-all rounded-2xl overflow-hidden bg-card/80 backdrop-blur-sm flex flex-col justify-between">
+                      <CardHeader className="p-5 pb-3">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                              item.isBreakout
+                                ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {item.isBreakout ? "🔥 Breakout" : item.source}
+                          </Badge>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                            <TrendingUp className="h-3 w-3" />
+                            {item.growth}
+                          </span>
+                        </div>
+                        <CardTitle className="text-base font-semibold text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors leading-snug">
+                          {item.keyword}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-5 pt-0 space-y-3">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t">
+                          <span className="flex items-center gap-1">
+                            <Activity className="h-3.5 w-3.5 text-muted-foreground/70" />
+                            Vol: <strong className="text-foreground">{item.searchVolume}</strong>
+                          </span>
+                          <Badge variant="secondary" className="text-[10px] font-medium bg-muted">
+                            {item.intent}
+                          </Badge>
+                        </div>
 
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleCopy(item.keyword, `kw-${idx}`)}
-                        className="w-full h-8 text-xs font-medium text-muted-foreground hover:text-foreground gap-1.5 bg-muted/40 hover:bg-muted"
-                      >
-                        {copiedId === `kw-${idx}` ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                        <span>{copiedId === `kw-${idx}` ? "Keyword Copied" : "Copy Keyword"}</span>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
+                        {/* Action & Verification Links */}
+                        <div className="flex items-center gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleCopy(item.keyword, `kw-${idx}`)}
+                            className="flex-1 h-8 text-xs font-medium text-muted-foreground hover:text-foreground gap-1.5 bg-muted/40 hover:bg-muted"
+                          >
+                            {copiedId === `kw-${idx}` ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                            <span>{copiedId === `kw-${idx}` ? "Copied" : "Copy"}</span>
+                          </Button>
+                          
+                          <a
+                            href={googleTrendsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-lg text-xs font-medium text-violet-600 dark:text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 transition-colors border border-violet-500/20"
+                            title="Verify trend velocity on Google Trends"
+                          >
+                            <span>Trends</span>
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+
+                          <a
+                            href={googleSearchUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground bg-muted/40 hover:bg-muted transition-colors border border-border/40"
+                            title="View live search SERP on Google"
+                          >
+                            <Search className="h-3 w-3" />
+                          </a>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Data Sourcing & Verification Citation Box */}
+              <div className="p-4 rounded-2xl border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-violet-500 shrink-0" />
+                  <span>
+                    <strong>Data Sources & Intelligence Basis:</strong> Live Google Search Suggest API (AnswerThePublic query architecture), Google Trends RSS Velocity ({selectedGeo.toUpperCase()}), & Niche Search Volume Models.
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <a
+                    href="https://trends.google.com/trends/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-violet-600 dark:text-violet-400 hover:underline font-medium"
+                  >
+                    Google Trends <ExternalLink className="h-3 w-3" />
+                  </a>
+                  <span>•</span>
+                  <a
+                    href="https://www.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline font-medium"
+                  >
+                    Google Search <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
               </div>
 
               {/* Macro & Regional Cultural Signals */}
@@ -360,14 +418,25 @@ ${(data.contentBriefs?.newsletterAngles || [])
                     </h4>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {data.generalTrends.map((trend: any, i: number) => (
-                      <span key={i} className="inline-flex items-center gap-1.5 text-xs bg-background border px-3 py-1.5 rounded-xl font-medium shadow-2xs">
-                        <span className="font-semibold text-foreground capitalize">{trend.title}</span>
-                        <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md font-mono">
-                          {trend.traffic} searches
-                        </span>
-                      </span>
-                    ))}
+                    {data.generalTrends.map((trend: any, i: number) => {
+                      const trendUrl = `https://trends.google.com/trends/explore?q=${encodeURIComponent(trend.title)}&geo=${selectedGeo === "worldwide" ? "" : selectedGeo.toUpperCase()}`;
+                      return (
+                        <a
+                          key={i}
+                          href={trendUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs bg-background border px-3 py-1.5 rounded-xl font-medium shadow-2xs hover:border-violet-500/40 hover:text-violet-600 transition-all group"
+                          title="Click to view trend on Google Trends"
+                        >
+                          <span className="font-semibold text-foreground capitalize group-hover:text-violet-600">{trend.title}</span>
+                          <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md font-mono">
+                            {trend.traffic} searches
+                          </span>
+                          <ExternalLink className="h-2.5 w-2.5 opacity-50 group-hover:opacity-100" />
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               )}

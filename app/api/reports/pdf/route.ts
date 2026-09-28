@@ -46,16 +46,46 @@ export async function GET(req: NextRequest) {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_KEY;
     const supabase = createSupabaseClient(supabaseUrl, serviceKey);
 
-    // 1. Fetch Client Info
-    const { data: client, error: clientErr } = await supabase
-      .from("clients")
-      .select("id, name, logo_url")
-      .eq("id", clientId)
-      .single();
+    // 1. Fetch Client Info (support UUID, exact name, or slug resolution)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId);
+    let client: { id: string; name: string; logo_url: string | null } | null = null;
 
-    if (clientErr || !client) {
+    if (isUUID) {
+      const { data } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .eq("id", clientId)
+        .maybeSingle();
+      client = data;
+    }
+
+    if (!client) {
+      // Try exact or case-insensitive name match
+      const { data: byName } = await supabase
+        .from("clients")
+        .select("id, name, logo_url")
+        .ilike("name", clientId)
+        .maybeSingle();
+      client = byName;
+    }
+
+    if (!client) {
+      // Try normalized slug match
+      const { data: allClients } = await supabase
+        .from("clients")
+        .select("id, name, logo_url");
+      const normalizedInput = clientId.toLowerCase().replace(/[^a-z0-9]/g, "");
+      client = allClients?.find(c => {
+        const normalizedName = c.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return normalizedName === normalizedInput || c.id === clientId;
+      }) || null;
+    }
+
+    if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
+
+    const realClientId = client.id;
 
     const brandTheme = getClientBrandTheme(client.name);
 
@@ -73,18 +103,18 @@ export async function GET(req: NextRequest) {
       { data: latestSummaryRow },
       { data: accountMetrics },
     ] = await Promise.all([
-      supabase.from("client_ga4_config").select("ga4_property_id").eq("client_id", clientId).maybeSingle(),
-      supabase.from("client_metricool_config").select("platform, followers").eq("client_id", clientId).eq("is_active", true),
-      supabase.from("social_oauth_accounts").select("platform, account_id, account_name").eq("client_id", clientId).eq("is_active", true),
-      supabase.from("client_youtube_map").select("channel_id, channel_title").eq("client_id", clientId).eq("active", true),
-      supabase.from("social_accounts").select("id, platform, account_handle").eq("client_id", clientId).eq("platform", "x").eq("is_active", true),
-      supabase.from("shopify_oauth_connections").select("id, shop_domain").eq("client_id", clientId).eq("is_active", true),
-      supabase.from("client_meta_ads_config").select("id").eq("client_id", clientId).eq("is_active", true),
-      supabase.from("client_ubersuggest_config" as any).select("id").eq("client_id", clientId).eq("is_active", true),
-      supabase.from("report_gsc_metrics" as any).select("id").eq("client_id", clientId).limit(1),
+      supabase.from("client_ga4_config").select("ga4_property_id").eq("client_id", realClientId).maybeSingle(),
+      supabase.from("client_metricool_config").select("platform, followers").eq("client_id", realClientId).eq("is_active", true),
+      supabase.from("social_oauth_accounts").select("platform, account_id, account_name").eq("client_id", realClientId).eq("is_active", true),
+      supabase.from("client_youtube_map").select("channel_id, channel_title").eq("client_id", realClientId).eq("active", true),
+      supabase.from("social_accounts").select("id, platform, account_handle").eq("client_id", realClientId).eq("platform", "x").eq("is_active", true),
+      supabase.from("shopify_oauth_connections").select("id, shop_domain").eq("client_id", realClientId).eq("is_active", true),
+      supabase.from("client_meta_ads_config").select("id").eq("client_id", realClientId).eq("is_active", true),
+      supabase.from("client_ubersuggest_config" as any).select("id").eq("client_id", realClientId).eq("is_active", true),
+      supabase.from("report_gsc_metrics" as any).select("id").eq("client_id", realClientId).limit(1),
       // Prefer summaries whose period overlaps the current reporting week; fall back to latest
-      supabase.from("analytics_summaries" as any).select("summary_data, generated_at, type, period_start, period_end").eq("client_id", clientId).gte("period_end", startISO).lte("period_start", endISO).order("generated_at", { ascending: false }).limit(10),
-      supabase.from("social_account_metrics").select("platform, followers, new_followers, period_start, period_end, views, impressions, engagements, collected_at").eq("client_id", clientId).order("collected_at", { ascending: false }).limit(200),
+      supabase.from("analytics_summaries" as any).select("summary_data, generated_at, type, period_start, period_end").eq("client_id", realClientId).gte("period_end", startISO).lte("period_start", endISO).order("generated_at", { ascending: false }).limit(10),
+      supabase.from("social_account_metrics").select("platform, followers, new_followers, period_start, period_end, views, impressions, engagements, collected_at").eq("client_id", realClientId).order("collected_at", { ascending: false }).limit(200),
     ]);
 
     // Determine Active Social Channels
@@ -156,7 +186,7 @@ export async function GET(req: NextRequest) {
       const metricoolResults = await Promise.allSettled(
         socialPlatformsNeedingFollowers.map(async (platform) => {
           const { data, error } = await supabase.functions.invoke("metricool-social-weekly", {
-            body: { clientId, platform, from: startISO, to: endISO },
+            body: { clientId: realClientId, platform, from: startISO, to: endISO },
           });
           if (error || !data?.success) return { platform, followers: 0, gained: 0 };
           const timeline = data.data?.current?.followersTimeline || [];
@@ -180,7 +210,7 @@ export async function GET(req: NextRequest) {
     const { data: postsRaw } = await supabase
       .from("social_content")
       .select("id, platform, published_at, title, url, content_id")
-      .eq("client_id", clientId)
+      .eq("client_id", realClientId)
       .gte("published_at", startDate.toISOString())
       .lte("published_at", endDate.toISOString())
       .order("published_at", { ascending: false, nullsFirst: false })
@@ -327,7 +357,7 @@ export async function GET(req: NextRequest) {
       const { data: fallbackSummaries } = await supabase
         .from("analytics_summaries" as any)
         .select("summary_data, generated_at, type, period_start, period_end")
-        .eq("client_id", clientId)
+        .eq("client_id", realClientId)
         .order("generated_at", { ascending: false })
         .limit(10);
       summaryRows = (fallbackSummaries as any[]) || [];
@@ -416,7 +446,7 @@ export async function GET(req: NextRequest) {
       if (ga4Config?.ga4_property_id) {
         try {
           const { data: ga4Data } = await supabase.functions.invoke("fetch-ga4-analytics", {
-            body: { clientId, startDate: startISO, endDate: endISO },
+            body: { clientId: realClientId, startDate: startISO, endDate: endISO },
           });
           const topPages = ga4Data?.analytics?.topPages || ga4Data?.topPages || [];
           topPages.slice(0, 7).forEach((p: any, idx: number) => {
@@ -442,13 +472,13 @@ export async function GET(req: NextRequest) {
       const { data: substackConfig } = await supabase
         .from("client_substack_config")
         .select("id")
-        .eq("client_id", clientId)
+        .eq("client_id", realClientId)
         .eq("is_active", true)
         .maybeSingle();
       if (substackConfig) {
         try {
           const { data: subData } = await supabase.functions.invoke("fetch-substack-ga4", {
-            body: { clientId, startDate: startISO, endDate: endISO },
+            body: { clientId: realClientId, startDate: startISO, endDate: endISO },
           });
           const subPages = subData?.analytics?.topPages || subData?.topPages || [];
           subPages.slice(0, 5).forEach((p: any, idx: number) => {
@@ -474,7 +504,7 @@ export async function GET(req: NextRequest) {
       const { data: gscRows } = await supabase
         .from("report_gsc_metrics" as any)
         .select("top_queries")
-        .eq("client_id", clientId)
+        .eq("client_id", realClientId)
         .order("collected_at", { ascending: false })
         .limit(1);
       if (gscRows && gscRows.length > 0) {

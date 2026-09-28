@@ -252,8 +252,17 @@ export const rankTopInsights = (
     };
   });
 
-  // Sort by views DESC (highest views first across all platforms)
+  // Sort by views DESC with engagement tie-breaking when view volumes are comparable (within 25%)
   rankedContent.sort((a, b) => {
+    const maxViews = Math.max(a.views, b.views);
+    const minViews = Math.min(a.views, b.views);
+    if (maxViews > 0 && (maxViews - minViews) / maxViews <= 0.25) {
+      const aInteractions = (a.likes || 0) + (a.comments || 0) + (a.shares || 0);
+      const bInteractions = (b.likes || 0) + (b.comments || 0) + (b.shares || 0);
+      if (aInteractions !== bInteractions) {
+        return bInteractions - aInteractions;
+      }
+    }
     return b.views - a.views;
   });
 

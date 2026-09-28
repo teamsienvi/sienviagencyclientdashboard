@@ -30,83 +30,50 @@ export function useTopPerformingPosts(
       const periodStartStr = periodStartDate.toISOString().split("T")[0];
       const periodEndStr = periodEndDate.toISOString().split("T")[0];
 
-      // Query 1: Posts published within the reporting period (existing behavior)
-      let metricsQuery = supabase
-        .from("social_content_metrics")
+      // Query posts published within the reporting period directly from social_content
+      const { data: contentRows, error: contentError } = await supabase
+        .from("social_content")
         .select(`
-          views,
-          impressions,
-          reach,
-          likes,
-          comments,
-          shares,
-          period_end,
-          collected_at,
+          id,
+          client_id,
           platform,
-          social_content!inner (
-            id,
-            client_id,
-            platform,
-            published_at,
-            url,
-            title
+          published_at,
+          url,
+          title,
+          social_content_metrics (
+            views, impressions, reach, likes, comments, shares, period_end, collected_at
           )
         `)
-        .eq("social_content.client_id", clientId)
-        .gte("social_content.published_at", periodStartStr)
-        .lte("social_content.published_at", periodEndStr)
-        .limit(2000);
-
-      let { data: metricsRaw, error: contentError } = await metricsQuery;
+        .eq("client_id", clientId)
+        .gte("published_at", periodStartStr)
+        .lte("published_at", periodEndDate.toISOString())
+        .order("published_at", { ascending: false })
+        .limit(300);
 
       if (contentError) throw contentError;
-      
-      // Merge result sets (now only relying on Query 1 which strictly filters by published_at)
-      const allMetrics = [...(metricsRaw || [])];
+      if (!contentRows || contentRows.length === 0) return [];
 
-      if (allMetrics.length === 0) {
-        // Fallback: query via published_at directly
-        const { data: fallbackContent } = await supabase
-          .from("social_content")
-          .select(`
-            id,
-            client_id,
-            platform,
-            published_at,
-            url,
-            title,
-            social_content_metrics (
-              views, impressions, reach, likes, comments, shares, period_end, collected_at
-            )
-          `)
-          .eq("client_id", clientId)
-          .gte("published_at", periodStartStr)
-          .lte("published_at", periodEndStr)
-          .order('published_at', { ascending: false })
-          .limit(200);
+      const topInsightRows: any[] = [];
+      contentRows.forEach((post: any) => {
+        if (!post.social_content_metrics || post.social_content_metrics.length === 0) return;
+        const latestMetric = [...post.social_content_metrics].sort((a: any, b: any) =>
+          new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
+        )[0];
 
-        if (fallbackContent && fallbackContent.length > 0) {
-            metricsRaw = fallbackContent.flatMap((post: any) => {
-                if (!post.social_content_metrics || post.social_content_metrics.length === 0) return [];
-                const latestMetric = [...post.social_content_metrics].sort((a: any, b: any) =>
-                    new Date(b.collected_at || 0).getTime() - new Date(a.collected_at || 0).getTime()
-                )[0];
-                return [{
-                    ...latestMetric,
-                    social_content: {
-                        id: post.id,
-                        client_id: post.client_id,
-                        platform: post.platform,
-                        published_at: post.published_at,
-                        url: post.url,
-                        title: post.title
-                    }
-                }];
-            });
-        }
-      }
+        topInsightRows.push({
+          ...latestMetric,
+          social_content: {
+            id: post.id,
+            client_id: post.client_id,
+            platform: post.platform,
+            published_at: post.published_at,
+            url: post.url,
+            title: post.title,
+          },
+        });
+      });
 
-      const finalMetrics = allMetrics.length > 0 ? allMetrics : (metricsRaw || []);
+      const finalMetrics = topInsightRows;
       if (!finalMetrics || finalMetrics.length === 0) return [];
 
       // Deduplicate: for each post, keep only the row with the latest period_end
