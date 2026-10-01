@@ -106,6 +106,7 @@ serve(async (req) => {
           .from('web_analytics_page_views')
           .select('country')
           .eq('client_id', clientId)
+          .eq('is_excluded', false)
           .gte('viewed_at', startISO)
           .lt('viewed_at', endISO);
 
@@ -129,6 +130,7 @@ serve(async (req) => {
           .from('web_analytics_sessions')
           .select('country')
           .eq('client_id', clientId)
+          .eq('is_excluded', false)
           .gte('started_at', startISO)
           .lt('started_at', endISO);
 
@@ -152,6 +154,7 @@ serve(async (req) => {
           .from('web_analytics_page_views')
           .select('visitor_id, country, viewed_at')
           .eq('client_id', clientId)
+          .eq('is_excluded', false)
           .gte('viewed_at', startISO)
           .lt('viewed_at', endISO)
           .order('viewed_at', { ascending: true });

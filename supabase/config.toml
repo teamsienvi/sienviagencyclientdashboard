@@ -165,6 +165,15 @@ verify_jwt = false
 [functions.generate-analytics-summary]
 verify_jwt = false
 
+[functions.backfill-traffic-audit]
+verify_jwt = false
+
+[functions.country-breakdown]
+verify_jwt = false
+
+[functions.update-traffic-rules]
+verify_jwt = false
+
 [functions.test-db]
 enabled = true
 verify_jwt = true

@@ -1,5 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Traffic classification: uses the canonical v2.2 classifier.
+// Source of truth: supabase/functions/src/traffic-classifier.ts
+// Do NOT import from the legacy traffic-filter.ts or use evaluateExclusion().
+import { classifyTraffic, rulesFromDbRow, type TrafficRules } from "../src/traffic-classifier.ts";
 
 // Dynamic CORS: reflect the request origin to support credentials: 'include'
 function getCorsHeaders(req: Request) {
@@ -143,9 +147,13 @@ serve(async (req) => {
       );
     }
 
-    // Get user agent from headers
+    // Get user agent and IP from headers
     const userAgent = req.headers.get('user-agent') || '';
     const deviceType = getDeviceType(userAgent);
+    const ipAddress = req.headers.get('cf-connecting-ip')
+      || req.headers.get('x-real-ip')
+      || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || null;
 
     // Create Supabase client with service role for admin access
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -174,11 +182,32 @@ serve(async (req) => {
       );
     }
 
+    // ── Traffic classification (v2) ──────────────────────────────────
+    // Fetch per-client traffic rules including v2 fields
+    const { data: rulesRow } = await supabase
+      .from('client_traffic_rules')
+      .select('allowed_countries, team_ips, custom_bot_patterns, is_active, geo_mode, allowed_ips, allowed_cidrs, allowed_ua_patterns')
+      .eq('client_id', clientId)
+      .maybeSingle();
+
+    const rules: TrafficRules | null = rulesRow
+      ? rulesFromDbRow(rulesRow)
+      : null;
+
+    const classification = classifyTraffic({
+      userAgent,
+      country: normalizedCountry,
+      ipAddress,
+      rules,
+    });
+
+    // ── End traffic classification ───────────────────────────────────
+
     const now = Date.now();
     const sessionId = generateSessionId(visitorId, now);
     const viewedAt = new Date().toISOString();
 
-    // Insert page view
+    // Insert page view (with full classification)
     const { error: pageViewError } = await supabase
       .from('web_analytics_page_views')
       .insert({
@@ -195,6 +224,14 @@ serve(async (req) => {
         device_type: deviceType,
         viewed_at: viewedAt,
         country: normalizedCountry,
+        ip_address: ipAddress,
+        is_excluded: classification.is_excluded,
+        exclude_reason: classification.exclude_reason,
+        traffic_class: classification.traffic_class,
+        traffic_flags: classification.traffic_flags,
+        exclusion_policy: classification.exclusion_policy,
+        audit_version: classification.audit_version,
+        evaluated_at: classification.evaluated_at,
       });
 
     if (pageViewError) {
@@ -223,7 +260,7 @@ serve(async (req) => {
         })
         .eq('id', existingSession.id);
     } else {
-      // Create new session
+      // Create new session (with full classification)
       const { error: sessionError } = await supabase
         .from('web_analytics_sessions')
         .insert({
@@ -238,6 +275,14 @@ serve(async (req) => {
           device_type: deviceType,
           bounce: true,
           country: normalizedCountry,
+          ip_address: ipAddress,
+          is_excluded: classification.is_excluded,
+          exclude_reason: classification.exclude_reason,
+          traffic_class: classification.traffic_class,
+          traffic_flags: classification.traffic_flags,
+          exclusion_policy: classification.exclusion_policy,
+          audit_version: classification.audit_version,
+          evaluated_at: classification.evaluated_at,
         });
 
       if (sessionError) {
@@ -246,7 +291,11 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Tracked page view for client ${clientId}: ${pageUrl}`);
+    if (classification.is_excluded) {
+      console.log(`[EXCLUDED] ${classification.exclude_reason} (${classification.traffic_class}) — client ${clientId}: ${pageUrl} (${normalizedCountry})`);
+    } else {
+      console.log(`Tracked page view for client ${clientId}: ${pageUrl} (${classification.traffic_class})`);
+    }
 
     return new Response(
       JSON.stringify({ success: true }),

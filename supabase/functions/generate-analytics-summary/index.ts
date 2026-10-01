@@ -926,11 +926,12 @@ async function collectWebsiteData(
         const isSnarkyAzzHumans = clientId === '297cbb3c-54b4-4bed-8206-25949a94fa62';
 
         if (!isSnarkyAzzHumans) {
-            // 1. Page views — filtered by client_id
+            // 1. Page views — filtered by client_id, reporting traffic only
             const { data: pageViews } = await supabase
                 .from("web_analytics_page_views")
                 .select("page_url, page_title, visitor_id, device_type, country, referrer, viewed_at, utm_source, utm_medium, utm_campaign")
                 .eq("client_id", clientId)
+                .eq("is_excluded", false)
                 .gte("viewed_at", startStr)
                 .lte("viewed_at", endStr + "T23:59:59Z")
                 .limit(500);
@@ -987,11 +988,12 @@ async function collectWebsiteData(
                 sections.push(output);
             }
 
-            // 2. Sessions — filtered by client_id, with duration and page count
+            // 2. Sessions — filtered by client_id, reporting traffic only
             const { data: sessions } = await supabase
                 .from("web_analytics_sessions")
                 .select("visitor_id, device_type, country, referrer, created_at, bounce, page_count, started_at, ended_at, utm_source, utm_medium")
                 .eq("client_id", clientId)
+                .eq("is_excluded", false)
                 .gte("created_at", startStr)
                 .lte("created_at", endStr + "T23:59:59Z")
                 .limit(500);

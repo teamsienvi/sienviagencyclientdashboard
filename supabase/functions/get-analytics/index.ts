@@ -34,6 +34,7 @@ serve(async (req) => {
     const { data: sessions, error: sessionsError } = await supabase
       .from('web_analytics_sessions')
       .select('*')
+      .eq('is_excluded', false)
       .gte('started_at', startDate)
       .lte('started_at', endDate);
 
@@ -42,6 +43,7 @@ serve(async (req) => {
     const { data: pageViewData, error: pvError } = await supabase
       .from('web_analytics_page_views')
       .select('*')
+      .eq('is_excluded', false)
       .gte('viewed_at', startDate)
       .lte('viewed_at', endDate);
 
