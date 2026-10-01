@@ -23,6 +23,7 @@
  *  17. Concurrent backfill behavior contracts
  *  18. Server-side rule mutation contracts
  *  19. Source-of-truth regression protection
+ *  20. Authentication & zero-trust regression protection
  *
  * Run with:  deno test supabase/functions/src/traffic-classifier.test.ts
  */
@@ -649,3 +650,34 @@ Deno.test("SOT: exclude mode flags AND excludes outside-target", () => {
   assertEquals(r.traffic_flags.includes("outside_target_geo:DE"), true, "Exclude must flag");
   assertEquals(r.exclusion_policy, "geo_policy");
 });
+
+// ═════════════════════════════════════════════════════════════════════
+// 20. AUTHENTICATION & ZERO-TRUST REGRESSION PROTECTION
+//     Guards against re-introducing the unauthenticated backfill gap.
+// ═════════════════════════════════════════════════════════════════════
+
+Deno.test("Security: backfill-traffic-audit rejects missing auth unconditionally", async () => {
+  const source = await Deno.readTextFile("supabase/functions/backfill-traffic-audit/index.ts");
+  // Must reject missing auth header before processing body
+  assertEquals(source.includes("if (!authHeader)"), true);
+  assertEquals(source.includes("Authorization header required"), true);
+});
+
+Deno.test("Security: backfill-traffic-audit enforces admin role on JWT", async () => {
+  const source = await Deno.readTextFile("supabase/functions/backfill-traffic-audit/index.ts");
+  assertEquals(source.includes(".eq('role', 'admin')"), true);
+  assertEquals(source.includes("Admin role required"), true);
+});
+
+Deno.test("Security: backfill-traffic-audit forbids service-role production mutation", async () => {
+  const source = await Deno.readTextFile("supabase/functions/backfill-traffic-audit/index.ts");
+  assertEquals(source.includes("Service-role key may only be used for dry-run"), true);
+  assertEquals(source.includes("Service-role key may not execute rollback"), true);
+});
+
+Deno.test("Security: update-traffic-rules rejects missing auth unconditionally", async () => {
+  const source = await Deno.readTextFile("supabase/functions/update-traffic-rules/index.ts");
+  assertEquals(source.includes("if (!authHeader)"), true);
+  assertEquals(source.includes(".eq('role', 'admin')"), true);
+});
+

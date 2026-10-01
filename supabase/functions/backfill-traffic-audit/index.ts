@@ -50,69 +50,65 @@ serve(async (req) => {
   try {
     // ── Auth: extract and verify admin identity ─────────────────────
     const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization header required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     let adminUserId: string | null = null;
     let adminEmail: string | null = null;
 
-    // Peek at body to check for dryRun (needed for service-role bypass)
+    // Parse body
     const bodyText = await req.text();
     const body = bodyText ? JSON.parse(bodyText) : {};
 
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      // Allow service-role key to bypass user JWT auth for DRY-RUN ONLY
-      const isServiceRole = token === supabaseKey;
-      if (isServiceRole && body.dryRun === true) {
-        adminUserId = 'service-role';
-        adminEmail = 'service-role@system';
-        console.log('Service-role dry-run bypass: authorized');
-      } else if (isServiceRole && body.dryRun !== true) {
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+    // Allow service-role key for authenticated MACHINE DRY-RUN ONLY (never for browser or mutation)
+    const isServiceRole = Boolean(supabaseKey && token === supabaseKey.trim());
+    console.log('[backfill-auth]', { tokenLen: token.length, keyLen: supabaseKey?.length, isServiceRole, dryRun: body.dryRun });
+    if (isServiceRole && body.dryRun === true) {
+      adminUserId = 'service-role';
+      adminEmail = 'service-role@system';
+      console.log('Authenticated machine dry-run: authorized');
+    } else if (isServiceRole && body.dryRun !== true) {
+      return new Response(
+        JSON.stringify({ error: 'Service-role key may only be used for dry-run. Production mutations require admin user JWT.' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } else {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) {
         return new Response(
-          JSON.stringify({ error: 'Service-role key may only be used for dry-run. Production mutations require admin user JWT.' }),
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      // Verify admin role
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .maybeSingle();
+      if (!roleRow) {
+        return new Response(
+          JSON.stringify({ error: 'Admin role required' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-      } else {
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-        if (authError || !user) {
-          return new Response(
-            JSON.stringify({ error: 'Unauthorized' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        // Verify admin role
-        const { data: roleRow } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('role', 'admin')
-          .maybeSingle();
-        if (!roleRow) {
-          return new Response(
-            JSON.stringify({ error: 'Admin role required' }),
-            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        adminUserId = user.id;
-        adminEmail = user.email || null;
       }
-    }
-
-    // ── Require authentication for production mutations ──────────────
-    // Dry-runs may proceed without auth for automated testing.
-    // Non-dry-run (production mutations) MUST have authenticated admin.
-    if (!authHeader && body.dryRun !== true) {
-      return new Response(
-        JSON.stringify({ error: 'Authorization required for production backfill' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      adminUserId = user.id;
+      adminEmail = user.email || null;
     }
 
     const action = body.action || 'backfill';
 
     if (action === 'rollback') {
-      if (!adminUserId) {
+      if (adminUserId === 'service-role') {
         return new Response(
-          JSON.stringify({ error: 'Authorization required for rollback' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ error: 'Service-role key may not execute rollback. Admin user JWT required.' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       return await handleRollback(supabase, body, adminUserId, adminEmail);
