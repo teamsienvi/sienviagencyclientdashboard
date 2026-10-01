@@ -45,3 +45,6 @@ seed-*.cjs
 seed-*.mjs
 remove_*.mjs
 setup_*.sql
+backups/
+*.dump
+*.dump.sql
