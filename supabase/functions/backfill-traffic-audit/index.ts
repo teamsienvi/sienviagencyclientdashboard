@@ -53,33 +53,49 @@ serve(async (req) => {
     let adminUserId: string | null = null;
     let adminEmail: string | null = null;
 
+    // Peek at body to check for dryRun (needed for service-role bypass)
+    const bodyText = await req.text();
+    const body = bodyText ? JSON.parse(bodyText) : {};
+
     if (authHeader) {
       const token = authHeader.replace('Bearer ', '');
-      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-      if (authError || !user) {
+      // Allow service-role key to bypass user JWT auth for DRY-RUN ONLY
+      const isServiceRole = token === supabaseKey;
+      if (isServiceRole && body.dryRun === true) {
+        adminUserId = 'service-role';
+        adminEmail = 'service-role@system';
+        console.log('Service-role dry-run bypass: authorized');
+      } else if (isServiceRole && body.dryRun !== true) {
         return new Response(
-          JSON.stringify({ error: 'Unauthorized' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      // Verify admin role
-      const { data: roleRow } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
-      if (!roleRow) {
-        return new Response(
-          JSON.stringify({ error: 'Admin role required' }),
+          JSON.stringify({ error: 'Service-role key may only be used for dry-run. Production mutations require admin user JWT.' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      } else {
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        if (authError || !user) {
+          return new Response(
+            JSON.stringify({ error: 'Unauthorized' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // Verify admin role
+        const { data: roleRow } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'admin')
+          .maybeSingle();
+        if (!roleRow) {
+          return new Response(
+            JSON.stringify({ error: 'Admin role required' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        adminUserId = user.id;
+        adminEmail = user.email || null;
       }
-      adminUserId = user.id;
-      adminEmail = user.email || null;
     }
 
-    const body = await req.json().catch(() => ({}));
     const action = body.action || 'backfill';
 
     if (action === 'rollback') {
