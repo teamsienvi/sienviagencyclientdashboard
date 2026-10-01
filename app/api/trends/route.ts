@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,183 @@ const CLIENT_NICHES: Record<string, { name: string; industry: string; keywords: 
     ],
     audience: "Health-conscious individuals, respiratory patients, seniors, high-altitude athletes, and clinical caretakers looking for reliable blood oxygen monitoring.",
   },
+  "ef580ebf-439f-4305-826a-f1f8aa89fd03": {
+    name: "Snarky Humans",
+    industry: "Novelty Apparel, Snarky Humor Merch, Pop Culture T-Shirts & Accessories",
+    keywords: [
+      "funny graphic tees",
+      "sarcastic t-shirts",
+      "snarky gifts",
+      "humorous mugs and apparel",
+      "adult humor clothing",
+    ],
+    audience: "Millennials and Gen-Z consumers who love sarcasm, meme culture, and bold self-expression through apparel.",
+  },
+  "d8a121fe-cdd9-4e19-90dc-dd32b159f973": {
+    name: "Snarky Pets",
+    industry: "Pet Lifestyle, Pet Accessories & Novelty Pet Products",
+    keywords: [
+      "funny pet accessories",
+      "dog bandana humor",
+      "pet owner gifts",
+      "sarcastic pet products",
+      "custom pet merch",
+    ],
+    audience: "Pet owners who love humorous, personality-driven pet products and gifts.",
+  },
+  "79099b9d-0281-4a95-8076-dcff0fd128a4": {
+    name: "BlingyBag",
+    industry: "Fashion Accessories, Handbags, Bling & Rhinestone Bags",
+    keywords: [
+      "rhinestone bags",
+      "bling purse",
+      "crystal handbag",
+      "evening clutch sparkle",
+      "fashion statement bags",
+    ],
+    audience: "Fashion-forward women who love sparkle, glam accessories, and statement bags for events and everyday wear.",
+  },
+  "973e8407-bf7f-45ca-bd73-a26acc3ad9e3": {
+    name: "BSUE Brow & Lash",
+    industry: "Beauty, Brow & Lash Services, Permanent Makeup",
+    keywords: [
+      "microblading near me",
+      "lash extensions",
+      "brow lamination",
+      "permanent makeup",
+      "lash lift and tint",
+    ],
+    audience: "Beauty-conscious clients seeking professional brow and lash enhancement services.",
+  },
+  "edfc083a-77f7-4c83-b6e0-a32bfc0553a1": {
+    name: "Cissie Pryor Presents",
+    industry: "Entertainment, Content Creator, Lifestyle Brand & Digital Media",
+    keywords: [
+      "lifestyle content creator",
+      "digital entertainment brand",
+      "social media influencer",
+      "content creation tips",
+      "creator economy",
+    ],
+    audience: "Entertainment and lifestyle enthusiasts, aspiring creators, and the creator economy community.",
+  },
+  "3177cefc-46cc-4790-8a20-65b160103077": {
+    name: "Luxxe Auto Accessories",
+    industry: "Automotive Accessories, Car Interior & Exterior Customization",
+    keywords: [
+      "car accessories 2026",
+      "luxury car interior",
+      "LED car lights",
+      "car phone mount",
+      "auto detailing accessories",
+    ],
+    audience: "Car enthusiasts, rideshare drivers, and vehicle owners looking to upgrade their ride aesthetics and functionality.",
+  },
+  "b6c39651-9259-4930-af6e-b744a5a191ad": {
+    name: "The Haven At Deer Park",
+    industry: "Hospitality, Vacation Rentals, Event Venues & Short-Term Stays",
+    keywords: [
+      "vacation rental near me",
+      "event venue rental",
+      "staycation ideas",
+      "airbnb alternatives",
+      "weekend getaway",
+    ],
+    audience: "Couples, families, and event planners seeking premium short-term stays and event spaces.",
+  },
+  "041555a7-1a25-42b8-89c7-edc40afff861": {
+    name: "Serenity Scrolls",
+    industry: "E-commerce, Digital Products, Spiritual Wellness & Journaling",
+    keywords: [
+      "guided journal prompts",
+      "spiritual wellness products",
+      "mindfulness journal",
+      "self-care digital downloads",
+      "affirmation cards",
+    ],
+    audience: "Spiritual seekers, journaling enthusiasts, and individuals focused on mental health and self-care routines.",
+  },
+  "d8f38e01-77ff-4839-ac48-54795adc9f3e": {
+    name: "Sienvi Agency",
+    industry: "Digital Marketing Agency, Social Media Management & Brand Strategy",
+    keywords: [
+      "social media marketing agency",
+      "digital marketing services",
+      "brand strategy consultant",
+      "content marketing",
+      "influencer marketing",
+    ],
+    audience: "Small-to-medium businesses seeking social media growth, brand visibility, and performance marketing.",
+  },
+  "95791e88-87cd-4621-af7e-df46f5ad93ac": {
+    name: "Father Figure Formula",
+    industry: "Men's Personal Development, Coaching, Podcasting & Community",
+    keywords: [
+      "fatherhood tips",
+      "men self-improvement",
+      "dad coaching program",
+      "personal development for men",
+      "parenting podcast",
+    ],
+    audience: "Modern fathers, men seeking personal growth, and communities focused on intentional fatherhood.",
+  },
+  "0b90215e-e55d-4b5e-8453-de35153a1fcd": {
+    name: "The Billionaire Brother",
+    industry: "Entrepreneurship, Wealth Education, Business Coaching & Motivation",
+    keywords: [
+      "entrepreneur mindset",
+      "wealth building tips",
+      "business coaching",
+      "passive income ideas",
+      "financial literacy",
+    ],
+    audience: "Aspiring entrepreneurs, business builders, and individuals focused on financial growth and wealth mindset.",
+  },
+  "0771b432-d720-4d0f-a964-ee6c7edcd116": {
+    name: "Hwabelle",
+    industry: "Botanical Art, Plant Preservation Tools & Nature-Inspired E-commerce",
+    keywords: [
+      "flower press kit",
+      "botanical preservation",
+      "dried flower art",
+      "herbarium supplies",
+      "nature craft tools",
+    ],
+    audience: "Plant lovers, crafters, botanical artists, and nature-inspired home décor enthusiasts.",
+  },
+  "22090989-2d0e-47b2-b9c5-98652d7f0957": {
+    name: "PlayIQ",
+    industry: "Sports Tech, Youth Athletics, Training Analytics & Coaching Platforms",
+    keywords: [
+      "youth sports analytics",
+      "athlete training app",
+      "sports performance tracking",
+      "coaching platform",
+      "player development tools",
+    ],
+    audience: "Youth athletes, coaches, sports parents, and organizations focused on player development and performance analytics.",
+  },
 };
+
+/**
+ * Look up client name from Supabase when not found in static niches
+ */
+async function resolveClientName(clientId: string): Promise<string | null> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseKey) return null;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const { data } = await supabase
+      .from("clients")
+      .select("name")
+      .eq("id", clientId)
+      .maybeSingle();
+    return data?.name || null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Fetch raw daily search trends from Google Trends RSS
@@ -111,19 +288,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const clientInfo = CLIENT_NICHES[clientId] || {
-    name: "OxiSure Tech",
-    industry: "Health-Tech, Pulse Oximeters & Respiratory Wellness",
-    keywords: ["pulse oximeter", "blood oxygen", "SpO2", "respiratory health", "sleep apnea monitoring"],
-    audience: "Health-conscious consumers, athletes, and caretakers.",
-  };
+  const clientInfo = CLIENT_NICHES[clientId] || null;
+
+  // Dynamic fallback: resolve client name from Supabase when not pre-configured
+  let resolvedClientInfo = clientInfo;
+  if (!resolvedClientInfo) {
+    const clientName = await resolveClientName(clientId);
+    resolvedClientInfo = {
+      name: clientName || "Client",
+      industry: "General Business & Social Media",
+      keywords: [clientName || "trending topics", "social media trends", "content marketing", "viral content ideas", "digital marketing"],
+      audience: "Social media audience and digital consumers.",
+    };
+  }
 
   try {
     // 1. Fetch real-time general trending searches for regional awareness
     const generalTrends = await fetchGoogleTrendsRSS(geo);
 
-    // 2. Fetch specific niche search suggestions for OxiSure
-    const nicheSuggestionsPromises = clientInfo.keywords.slice(0, 5).map((kw) => fetchGoogleSuggestions(kw));
+    // 2. Fetch specific niche search suggestions for client
+    const nicheSuggestionsPromises = resolvedClientInfo.keywords.slice(0, 5).map((kw) => fetchGoogleSuggestions(kw));
     const rawSuggestions = await Promise.all(nicheSuggestionsPromises);
     const flattenedSuggestions = Array.from(new Set(rawSuggestions.flat()));
 
@@ -325,7 +509,7 @@ export async function GET(request: NextRequest) {
     };
 
     const payload = {
-      client: clientInfo.name,
+      client: resolvedClientInfo.name,
       clientId,
       geo,
       generatedAt: new Date().toISOString(),

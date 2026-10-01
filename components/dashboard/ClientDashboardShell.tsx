@@ -732,7 +732,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
             {/* Navigation Buckets Bar - Full width, fills row */}
             <div className="grid py-4 mb-4 border-y border-primary/5 bg-primary/[0.02] rounded-xl overflow-hidden"
-              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, showSearchConsole, isOxiSureTech].filter(Boolean).length}, 1fr)` }}
+              style={{ gridTemplateColumns: `repeat(${[hasSocialMedia, hasAdsPlatform && client?.name !== "The Haven At Deer Park", hasWebAndEcomm, connectedAccounts?.ubersuggest, showSearchConsole, hasSocialMedia].filter(Boolean).length}, 1fr)` }}
             >
               
               {hasSocialMedia && (
@@ -785,7 +785,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 </button>
               )}
 
-              {isOxiSureTech && (
+              {hasSocialMedia && (
                 <button
                   onClick={() => {
                     if (typeof window !== "undefined") {
@@ -1448,8 +1448,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </div>
                 )}
 
-                {/* Trending & Content Radar Section (Piloted on OxiSure Tech) */}
-                {isOxiSureTech && (
+                {/* Trending & Content Radar Section (All Social-Media Clients) */}
+                {hasSocialMedia && (
                   <div className="mt-8 mb-8 scroll-mt-24" id="trending-radar">
                     <TrendingKeywordsSection clientId={clientId!} clientName={client.name} defaultCollapsed={true} />
                   </div>

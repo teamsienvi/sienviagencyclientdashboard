@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Copy,
   Check,
+  Download,
   Video,
   FileText,
   Layers,
@@ -72,9 +73,9 @@ export function TrendingKeywordsSection({
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleCopyAll = () => {
-    if (!data) return;
-    const brief = `
+  const buildBriefText = () => {
+    if (!data) return "";
+    return `
 # 🚀 Weekly Content Radar & Trending Keywords Report
 Client: ${data.client || clientName}
 Week: ${data.weekRange || "Current Week"}
@@ -129,10 +130,30 @@ ${(data.contentBriefs?.newsletterAngles || [])
   )
   .join("\n")}
     `.trim();
+  };
 
-    navigator.clipboard.writeText(brief);
+  const handleCopyAll = () => {
+    if (!data) return;
+    navigator.clipboard.writeText(buildBriefText());
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2500);
+  };
+
+  const handleDownload = () => {
+    if (!data) return;
+    const brief = buildBriefText();
+    const safeName = (data.client || clientName || "Client").replace(/[^a-zA-Z0-9]/g, "_");
+    const weekSafe = (data.weekRange || "current_week").replace(/[^a-zA-Z0-9]/g, "_");
+    const filename = `${safeName}_Trend_Radar_${weekSafe}.md`;
+    const blob = new Blob([brief], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -202,6 +223,18 @@ ${(data.contentBriefs?.newsletterAngles || [])
               >
                 {copiedAll ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 <span className="text-xs font-medium">{copiedAll ? "Brief Copied!" : "Copy Full Weekly Brief"}</span>
+              </Button>
+
+              {/* Download Brief Button */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleDownload}
+                disabled={isLoading || !data}
+                className="gap-2 h-10 px-3 bg-background/80 hover:bg-background border shadow-sm"
+              >
+                <Download className="h-3.5 w-3.5 text-violet-500" />
+                <span className="text-xs font-medium">Download Brief</span>
               </Button>
 
               {/* Collapsible Toggle Button */}
