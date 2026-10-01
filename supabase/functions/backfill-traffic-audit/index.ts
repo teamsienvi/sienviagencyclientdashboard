@@ -96,9 +96,25 @@ serve(async (req) => {
       }
     }
 
+    // ── Require authentication for production mutations ──────────────
+    // Dry-runs may proceed without auth for automated testing.
+    // Non-dry-run (production mutations) MUST have authenticated admin.
+    if (!authHeader && body.dryRun !== true) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required for production backfill' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const action = body.action || 'backfill';
 
     if (action === 'rollback') {
+      if (!adminUserId) {
+        return new Response(
+          JSON.stringify({ error: 'Authorization required for rollback' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       return await handleRollback(supabase, body, adminUserId, adminEmail);
     }
 
@@ -259,12 +275,39 @@ async function handleBackfill(
     geo_impact: 0,
   };
 
-  const addToBreakdown = (cls: ClassificationResult) => {
+  // Per-table breakdown for independent PV/session reporting
+  const perTable: Record<string, {
+    scanned: number; changed: number; excluded: number; included: number;
+    traffic_classes: Record<string, number>;
+    exclusion_policies: Record<string, number>;
+    would_exclude: number; would_include: number; geo_impact: number;
+  }> = {};
+
+  const ensureTable = (t: string) => {
+    if (!perTable[t]) {
+      perTable[t] = {
+        scanned: 0, changed: 0, excluded: 0, included: 0,
+        traffic_classes: {}, exclusion_policies: {},
+        would_exclude: 0, would_include: 0, geo_impact: 0,
+      };
+    }
+  };
+
+  const addToBreakdown = (cls: ClassificationResult, table?: string) => {
     breakdown.traffic_classes[cls.traffic_class] =
       (breakdown.traffic_classes[cls.traffic_class] || 0) + 1;
     if (cls.exclusion_policy) {
       breakdown.exclusion_policies[cls.exclusion_policy] =
         (breakdown.exclusion_policies[cls.exclusion_policy] || 0) + 1;
+    }
+    if (table) {
+      ensureTable(table);
+      perTable[table].traffic_classes[cls.traffic_class] =
+        (perTable[table].traffic_classes[cls.traffic_class] || 0) + 1;
+      if (cls.exclusion_policy) {
+        perTable[table].exclusion_policies[cls.exclusion_policy] =
+          (perTable[table].exclusion_policies[cls.exclusion_policy] || 0) + 1;
+      }
     }
   };
 
@@ -299,6 +342,8 @@ async function handleBackfill(
       if (!rows || rows.length === 0) { hasMore = false; break; }
 
       totalScanned += rows.length;
+      ensureTable(tableName);
+      perTable[tableName].scanned += rows.length;
       const updates: { id: string; data: Record<string, unknown> }[] = [];
       const historyRows: Record<string, unknown>[] = [];
 
@@ -310,7 +355,7 @@ async function handleBackfill(
           rules,
         });
 
-        addToBreakdown(cls);
+        addToBreakdown(cls, tableName);
 
         // Detect actual changes
         const changed = cls.is_excluded !== row.is_excluded ||
@@ -319,14 +364,22 @@ async function handleBackfill(
 
         if (changed) {
           totalChanged++;
+          perTable[tableName].changed++;
           if (cls.is_excluded && !row.is_excluded) {
             totalExcluded++;
             breakdown.would_exclude++;
+            perTable[tableName].excluded++;
+            perTable[tableName].would_exclude++;
           } else if (!cls.is_excluded && row.is_excluded) {
             totalIncluded++;
             breakdown.would_include++;
+            perTable[tableName].included++;
+            perTable[tableName].would_include++;
           }
-          if (cls.exclusion_policy === 'geo_policy') breakdown.geo_impact++;
+          if (cls.exclusion_policy === 'geo_policy') {
+            breakdown.geo_impact++;
+            perTable[tableName].geo_impact++;
+          }
 
           const newData = {
             is_excluded: cls.is_excluded,
@@ -415,6 +468,8 @@ async function handleBackfill(
     records_excluded: totalExcluded,
     records_included: totalIncluded,
     breakdown,
+    page_views: perTable['web_analytics_page_views'] || null,
+    sessions: perTable['web_analytics_sessions'] || null,
   };
 
   if (!dryRun) {
