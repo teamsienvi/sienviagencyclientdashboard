@@ -1,143 +1,122 @@
 # Traffic Classification System — Architecture Reference
 
-> **Source of truth**: [`traffic-classifier.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-classifier.ts)
-> **Version**: v2.2 (`traffic-v2`)
-> **Last updated**: 2026-10-01
+> **Canonical Classifier**: [`traffic-classifier.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-classifier.ts)  
+> **Version**: v2.2 (`traffic-v2`)  
+> **Status**: Production  
+> **Rollout**: Controlled client-by-client  
+> **Last updated**: 2026-10-01  
 
-## System Overview
+---
 
-The Traffic Classification system determines what each analytics event **is** (bot, human, internal, suspicious) and whether it should appear in **client KPI reporting**.
+## 1. System Overview
 
-It operates as a two-stage pipeline:
+The Traffic Classification system governs data quality and analytics hygiene across the Sienvi Agency Client Dashboard. It determines what each incoming analytics event **is** (evidence-based classification) and whether it should appear in **client KPI reporting** (policy-based reporting).
 
-```
-Visitor → track-analytics → classifyTraffic() → Stage A (Classification) → Stage B (Reporting Policy) → Persist
+The system operates as a strict two-stage pipeline:
+
+```text
+Visitor Event → track-analytics → classifyTraffic() 
+                    ↓
+        STAGE A — CLASSIFICATION (Truthful evidence)
+                    ↓
+        STAGE B — REPORTING POLICY (Allowlist / Exclusions)
+                    ↓
+        Database Persistence & Client KPI Views
 ```
 
 ### Stage A — Traffic Classification
+Determines what the traffic actually **is**, based strictly on empirical evidence. Classification is immutable and is never falsified by allowlists or client preferences.
 
-Determines what the traffic actually **is**, based on evidence. Classification is never modified by allowlists or reporting policy.
-
-| Priority | Rule | Class |
-|----------|------|-------|
-| 1 | Built-in known bot UA (50+ patterns) | `bot` |
-| 2 | Custom bot UA patterns (per-client) | `bot` |
-| 3 | Suspicious automation (short/empty UA) | `suspicious` |
-| 4 | Team / internal IP match | `internal` |
-| 5 | Default | `human` |
+| Priority | Rule | Resulting Class |
+| :--- | :--- | :--- |
+| 1 | Built-in known bot user-agent (50+ patterns) | `bot` |
+| 2 | Custom bot user-agent patterns (client-configured) | `bot` |
+| 3 | Suspicious automation (short/empty user-agent < 15 chars) | `suspicious` |
+| 4 | Team / internal IP or CIDR match | `internal` |
+| 5 | Standard browser pattern | `human` |
 
 ### Stage B — Reporting Policy
+Determines `is_excluded` based on classification rules and allowlists. Reporting allowlists override `is_excluded` to `false`, but **never** alter `traffic_class` (a bot remains classified as `bot`).
 
-Decides `is_excluded` based on classification + rules. Allowlists may override `is_excluded` but **never** change `traffic_class`.
-
-| Priority | Rule | Effect |
-|----------|------|--------|
-| 1 | Reporting allowlist (IP, CIDR, UA pattern) | `is_excluded = false` |
-| 2 | Internal traffic | `is_excluded = true` |
-| 3 | Known/custom bot | `is_excluded = true` |
-| 4 | Suspicious automation | `is_excluded = true` |
-| 5 | Geographic reporting policy | Depends on `geo_mode` (see below) |
-| 6 | Default include | `is_excluded = false` |
-
----
-
-## Geographic Reporting Policy (`geo_mode`)
-
-The geographic reporting behavior is controlled by `geo_mode`, **not** by the mere presence of `allowed_countries`.
-
-### `off`
-No geo-based reporting action. `allowed_countries` is ignored.
-
-### `observe` (default)
-Outside-target country traffic is **flagged** but **included** in reporting:
-- `traffic_flags += outside_target_geo:XX`
-- `is_excluded` remains `false`
-
-### `exclude`
-Outside-target country traffic is **flagged** and **excluded** from reporting:
-- `traffic_flags += outside_target_geo:XX`
-- `is_excluded = true`
-- `exclusion_policy = geo_policy`
-
-### Unknown Geography
-Values such as `null`, `""`, `"XX"`, `"unknown"` are:
-- Flagged as `geo:unknown`
-- **Never** excluded solely because geography is unknown
-- This applies in all geo modes, including `exclude`
-
-### US-Only Seed Data
-The original v1 migration seeded `allowed_countries = ["US"]` for active clients. This does **not** mean all non-US traffic is excluded, because v2.2 defaults `geo_mode` to `"observe"`. Non-US traffic is only excluded when an administrator explicitly sets `geo_mode = "exclude"`.
+| Priority | Policy Rule | Reporting Effect |
+| :--- | :--- | :--- |
+| 1 | Reporting allowlist match (IP, CIDR, UA pattern) | `is_excluded = false` (`reporting_allowlist` flag) |
+| 2 | Internal traffic exclusion | `is_excluded = true` (`internal_traffic` policy) |
+| 3 | Known or custom bot exclusion | `is_excluded = true` (`known_bot` / `custom_bot`) |
+| 4 | Suspicious automation exclusion | `is_excluded = true` (`suspicious_automation`) |
+| 5 | Geographic reporting policy | Governed by `geo_mode` (see Section 2) |
+| 6 | Default policy | `is_excluded = false` (included in client KPIs) |
 
 ---
 
-## Component Map
+## 2. Geographic Reporting Policy (`geo_mode`)
 
-### Source of Truth (Classification Engine)
-| File | Role |
-|------|------|
-| [`traffic-classifier.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-classifier.ts) | **Canonical** classification engine — `classifyTraffic()` |
+The geographic reporting behavior is controlled dynamically per client by `geo_mode`, **not** by the mere presence of `allowed_countries`.
 
-### Active Ingestion
-| File | Role |
-|------|------|
-| [`track-analytics/index.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/track-analytics/index.ts) | Real-time page view + session ingestion, calls `classifyTraffic()` |
+* **`off`**: Geographic filtering disabled. `allowed_countries` is ignored.
+* **`observe` (Default)**: Outside-target country traffic is **flagged** for visibility but **included** in reporting (`traffic_flags += outside_target_geo:XX`, `is_excluded = false`).
+* **`exclude`**: Outside-target country traffic is **flagged and excluded** from reporting (`is_excluded = true`, `exclusion_policy = geo_policy`).
 
-### Rule Mutation
-| File | Role |
-|------|------|
-| [`update-traffic-rules/index.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/update-traffic-rules/index.ts) | Server-side rule upsert + audit logging |
+### Unknown Geography Invariant
+When country code is unknown (`null`, `""`, `"XX"`, `"unknown"`):
+- Flagged with `geo:unknown`
+- **NEVER excluded solely because geography is unknown**, in all modes (including `exclude`).
 
-### Historical Processing
-| File | Role |
-|------|------|
-| [`backfill-traffic-audit/index.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/backfill-traffic-audit/index.ts) | Cursor-based backfill + rollback |
-
-### Rollback / History
-| Table | Role |
-|-------|------|
-| `traffic_audit_runs` | Backfill run tracking (status, stats, cursor) |
-| `traffic_classification_history` | Per-row snapshots for deterministic rollback |
-
-### Admin UI
-| File | Role |
-|------|------|
-| [`TrafficAuditPanel.tsx`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/components/analytics/TrafficAuditPanel.tsx) | Dashboard panel: rules config, backfill/rollback, stats |
-
-### Shared Thresholds
-| File | Role |
-|------|------|
-| [`traffic-thresholds.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-thresholds.ts) | Runtime-neutral thresholds shared between Edge Functions and React |
-
-### Tests
-| File | Role |
-|------|------|
-| [`traffic-classifier.test.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-classifier.test.ts) | Deno test suite — 40+ tests covering all classification and policy scenarios |
+### Seed Configuration
+Initial database migration seeded `allowed_countries = ["US"]` with `geo_mode = "observe"`. Non-US human traffic is never excluded unless an administrator explicitly updates the client configuration to `geo_mode = "exclude"`.
 
 ---
 
-## Legacy (Non-Authoritative)
+## 3. Security & Authorization Model
 
-| File | Status | Notes |
-|------|--------|-------|
-| [`traffic-filter.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-filter.ts) | **DEPRECATED** | v1 binary exclusion engine. Preserved for rollback compatibility only. Has no active imports. |
-
-Key differences from v2.2:
-- v1 used binary `is_excluded` with no `traffic_class`, `traffic_flags`, or `exclusion_policy`
-- v1 geo behavior: country NOT in `allowed_countries` → automatic exclusion (no `geo_mode`)
-- v2.2 separates classification (Stage A) from reporting policy (Stage B)
+Traffic Classification operations adhere to a strict **zero-trust authentication architecture**:
+1. **Public Ingestion**: `track-analytics` accepts public analytics events and runs `classifyTraffic()` server-side.
+2. **Rule Mutation**: [`update-traffic-rules`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/update-traffic-rules/index.ts) requires a valid user JWT with `role = 'admin'` in `user_roles`. Identity (`changed_by_user_id`) is strictly extracted from server-validated JWT tokens, never accepted from client request payloads. All changes append an immutable record to `traffic_rule_audit_log`.
+3. **Historical Backfill & Rollback**: [`backfill-traffic-audit`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/backfill-traffic-audit/index.ts) rejects unauthenticated requests with `401 Unauthorized` unconditionally (covering `dryRun: false`, `dryRun: true`, and `action: "rollback"`). Non-admin JWTs are rejected with `403 Forbidden`. Authenticated machine dry-runs require explicit Bearer service-role tokens. Service-role credentials cannot execute mutations or rollbacks.
 
 ---
 
-## Persisted Fields (v2.2)
+## 4. Backfill, Dry-Run & Rollback Procedure
 
-Each page view and session record stores:
+Historical reclassification processes analytics in cursor-based batches:
+* **Dry-Run Requirement**: Rollout for any client must begin with an authenticated `dryRun: true`. Dry-runs calculate separate page-view and session statistics without database mutation.
+* **Per-Table Breakdown**: The engine independently computes metrics for `web_analytics_page_views` and `web_analytics_sessions`.
+* **Concurrency Lock**: Enforces a strict maximum of one active production run per client via `traffic_audit_runs` unique constraint.
+* **Snapshot Rollback (Level 2)**: Prior to updating rows in a production backfill, exact snapshots of previous states are saved to `traffic_classification_history`. The `action: "rollback"` endpoint provides deterministic restoration.
 
-| Field | Description |
-|-------|-------------|
-| `traffic_class` | `bot` / `internal` / `suspicious` / `human` / `unknown` |
-| `traffic_flags` | Array of classification metadata strings |
-| `is_excluded` | Whether the record is excluded from KPI reporting |
-| `exclude_reason` | Human-readable reason (backward compat with v1) |
-| `exclusion_policy` | Policy that triggered exclusion (`known_bot`, `custom_bot`, `internal_traffic`, `suspicious_automation`, `geo_policy`) |
-| `audit_version` | Classifier version stamp (`traffic-v2`) |
-| `evaluated_at` | ISO 8601 UTC timestamp of classification |
+### Four-Level Recovery Hierarchy
+1. **Level 1**: Classifier function rollback (redeploy previous edge function).
+2. **Level 2**: Deterministic audit-run rollback via `traffic_classification_history` (primary recovery).
+3. **Level 3**: Corrected versioned reclassification (rerun with updated rules).
+4. **Level 4**: Database disaster recovery.
+
+---
+
+## 5. Incident Reference & Production PlayIQ State
+
+* **Incident Documentation**: [`docs/incidents/2026-10-01-traffic-backfill-auth-gap.md`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/docs/incidents/2026-10-01-traffic-backfill-auth-gap.md)  
+  Documents the authorization gap discovered during deployment testing where unauthenticated requests could trigger mutations. The flaw was remediated in commits `8bad745` and `e23128a`.
+* **PlayIQ Production Historical Run**:
+  * **Run ID**: `48e490ac-b366-44bf-874b-995e86e2f695`
+  * **Actor**: `created_by = system` (preserved truthfully)
+  * **Status**: `completed`
+  * **Records Processed**: 2,048 (1,985 page views + 63 sessions)
+  * **Exclusions**: 15 (10 page views + 5 sessions, 100% confirmed bots)
+  * **Reconciliation**: 1,975 reporting PVs + 10 excluded PVs = 1,985 total; 58 reporting sessions + 5 excluded sessions = 63 total.
+  * **Rollback Snapshots**: 2,048 snapshots verified intact (`ROLLBACK DATA INTEGRITY: PASS`).
+  * **Status**: Completed. PlayIQ must **not** be backfilled again.
+
+---
+
+## 6. Component Map
+
+| Component | Path | Function |
+| :--- | :--- | :--- |
+| **Classification Engine** | [`traffic-classifier.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-classifier.ts) | Canonical source of truth: `classifyTraffic()`, `rulesFromDbRow()` |
+| **Ingestion Edge Function** | [`track-analytics/index.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/track-analytics/index.ts) | Real-time page view and session ingestion |
+| **Rule Mutation Function** | [`update-traffic-rules/index.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/update-traffic-rules/index.ts) | Server-side rule upsert and audit logging |
+| **Backfill Function** | [`backfill-traffic-audit/index.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/backfill-traffic-audit/index.ts) | Authenticated backfill, dry-run, and rollback |
+| **Shared Thresholds** | [`traffic-thresholds.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-thresholds.ts) | Centralized constants shared across edge functions and React |
+| **Admin UI Panel** | [`TrafficAuditPanel.tsx`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/components/analytics/TrafficAuditPanel.tsx) | Client admin interface for rules, dry-run, and audit runs |
+| **Test Suite** | [`traffic-classifier.test.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-classifier.test.ts) | 71 automated tests across 20 functional and security sections |
+| **Legacy Shim** | [`traffic-filter.ts`](file:///c:/Users/Iris/OneDrive/Work/sienviagencyclientdashboard/supabase/functions/src/traffic-filter.ts) | Deprecated compatibility module (no active imports) |
