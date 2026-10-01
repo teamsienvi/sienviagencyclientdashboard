@@ -147,7 +147,7 @@ async function handleBackfill(
     );
   }
 
-  const batchSize = Math.min(Math.max(requestedBatch || 1000, 100), 2000);
+  const batchSize = Math.min(Math.max(requestedBatch || 1000, 100), 1000);
 
   // Load traffic rules
   const { data: rulesRow } = await supabase
@@ -453,9 +453,26 @@ async function handleBackfill(
     }
   }
 
+  // Parse checkpoint cursor if resuming
+  let pvCursor: string | null = null;
+  let sessionCursor: string | null = null;
+  if (cursor) {
+    const parts = cursor.split(':');
+    const cType = parts[0];
+    const cId = parts.slice(1).join(':');
+    if (cType === 'page_view') {
+      pvCursor = cId;
+    } else if (cType === 'session') {
+      pvCursor = 'DONE';
+      sessionCursor = cId;
+    }
+  }
+
   // Process page views, then sessions
-  await processTable('web_analytics_page_views', 'page_view', cursor);
-  await processTable('web_analytics_sessions', 'session', null);
+  if (pvCursor !== 'DONE') {
+    await processTable('web_analytics_page_views', 'page_view', pvCursor);
+  }
+  await processTable('web_analytics_sessions', 'session', sessionCursor);
 
   // Complete the run
   const finalStats = {
@@ -468,18 +485,16 @@ async function handleBackfill(
     sessions: perTable['web_analytics_sessions'] || null,
   };
 
-  if (!dryRun) {
-    await supabase.from('traffic_audit_runs').update({
-      status: 'completed',
-      completed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      records_scanned: totalScanned,
-      records_changed: totalChanged,
-      records_excluded: totalExcluded,
-      records_included: totalIncluded,
-      run_stats: breakdown,
-    }).eq('id', run.id);
-  }
+  await supabase.from('traffic_audit_runs').update({
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    records_scanned: totalScanned,
+    records_changed: dryRun ? 0 : totalChanged,
+    records_excluded: totalExcluded,
+    records_included: totalIncluded,
+    run_stats: finalStats,
+  }).eq('id', run.id);
 
   console.log(`Backfill ${dryRun ? '(dry-run) ' : ''}complete:`, JSON.stringify(finalStats, null, 2));
 

@@ -48,3 +48,5 @@ setup_*.sql
 backups/
 *.dump
 *.dump.sql
+supabase/.temp/
+deno.lock

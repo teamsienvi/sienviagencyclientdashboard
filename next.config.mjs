@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  serverExternalPackages: ["pdfkit"],
   outputFileTracingRoot: path.join(__dirname),
   images: {
     remotePatterns: [
