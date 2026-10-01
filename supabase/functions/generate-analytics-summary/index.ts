@@ -923,7 +923,7 @@ async function collectWebsiteData(
         // (the track-analytics edge function inserts into web_analytics_page_views
         //  and web_analytics_sessions using the agency's client_id)
         
-        const isSnarkyAzzHumans = clientId === '297cbb3c-54b4-4bed-8206-25949a94fa62';
+        const isSnarkyAzzHumans = clientId === 'ef580ebf-439f-4305-826a-f1f8aa89fd03' || clientId === '297cbb3c-54b4-4bed-8206-25949a94fa62';
 
         if (!isSnarkyAzzHumans) {
             // 1. Page views — filtered by client_id, reporting traffic only

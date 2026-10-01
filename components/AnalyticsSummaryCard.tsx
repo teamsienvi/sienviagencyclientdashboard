@@ -159,7 +159,7 @@ export function AnalyticsSummaryCard({
     // 3. Fetch Top Posts
     const { data: topPosts, isLoading: isLoadingTopPosts } = useTopPerformingPosts(isSocial ? clientId : undefined, dateRange, 4, customDateRange);
 
-    const isSnarkyAzzHumans = clientId === '297cbb3c-54b4-4bed-8206-25949a94fa62';
+    const isSnarkyAzzHumans = clientId === 'ef580ebf-439f-4305-826a-f1f8aa89fd03' || clientId === '297cbb3c-54b4-4bed-8206-25949a94fa62';
 
     const processedSummary = useMemo(() => {
         const raw = (cachedSummary as any)?.summary_data || null;

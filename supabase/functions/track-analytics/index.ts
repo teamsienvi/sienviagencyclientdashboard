@@ -160,15 +160,31 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Resolve alias if client was consolidated
+    let effectiveClientId = clientId;
+    try {
+      const { data: alias } = await supabase
+        .from('client_aliases')
+        .select('canonical_client_id')
+        .eq('alias_client_id', clientId)
+        .maybeSingle();
+
+      if (alias?.canonical_client_id) {
+        effectiveClientId = alias.canonical_client_id;
+      }
+    } catch {
+      // Table may not exist yet prior to migration run
+    }
+
     // Verify client exists and is active
     const { data: client, error: clientError } = await supabase
       .from('clients')
       .select('id, is_active')
-      .eq('id', clientId)
+      .eq('id', effectiveClientId)
       .maybeSingle();
 
     if (clientError || !client) {
-      console.error('Client not found:', clientId);
+      console.error('Client not found:', effectiveClientId);
       return new Response(
         JSON.stringify({ error: 'Invalid client' }),
         { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
@@ -187,7 +203,7 @@ serve(async (req) => {
     const { data: rulesRow } = await supabase
       .from('client_traffic_rules')
       .select('allowed_countries, team_ips, custom_bot_patterns, is_active, geo_mode, allowed_ips, allowed_cidrs, allowed_ua_patterns')
-      .eq('client_id', clientId)
+      .eq('client_id', effectiveClientId)
       .maybeSingle();
 
     const rules: TrafficRules | null = rulesRow
@@ -211,7 +227,7 @@ serve(async (req) => {
     const { error: pageViewError } = await supabase
       .from('web_analytics_page_views')
       .insert({
-        client_id: clientId,
+        client_id: effectiveClientId,
         visitor_id: visitorId,
         session_id: sessionId,
         page_url: pageUrl,
@@ -264,7 +280,7 @@ serve(async (req) => {
       const { error: sessionError } = await supabase
         .from('web_analytics_sessions')
         .insert({
-          client_id: clientId,
+          client_id: effectiveClientId,
           visitor_id: visitorId,
           session_id: sessionId,
           started_at: viewedAt,
