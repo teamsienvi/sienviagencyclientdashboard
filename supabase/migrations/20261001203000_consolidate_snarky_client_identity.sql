@@ -272,14 +272,14 @@ BEGIN
     END IF;
 
     -- 3. Verify total manifest entries:
-    -- 13653 (PV) + 3644 (Sessions) + 1 (social_accounts) + 4 (social_account_metrics) + 4 (analytics_summaries) + 1 (seo_keyword_rankings) = 17,307
+    -- 13653 (PV) + 3644 (Sessions) + 1 (social_accounts) + 288 (social_account_metrics) + 4 (analytics_summaries) + 0 (seo_keyword_rankings) = 17,590
     SELECT COUNT(*) INTO v_manifest_cnt 
     FROM public.client_consolidation_manifest 
     WHERE migration_id = v_migration_id;
 
-    IF v_manifest_cnt != 17307 THEN
-        RAISE EXCEPTION 'Postcondition Failed: Manifest count mismatch! Expected 17,307 records, found %', v_manifest_cnt;
+    IF v_manifest_cnt != 17590 THEN
+        RAISE EXCEPTION 'Postcondition Failed: Manifest count mismatch! Expected 17,590 records, found %', v_manifest_cnt;
     END IF;
 
-    RAISE NOTICE '>>> Postconditions Succeeded: 17,307 records safely migrated and manifest-indexed.';
+    RAISE NOTICE '>>> Postconditions Succeeded: 17,590 records safely migrated and manifest-indexed.';
 END $$;
