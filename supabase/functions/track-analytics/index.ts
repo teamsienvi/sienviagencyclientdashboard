@@ -32,7 +32,145 @@ function getDeviceType(userAgent: string): string {
   return 'desktop';
 }
 
+// ── Geo Resolution Types ────────────────────────────────────────────
+
+interface GeoResult {
+  country: string;          // 2-letter ISO or 'XX'
+  geo_source: string;       // 'cf_header' | 'ip_lookup' | 'client' | 'unresolved'
+  geo_failure_reason: string | null;
+}
+
+// ── Private IP detection ────────────────────────────────────────────
+
+function isPrivateIp(ip: string): boolean {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+  const [a, b] = parts.map(Number);
+  // 10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || a === 127;
+}
+
+// ── Layered Geo Resolution (Geo Capture Reliability v1) ─────────────
+//
+// Priority:
+//   1. Trusted CDN/platform country header (cf-ipcountry, x-country, etc.)
+//   2. Server-side IP geo lookup (ip-api.com, 2s timeout)
+//   3. Client-provided country (legacy fallback, lowest trust)
+//   4. 'XX' if all methods fail
+//
+// Every result includes geo_source and geo_failure_reason for telemetry.
+
+async function resolveGeo(req: Request, clientCountry?: string): Promise<GeoResult> {
+  // ── Layer 1: CDN / Platform headers (highest trust) ────────────
+  const cdnCountry = req.headers.get('cf-ipcountry')
+    || req.headers.get('x-country')
+    || req.headers.get('x-vercel-ip-country')
+    || req.headers.get('x-nf-country')      // Netlify
+    || req.headers.get('x-appengine-country') // GCP App Engine
+    || null;
+
+  if (cdnCountry && cdnCountry.trim().length >= 2 && cdnCountry.trim().toUpperCase() !== 'XX') {
+    return {
+      country: cdnCountry.trim().toUpperCase().slice(0, 2),
+      geo_source: 'cf_header',
+      geo_failure_reason: null,
+    };
+  }
+
+  // ── Layer 2: Server-side IP geo lookup ─────────────────────────
+  const clientIp = req.headers.get('cf-connecting-ip')
+    || req.headers.get('x-real-ip')
+    || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    || null;
+
+  if (!clientIp) {
+    // No IP available — skip to client fallback
+    if (clientCountry && typeof clientCountry === 'string' && clientCountry.trim().length >= 2) {
+      return {
+        country: clientCountry.trim().toUpperCase().slice(0, 2),
+        geo_source: 'client',
+        geo_failure_reason: 'no_ip',
+      };
+    }
+    return { country: 'XX', geo_source: 'unresolved', geo_failure_reason: 'no_ip' };
+  }
+
+  if (isPrivateIp(clientIp)) {
+    if (clientCountry && typeof clientCountry === 'string' && clientCountry.trim().length >= 2) {
+      return {
+        country: clientCountry.trim().toUpperCase().slice(0, 2),
+        geo_source: 'client',
+        geo_failure_reason: 'private_ip',
+      };
+    }
+    return { country: 'XX', geo_source: 'unresolved', geo_failure_reason: 'private_ip' };
+  }
+
+  // ip-api.com: 45 req/min free tier, no key needed, returns JSON
+  // Fields: countryCode only (minimizes response size)
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2000); // 2s hard timeout
+
+    const geoRes = await fetch(
+      `http://ip-api.com/json/${encodeURIComponent(clientIp)}?fields=status,countryCode,message`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+
+    if (geoRes.status === 429) {
+      // Rate limited — fall through to client fallback
+      if (clientCountry && typeof clientCountry === 'string' && clientCountry.trim().length >= 2) {
+        return {
+          country: clientCountry.trim().toUpperCase().slice(0, 2),
+          geo_source: 'client',
+          geo_failure_reason: 'provider_rate_limit',
+        };
+      }
+      return { country: 'XX', geo_source: 'unresolved', geo_failure_reason: 'provider_rate_limit' };
+    }
+
+    if (!geoRes.ok) {
+      throw new Error(`HTTP ${geoRes.status}`);
+    }
+
+    const geoData = await geoRes.json();
+
+    if (geoData.status === 'success' && geoData.countryCode && geoData.countryCode.length >= 2) {
+      return {
+        country: geoData.countryCode.toUpperCase().slice(0, 2),
+        geo_source: 'ip_lookup',
+        geo_failure_reason: null,
+      };
+    }
+
+    // API returned but no country (e.g., reserved range)
+    if (clientCountry && typeof clientCountry === 'string' && clientCountry.trim().length >= 2) {
+      return {
+        country: clientCountry.trim().toUpperCase().slice(0, 2),
+        geo_source: 'client',
+        geo_failure_reason: 'invalid_response',
+      };
+    }
+    return { country: 'XX', geo_source: 'unresolved', geo_failure_reason: 'invalid_response' };
+
+  } catch (err: unknown) {
+    const isTimeout = err instanceof DOMException && err.name === 'AbortError';
+    const failureReason = isTimeout ? 'provider_timeout' : 'provider_error';
+
+    if (clientCountry && typeof clientCountry === 'string' && clientCountry.trim().length >= 2) {
+      return {
+        country: clientCountry.trim().toUpperCase().slice(0, 2),
+        geo_source: 'client',
+        geo_failure_reason: failureReason,
+      };
+    }
+    return { country: 'XX', geo_source: 'unresolved', geo_failure_reason: failureReason };
+  }
+}
+
 serve(async (req) => {
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: getCorsHeaders(req) });
@@ -76,28 +214,15 @@ serve(async (req) => {
       utmCampaign: urlParams.get('utm_campaign') || ''
     };
 
-    var sendData = function(data) {
-      fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        credentials: 'omit',
-        keepalive: true
-      }).catch(function(){}); // Ignore errors silently to not clutter client console
-    };
-
-    // Attempt to fetch country from a free IP-to-Country API
-    fetch('https://ipapi.co/json/')
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data && data.country_code) {
-          payload.country = data.country_code;
-        }
-        sendData(payload);
-      })
-      .catch(function() {
-        sendData(payload); // Send without country if geolocation fails
-      });
+    // Send immediately — geo resolution is now handled server-side.
+    // No client-side geo API call needed (was ipapi.co, unreliable).
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'omit',
+      keepalive: true
+    }).catch(function(){}); // Ignore errors silently
   } catch (e) {
     console.error('Sienvi Analytics Tracker Error:', e);
   }
@@ -123,22 +248,12 @@ serve(async (req) => {
       utmSource,
       utmMedium,
       utmCampaign,
-      country,
+      country: clientCountry,  // client-provided (lowest trust, legacy fallback only)
     } = body;
 
-    // Auto-detect country from Cloudflare/proxy headers if not provided by client
-    let detectedCountry = country;
-    if (!detectedCountry) {
-      detectedCountry = req.headers.get('cf-ipcountry')
-        || req.headers.get('x-country')
-        || req.headers.get('x-vercel-ip-country')
-        || null;
-    }
-
-    // Normalize country: uppercase 2-letter code or 'XX' for unknown
-    const normalizedCountry = (typeof detectedCountry === 'string' && detectedCountry.trim().length >= 2)
-      ? detectedCountry.trim().toUpperCase().slice(0, 2)
-      : 'XX';
+    // ── Layered Geo Resolution (Geo Capture Reliability v1) ─────────
+    // Priority: CDN header → server-side IP lookup → client fallback → XX
+    const geoResult = await resolveGeo(req, clientCountry);
 
     if (!clientId || !visitorId || !pageUrl) {
       return new Response(
@@ -212,7 +327,7 @@ serve(async (req) => {
 
     const classification = classifyTraffic({
       userAgent,
-      country: normalizedCountry,
+      country: geoResult.country,
       ipAddress,
       rules,
     });
@@ -223,7 +338,7 @@ serve(async (req) => {
     const sessionId = generateSessionId(visitorId, now);
     const viewedAt = new Date().toISOString();
 
-    // Insert page view (with full classification)
+    // Insert page view (with full classification + geo telemetry)
     const { error: pageViewError } = await supabase
       .from('web_analytics_page_views')
       .insert({
@@ -239,7 +354,7 @@ serve(async (req) => {
         user_agent: userAgent,
         device_type: deviceType,
         viewed_at: viewedAt,
-        country: normalizedCountry,
+        country: geoResult.country,
         ip_address: ipAddress,
         is_excluded: classification.is_excluded,
         exclude_reason: classification.exclude_reason,
@@ -248,6 +363,8 @@ serve(async (req) => {
         exclusion_policy: classification.exclusion_policy,
         audit_version: classification.audit_version,
         evaluated_at: classification.evaluated_at,
+        geo_source: geoResult.geo_source,
+        geo_failure_reason: geoResult.geo_failure_reason,
       });
 
     if (pageViewError) {
@@ -276,7 +393,7 @@ serve(async (req) => {
         })
         .eq('id', existingSession.id);
     } else {
-      // Create new session (with full classification)
+      // Create new session (with full classification + geo telemetry)
       const { error: sessionError } = await supabase
         .from('web_analytics_sessions')
         .insert({
@@ -290,7 +407,7 @@ serve(async (req) => {
           user_agent: userAgent,
           device_type: deviceType,
           bounce: true,
-          country: normalizedCountry,
+          country: geoResult.country,
           ip_address: ipAddress,
           is_excluded: classification.is_excluded,
           exclude_reason: classification.exclude_reason,
@@ -299,6 +416,8 @@ serve(async (req) => {
           exclusion_policy: classification.exclusion_policy,
           audit_version: classification.audit_version,
           evaluated_at: classification.evaluated_at,
+          geo_source: geoResult.geo_source,
+          geo_failure_reason: geoResult.geo_failure_reason,
         });
 
       if (sessionError) {
@@ -308,9 +427,9 @@ serve(async (req) => {
     }
 
     if (classification.is_excluded) {
-      console.log(`[EXCLUDED] ${classification.exclude_reason} (${classification.traffic_class}) — client ${clientId}: ${pageUrl} (${normalizedCountry})`);
+      console.log(`[EXCLUDED] ${classification.exclude_reason} (${classification.traffic_class}) — client ${clientId}: ${pageUrl} (${geoResult.country}) [geo:${geoResult.geo_source}]`);
     } else {
-      console.log(`Tracked page view for client ${clientId}: ${pageUrl} (${classification.traffic_class})`);
+      console.log(`Tracked page view for client ${clientId}: ${pageUrl} (${classification.traffic_class}) [geo:${geoResult.geo_source}/${geoResult.country}]`);
     }
 
     return new Response(
