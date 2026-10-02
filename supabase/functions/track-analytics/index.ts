@@ -36,8 +36,43 @@ function getDeviceType(userAgent: string): string {
 
 interface GeoResult {
   country: string;          // 2-letter ISO or 'XX'
-  geo_source: string;       // 'cf_header' | 'ip_lookup' | 'client' | 'unresolved'
+  geo_source: string;       // 'cf_header' | 'ip_cache' | 'ip_lookup' | 'client' | 'unresolved'
   geo_failure_reason: string | null;
+}
+
+// ── In-memory IP geo cache (5-minute TTL) ───────────────────────────
+// Reduces ip-api.com calls for repeated visits from the same IP.
+// Deno Deploy isolates persist across requests within the same instance,
+// so this cache lives as long as the edge function instance does.
+
+const GEO_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const GEO_CACHE_MAX_SIZE = 2000;         // max entries before forced eviction
+
+const ipGeoCache = new Map<string, string>();  // IP → country code
+const ipGeoCacheTs = new Map<string, number>(); // IP → cache timestamp
+
+function ipGeoCacheGet(ip: string): string | undefined {
+  const ts = ipGeoCacheTs.get(ip);
+  if (ts && Date.now() - ts < GEO_CACHE_TTL_MS) {
+    return ipGeoCache.get(ip);
+  }
+  // Expired — clean up
+  ipGeoCache.delete(ip);
+  ipGeoCacheTs.delete(ip);
+  return undefined;
+}
+
+function ipGeoCacheSet(ip: string, country: string): void {
+  // Evict oldest entries if cache is full
+  if (ipGeoCache.size >= GEO_CACHE_MAX_SIZE) {
+    const oldest = ipGeoCacheTs.entries().next().value;
+    if (oldest) {
+      ipGeoCache.delete(oldest[0]);
+      ipGeoCacheTs.delete(oldest[0]);
+    }
+  }
+  ipGeoCache.set(ip, country);
+  ipGeoCacheTs.set(ip, Date.now());
 }
 
 // ── Private IP detection ────────────────────────────────────────────
@@ -106,6 +141,16 @@ async function resolveGeo(req: Request, clientCountry?: string): Promise<GeoResu
     return { country: 'XX', geo_source: 'unresolved', geo_failure_reason: 'private_ip' };
   }
 
+  // ── Layer 2a: Check in-memory IP cache ──────────────────────────
+  const cached = ipGeoCacheGet(clientIp);
+  if (cached) {
+    return {
+      country: cached,
+      geo_source: 'ip_cache',
+      geo_failure_reason: null,
+    };
+  }
+
   // ip-api.com: 45 req/min free tier, no key needed, returns JSON
   // Fields: countryCode only (minimizes response size)
   try {
@@ -137,8 +182,10 @@ async function resolveGeo(req: Request, clientCountry?: string): Promise<GeoResu
     const geoData = await geoRes.json();
 
     if (geoData.status === 'success' && geoData.countryCode && geoData.countryCode.length >= 2) {
+      const resolvedCountry = geoData.countryCode.toUpperCase().slice(0, 2);
+      ipGeoCacheSet(clientIp, resolvedCountry);
       return {
-        country: geoData.countryCode.toUpperCase().slice(0, 2),
+        country: resolvedCountry,
         geo_source: 'ip_lookup',
         geo_failure_reason: null,
       };
