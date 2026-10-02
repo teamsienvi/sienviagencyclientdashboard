@@ -187,15 +187,19 @@ const CLIENT_NICHES: Record<string, { name: string; industry: string; keywords: 
   },
   "22090989-2d0e-47b2-b9c5-98652d7f0957": {
     name: "PlayIQ",
-    industry: "Sports Tech, Youth Athletics, Training Analytics & Coaching Platforms",
+    industry: "EdTech, AI-Guided Learning, Adaptive Online Education & AI Study Tools",
     keywords: [
-      "youth sports analytics",
-      "athlete training app",
-      "sports performance tracking",
-      "coaching platform",
-      "player development tools",
+      "ai guided learning",
+      "ai online learning platform",
+      "ai tutor online",
+      "personalized learning with ai",
+      "adaptive learning ai",
+      "ai study assistant",
+      "interactive learning tools",
+      "ai homework helper",
+      "smart study tools for students",
     ],
-    audience: "Youth athletes, coaches, sports parents, and organizations focused on player development and performance analytics.",
+    audience: "Students, self-directed learners, educators, and parents looking for personalized, AI-guided learning solutions and adaptive study tools.",
   },
 };
 
