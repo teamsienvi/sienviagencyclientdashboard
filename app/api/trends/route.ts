@@ -292,7 +292,7 @@ async function generateClientContent(
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `You are a senior content strategist for "${clientInfo.name}", a brand in the ${clientInfo.industry} industry.
 
@@ -385,7 +385,7 @@ CRITICAL RULES:
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.9,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
       },
     });
 
