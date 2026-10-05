@@ -7,7 +7,10 @@ const DEFAULT_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 
 export async function PATCH(req: NextRequest) {
   try {
-    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL).trim();
+    let supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL).trim();
+    if (supabaseUrl.includes("xysuapqjvwuokvylnwha")) {
+      supabaseUrl = SUPABASE_URL;
+    }
     const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_KEY)
       .replace(/^["']|["']$/g, "")
       .trim();
