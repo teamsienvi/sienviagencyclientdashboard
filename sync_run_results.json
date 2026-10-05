@@ -1,129 +1,276 @@
 {
-  "timestamp": "2026-08-31T11:34:58.454Z",
-  "totalDispatched": 10,
-  "finalRegistry": {
-    "total": 330,
-    "ready": 175,
-    "syncing": 9,
-    "failed": 146,
-    "clients": [
-      "297cbb3c-54b4-4bed-8206-25949a94fa62",
-      "22090989-2d0e-47b2-b9c5-98652d7f0957",
-      "6c14388a-b7da-48fe-a8e4-57172f1f862a",
-      "95791e88-87cd-4621-af7e-df46f5ad93ac",
-      "d8a121fe-cdd9-4e19-90dc-dd32b159f973",
-      "18614cdc-35fb-4c4f-abb4-f26842574b0f",
-      "1a1edf9f-2ebe-4d40-a904-7295d5033401",
-      "79099b9d-0281-4a95-8076-dcff0fd128a4",
-      "0771b432-d720-4d0f-a964-ee6c7edcd116",
-      "ef580ebf-439f-4305-826a-f1f8aa89fd03",
-      "cf4bf738-9cc2-421b-bdc0-7344b88b0dad",
-      "0b90215e-e55d-4b5e-8453-de35153a1fcd",
-      "041555a7-1a25-42b8-89c7-edc40afff861",
-      "edfc083a-77f7-4c83-b6e0-a32bfc0553a1",
-      "973e8407-bf7f-45ca-bd73-a26acc3ad9e3",
-      "b6c39651-9259-4930-af6e-b744a5a191ad",
-      "d8f38e01-77ff-4839-ac48-54795adc9f3e",
-      "3177cefc-46cc-4790-8a20-65b160103077"
+  "timestamp": "2026-10-05T09:20:51.743Z",
+  "metricool": {
+    "total": 57,
+    "success": 57,
+    "failed": 0,
+    "period": {
+      "from": "2026-09-28",
+      "to": "2026-10-04",
+      "prevFrom": "2026-09-21",
+      "prevTo": "2026-09-27"
+    }
+  },
+  "youtube": {
+    "success": true,
+    "totalClients": 10,
+    "successCount": 10,
+    "failCount": 0,
+    "results": [
+      {
+        "clientName": "Cissie Pryor Presents",
+        "channelHandle": "@CissiePryorPresents",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 24
+      },
+      {
+        "clientName": "Father Figure Formula",
+        "channelHandle": "@FatherFigureFormula",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 207
+      },
+      {
+        "clientName": "Serenity Scrolls",
+        "channelHandle": "@Serenityscrollsofficial",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 1020
+      },
+      {
+        "clientName": "The Haven At Deer Park",
+        "channelHandle": "@HavenatDeerPark",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 33
+      },
+      {
+        "clientName": "Snarky Pets",
+        "channelHandle": "@snarkypetsofficial",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 60
+      },
+      {
+        "clientName": "OxiSure Tech",
+        "channelHandle": "@oxisuretech",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 53
+      },
+      {
+        "clientName": "BSUE Brow & Lash",
+        "channelHandle": "@BSUEBROWLASH",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 8
+      },
+      {
+        "clientName": "Sienvi Agency",
+        "channelHandle": "@SienviAgency",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 67
+      },
+      {
+        "clientName": "Luxxe Auto Accessories",
+        "channelHandle": "@LUXXEAutoAccessories",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 3
+      },
+      {
+        "clientName": "Hwabelle",
+        "channelHandle": "@Hwabelle",
+        "success": true,
+        "recordsSynced": 0,
+        "subscribers": 37
+      }
     ]
   },
-  "summaryResults": [
+  "ga4": [
     {
-      "clientId": "79099b9d-0281-4a95-8076-dcff0fd128a4",
-      "name": "BlingyBag",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "Snarky Pets",
+      "success": true,
+      "sessions": 32
     },
     {
-      "clientId": "973e8407-bf7f-45ca-bd73-a26acc3ad9e3",
-      "name": "BSUE Brow & Lash",
-      "social": false,
-      "website": true,
-      "seo": true
+      "client": "BlingyBag",
+      "success": true,
+      "sessions": 118
     },
     {
-      "clientId": "edfc083a-77f7-4c83-b6e0-a32bfc0553a1",
-      "name": "Cissie Pryor Presents",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "Father Figure Formula",
+      "success": true,
+      "sessions": 40
     },
     {
-      "clientId": "3177cefc-46cc-4790-8a20-65b160103077",
-      "name": "Luxxe Auto Accessories",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "Serenity Scrolls",
+      "success": true,
+      "sessions": 0
     },
     {
-      "clientId": "1a1edf9f-2ebe-4d40-a904-7295d5033401",
-      "name": "OxiSure Tech",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "Sienvi Agency",
+      "success": true,
+      "sessions": 16
     },
     {
-      "clientId": "ef580ebf-439f-4305-826a-f1f8aa89fd03",
-      "name": "Snarky Humans",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "The Billionaire Brother",
+      "success": true,
+      "sessions": 15
     },
     {
-      "clientId": "d8a121fe-cdd9-4e19-90dc-dd32b159f973",
-      "name": "Snarky Pets",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "Hwabelle",
+      "success": true,
+      "sessions": 9
     },
     {
-      "clientId": "b6c39651-9259-4930-af6e-b744a5a191ad",
-      "name": "The Haven At Deer Park",
-      "social": false,
-      "website": true,
-      "seo": true
+      "client": "The Haven At Deer Park",
+      "success": true,
+      "sessions": 22
     },
     {
-      "clientId": "041555a7-1a25-42b8-89c7-edc40afff861",
-      "name": "Serenity Scrolls",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "PlayIQ",
+      "success": true,
+      "sessions": 64
     },
     {
-      "clientId": "d8f38e01-77ff-4839-ac48-54795adc9f3e",
-      "name": "Sienvi Agency",
-      "social": true,
-      "website": true,
-      "seo": true
+      "client": "CheerCPT",
+      "success": true,
+      "sessions": 16
     },
+    {
+      "client": "OxiSure Tech",
+      "success": true,
+      "sessions": 154
+    },
+    {
+      "client": "HAIRtamin",
+      "success": true,
+      "sessions": 6316
+    },
+    {
+      "client": "Snarky Humans",
+      "success": true,
+      "sessions": 243
+    }
+  ],
+  "shopify": [
+    {
+      "client": "Snarky Humans",
+      "store": "bedd78-a1.myshopify.com",
+      "success": false,
+      "error": "Shopify API error: 401"
+    },
+    {
+      "client": "Snarky Pets",
+      "store": "fhfwar-jc.myshopify.com",
+      "success": false,
+      "error": "Shopify API error: 403"
+    },
+    {
+      "client": "BlingyBag",
+      "store": "3bc448-da.myshopify.com",
+      "success": false,
+      "error": "Shopify API error: 401"
+    }
+  ],
+  "seo": [
+    {
+      "client": "Snarky Pets",
+      "domain": "snarkypets.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "Sienvi Agency",
+      "domain": "sienvi.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "Father Figure Formula",
+      "domain": "fatherfigureformula.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "OxiSure Tech",
+      "domain": "oxisuretechsolutions.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "The Billionaire Brother",
+      "domain": "thebillionairebrother.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "BlingyBag",
+      "domain": "blingybag.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "CheerCPT",
+      "domain": "cheercpt.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "Snarky A$$ Humans [MIGRATED]",
+      "domain": "snarkyhumans.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "HAIRtamin",
+      "domain": "hairtamin.com",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    },
+    {
+      "client": "Hwabelle",
+      "domain": "hwabelle.shop",
+      "success": false,
+      "error": "Ubersuggest /api/projects returned 401 — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets."
+    }
+  ],
+  "melcat": {
+    "success": true,
+    "data": {
+      "success": true
+    }
+  },
+  "lms": {
+    "success": false,
+    "error": "Failed to fetch LMS data: Not Found"
+  },
+  "summaries": [
     {
       "clientId": "cf4bf738-9cc2-421b-bdc0-7344b88b0dad",
       "name": "Ban Batu",
       "social": true,
       "website": true,
+      "ads": true,
       "seo": true
     },
     {
-      "clientId": "95791e88-87cd-4621-af7e-df46f5ad93ac",
-      "name": "Father Figure Formula",
+      "clientId": "79099b9d-0281-4a95-8076-dcff0fd128a4",
+      "name": "BlingyBag",
       "social": true,
       "website": true,
+      "ads": true,
       "seo": true
     },
     {
-      "clientId": "0b90215e-e55d-4b5e-8453-de35153a1fcd",
-      "name": "The Billionaire Brother",
+      "clientId": "973e8407-bf7f-45ca-bd73-a26acc3ad9e3",
+      "name": "BSUE Brow & Lash",
       "social": true,
       "website": true,
-      "seo": true
-    },
-    {
-      "clientId": "0771b432-d720-4d0f-a964-ee6c7edcd116",
-      "name": "Hwabelle",
-      "social": true,
-      "website": true,
+      "ads": true,
       "seo": true
     },
     {
@@ -131,13 +278,23 @@
       "name": "CheerCPT",
       "social": true,
       "website": true,
+      "ads": true,
       "seo": true
     },
     {
-      "clientId": "22090989-2d0e-47b2-b9c5-98652d7f0957",
-      "name": "PlayIQ",
+      "clientId": "edfc083a-77f7-4c83-b6e0-a32bfc0553a1",
+      "name": "Cissie Pryor Presents",
       "social": true,
       "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "95791e88-87cd-4621-af7e-df46f5ad93ac",
+      "name": "Father Figure Formula",
+      "social": true,
+      "website": true,
+      "ads": true,
       "seo": true
     },
     {
@@ -145,7 +302,532 @@
       "name": "HAIRtamin",
       "social": true,
       "website": true,
+      "ads": true,
       "seo": true
+    },
+    {
+      "clientId": "0771b432-d720-4d0f-a964-ee6c7edcd116",
+      "name": "Hwabelle",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "951ea00b-c710-4c26-ac4f-6b35629a4a70",
+      "name": "In the Dome",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "3177cefc-46cc-4790-8a20-65b160103077",
+      "name": "Luxxe Auto Accessories",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "1a1edf9f-2ebe-4d40-a904-7295d5033401",
+      "name": "OxiSure Tech",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "22090989-2d0e-47b2-b9c5-98652d7f0957",
+      "name": "PlayIQ",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "041555a7-1a25-42b8-89c7-edc40afff861",
+      "name": "Serenity Scrolls",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "d8f38e01-77ff-4839-ac48-54795adc9f3e",
+      "name": "Sienvi Agency",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "ef580ebf-439f-4305-826a-f1f8aa89fd03",
+      "name": "Snarky Humans",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "d8a121fe-cdd9-4e19-90dc-dd32b159f973",
+      "name": "Snarky Pets",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "0b90215e-e55d-4b5e-8453-de35153a1fcd",
+      "name": "The Billionaire Brother",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    },
+    {
+      "clientId": "b6c39651-9259-4930-af6e-b744a5a191ad",
+      "name": "The Haven At Deer Park",
+      "social": true,
+      "website": true,
+      "ads": true,
+      "seo": true
+    }
+  ],
+  "audit": [
+    {
+      "clientId": "cf4bf738-9cc2-421b-bdc0-7344b88b0dad",
+      "name": "Ban Batu",
+      "platforms": []
+    },
+    {
+      "clientId": "79099b9d-0281-4a95-8076-dcff0fd128a4",
+      "name": "BlingyBag",
+      "platforms": [
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 1.7466505293341943
+        },
+        {
+          "platform": "instagram",
+          "followers": 19,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "facebook",
+          "followers": 269,
+          "growth": 2,
+          "engagement": 0
+        }
+      ]
+    },
+    {
+      "clientId": "973e8407-bf7f-45ca-bd73-a26acc3ad9e3",
+      "name": "BSUE Brow & Lash",
+      "platforms": [
+        {
+          "platform": "youtube",
+          "followers": 8,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "x",
+          "followers": 10,
+          "growth": 0,
+          "engagement": 17.33
+        },
+        {
+          "platform": "instagram",
+          "followers": 11,
+          "growth": 0,
+          "engagement": 12.5
+        },
+        {
+          "platform": "facebook",
+          "followers": 15,
+          "growth": 0,
+          "engagement": 27.49
+        }
+      ]
+    },
+    {
+      "clientId": "18614cdc-35fb-4c4f-abb4-f26842574b0f",
+      "name": "CheerCPT",
+      "platforms": []
+    },
+    {
+      "clientId": "edfc083a-77f7-4c83-b6e0-a32bfc0553a1",
+      "name": "Cissie Pryor Presents",
+      "platforms": [
+        {
+          "platform": "youtube",
+          "followers": null,
+          "growth": null,
+          "engagement": null
+        },
+        {
+          "platform": "facebook",
+          "followers": null,
+          "growth": null,
+          "engagement": null
+        },
+        {
+          "platform": "instagram",
+          "followers": null,
+          "growth": null,
+          "engagement": null
+        }
+      ]
+    },
+    {
+      "clientId": "95791e88-87cd-4621-af7e-df46f5ad93ac",
+      "name": "Father Figure Formula",
+      "platforms": [
+        {
+          "platform": "youtube",
+          "followers": 207,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 71.80964165844027
+        },
+        {
+          "platform": "linkedin",
+          "followers": 76,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "instagram",
+          "followers": 999,
+          "growth": 2,
+          "engagement": 0
+        },
+        {
+          "platform": "facebook",
+          "followers": 323,
+          "growth": 3,
+          "engagement": 0
+        },
+        {
+          "platform": "x",
+          "followers": 52,
+          "growth": null,
+          "engagement": null
+        }
+      ]
+    },
+    {
+      "clientId": "6c14388a-b7da-48fe-a8e4-57172f1f862a",
+      "name": "HAIRtamin",
+      "platforms": []
+    },
+    {
+      "clientId": "0771b432-d720-4d0f-a964-ee6c7edcd116",
+      "name": "Hwabelle",
+      "platforms": [
+        {
+          "platform": "linkedin",
+          "followers": 4,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "youtube",
+          "followers": 37,
+          "growth": 1,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 3.2247449819019414
+        },
+        {
+          "platform": "facebook",
+          "followers": 24,
+          "growth": 1,
+          "engagement": 50
+        }
+      ]
+    },
+    {
+      "clientId": "951ea00b-c710-4c26-ac4f-6b35629a4a70",
+      "name": "In the Dome",
+      "platforms": []
+    },
+    {
+      "clientId": "3177cefc-46cc-4790-8a20-65b160103077",
+      "name": "Luxxe Auto Accessories",
+      "platforms": [
+        {
+          "platform": "youtube",
+          "followers": 3,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "x",
+          "followers": 1,
+          "growth": 0,
+          "engagement": 25
+        },
+        {
+          "platform": "tiktok",
+          "followers": 6,
+          "growth": 0,
+          "engagement": 0
+        }
+      ]
+    },
+    {
+      "clientId": "1a1edf9f-2ebe-4d40-a904-7295d5033401",
+      "name": "OxiSure Tech",
+      "platforms": [
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 5
+        },
+        {
+          "platform": "youtube",
+          "followers": 53,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "facebook",
+          "followers": 103,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "instagram",
+          "followers": 17,
+          "growth": 1,
+          "engagement": null
+        },
+        {
+          "platform": "linkedin",
+          "followers": 5,
+          "growth": 0,
+          "engagement": 0
+        }
+      ]
+    },
+    {
+      "clientId": "22090989-2d0e-47b2-b9c5-98652d7f0957",
+      "name": "PlayIQ",
+      "platforms": [
+        {
+          "platform": "instagram",
+          "followers": 8,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 0.789111538544172
+        },
+        {
+          "platform": "youtube",
+          "followers": 4,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "facebook",
+          "followers": 28,
+          "growth": 0,
+          "engagement": 0
+        }
+      ]
+    },
+    {
+      "clientId": "041555a7-1a25-42b8-89c7-edc40afff861",
+      "name": "Serenity Scrolls",
+      "platforms": [
+        {
+          "platform": "youtube",
+          "followers": 1020,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "facebook",
+          "followers": 142,
+          "growth": 0,
+          "engagement": null
+        }
+      ]
+    },
+    {
+      "clientId": "d8f38e01-77ff-4839-ac48-54795adc9f3e",
+      "name": "Sienvi Agency",
+      "platforms": [
+        {
+          "platform": "instagram",
+          "followers": 19,
+          "growth": null,
+          "engagement": 0
+        },
+        {
+          "platform": "youtube",
+          "followers": 67,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 79.81141023833027
+        },
+        {
+          "platform": "facebook",
+          "followers": 98,
+          "growth": 0,
+          "engagement": 0
+        }
+      ]
+    },
+    {
+      "clientId": "ef580ebf-439f-4305-826a-f1f8aa89fd03",
+      "name": "Snarky Humans",
+      "platforms": [
+        {
+          "platform": "instagram",
+          "followers": 50,
+          "growth": null,
+          "engagement": 0
+        },
+        {
+          "platform": "youtube",
+          "followers": 35,
+          "growth": 5,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 18.129300756827906
+        },
+        {
+          "platform": "facebook",
+          "followers": 1346,
+          "growth": 0,
+          "engagement": 0
+        }
+      ]
+    },
+    {
+      "clientId": "d8a121fe-cdd9-4e19-90dc-dd32b159f973",
+      "name": "Snarky Pets",
+      "platforms": [
+        {
+          "platform": "facebook",
+          "followers": 3148,
+          "growth": 1,
+          "engagement": 26.67
+        },
+        {
+          "platform": "youtube",
+          "followers": 60,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 40.315613781657525
+        }
+      ]
+    },
+    {
+      "clientId": "0b90215e-e55d-4b5e-8453-de35153a1fcd",
+      "name": "The Billionaire Brother",
+      "platforms": [
+        {
+          "platform": "youtube",
+          "followers": 10,
+          "growth": 2,
+          "engagement": null
+        },
+        {
+          "platform": "linkedin",
+          "followers": 4,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "facebook",
+          "followers": 46,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 0
+        },
+        {
+          "platform": "instagram",
+          "followers": 13,
+          "growth": 0,
+          "engagement": null
+        }
+      ]
+    },
+    {
+      "clientId": "b6c39651-9259-4930-af6e-b744a5a191ad",
+      "name": "The Haven At Deer Park",
+      "platforms": [
+        {
+          "platform": "tiktok",
+          "followers": null,
+          "growth": 0,
+          "engagement": 1.875
+        },
+        {
+          "platform": "youtube",
+          "followers": 33,
+          "growth": 0,
+          "engagement": null
+        },
+        {
+          "platform": "facebook",
+          "followers": 230,
+          "growth": 1,
+          "engagement": 2.830188679245283
+        },
+        {
+          "platform": "instagram",
+          "followers": 14,
+          "growth": 0,
+          "engagement": 50
+        }
+      ]
     }
   ]
 }
