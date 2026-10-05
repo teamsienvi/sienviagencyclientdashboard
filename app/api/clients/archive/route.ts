@@ -7,47 +7,100 @@ const DEFAULT_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdX
 
 export async function PATCH(req: NextRequest) {
   try {
-    // Verify admin session via canonical user_roles
-    const ctx = await getCurrentUserContext();
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL).trim();
+    const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_KEY)
+      .replace(/^["']|["']$/g, "")
+      .trim();
 
-    if (!ctx) {
+    const supabaseAdmin = createSupabaseClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    let userId: string | null = null;
+    let isAdmin = false;
+
+    // 1. Try reading user from Authorization Bearer token if provided
+    const authHeader = req.headers.get("authorization");
+    if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+      const token = authHeader.slice(7).trim();
+      if (token) {
+        const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+        if (!userError && userData?.user?.id) {
+          userId = userData.user.id;
+        }
+      }
+    }
+
+    // 2. Otherwise verify session via cookie-based getCurrentUserContext
+    if (!userId) {
+      const ctx = await getCurrentUserContext();
+      if (ctx?.userId) {
+        userId = ctx.userId;
+        isAdmin = ctx.isAdmin;
+      }
+    }
+
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!ctx.isAdmin) {
+    // 3. Verify admin role in canonical user_roles table using service role
+    if (!isAdmin) {
+      const { data: roleRow, error: roleError } = await supabaseAdmin
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (roleError) {
+        console.error("user_roles check error:", roleError);
+      }
+      isAdmin = !!roleRow;
+    }
+
+    if (!isAdmin) {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
 
-    const body = await req.json();
+    // 4. Parse request body
+    const body = await req.json().catch(() => ({}));
     const { clientId, archived } = body;
 
     if (!clientId || typeof archived !== "boolean") {
-      return NextResponse.json({ error: "Missing clientId or archived boolean" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing clientId or archived boolean" },
+        { status: 400 }
+      );
     }
 
-    // Use service role to bypass RLS for the update
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || DEFAULT_SERVICE_KEY;
-    const supabase = createSupabaseClient(supabaseUrl, serviceKey);
-
-    const { error } = await supabase
+    // 5. Update client status in database
+    const { error: updateError } = await supabaseAdmin
       .from("clients")
       .update({ is_active: !archived })
       .eq("id", clientId);
 
-    if (error) {
-      console.error("Archive client error:", error);
-      return NextResponse.json({ error: "Failed to update client" }, { status: 500 });
+    if (updateError) {
+      console.error("Archive client error:", updateError);
+      return NextResponse.json(
+        { error: updateError.message || "Failed to update client" },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      clientId, 
+    return NextResponse.json({
+      success: true,
+      clientId,
       archived,
-      message: archived ? "Client archived successfully" : "Client restored successfully" 
+      message: archived
+        ? "Client archived successfully"
+        : "Client restored successfully",
     });
   } catch (err: any) {
-    console.error("Archive route error:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    console.error("Archive route unexpected error:", err);
+    return NextResponse.json(
+      { error: err?.message || String(err) || "Internal server error" },
+      { status: 500 }
+    );
   }
 }

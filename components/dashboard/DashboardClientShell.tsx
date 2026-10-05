@@ -65,14 +65,30 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
     );
   }, [searchQuery]);
 
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    try {
+      const { createClient } = await import("@/lib/supabase/browser");
+      const browserSupabase = createClient();
+      const { data: { session } } = await browserSupabase.auth.getSession();
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
+    } catch {
+      // fallback to cookie-only
+    }
+    return headers;
+  };
+
   const handleArchive = async (clientId: string, clientName: string) => {
     if (archivingIds.has(clientId)) return;
     
     setArchivingIds(prev => new Set(prev).add(clientId));
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/clients/archive", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ clientId, archived: true }),
       });
 
@@ -101,9 +117,10 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
     
     setArchivingIds(prev => new Set(prev).add(clientId));
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch("/api/clients/archive", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ clientId, archived: false }),
       });
 
