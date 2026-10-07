@@ -123,16 +123,37 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     queryKey: ["client-dashboard", clientId, "with-ga4"],
     queryFn: async () => {
       if (!clientId) return null;
-      const { data, error } = await supabase
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId);
+      
+      if (isUUID) {
+        const { data, error } = await supabase
+          .from("clients")
+          .select("id, name, logo_url, supabase_url, api_key, client_ga4_config(ga4_property_id)")
+          .eq("id", clientId)
+          .maybeSingle();
+        if (error) throw error;
+        return data;
+      }
+
+      // Non-UUID fallback (e.g. "hairtamin")
+      const { data: byName } = await supabase
         .from("clients")
         .select("id, name, logo_url, supabase_url, api_key, client_ga4_config(ga4_property_id)")
-        .eq("id", clientId)
+        .ilike("name", clientId.replace(/-/g, " "))
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (byName) return byName;
+
+      const { data: allClients } = await supabase
+        .from("clients")
+        .select("id, name, logo_url, supabase_url, api_key, client_ga4_config(ga4_property_id)");
+      const normalizedInput = clientId.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return allClients?.find(
+        (c) => c.name.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedInput
+      ) || null;
     },
     enabled: !!clientId,
   });
+
 
   // PlayIQ client check
   const isPlayIQ = client?.name === "PlayIQ";
@@ -712,7 +733,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
               {/* Action Buttons */}
               <div className="flex items-center gap-3 self-start md:self-auto">
-                <DownloadWeeklyPdfButton clientId={clientId} clientName={client.name} />
+                <DownloadWeeklyPdfButton clientId={client.id || clientId} clientName={client.name} />
               </div>
             </div>
           </div>
