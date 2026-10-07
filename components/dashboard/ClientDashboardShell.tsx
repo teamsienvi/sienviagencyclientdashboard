@@ -218,13 +218,8 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         .eq("is_active", true)
         .limit(1);
 
-      // Check Meta Ads config (direct API integration)
-      const { data: metaAdsData } = await supabase
-        .from("client_meta_ads_config")
-        .select("id")
-        .eq("client_id", clientId)
-        .eq("is_active", true)
-        .limit(1);
+      // Check Meta Ads connection via Metricool or OAuth
+      const hasMetaAds = metricoolPlatforms?.some(p => p.platform === "meta_ads") || false;
 
       // Check Substack config
       const isOxiSureTech = clientId === '1a1edf9f-2ebe-4d40-a904-7295d5033401';
@@ -258,7 +253,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         meta: metaData && metaData.length > 0,
         youtube: youtubeData && youtubeData.length > 0,
         shopify: shopifyData && shopifyData.length > 0,
-        metaAds: metaAdsData && metaAdsData.length > 0,
+        metaAds: hasMetaAds,
         substack: substackData && substackData.length > 0,
         ubersuggest: ubersuggestData && ubersuggestData.length > 0,
         gsc: gscData && gscData.length > 0,
