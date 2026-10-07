@@ -205,7 +205,7 @@ export async function GET(req: NextRequest) {
 
     // Ecosystem Status
     const hasSocial = activeSocialSet.size > 0;
-    const hasAds = !!(metaAdsConfig && metaAdsConfig.length > 0) || (metricoolConfigs || []).some(c => c.platform?.includes("ads"));
+    const hasAds = (metricoolConfigs || []).some(c => c.platform?.includes("ads"));
     const hasWebEcomm = !!ga4Config?.ga4_property_id || !!(shopifyOauth && shopifyOauth.length > 0);
     const hasSeo = !!(ubersuggestConfig && (ubersuggestConfig as any[]).length > 0) || !!(gscData && (gscData as any[]).length > 0) || !!gscMetricsFull || !!seoMetricsFull;
 
