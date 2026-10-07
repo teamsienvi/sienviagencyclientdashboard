@@ -23,6 +23,7 @@ export const getCurrentReportingWeek = () => {
   const thisMonday = getMostRecentMonday(today);
   const prevMonday = subDays(thisMonday, 7); // Previous week's Monday
   const prevSunday = subDays(thisMonday, 1); // Previous week's Sunday
+  prevSunday.setHours(23, 59, 59, 999);
   
   return {
     start: prevMonday,

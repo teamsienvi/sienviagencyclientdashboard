@@ -1,8 +1,11 @@
-const fs = require('fs');
-const pdf = require('pdf-parse');
+const fs = require("node:fs");
+const pdf = require("pdf-parse");
 
-let dataBuffer = fs.readFileSync('..\\blingy bags_GMV Max_Last 7 days4.pdf');
+async function parse() {
+  const data = fs.readFileSync("scratch/Live_HAIRtamin_Downloaded.pdf");
+  const parsed = await pdf(data);
+  console.log("Pages:", parsed.numpages);
+  console.log("Text:\n", parsed.text);
+}
 
-pdf(dataBuffer).then(function(data) {
-    console.log(data.text);
-}).catch(err => console.error(err));
+parse().catch(console.error);

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfDay, endOfDay } from "date-fns";
+import { startOfDay, endOfDay, format } from "date-fns";
 import { rankTopInsights, TopInsightContent, RankedTopInsight } from "@/utils/topPerformingInsights";
 import { getDashboardDateRange, type DateRangePreset } from "@/utils/dashboardDateRange";
 
@@ -27,8 +27,11 @@ export function useTopPerformingPosts(
         periodEndDate = endOfDay(range.end);
       }
 
-      const periodStartStr = periodStartDate.toISOString().split("T")[0];
-      const periodEndStr = periodEndDate.toISOString().split("T")[0];
+      // Format calendar dates cleanly to avoid timezone shifting
+      const startDayStr = format(periodStartDate, "yyyy-MM-dd");
+      const endDayStr = format(periodEndDate, "yyyy-MM-dd");
+      const periodStartISO = `${startDayStr}T00:00:00Z`;
+      const periodEndISO = `${endDayStr}T23:59:59.999Z`;
 
       // Query posts published within the reporting period directly from social_content
       const { data: contentRows, error: contentError } = await supabase
@@ -45,8 +48,8 @@ export function useTopPerformingPosts(
           )
         `)
         .eq("client_id", clientId)
-        .gte("published_at", periodStartStr)
-        .lte("published_at", periodEndDate.toISOString())
+        .gte("published_at", periodStartISO)
+        .lte("published_at", periodEndISO)
         .order("published_at", { ascending: false })
         .limit(300);
 

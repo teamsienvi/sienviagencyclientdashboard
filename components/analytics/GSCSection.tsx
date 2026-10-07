@@ -32,42 +32,154 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
   const [dateFilter, setDateFilter] = useState<"7d" | "14d" | "30d" | "90d" | "all">("7d");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
-  const { data: gscData, isLoading } = useQuery({
+  // Fetch all GSC records for the client so multi-week and quarterly history are available
+  const { data: gscRows, isLoading } = useQuery({
     queryKey: ["client-gsc-metrics", clientId],
     queryFn: async () => {
-      if (!clientId) return null;
+      if (!clientId) return [];
       const { data, error } = await supabase
         .from("report_gsc_metrics" as any)
         .select("*")
         .eq("client_id", clientId)
-        .order("collected_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("collected_at", { ascending: false });
       if (error) throw error;
-      return data as any;
+      return (data || []) as any[];
     },
     enabled: !!clientId && isActive,
   });
 
-  const metrics = gscData;
-
   // Date filtering logic
   const filterDays: Record<string, number> = { "7d": 7, "14d": 14, "30d": 30, "90d": 90, "all": 9999 };
 
-  const allDailyBreakdown = useMemo(() => (metrics?.daily_breakdown || []) as any[], [metrics]);
-  
+  // Combine unique daily breakdown points across all uploads (latest collected wins for duplicates)
+  const allDailyBreakdown = useMemo(() => {
+    if (!gscRows || gscRows.length === 0) return [];
+    const dateMap = new Map<string, any>();
+    // Sort oldest to newest so newest collected data overrides duplicates
+    const sorted = [...gscRows].sort((a, b) =>
+      new Date(a.collected_at || a.created_at || 0).getTime() - new Date(b.collected_at || b.created_at || 0).getTime()
+    );
+    sorted.forEach((r) => {
+      (r.daily_breakdown || []).forEach((d: any) => {
+        if (d && d.date) {
+          dateMap.set(d.date, d);
+        }
+      });
+    });
+    return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  }, [gscRows]);
+
   const filteredDaily = useMemo(() => {
-    if (dateFilter === "all" || allDailyBreakdown.length === 0) return allDailyBreakdown;
-    const days = filterDays[dateFilter];
+    if (allDailyBreakdown.length === 0) return [];
+    if (dateFilter === "all") return allDailyBreakdown;
+    const days = filterDays[dateFilter] || 7;
     return allDailyBreakdown.slice(-days);
   }, [allDailyBreakdown, dateFilter]);
 
+  const currentStartDate = filteredDaily.length > 0 ? filteredDaily[0].date : (gscRows?.[0]?.date_range_start || "");
+  const currentEndDate = filteredDaily.length > 0 ? filteredDaily[filteredDaily.length - 1].date : (gscRows?.[0]?.date_range_end || "");
+
+  // Helpers to aggregate multi-period lists
+  const aggregateGSCList = (items: any[], keyProp: string) => {
+    const map = new Map<string, any>();
+    items.forEach((item) => {
+      const key = item[keyProp];
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { ...item });
+      } else {
+        const existing = map.get(key);
+        const totalClicks = (existing.clicks || 0) + (item.clicks || 0);
+        const totalImpressions = (existing.impressions || 0) + (item.impressions || 0);
+        const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+        const existingImp = existing.impressions || 0;
+        const itemImp = item.impressions || 0;
+        const weightedPos =
+          existingImp + itemImp > 0
+            ? ((existing.position || 0) * existingImp + (item.position || 0) * itemImp) /
+              (existingImp + itemImp)
+            : existing.position || 0;
+
+        existing.clicks = totalClicks;
+        existing.impressions = totalImpressions;
+        existing.ctr = ctr;
+        existing.position = weightedPos;
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
+  };
+
+  const aggregateSimpleList = (items: any[], keyProp: string) => {
+    const map = new Map<string, any>();
+    items.forEach((item) => {
+      const key = item[keyProp];
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { ...item });
+      } else {
+        const existing = map.get(key);
+        existing.clicks = (existing.clicks || 0) + (item.clicks || 0);
+        existing.impressions = (existing.impressions || 0) + (item.impressions || 0);
+        if (existing.impressions > 0) {
+          existing.ctr = (existing.clicks / existing.impressions) * 100;
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => (b.clicks || 0) - (a.clicks || 0));
+  };
+
+  // Derive aggregated tables and breakdowns matching the active timeframe
+  const activeMetrics = useMemo(() => {
+    if (!gscRows || gscRows.length === 0) return null;
+    const latestRow = gscRows[0];
+
+    // If 7d and the latest upload is 7 days, use it directly
+    if (dateFilter === "7d" && (latestRow.daily_breakdown?.length || 0) <= 7) {
+      return latestRow;
+    }
+
+    let relevantRows: any[] = [];
+    if (dateFilter === "14d") {
+      const weeklyRows = gscRows.filter((r: any) => (r.daily_breakdown?.length || 0) <= 14);
+      relevantRows = weeklyRows.slice(0, 2);
+    } else {
+      // For 30d, 90d, or all, select non-overlapping uploads covering the range
+      const chosen: any[] = [];
+      let minDateCovered = "9999-99-99";
+      for (const r of gscRows) {
+        if (!r.date_range_end || !r.date_range_start) continue;
+        if (r.date_range_end <= minDateCovered) {
+          chosen.push(r);
+          minDateCovered = r.date_range_start;
+        }
+      }
+      relevantRows = chosen.length > 0 ? chosen : [latestRow];
+    }
+
+    if (relevantRows.length === 0) relevantRows = [latestRow];
+
+    const top_queries = aggregateGSCList(relevantRows.flatMap((r: any) => r.top_queries || []), "query");
+    const top_pages = aggregateGSCList(relevantRows.flatMap((r: any) => r.top_pages || []), "page");
+    const device_breakdown = aggregateSimpleList(relevantRows.flatMap((r: any) => r.device_breakdown || []), "device");
+    const country_breakdown = aggregateSimpleList(relevantRows.flatMap((r: any) => r.country_breakdown || []), "country");
+    const search_appearance = aggregateSimpleList(relevantRows.flatMap((r: any) => r.search_appearance || []), "search_appearance");
+
+    return {
+      ...latestRow,
+      top_queries,
+      top_pages,
+      device_breakdown,
+      country_breakdown,
+      search_appearance,
+    };
+  }, [gscRows, dateFilter]);
+
   // Recalculate KPIs from filtered daily data
-  const filteredTotalClicks = filteredDaily.reduce((s: number, d: any) => s + d.clicks, 0);
-  const filteredTotalImpressions = filteredDaily.reduce((s: number, d: any) => s + d.impressions, 0);
+  const filteredTotalClicks = filteredDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+  const filteredTotalImpressions = filteredDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
   const filteredAvgCtr = filteredTotalImpressions > 0 ? (filteredTotalClicks / filteredTotalImpressions) * 100 : 0;
   const filteredAvgPosition = filteredDaily.length > 0
-    ? filteredDaily.reduce((s: number, d: any) => s + d.position, 0) / filteredDaily.length
+    ? filteredDaily.reduce((s: number, d: any) => s + (d.position || 0), 0) / filteredDaily.length
     : 0;
 
   if (isLoading) {
@@ -78,7 +190,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     );
   }
 
-  if (!metrics) {
+  if (!gscRows || gscRows.length === 0 || !activeMetrics) {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-card/40 border border-emerald-500/20 rounded-2xl">
         <div className="p-3 bg-emerald-500/10 text-emerald-600 rounded-full mb-3">
@@ -105,6 +217,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     );
   }
 
+  const metrics = activeMetrics;
   const topQueries = (metrics.top_queries || []) as any[];
   const topPages = (metrics.top_pages || []) as any[];
   const deviceBreakdown = (metrics.device_breakdown || []) as any[];
@@ -123,17 +236,18 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     impressions: d.impressions,
   }));
 
-  // Last 7 days vs previous 7 days for trend (from filtered set)
-  const last7 = filteredDaily.slice(-7);
-  const prev7 = filteredDaily.slice(-14, -7);
-  const last7Clicks = last7.reduce((s: number, d: any) => s + d.clicks, 0);
-  const prev7Clicks = prev7.reduce((s: number, d: any) => s + d.clicks, 0);
-  const clicksTrend = prev7Clicks > 0 ? ((last7Clicks - prev7Clicks) / prev7Clicks) * 100 : 0;
-  const last7Impressions = last7.reduce((s: number, d: any) => s + d.impressions, 0);
-  const prev7Impressions = prev7.reduce((s: number, d: any) => s + d.impressions, 0);
-  const impressionsTrend = prev7Impressions > 0 ? ((last7Impressions - prev7Impressions) / prev7Impressions) * 100 : 0;
+  // Trend comparison: compare selected window vs equal preceding window
+  const currentCount = filteredDaily.length;
+  const prevPeriodDaily = dateFilter !== "all" && allDailyBreakdown.length >= currentCount * 2
+    ? allDailyBreakdown.slice(-currentCount * 2, -currentCount)
+    : [];
+  const prevClicks = prevPeriodDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+  const clicksTrend = prevClicks > 0 ? ((filteredTotalClicks - prevClicks) / prevClicks) * 100 : 0;
+  const prevImpressions = prevPeriodDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+  const impressionsTrend = prevImpressions > 0 ? ((filteredTotalImpressions - prevImpressions) / prevImpressions) * 100 : 0;
+  const trendLabel = prevPeriodDaily.length > 0 ? `vs prev ${prevPeriodDaily.length}d` : `trend`;
 
-  const totalDeviceClicks = deviceBreakdown.reduce((s: number, d: any) => s + d.clicks, 0);
+  const totalDeviceClicks = deviceBreakdown.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
 
   const formatUrl = (url: string) => {
     try {
@@ -159,7 +273,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
             Google Search Console
           </span>
           <span className="text-xs text-muted-foreground">
-            {metrics.date_range_start} → {metrics.date_range_end}
+            {currentStartDate} → {currentEndDate}
           </span>
           {metrics.source === "csv_import" && (
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
@@ -197,12 +311,10 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
       </div>
 
       {/* Filtered range indicator */}
-      {dateFilter !== "all" && (
-        <p className="text-xs text-muted-foreground -mt-3">
-          Showing <span className="font-semibold text-foreground">{filteredDaily.length}</span> days of data
-          {filteredDaily.length > 0 && ` (${filteredDaily[0]?.date} → ${filteredDaily[filteredDaily.length - 1]?.date})`}
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground -mt-3">
+        Showing <span className="font-semibold text-foreground">{filteredDaily.length}</span> days of data
+        {filteredDaily.length > 0 && ` (${currentStartDate} → ${currentEndDate})`}
+      </p>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -211,7 +323,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
           label="Total Clicks"
           value={filteredTotalClicks.toLocaleString()}
           trend={clicksTrend}
-          trendLabel="vs prev 7d"
+          trendLabel={trendLabel}
           color="emerald"
         />
         <KPICard
@@ -219,7 +331,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
           label="Impressions"
           value={filteredTotalImpressions.toLocaleString()}
           trend={impressionsTrend}
-          trendLabel="vs prev 7d"
+          trendLabel={trendLabel}
           color="blue"
         />
         <KPICard
