@@ -6,14 +6,8 @@ const corsHeaders = {
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ─── OpenAI Assistant ID Mapping ────────────────────────────────────────────
-const ASSISTANT_IDS: Record<string, string> = {
-    meta: "asst_iZ6DPy2JACkHIcGIR9n8sUZG",
-    google: "asst_iP6yG99Hn5ErReNxgBwzZ1Kq",
-    amazon: "asst_YQf5tpRHLbcXtdNuNwIn6RWJ",
-    tiktok: "asst_417YSXWwLtO5paLn3mVTR71c",     // general "billion-dollar" assistant
-    all: "asst_417YSXWwLtO5paLn3mVTR71c",         // fallback to general
-};
+// ─── OpenAI Responses model ─────────────────────────────────────────────────
+const OPENAI_MODEL = "gpt-4o-mini";
 
 // Special TikTok GMV Max preamble - Quantitative Campaign Report
 const TIKTOK_PREAMBLE = `Analyze the following TikTok Ads data. Provide a campaign report focusing on spend, revenue, ROAS, and winning products. For this tiktok gmv max campaign, remember that budget is controlled at the campaign level, not per sku, and sku selection is automated.
@@ -182,12 +176,8 @@ serve(async (req) => {
             : DEFAULT_INSTRUCTIONS;
         const userMessage = `${preamble}Client: ${client.name}\nPlatform: ${adPlatform}\nData Source: ${fileName}\n\n──────────────────────────────────────────────────────────────\nRAW AD DATA:\n${truncatedData}\n──────────────────────────────────────────────────────────────`;
 
-        // Resolve the assistant ID
-        const assistantId = ASSISTANT_IDS[adPlatform] || ASSISTANT_IDS["all"];
-        console.log(`Using OpenAI assistant: ${assistantId} for platform: ${adPlatform}`);
-
-        // Call OpenAI Assistant
-        const summaryData = await callOpenAIAssistant(openaiApiKey, assistantId, userMessage);
+        console.log(`Using OpenAI Responses API model: ${OPENAI_MODEL} for platform: ${adPlatform}`);
+        const summaryData = await callOpenAIResponse(openaiApiKey, userMessage);
 
         // Cache the result
         try {
@@ -253,7 +243,6 @@ async function openaiRequest(
     const headers: Record<string, string> = {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "OpenAI-Beta": "assistants=v2",
     };
 
     const res = await fetch(`${OPENAI_BASE}${path}`, {
@@ -271,91 +260,30 @@ async function openaiRequest(
     return res.json();
 }
 
-async function callOpenAIAssistant(
-    apiKey: string,
-    assistantId: string,
-    userMessage: string
-): Promise<any> {
-    // 1. Create a thread
-    const thread = await openaiRequest(apiKey, "/threads", "POST", {});
-    const threadId = thread.id;
-    console.log(`Created thread: ${threadId}`);
-
-    // 2. Add user message to thread
-    await openaiRequest(apiKey, `/threads/${threadId}/messages`, "POST", {
-        role: "user",
-        content: userMessage,
+async function callOpenAIResponse(apiKey: string, userMessage: string): Promise<any> {
+    const response = await openaiRequest(apiKey, "/responses", "POST", {
+        model: OPENAI_MODEL,
+        input: userMessage,
+        text: { format: { type: "json_object" } },
+        max_output_tokens: 2000,
+        store: false,
     });
 
-    // 3. Create a run
-    const run = await openaiRequest(apiKey, `/threads/${threadId}/runs`, "POST", {
-        assistant_id: assistantId,
-    });
-    let runId = run.id;
-    console.log(`Created run: ${runId}`);
-
-    // 4. Poll for completion (max 180 seconds)
-    const maxWait = 180_000;
-    const pollInterval = 2_000;
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < maxWait) {
-        const runStatus = await openaiRequest(
-            apiKey,
-            `/threads/${threadId}/runs/${runId}`,
-            "GET"
-        );
-
-        console.log(`Run status: ${runStatus.status}`);
-
-        if (runStatus.status === "completed") {
-            break;
-        } else if (
-            runStatus.status === "failed" ||
-            runStatus.status === "cancelled" ||
-            runStatus.status === "expired"
-        ) {
-            const errMsg = runStatus.last_error?.message || runStatus.status;
-            throw new Error(`OpenAI run ${runStatus.status}: ${errMsg}`);
-        }
-
-        // Wait before next poll
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-    }
-
-    // Check if we exited because of timeout
-    if (Date.now() - startTime >= maxWait) {
-        throw new Error("OpenAI Assistant took too long to analyze this file (exceeded 2 minutes). Ensure the dataset isn't unnecessarily large, or try again later when AI servers are less congested.");
-    }
-
-    // 5. Get messages
-    const messages = await openaiRequest(
-        apiKey,
-        `/threads/${threadId}/messages?order=desc&limit=1`,
-        "GET"
-    );
-
-    const assistantMessage = messages.data?.[0];
-    if (!assistantMessage || assistantMessage.role !== "assistant") {
-        throw new Error("No assistant response found in thread");
-    }
-
-    // Extract text content
-    let text = "";
-    for (const content of assistantMessage.content) {
-        if (content.type === "text") {
-            text = content.text.value;
-            break;
-        }
-    }
-
+    const text = typeof response.output_text === "string"
+        ? response.output_text
+        : (response.output || [])
+            .flatMap((item: any) => item.content || [])
+            .filter((item: any) => item.type === "output_text")
+            .map((item: any) => item.text || "")
+            .join("");
     if (!text) {
-        throw new Error("Empty text response from OpenAI assistant");
+        const reason = response.incomplete_details?.reason || response.error?.message;
+        throw new Error(reason
+            ? `OpenAI returned no analysis text: ${reason}`
+            : "OpenAI returned an empty analysis response");
     }
 
-    console.log("OpenAI raw text (first 300 chars):", text.substring(0, 300));
-
-    // Parse JSON from the response
+    console.log("OpenAI response text (first 300 chars):", text.substring(0, 300));
     return parseAssistantResponse(text);
 }
 
