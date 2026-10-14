@@ -21,6 +21,7 @@ import { ChannelShareChange } from "./social-analytics/channel-share-change";
 import { AudienceStatusCard } from "./social-analytics/audience-status";
 import { TopContentDrivers } from "./social-analytics/top-content-drivers";
 import { RecommendationPanel } from "./social-analytics/recommendation-panel";
+import { HairtaminGSCStory } from "./analytics/HairtaminGSCStory";
 import { PlatformComparisonTable } from "./social-analytics/platform-comparison-table";
 
 interface PlatformDataPoint {
@@ -227,6 +228,9 @@ export function PerformanceStoryModal({
         />
 
         <div className="p-4 sm:p-6 space-y-6 w-full min-w-0">
+          {(clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a" || clientName?.toLowerCase().includes("hairtamin")) ? (
+            <HairtaminGSCStory clientId={clientId} />
+          ) : <>
 
           {/* Dynamic Factual Executive Summary */}
           <ExecutiveSummary comparison={comparison as any} />
@@ -277,6 +281,8 @@ export function PerformanceStoryModal({
 
           {/* Full Channel Union Matrix Table */}
           <PlatformComparisonTable comparison={comparison} />
+          </>}
+
 
         </div>
       </DialogContent>
