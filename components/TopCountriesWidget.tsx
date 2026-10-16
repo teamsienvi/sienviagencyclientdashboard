@@ -6,6 +6,7 @@ import { Globe, Info, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { subDays, format } from "date-fns";
 import type { DateRangePreset } from "@/hooks/useClientAnalytics";
+import { filterExcludedCountries } from "@/lib/analytics/geo-exclusions";
 
 // Country code to name mapping for common codes
 const COUNTRY_NAMES: Record<string, string> = {
@@ -80,12 +81,12 @@ export const TopCountriesWidget = ({ clientId, dateRange, countriesData }: TopCo
     staleTime: 5 * 60 * 1000,
   });
 
-  const items = countriesData && countriesData.length > 0
+  const items = filterExcludedCountries(countriesData && countriesData.length > 0
     ? countriesData.map(c => ({ 
         country: c.country || c.key || 'XX', 
         value: c.count || c.value || 0 
       })).sort((a,b) => b.value - a.value)
-    : (data?.items || []);
+    : (data?.items || []));
 
   const total = items.reduce((sum, i) => sum + i.value, 0);
   const top = items.slice(0, 10);

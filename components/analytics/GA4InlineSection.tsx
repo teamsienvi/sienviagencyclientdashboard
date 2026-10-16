@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { filterExcludedCountries } from "@/lib/analytics/geo-exclusions";
 import { format, subDays } from "date-fns";
 import {
   Users, Eye, Clock, TrendingDown, TrendingUp, Globe, Activity,
@@ -81,6 +82,8 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
 
   const dailyBreakdown = (analytics.dailyBreakdown || []) as any[];
   const trafficSources = (analytics.trafficSources || []) as any[];
+  const deviceBreakdown = ((analytics as any).deviceBreakdown || []) as any[];
+  const countries = filterExcludedCountries(((analytics as any).countries || []) as any[]);
   // Normalize and aggregate topPages
   const rawTopPages = (analytics.topPages || (analytics as any).top_pages || []) as any[];
   const aggregatedTopPagesMap = new Map<string, { url: string; path: string; views: number; title: string | null }>();

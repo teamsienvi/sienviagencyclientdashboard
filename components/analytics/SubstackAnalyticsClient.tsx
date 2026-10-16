@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Users, Eye, Clock, TrendingDown, Activity, BarChart3, MousePointerClick, Info, ExternalLink, Layers } from "lucide-react";
 import { TopCountriesWidget } from "@/components/TopCountriesWidget";
+import { filterExcludedCountries } from "@/lib/analytics/geo-exclusions";
 import { format, subDays } from "date-fns";
 import { useSubstackAnalytics } from "@/hooks/useSubstackAnalytics";
 import { DateRangePreset } from "@/hooks/useClientAnalytics";
@@ -72,7 +73,7 @@ const SubstackAnalyticsClient = ({ clientId }: { clientId: string }) => {
     deviceBreakdown: analytics.deviceBreakdown,
     dailyBreakdown: analytics.dailyBreakdown,
     topPages: analytics.topPages,
-    countries: (analytics as any).countries,
+    countries: filterExcludedCountries((analytics as any).countries),
   } : null;
 
   const hasRealTrafficSources = normalizedAnalytics?.trafficSources && normalizedAnalytics.trafficSources.length > 0;
