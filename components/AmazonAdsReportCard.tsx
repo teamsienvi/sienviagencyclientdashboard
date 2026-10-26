@@ -388,6 +388,10 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 if (prev?.generation_status === 'complete' && prev?.parsed_data) {
                     setPreviousReport(prev.parsed_data as AmazonReportData);
                 }
+                // Restore Week 1 totals that were uploaded alongside this report
+                if ((latest.parsed_data as any).week1Totals) {
+                    setWeek1Totals((latest.parsed_data as any).week1Totals);
+                }
             } else if (latest.generation_status === 'failed') {
                 setIsAnalyzing(false);
                 if (hasTriggeredAnalysis.current) {
@@ -430,7 +434,13 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
     }, []);
 
     // ─── Parse file client-side ───────────────────────────────────────────────
-    const parseFileClientSide = async (f: File): Promise<{ csvText: string; exactTotals: { spend: number; sales: number; orders: number; clicks: number; impressions: number }; fileName: string }> => {
+    const parseFileClientSide = async (f: File): Promise<{
+        csvText: string;
+        exactTotals: { spend: number; sales: number; orders: number; clicks: number; impressions: number };
+        exactCampaigns: TopCampaign[];
+        exactWaste: WastefulTerm[];
+        fileName: string;
+    }> => {
         const arrayBuffer = await f.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
@@ -471,6 +481,9 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
         const allText: string[] = [];
         let exactTotals = { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
+        const campaignRows: TopCampaign[] = [];
+        const seenCampaignIds = new Set<string>();
+        const termAgg = new Map<string, { clicks: number; spend: number; sales: number }>();
 
         for (const sheetName of finalSheets) {
             const sheet = workbook.Sheets[sheetName];
@@ -487,22 +500,64 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             const keys = Object.keys(rows[0]).map(k => k.trim());
             const entityKey = keys.find(k => k.toLowerCase() === 'entity' || k.toLowerCase() === 'record type');
 
-            const findKey = (patterns: string[]) => keys.find(k => patterns.some(p => k.toLowerCase() === p || k.toLowerCase().includes(p)));
+            // Patterns are checked in priority order, exact header match first, so e.g. the
+            // Sponsored Display "Cost Type" column is never mistaken for "Spend".
+            const findKey = (patterns: string[]) => {
+                for (const p of patterns) {
+                    const exact = keys.find(k => k.toLowerCase() === p);
+                    if (exact) return exact;
+                }
+                for (const p of patterns) {
+                    const partial = keys.find(k => k.toLowerCase().includes(p));
+                    if (partial) return partial;
+                }
+                return undefined;
+            };
             const spendKey = findKey(['spend', 'cost']);
             const salesKey = findKey(['14 day total sales', 'total sales', 'sales']);
-            const ordersKey = findKey(['14 day total orders', '7 day total orders', 'total orders', 'unit orders', 'orders']);
+            const ordersKey = findKey(['14 day total orders', '7 day total orders', 'total orders', 'orders', 'unit orders']);
             const clicksKey = findKey(['clicks']);
             const impressionsKey = findKey(['impressions']);
-            const parseNum = (row: Record<string, any>, k?: string) => k && row[k] ? parseFloat(String(row[k]).replace(/,/g, '')) || 0 : 0;
+            const campaignNameKey = findKey(['campaign name', 'campaign name (informational only)', 'name']);
+            const campaignIdKey = keys.find(k => k.toLowerCase() === 'campaign id');
+            const searchTermKey = findKey(['customer search term']);
+            const parseNum = (row: Record<string, any>, k?: string) => k && row[k] ? parseFloat(String(row[k]).replace(/[,$%]/g, '')) || 0 : 0;
 
             if (isCampaignSheet || !isBulkFile) {
                 for (const row of rows) {
                     if (entityKey && String(row[entityKey] || '').trim().toLowerCase() !== 'campaign') continue;
-                    exactTotals.spend += parseNum(row, spendKey);
-                    exactTotals.sales += parseNum(row, salesKey);
-                    exactTotals.orders += parseNum(row, ordersKey);
+                    // The same Sponsored Brands campaign is listed in both the SB and SB Multi Ad Group sheets
+                    const campaignId = campaignIdKey ? String(row[campaignIdKey] || '').trim() : '';
+                    if (campaignId) {
+                        if (seenCampaignIds.has(campaignId)) continue;
+                        seenCampaignIds.add(campaignId);
+                    }
+                    const spend = parseNum(row, spendKey), sales = parseNum(row, salesKey), orders = parseNum(row, ordersKey);
+                    exactTotals.spend += spend;
+                    exactTotals.sales += sales;
+                    exactTotals.orders += orders;
                     exactTotals.clicks += parseNum(row, clicksKey);
                     exactTotals.impressions += parseNum(row, impressionsKey);
+                    const name = campaignNameKey ? String(row[campaignNameKey] || '').trim() : '';
+                    if (name && (spend > 0 || sales > 0)) {
+                        campaignRows.push({
+                            name, spend, sales, orders,
+                            acos: sales > 0 ? (spend / sales) * 100 : 0,
+                            roas: spend > 0 ? sales / spend : 0,
+                        });
+                    }
+                }
+            }
+
+            if (isSearchTermSheet && searchTermKey) {
+                for (const row of rows) {
+                    const term = String(row[searchTermKey] || '').trim();
+                    if (!term) continue;
+                    const a = termAgg.get(term) || { clicks: 0, spend: 0, sales: 0 };
+                    a.clicks += parseNum(row, clicksKey);
+                    a.spend += parseNum(row, spendKey);
+                    a.sales += parseNum(row, salesKey);
+                    termAgg.set(term, a);
                 }
             }
 
@@ -531,7 +586,17 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         let csvText = allText.join('\n\n');
         if (csvText.length > MAX_CHARS) csvText = csvText.substring(0, MAX_CHARS) + '\n\n[... truncated ...]';
 
-        return { csvText, exactTotals, fileName: f.name };
+        const round2 = (v: number) => Math.round(v * 100) / 100;
+        const exactCampaigns = campaignRows
+            .sort((a, b) => b.sales - a.sales || b.spend - a.spend)
+            .map(c => ({ ...c, spend: round2(c.spend), sales: round2(c.sales), acos: round2(c.acos), roas: round2(c.roas) }));
+        const exactWaste: WastefulTerm[] = Array.from(termAgg.entries())
+            .filter(([, a]) => a.sales === 0 && a.spend > 0)
+            .sort((a, b) => b[1].spend - a[1].spend)
+            .slice(0, 6)
+            .map(([term, a]) => ({ term, clicks: a.clicks, spend: round2(a.spend), sales: 0, action: "Negate or cut bid" }));
+
+        return { csvText, exactTotals, exactCampaigns, exactWaste, fileName: f.name };
     };
 
     // ─── Analysis ────────────────────────────────────────────────────────────
@@ -548,7 +613,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
             // Parse client-side — no binary upload, no xlsx import on edge function
             toast({ title: "Parsing file…", description: "Reading your report data" });
-            const { csvText, exactTotals, fileName } = await parseFileClientSide(file);
+            const { csvText, exactTotals, exactCampaigns, exactWaste, fileName } = await parseFileClientSide(file);
 
             // Guard: if no campaign metrics could be read, don't generate a misleading all-zero AI report
             if (exactTotals.spend === 0 && exactTotals.sales === 0 && exactTotals.clicks === 0 && exactTotals.impressions === 0) {
@@ -578,6 +643,9 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         fileName,
                         rawData: csvText,
                         exactTotals,
+                        exactCampaigns,
+                        exactWaste,
+                        week1Totals: w1Totals,
                         // Undated filenames fall back to today's date (not the month) so each upload
                         // gets its own row and sorts after earlier dated reports.
                         reportPeriod: (() => { const dr = parseDateRangeFromFilename(fileName); return dr ? `${dr.from}_${dr.to}` : new Date().toISOString().substring(0, 10); })(),

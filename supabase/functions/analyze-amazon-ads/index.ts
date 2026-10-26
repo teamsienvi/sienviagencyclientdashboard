@@ -97,6 +97,9 @@ serve(async (req) => {
         const reportPeriod: string = body.reportPeriod || new Date().toISOString().substring(0, 7);
         const exactTotals = body.exactTotals || { spend: 0, sales: 0, orders: 0, clicks: 0, impressions: 0 };
         const dateRange = body.dateRange || null; // e.g. { from: '2026-07-13', to: '2026-07-26' }
+        const exactCampaigns: any[] | null = Array.isArray(body.exactCampaigns) ? body.exactCampaigns : null;
+        const exactWaste: any[] | null = Array.isArray(body.exactWaste) ? body.exactWaste : null;
+        const week1Totals = body.week1Totals || null;
 
         if (!clientId) throw new Error("clientId is required");
         if (!fileContent || fileContent.trim().length < 20) throw new Error("File appears empty or too small.");
@@ -122,6 +125,17 @@ serve(async (req) => {
             ? `\nREPORTING PERIOD: ${dateRange.from} to ${dateRange.to} (14-day biweekly window)\n`
             : '';
 
+        const fmtMoney = (v: number) => Number(v || 0).toFixed(2);
+        const exactTablesContext = (exactCampaigns || exactWaste) ? `
+EXACT CAMPAIGN TABLE computed from the file (reference these numbers; do not recompute):
+${(exactCampaigns || []).slice(0, 40).map((c: any) => `- ${c.name}: spend $${fmtMoney(c.spend)}, sales $${fmtMoney(c.sales)}, orders ${c.orders}, ACoS ${Number(c.acos).toFixed(1)}%, ROAS ${Number(c.roas).toFixed(2)}x`).join("\n") || "- (none)"}
+
+EXACT TOP ZERO-SALE SEARCH TERMS (aggregated across ad groups):
+${(exactWaste || []).map((t: any) => `- "${t.term}": ${t.clicks} clicks, $${fmtMoney(t.spend)} spend, $0 sales`).join("\n") || "- (none)"}
+${week1Totals ? `
+PREVIOUS PERIOD (Week 1) TOTALS: spend $${fmtMoney(week1Totals.spend)}, sales $${fmtMoney(week1Totals.sales)}, orders ${week1Totals.orders}, clicks ${week1Totals.clicks}, impressions ${week1Totals.impressions}
+` : ""}` : "";
+
         const preCalculatedContext = `
 ${"─".repeat(60)}
 PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
@@ -130,6 +144,7 @@ PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
 - Orders: ${exactTotals.orders}
 - Clicks: ${exactTotals.clicks}
 - Impressions: ${exactTotals.impressions}${dateRangeContext}
+${exactTablesContext}
 ${"─".repeat(60)}
 `;
 
@@ -154,6 +169,30 @@ ${"─".repeat(60)}
         console.log("Calling OpenAI Chat Completions for Amazon Ads analysis...");
         try {
             const parsedReport = await callChatCompletion(openaiApiKey, userMessage);
+
+            // Numbers come from the file, not the model: overwrite KPIs and tables deterministically.
+            const t = exactTotals;
+            const r2 = (v: number) => Math.round(v * 100) / 100;
+            if (t.spend > 0 || t.sales > 0 || t.clicks > 0) {
+                parsedReport.kpis = {
+                    adSales: r2(t.sales),
+                    adSpend: r2(t.spend),
+                    acos: t.sales > 0 ? r2((t.spend / t.sales) * 100) : null,
+                    roas: t.spend > 0 ? r2(t.sales / t.spend) : null,
+                    orders: t.orders,
+                    ctr: t.impressions > 0 ? r2((t.clicks / t.impressions) * 100) : null,
+                    cvr: t.clicks > 0 ? r2((t.orders / t.clicks) * 100) : null,
+                    avgCpc: t.clicks > 0 ? r2(t.spend / t.clicks) : null,
+                };
+            }
+            if (exactCampaigns) parsedReport.topRevenueCampaigns = exactCampaigns;
+            if (exactWaste) {
+                // Keep the model's suggested action text when it matches a term, else default
+                const aiActions = new Map((parsedReport.wastefulSearchTerms || []).map((w: any) => [w.term, w.action]));
+                parsedReport.wastefulSearchTerms = exactWaste.map((w: any) => ({ ...w, action: aiActions.get(w.term) || w.action || "Negate or cut bid" }));
+            }
+            if (week1Totals) parsedReport.week1Totals = week1Totals;
+            parsedReport.sourceFileName = fileName;
 
             const { error: updateError } = await supabase
                 .from("amazon_ads_reports")
