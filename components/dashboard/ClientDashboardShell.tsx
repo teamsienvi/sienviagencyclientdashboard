@@ -11,7 +11,7 @@ import { getClientLogo } from "@/utils/clientLogos";
 import {
   ArrowLeft, Calendar, TrendingUp, Users, Eye,
   Youtube, Music2, Linkedin, FileText, ExternalLink,
-  BarChart3, Loader2, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat, Cpu, Flame
+  BarChart3, Loader2,  ChevronLeft, ChevronRight, Upload, Twitter, Building2, ChevronDown, LogOut, ShoppingBag, Headphones, Podcast, FlaskConical, Instagram, Facebook, Target, Mail, Smartphone, Cat, Cpu, Flame
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUserClients } from "@/hooks/useClientAccess";
@@ -30,7 +30,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { Carousel, CarouselContent, CarouselItem, type CarouselApi } from "@/components/ui/carousel";
 import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 // import { TopPerformingPosts } from "@/components/TopPerformingPosts";
@@ -43,6 +43,7 @@ import { TikTokAdsReportCard } from "@/components/TikTokAdsReportCard";
 import { WebsiteAnalyticsSection } from "@/components/analytics/WebsiteAnalyticsSection";
 import { getClientAdPlatforms, AD_PLATFORM_LABELS, hasAmazonOrdersAnalytics } from "@/config/adPlatforms";
 import { Globe, Share2, Star } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { XCSVUploadDialog } from "@/components/XCSVUploadDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -110,6 +111,24 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Executive Carousel slide tracking & API controller
+  const [executiveCarouselApi, setExecutiveCarouselApi] = useState<CarouselApi>();
+  const [executiveSlide, setExecutiveSlide] = useState(0);
+
+  useEffect(() => {
+    if (!executiveCarouselApi) return;
+    const updateSlide = () => {
+      setExecutiveSlide(executiveCarouselApi.selectedScrollSnap());
+    };
+    updateSlide();
+    executiveCarouselApi.on("select", updateSlide);
+    executiveCarouselApi.on("reInit", updateSlide);
+    return () => {
+      executiveCarouselApi.off("select", updateSlide);
+      executiveCarouselApi.off("reInit", updateSlide);
+    };
+  }, [executiveCarouselApi]);
 
   // OxiSure Tech client ID — used to conditionally render the Retention App Sales section
   const isOxiSureTech = clientId === '1a1edf9f-2ebe-4d40-a904-7295d5033401';
@@ -826,15 +845,100 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               <div className="space-y-6 scroll-mt-24" id="executive-insights">
 
                 
-                <div className="relative">
-                  <Carousel opts={{ align: "start" }} className="w-full">
-                    {(hasSocialMedia && !isAdsOnlyClient) && (hasWebAndEcomm || connectedAccounts?.ubersuggest || showSearchConsole) && (
-                      <div className="flex items-center justify-end gap-2 mb-3">
-                        <span className="text-xs font-medium text-muted-foreground mr-1">Social Media · Website Overview</span>
-                        <CarouselPrevious className="static translate-y-0 h-8 w-8" />
-                        <CarouselNext className="static translate-y-0 h-8 w-8" />
+                <div className="space-y-4">
+                  {/* Executive Switcher & Navigation Controls (when both overview cards are active) */}
+                  {(hasSocialMedia && !isAdsOnlyClient) && (hasWebAndEcomm || connectedAccounts?.ubersuggest || showSearchConsole) && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-primary/[0.03] border border-primary/10 rounded-2xl">
+                      <div className="flex items-center gap-1.5 bg-background/80 p-1 rounded-xl border border-border/60 shadow-xs">
+                        <button
+                          type="button"
+                          onClick={() => executiveCarouselApi?.scrollTo(0)}
+                          className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                            executiveSlide === 0
+                              ? "bg-violet-600 text-white shadow-sm"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                          <span>Social Media Overview</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => executiveCarouselApi?.scrollTo(1)}
+                          className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                            executiveSlide === 1
+                              ? "bg-emerald-600 text-white shadow-sm"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                          )}
+                        >
+                          <Globe className="h-3.5 w-3.5" />
+                          <span>Website Overview</span>
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "text-[9px] px-1.5 py-0 h-4 font-semibold",
+                              executiveSlide === 1
+                                ? "bg-white/20 text-white"
+                                : "bg-emerald-500/10 text-emerald-600"
+                            )}
+                          >
+                            New
+                          </Badge>
+                        </button>
                       </div>
-                    )}
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => executiveCarouselApi?.scrollPrev()}
+                          disabled={executiveSlide === 0}
+                          className="h-9 gap-1.5 text-xs font-semibold cursor-pointer"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+
+                        <Button
+                          variant={executiveSlide === 0 ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            if (executiveSlide === 0) {
+                              executiveCarouselApi?.scrollTo(1);
+                            } else {
+                              executiveCarouselApi?.scrollTo(0);
+                            }
+                          }}
+                          className={cn(
+                            "h-9 gap-1.5 text-xs font-semibold cursor-pointer",
+                            executiveSlide === 0 ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" : ""
+                          )}
+                        >
+                          {executiveSlide === 0 ? (
+                            <>
+                              Next: Website Overview
+                              <ChevronRight className="h-4 w-4" />
+                            </>
+                          ) : (
+                            <>
+                              <ChevronLeft className="h-4 w-4" />
+                              Back to Social Media
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <Carousel
+                      opts={{ align: "start" }}
+                      setApi={setExecutiveCarouselApi}
+                      className="w-full"
+                    >
                     <CarouselContent>
                       {hasSocialMedia && !isAdsOnlyClient && (
                         <CarouselItem>
@@ -886,6 +990,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                   </Carousel>
                 </div>
               </div>
+            </div>
 
 
 
