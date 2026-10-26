@@ -35,6 +35,7 @@ import { clientsData } from "@/data/clients";
 import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 // import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
+import { WebsiteOverviewCard } from "@/components/WebsiteOverviewCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { GoogleAdsReportCard } from "@/components/GoogleAdsReportCard";
@@ -61,6 +62,7 @@ import { OxiSureAppSalesSection } from "@/components/oxisure/OxiSureAppSalesSect
 import { PlayIQAnalyticsSection } from "@/components/dashboard/PlayIQAnalyticsSection";
 import { TrendingKeywordsSection } from "@/components/analytics/TrendingKeywordsSection";
 import { DownloadWeeklyPdfButton } from "@/components/reports/DownloadWeeklyPdfButton";
+
 
 const PLATFORM_SHORT_NAMES: Record<string, string> = {
   instagram: "IG",
@@ -824,7 +826,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
               <div className="space-y-6 scroll-mt-24" id="executive-insights">
 
                 
-                <div className="relative px-4 sm:px-12">
+                <div className="relative">
                   <Carousel opts={{ align: "start" }} className="w-full">
                     <CarouselContent>
                       {hasSocialMedia && !isAdsOnlyClient && (
@@ -847,21 +849,12 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         </CarouselItem>
                       )}
 
-                      {/* Web & E-Commerce Overview card removed as requested */}
-
-                      {connectedAccounts?.ubersuggest && (
+                      {/* Website Overview — high-level report combining web traffic, e-commerce, SEO & Search Console */}
+                      {(hasWebAndEcomm || connectedAccounts?.ubersuggest || showSearchConsole) && (
                         <CarouselItem>
-                          <AnalyticsSummaryCard
+                          <WebsiteOverviewCard
                             clientId={clientId!}
-                            type="seo"
-                            title="SEO Performance Overview"
-                            icon={<span className="text-xl leading-none">🔍</span>}
-                            dateRange={dateRange}
-                            onDateRangeChange={(preset, customRange) => {
-                              setDateRange(preset);
-                              if (customRange) setCustomDateRange(customRange);
-                            }}
-                            customDateRange={customDateRange}
+                            title="Website Overview"
                             isActive={activeTab === "analytics"}
                           />
                         </CarouselItem>
@@ -883,8 +876,6 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                       )}
                       */}
                     </CarouselContent>
-                    <CarouselPrevious className="flex -left-2 sm:-left-12 h-8 w-8 bg-background/80 backdrop-blur-sm border-border hover:bg-accent" />
-                    <CarouselNext className="flex -right-2 sm:-right-12 h-8 w-8 bg-background/80 backdrop-blur-sm border-border hover:bg-accent" />
                   </Carousel>
                 </div>
               </div>
@@ -1202,11 +1193,13 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 {/* Web & E-Comm Channel */}
                 {hasWebAndEcomm ? (
                   <div className="mt-8 mb-8 scroll-mt-24 bg-emerald-50 dark:bg-emerald-500/5 border-2 border-emerald-200 dark:border-emerald-500/20 rounded-3xl p-4 md:p-8 shadow-sm" id="web-ecommerce">
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
-                      <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
-                      <div>
-                        <h3 className="font-semibold text-xl text-emerald-950 dark:text-emerald-100 tracking-tight">Web & E-Commerce</h3>
-                        <p className="text-sm text-emerald-600/80 dark:text-emerald-300/70 mt-1">Site traffic, sales engines, and integrations</p>
+                    <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-emerald-200 dark:border-emerald-500/20">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20"><Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /></div>
+                        <div>
+                          <h3 className="font-semibold text-xl text-emerald-950 dark:text-emerald-100 tracking-tight">Web & E-Commerce</h3>
+                          <p className="text-sm text-emerald-600/80 dark:text-emerald-300/70 mt-1">Site traffic, sales engines, and integrations</p>
+                        </div>
                       </div>
                     </div>
 

@@ -66,9 +66,22 @@ serve(async (req) => {
             analyticsContext = result.context;
             collectedMetrics = result.metrics;
         } else if (type === "website") {
-            const result = await collectWebsiteData(supabase, clientId, startStr, endStr);
-            analyticsContext = result.context;
-            collectedMetrics = result.metrics;
+            // High-level Website Overview: traffic + e-commerce + SEO + Search Console
+            const [web, seo] = await Promise.all([
+                collectWebsiteData(supabase, clientId, startStr, endStr),
+                collectSeoData(supabase, clientId, startStr, endStr),
+            ]);
+            const parts: string[] = [];
+            if (web.context.trim()) parts.push(web.context);
+            if (seo.metrics.has_seo || seo.metrics.has_gsc) parts.push(seo.context);
+            analyticsContext = parts.join("\n\n");
+            collectedMetrics = {
+                ...web.metrics,
+                web: web.metrics.web || null,
+                shop: web.metrics.shop || null,
+                seo: seo.metrics.seo || null,
+                gsc: seo.metrics.gsc || null,
+            };
         } else if (type === "ads") {
             const result = await collectAdsData(supabase, clientId, startStr, endStr);
             analyticsContext = result.context;
@@ -721,7 +734,7 @@ async function collectWebsiteData(
     endStr: string
 ): Promise<{ context: string; metrics: any }> {
     const sections: string[] = [];
-    const metricsResult = {
+    const metricsResult: any = {
         total_views: 0,
         engagement_rate: 0,
         followers_gained: 0,
@@ -732,6 +745,8 @@ async function collectWebsiteData(
 
     let totalSessions = 0;
     let totalEngagedSessions = 0;
+    // Structured, source-aware web traffic figures for the Website Overview card
+    const web = { page_views: 0, sessions: 0, visitors: 0, bounce_rate: null as number | null, sources: [] as string[] };
 
     try {
         // 0. Check for Substack GA4 integration
@@ -774,6 +789,10 @@ async function collectWebsiteData(
                     // Update metrics for the return object
                     metricsResult.total_views += (a.pageViews ?? a.totalPageViews ?? 0);
                     metricsResult.unique_visitors += (a.visitors ?? a.uniqueVisitors ?? 0);
+                    web.page_views += (a.pageViews ?? a.totalPageViews ?? 0);
+                    web.visitors += (a.visitors ?? a.uniqueVisitors ?? 0);
+                    web.sessions += (a.totalSessions ?? a.sessions ?? 0);
+                    web.sources.push("Substack");
                     
                     const subSessions = a.totalSessions ?? a.sessions ?? 0;
                     if (subSessions > 0 && a.bounceRate !== undefined) {
@@ -785,11 +804,9 @@ async function collectWebsiteData(
                     sections.push(subOutput);
                 } else {
                     console.warn(`Substack invoke for ${clientId} returned no analytics or error:`, ga4Err);
-                    sections.push(`DEBUG SUBSTACK: Error=${JSON.stringify(ga4Err)}, Data=${JSON.stringify(ga4Data)}`);
                 }
             } catch (e) {
                 console.error("Failed to fetch Substack GA4 data for summary", e);
-                sections.push(`DEBUG SUBSTACK Catch: ${e}`);
             }
         }
 
@@ -810,6 +827,13 @@ async function collectWebsiteData(
                     const s = shopifyData.data;
                     console.log(`Shopify data found for ${clientId}: sales=${s.totalSales}, orders=${s.orders}`);
                     metricsResult.total_sales += (s.totalSales || 0);
+                    metricsResult.shop = {
+                        total_sales: s.totalSales || 0,
+                        net_sales: s.netSales || 0,
+                        orders: s.orders || 0,
+                        aov: s.averageOrderValue || 0,
+                        new_customers: s.newCustomers || 0,
+                    };
                     
                     sections.push(`## Shopify E-Commerce Performance (${startStr} to ${endStr})\n` +
                         `- Total Sales: $${s.totalSales.toLocaleString()}\n` +
@@ -849,6 +873,9 @@ async function collectWebsiteData(
 
                     metricsResult.total_views += (a.totalSessions ?? 0); // Using sessions as views for aggregation
                     metricsResult.unique_visitors += (a.uniqueVisitors ?? 0);
+                    web.sessions += (a.totalSessions ?? 0);
+                    web.visitors += (a.uniqueVisitors ?? 0);
+                    web.sources.push("GA4");
                     
                     const ga4Sessions = a.totalSessions ?? 0;
                     if (ga4Sessions > 0 && a.bounceRate !== undefined) {
@@ -860,64 +887,14 @@ async function collectWebsiteData(
                     sections.push(ga4Output);
                 } else {
                     console.warn(`GA4 invoke for ${clientId} returned no analytics or error:`, ga4Err);
-                    sections.push(`DEBUG GA4: Error=${JSON.stringify(ga4Err)}, Data=${JSON.stringify(ga4Data)}`);
                 }
             } catch (e) {
                 console.error("Failed to fetch GA4 data for summary", e);
-                sections.push(`DEBUG GA4 Catch: ${e}`);
             }
         }
 
-        // 0d. Check for Google Search Console data (report_gsc_metrics) - HAIRtamin only
-        const isHairtaminClient = clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a";
-        if (isHairtaminClient) {
-            const { data: gscRows } = await supabase
-                .from("report_gsc_metrics")
-                .select("*")
-                .eq("client_id", clientId)
-                .order("collected_at", { ascending: false })
-                .limit(1);
-
-            if (gscRows && gscRows.length > 0) {
-                const gsc = gscRows[0];
-                const daily = Array.isArray(gsc.daily_breakdown) ? gsc.daily_breakdown : [];
-                const topQueries = Array.isArray(gsc.top_queries) ? gsc.top_queries : [];
-                const topPages = Array.isArray(gsc.top_pages) ? gsc.top_pages : [];
-                
-                let gscClicks = gsc.total_clicks || 0;
-                let gscImpressions = gsc.total_impressions || 0;
-                let gscCtr = parseFloat(gsc.avg_ctr) || 0;
-                let gscPosition = parseFloat(gsc.avg_position) || 0;
-
-                if (daily.length >= 7) {
-                    const matchingDaily = daily.filter((d: any) => d.date >= startStr && d.date <= endStr);
-                    if (matchingDaily.length > 0) {
-                        gscClicks = matchingDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
-                        gscImpressions = matchingDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
-                        gscCtr = gscImpressions > 0 ? (gscClicks / gscImpressions) * 100 : 0;
-                        gscPosition = matchingDaily.reduce((s: number, d: any) => s + (d.position || 0), 0) / matchingDaily.length;
-                    }
-                }
-
-                let gscOutput = `## Google Search Console (Organic Search Visibility) (${startStr} to ${endStr})\n` +
-                    `- Total Search Clicks: ${gscClicks.toLocaleString()}\n` +
-                    `- Total Search Impressions: ${gscImpressions.toLocaleString()}\n` +
-                    `- Average Search CTR: ${gscCtr.toFixed(2)}%\n` +
-                    `- Average Ranking Position: ${gscPosition.toFixed(1)}\n`;
-
-                if (topQueries.length > 0) {
-                    gscOutput += `- Top Ranked Search Queries:\n` +
-                        topQueries.slice(0, 5).map((q: any) => `  - "${q.query}": ${q.clicks} clicks, ${q.impressions} impr, CTR ${typeof q.ctr === 'number' ? q.ctr.toFixed(1) : q.ctr}%, Pos ${typeof q.position === 'number' ? q.position.toFixed(1) : q.position}`).join('\n') + '\n';
-                }
-
-                if (topPages.length > 0) {
-                    gscOutput += `- Top Performing Landing Pages in Search:\n` +
-                        topPages.slice(0, 5).map((p: any) => `  - ${p.page}: ${p.clicks} clicks, ${p.impressions} impr`).join('\n') + '\n';
-                }
-
-                sections.push(gscOutput);
-            }
-        }
+        // 0d. Google Search Console is collected by collectSeoData (richer 7-day view),
+        // which the Website Overview merges in — skipped here to avoid duplication.
 
         // Website analytics data is stored in the agency's own Supabase
         // (the track-analytics edge function inserts into web_analytics_page_views
@@ -985,6 +962,9 @@ async function collectWebsiteData(
 
                 metricsResult.total_views += pageViews.length;
                 metricsResult.unique_visitors += uniqueVisitors;
+                web.page_views += pageViews.length;
+                web.visitors += uniqueVisitors;
+                if (!web.sources.includes("Site tracker")) web.sources.push("Site tracker");
                 sections.push(output);
             }
 
@@ -1003,6 +983,8 @@ async function collectWebsiteData(
                 const bounceRate = ((bounceCount / sessions.length) * 100).toFixed(1);
                 
                 const engagedCount = sessions.length - bounceCount;
+                web.sessions += sessions.length;
+                if (!web.sources.includes("Site tracker")) web.sources.push("Site tracker");
                 totalSessions += sessions.length;
                 totalEngagedSessions += engagedCount;
 
@@ -1035,8 +1017,20 @@ async function collectWebsiteData(
 
     if (totalSessions > 0) {
         metricsResult.engagement_rate = (totalEngagedSessions / totalSessions) * 100;
+        web.bounce_rate = 100 - metricsResult.engagement_rate;
     } else {
         metricsResult.engagement_rate = 0;
+    }
+
+    if (web.sources.length > 0) {
+        metricsResult.web = {
+            page_views: web.page_views,
+            sessions: web.sessions,
+            visitors: web.visitors,
+            engagement_rate: totalSessions > 0 ? metricsResult.engagement_rate : null,
+            bounce_rate: web.bounce_rate,
+            sources: web.sources,
+        };
     }
 
     return { context: sections.join("\n\n"), metrics: metricsResult };
@@ -1151,7 +1145,7 @@ async function collectSeoData(
     endStr: string
 ): Promise<{ context: string; metrics: any }> {
     const sections: string[] = [];
-    const metricsResult = {
+    const metricsResult: any = {
         total_views: 0,
         engagement_rate: 0,
         followers_gained: 0,
@@ -1250,6 +1244,26 @@ async function collectSeoData(
             }
 
             const hasAudit = newestScore !== null && newestScore !== undefined;
+            metricsResult.has_seo = true;
+            metricsResult.seo = {
+                domain: newest.raw_project_data?.domain || newest.raw_project_data?.url || null,
+                health_score: hasAudit ? newestScore : null,
+                health_change: hasAudit && oldestScore != null ? scoreDiff : null,
+                issues: hasAudit ? newestIssuesCount : null,
+                tracked_keywords: newestKeywords.length,
+                ranking_keywords: rankingKeywords.length,
+                top3: top3Count,
+                top10: top10Count,
+                improved: improvedCount,
+                declined: declinedCount,
+                unstable: unstableCount,
+                pending: pendingCount,
+                top_keywords: [...rankingKeywords]
+                    .sort((a: any, b: any) => a.desktop_new - b.desktop_new)
+                    .slice(0, 5)
+                    .map((kw: any) => ({ keyword: kw.keyword, position: kw.desktop_new, previous: kw.desktop_old ?? null, volume: kw.volume ?? null })),
+                collected_at: newest.collected_at,
+            };
             let output = hasAudit
                 ? `## SEO Technical Audit (Ubersuggest)\n` +
                   `- Site Health Score: ${newestScore} (started at ${oldestScore ?? "N/A"} this period, change: ${scoreDiff >= 0 ? '+' : ''}${scoreDiff})\n` +
@@ -1257,19 +1271,28 @@ async function collectSeoData(
                 : `## SEO Technical Audit (Ubersuggest)\n` +
                   `- No site audit is available yet. Do NOT make any claims about site health, issue counts, or technical quality.\n`;
 
+            const seoAgeDays = newest.collected_at ? Math.floor((Date.now() - new Date(newest.collected_at).getTime()) / 86400000) : 0;
+            if (seoAgeDays > 14) {
+                output += `- NOTE: This SEO data was last collected ${String(newest.collected_at).slice(0, 10)} (${seoAgeDays} days ago). Say it is from that date; do NOT describe it as this week's change or stability.\n`;
+            }
+
             if (hasAudit && newestIssues?.highest_impact && Array.isArray(newestIssues.highest_impact) && newestIssues.highest_impact.length > 0) {
                 output += `- Key Issues Detected:\n` +
                     newestIssues.highest_impact.slice(0, 3).map((issue: any) => `  - ${issue.title || issue.issue_type || "Issue"}: ${issue.count || 0} occurrences (${issue.difficulty || "medium"} difficulty)`).join('\n') + `\n`;
             }
 
+            if (newestKeywords.length === 0) {
+                output += `\n## Keyword Rankings\n- No keywords are being tracked yet. Do NOT claim the site has zero rankings or no search visibility based on keyword tracking.\n`;
+            } else {
             output += `\n## Keyword Rankings (Tracked Keywords: ${newestKeywords.length})\n` +
                 `- Keywords ranking in Google top 100: ${rankingKeywords.length}\n` +
                 `- Keywords in Top 3: ${top3Count}\n` +
                 `- Keywords in Top 10: ${top10Count}\n` +
                 `- Improved ranks: ${improvedCount} keywords\n` +
                 `- Declined ranks: ${declinedCount} keywords\n` +
-                (unstableCount > 0 ? `- Keywords with unstable/unconfirmed rank data: ${unstableCount}\n` : "") +
+                (unstableCount > 0 ? `- Keywords with unstable/unconfirmed rank data: ${unstableCount} (their position is UNKNOWN — do NOT count them as outside the top 100)\n` : "") +
                 (pendingCount > 0 ? `- Keywords newly added, first rank check pending: ${pendingCount}\n` : "");
+            }
             if (rankingKeywords.length > 0) {
                 output += `- Ranking keywords (current position, previous position, monthly volume):\n` +
                     rankingKeywords
@@ -1366,6 +1389,8 @@ async function collectSeoData(
             sections.push(gscOutput);
 
             // Enrich metrics with 7-day figures
+            metricsResult.has_gsc = true;
+            metricsResult.gsc = { clicks: gscClicks, impressions: gscImpressions, ctr: gscCtr, position: gscPosition, window: windowLabel };
             metricsResult.gsc_clicks = gscClicks;
             metricsResult.gsc_impressions = gscImpressions;
             metricsResult.gsc_ctr = gscCtr;
@@ -1416,7 +1441,7 @@ function buildPrompt(
 ): string {
     const label = type === "ads" ? "advertising" : 
                   type === "social" ? "social media" : 
-                  type === "website" ? "website" : 
+                  type === "website" ? "website (traffic, e-commerce, SEO & search visibility — a high-level overview tying these together)" : 
                   type === "seo" ? "search engine optimization (SEO)" : "analytics";
     const platformClause = platforms.length > 0
         ? `\nThis client is active on: ${platforms.join(", ")}. Only reference these platforms.`
