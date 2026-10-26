@@ -143,7 +143,13 @@ PRE-CALCULATED ACCURATE TOTALS (use these EXACTLY for the top-level KPIs):
 - Ad Sales: ${exactTotals.sales.toFixed(2)}
 - Orders: ${exactTotals.orders}
 - Clicks: ${exactTotals.clicks}
-- Impressions: ${exactTotals.impressions}${dateRangeContext}
+- Impressions: ${exactTotals.impressions}
+- ACoS (account-wide): ${exactTotals.sales > 0 ? ((exactTotals.spend / exactTotals.sales) * 100).toFixed(2) + "%" : "N/A (no sales)"}
+- ROAS (account-wide): ${exactTotals.spend > 0 ? (exactTotals.sales / exactTotals.spend).toFixed(2) + "x" : "N/A"}
+- CTR: ${exactTotals.impressions > 0 ? ((exactTotals.clicks / exactTotals.impressions) * 100).toFixed(2) + "%" : "N/A"}
+- CVR: ${exactTotals.clicks > 0 ? ((exactTotals.orders / exactTotals.clicks) * 100).toFixed(2) + "%" : "N/A"}
+- Avg CPC: ${exactTotals.clicks > 0 ? "$" + (exactTotals.spend / exactTotals.clicks).toFixed(2) : "N/A"}
+When quoting account-level ACoS/ROAS/CTR/CVR/CPC in the text, use ONLY these values (never a single campaign's figure).${dateRangeContext}
 ${exactTablesContext}
 ${"─".repeat(60)}
 `;
