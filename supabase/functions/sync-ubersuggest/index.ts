@@ -207,8 +207,9 @@ serve(async (req) => {
         if (lastValidIssues === null && row.site_audit_issues !== null) lastValidIssues = row.site_audit_issues;
         if (lastValidKeywords.length === 0 && row.tracked_keywords && row.tracked_keywords.length > 0) {
           // When loading from DB, prefer rows where at least some keywords have real position data
+          // (or real rank-tracking metadata, e.g. rows imported from the Ubersuggest MCP where nothing ranks yet)
           const stored = row.tracked_keywords as any[];
-          const hasRealData = stored.some((k: any) => k.desktop_new !== null);
+          const hasRealData = stored.some((k: any) => k.desktop_new !== null || k.volume != null || k.rank_status != null);
           if (hasRealData) lastValidKeywords = stored;
         }
       }

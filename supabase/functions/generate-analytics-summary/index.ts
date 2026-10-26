@@ -1209,20 +1209,26 @@ async function collectSeoData(
 
             newestKeywords.forEach((kw: any) => {
                 const pos = kw.desktop_new;
-                if (pos !== null) {
+                if (pos !== null && pos !== undefined) {
                     if (pos <= 3) top3Count++;
                     if (pos <= 10) top10Count++;
-
-                    const oldKw = oldestKeywords.find((okw: any) => okw.keyword === kw.keyword);
-                    if (oldKw && oldKw.desktop_new !== null) {
-                        if (pos < oldKw.desktop_new) {
-                            improvedCount++;
-                        } else if (pos > oldKw.desktop_new) {
-                            declinedCount++;
-                        }
-                    }
+                }
+                // Prefer the rank tracker's own previous position (desktop_old) when present
+                const prevPos = kw.desktop_old !== undefined
+                    ? kw.desktop_old
+                    : oldestKeywords.find((okw: any) => okw.keyword === kw.keyword)?.desktop_new;
+                if (pos != null && prevPos != null) {
+                    if (pos < prevPos) improvedCount++;
+                    else if (pos > prevPos) declinedCount++;
+                } else if (pos == null && prevPos != null) {
+                    declinedCount++; // dropped out of top 100
+                } else if (pos != null && prevPos == null && kw.desktop_old !== undefined) {
+                    improvedCount++; // newly entered top 100
                 }
             });
+            const rankingKeywords = newestKeywords.filter((kw: any) => kw.desktop_new != null);
+            const unstableCount = newestKeywords.filter((kw: any) => kw.rank_status === "unstable").length;
+            const pendingCount = newestKeywords.filter((kw: any) => kw.rank_status === "pending").length;
 
             // Set main metrics for dashboard display
             metricsResult.total_views = newestKeywords.length; // Tracked Keywords Count
@@ -1243,20 +1249,35 @@ async function collectSeoData(
                 if (kws !== null) organicKeywordsCount = kws.toLocaleString();
             }
 
-            let output = `## SEO Technical Audit (Ubersuggest)\n` +
-                `- Site Health Score: ${newestScore ?? "N/A"} (started at ${oldestScore ?? "N/A"} this period, change: ${scoreDiff >= 0 ? '+' : ''}${scoreDiff})\n` +
-                `- Total Site Issues: ${newestIssuesCount} (started at ${oldestIssuesCount}, change: ${issuesDiff >= 0 ? '+' : ''}${issuesDiff})\n`;
+            const hasAudit = newestScore !== null && newestScore !== undefined;
+            let output = hasAudit
+                ? `## SEO Technical Audit (Ubersuggest)\n` +
+                  `- Site Health Score: ${newestScore} (started at ${oldestScore ?? "N/A"} this period, change: ${scoreDiff >= 0 ? '+' : ''}${scoreDiff})\n` +
+                  `- Total Site Issues: ${newestIssuesCount} (started at ${oldestIssuesCount}, change: ${issuesDiff >= 0 ? '+' : ''}${issuesDiff})\n`
+                : `## SEO Technical Audit (Ubersuggest)\n` +
+                  `- No site audit is available yet. Do NOT make any claims about site health, issue counts, or technical quality.\n`;
 
-            if (newestIssues?.highest_impact && Array.isArray(newestIssues.highest_impact) && newestIssues.highest_impact.length > 0) {
+            if (hasAudit && newestIssues?.highest_impact && Array.isArray(newestIssues.highest_impact) && newestIssues.highest_impact.length > 0) {
                 output += `- Key Issues Detected:\n` +
                     newestIssues.highest_impact.slice(0, 3).map((issue: any) => `  - ${issue.title || issue.issue_type || "Issue"}: ${issue.count || 0} occurrences (${issue.difficulty || "medium"} difficulty)`).join('\n') + `\n`;
             }
 
             output += `\n## Keyword Rankings (Tracked Keywords: ${newestKeywords.length})\n` +
+                `- Keywords ranking in Google top 100: ${rankingKeywords.length}\n` +
                 `- Keywords in Top 3: ${top3Count}\n` +
                 `- Keywords in Top 10: ${top10Count}\n` +
                 `- Improved ranks: ${improvedCount} keywords\n` +
-                `- Declined ranks: ${declinedCount} keywords\n`;
+                `- Declined ranks: ${declinedCount} keywords\n` +
+                (unstableCount > 0 ? `- Keywords with unstable/unconfirmed rank data: ${unstableCount}\n` : "") +
+                (pendingCount > 0 ? `- Keywords newly added, first rank check pending: ${pendingCount}\n` : "");
+            if (rankingKeywords.length > 0) {
+                output += `- Ranking keywords (current position, previous position, monthly volume):\n` +
+                    rankingKeywords
+                        .sort((a: any, b: any) => a.desktop_new - b.desktop_new)
+                        .slice(0, 10)
+                        .map((kw: any) => `  - "${kw.keyword}": #${kw.desktop_new} (prev ${kw.desktop_old ?? "not ranking"}), vol ${kw.volume ?? "N/A"}`)
+                        .join('\n') + `\n`;
+            }
 
             output += `\n## Domain Visibility Overview\n` +
                 `- Est. Organic Monthly Traffic: ${organicTrafficStr}\n` +
