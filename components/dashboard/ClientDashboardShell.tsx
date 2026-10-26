@@ -828,6 +828,13 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                 
                 <div className="relative">
                   <Carousel opts={{ align: "start" }} className="w-full">
+                    {(hasSocialMedia && !isAdsOnlyClient) && (hasWebAndEcomm || connectedAccounts?.ubersuggest || showSearchConsole) && (
+                      <div className="flex items-center justify-end gap-2 mb-3">
+                        <span className="text-xs font-medium text-muted-foreground mr-1">Social Media · Website Overview</span>
+                        <CarouselPrevious className="static translate-y-0 h-8 w-8" />
+                        <CarouselNext className="static translate-y-0 h-8 w-8" />
+                      </div>
+                    )}
                     <CarouselContent>
                       {hasSocialMedia && !isAdsOnlyClient && (
                         <CarouselItem>
