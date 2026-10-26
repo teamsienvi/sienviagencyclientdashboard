@@ -36,6 +36,7 @@ import { CSVUploadDialog } from "@/components/CSVUploadDialog";
 // import { TopPerformingPosts } from "@/components/TopPerformingPosts";
 import { AnalyticsSummaryCard } from "@/components/AnalyticsSummaryCard";
 import { WebsiteOverviewCard } from "@/components/WebsiteOverviewCard";
+import { AdsOverviewCard } from "@/components/AdsOverviewCard";
 import { AdsShredderCard } from "@/components/AdsShredderCard";
 import { AmazonAdsReportCard } from "@/components/AmazonAdsReportCard";
 import { GoogleAdsReportCard } from "@/components/GoogleAdsReportCard";
@@ -268,6 +269,27 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         .eq("client_id", clientId)
         .limit(1);
 
+      // Check uploaded Amazon Ads reports
+      const { data: amazonAdsData } = await supabase
+        .from("amazon_ads_reports" as any)
+        .select("id")
+        .eq("client_id", clientId)
+        .limit(1);
+
+      // Check uploaded Google Ads reports
+      const { data: googleAdsData } = await supabase
+        .from("google_ads_reports" as any)
+        .select("id")
+        .eq("client_id", clientId)
+        .limit(1);
+
+      // Check uploaded TikTok / other ads summaries
+      const { data: adsSummariesData } = await supabase
+        .from("ads_analytics_summaries" as any)
+        .select("id")
+        .eq("client_id", clientId)
+        .limit(1);
+
       return {
         x: xData && xData.length > 0,
         xHasData: (xContentData && xContentData.length > 0) || (xData && xData.length > 0),
@@ -278,6 +300,9 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
         substack: substackData && substackData.length > 0,
         ubersuggest: ubersuggestData && ubersuggestData.length > 0,
         gsc: gscData && gscData.length > 0,
+        hasAmazonAds: amazonAdsData && amazonAdsData.length > 0,
+        hasGoogleAds: googleAdsData && googleAdsData.length > 0,
+        hasAdsSummary: adsSummariesData && adsSummariesData.length > 0,
       };
     },
     enabled: !!clientId,
@@ -678,6 +703,72 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   const showSearchConsole = isHairtamin && (connectedAccounts?.gsc || isAdmin);
 
+  // Check if client has uploaded or active advertising data (Amazon Ads, Google Ads, TikTok Ads, Meta Ads)
+  const hasAdsOverview = useMemo(() => {
+    if (!client?.name) return false;
+    const configuredPlatforms = getClientAdPlatforms(client.name);
+    // Explicitly excluded non-ads clients have configuredPlatforms = []
+    if (configuredPlatforms.length === 0) return false;
+
+    // Must have uploaded ad reports or active connected ad platforms
+    const hasUploadedAds =
+      Boolean((connectedAccounts as any)?.hasAmazonAds) ||
+      Boolean((connectedAccounts as any)?.hasGoogleAds) ||
+      Boolean((connectedAccounts as any)?.hasAdsSummary);
+
+    const hasConnectedAds =
+      Boolean(connectedAccounts?.metaAds) ||
+      Boolean(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)));
+
+    return hasUploadedAds || hasConnectedAds;
+  }, [client?.name, connectedAccounts, metricoolPlatforms]);
+
+  // Dynamic Executive Insight Layer slides based on client capabilities
+  const executiveSlides = useMemo(() => {
+    const slides: {
+      id: "social" | "website" | "ads";
+      title: string;
+      shortTitle: string;
+      icon: any;
+      activeBg: string;
+      badge?: string;
+    }[] = [];
+
+    if (hasSocialMedia && !isAdsOnlyClient) {
+      slides.push({
+        id: "social",
+        title: "Social Media Overview",
+        shortTitle: "Social Media",
+        icon: Share2,
+        activeBg: "bg-violet-600 text-white shadow-sm",
+      });
+    }
+
+    if (hasWebAndEcomm || connectedAccounts?.ubersuggest || showSearchConsole) {
+      slides.push({
+        id: "website",
+        title: "Website Overview",
+        shortTitle: "Website",
+        icon: Globe,
+        activeBg: "bg-emerald-600 text-white shadow-sm",
+        badge: "New",
+      });
+    }
+
+    if (hasAdsOverview) {
+      slides.push({
+        id: "ads",
+        title: "Advertising Overview",
+        shortTitle: "Advertising",
+        icon: Target,
+        activeBg: "bg-amber-600 text-white shadow-sm",
+        badge: "Ads",
+      });
+    }
+
+    return slides;
+  }, [hasSocialMedia, isAdsOnlyClient, hasWebAndEcomm, connectedAccounts, showSearchConsole, hasAdsOverview]);
+
   const latestReport = clientReports?.reports && clientReports.reports.length > 0 
     ? clientReports.reports[clientReports.reports.length - 1] 
     : null;
@@ -846,51 +937,48 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                 
                 <div className="space-y-4">
-                  {/* Executive Switcher & Navigation Controls (when both overview cards are active) */}
-                  {(hasSocialMedia && !isAdsOnlyClient) && (hasWebAndEcomm || connectedAccounts?.ubersuggest || showSearchConsole) && (
+                  {/* Executive Switcher & Navigation Controls (when multiple overview cards are active) */}
+                  {executiveSlides.length > 1 && (
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 bg-primary/[0.03] border border-primary/10 rounded-2xl">
-                      <div className="flex items-center gap-1.5 bg-background/80 p-1 rounded-xl border border-border/60 shadow-xs">
-                        <button
-                          type="button"
-                          onClick={() => executiveCarouselApi?.scrollTo(0)}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
-                            executiveSlide === 0
-                              ? "bg-violet-600 text-white shadow-sm"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                          )}
-                        >
-                          <Share2 className="h-3.5 w-3.5" />
-                          <span>Social Media Overview</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => executiveCarouselApi?.scrollTo(1)}
-                          className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
-                            executiveSlide === 1
-                              ? "bg-emerald-600 text-white shadow-sm"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                          )}
-                        >
-                          <Globe className="h-3.5 w-3.5" />
-                          <span>Website Overview</span>
-                          <Badge
-                            variant="secondary"
-                            className={cn(
-                              "text-[9px] px-1.5 py-0 h-4 font-semibold",
-                              executiveSlide === 1
-                                ? "bg-white/20 text-white"
-                                : "bg-emerald-500/10 text-emerald-600"
-                            )}
-                          >
-                            New
-                          </Badge>
-                        </button>
+                      <div className="flex items-center gap-1.5 bg-background/80 p-1 rounded-xl border border-border/60 shadow-xs overflow-x-auto max-w-full">
+                        {executiveSlides.map((slide, idx) => {
+                          const Icon = slide.icon;
+                          const isActive = executiveSlide === idx;
+                          return (
+                            <button
+                              key={slide.id}
+                              type="button"
+                              onClick={() => executiveCarouselApi?.scrollTo(idx)}
+                              className={cn(
+                                "flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+                                isActive
+                                  ? slide.activeBg
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                              )}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              <span>{slide.title}</span>
+                              {slide.badge && (
+                                <Badge
+                                  variant="secondary"
+                                  className={cn(
+                                    "text-[9px] px-1.5 py-0 h-4 font-semibold",
+                                    isActive
+                                      ? "bg-white/20 text-white"
+                                      : slide.id === "ads"
+                                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                        : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                  )}
+                                >
+                                  {slide.badge}
+                                </Badge>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
@@ -902,33 +990,32 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           Previous
                         </Button>
 
-                        <Button
-                          variant={executiveSlide === 0 ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => {
-                            if (executiveSlide === 0) {
-                              executiveCarouselApi?.scrollTo(1);
-                            } else {
-                              executiveCarouselApi?.scrollTo(0);
-                            }
-                          }}
-                          className={cn(
-                            "h-9 gap-1.5 text-xs font-semibold cursor-pointer",
-                            executiveSlide === 0 ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" : ""
-                          )}
-                        >
-                          {executiveSlide === 0 ? (
-                            <>
-                              Next: Website Overview
-                              <ChevronRight className="h-4 w-4" />
-                            </>
-                          ) : (
-                            <>
-                              <ChevronLeft className="h-4 w-4" />
-                              Back to Social Media
-                            </>
-                          )}
-                        </Button>
+                        {executiveSlide < executiveSlides.length - 1 ? (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => executiveCarouselApi?.scrollTo(executiveSlide + 1)}
+                            className={cn(
+                              "h-9 gap-1.5 text-xs font-semibold cursor-pointer text-white shadow-sm",
+                              executiveSlides[executiveSlide + 1]?.id === "ads"
+                                ? "bg-amber-600 hover:bg-amber-700"
+                                : "bg-emerald-600 hover:bg-emerald-700"
+                            )}
+                          >
+                            Next: {executiveSlides[executiveSlide + 1]?.title}
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => executiveCarouselApi?.scrollTo(0)}
+                            className="h-9 gap-1.5 text-xs font-semibold cursor-pointer"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Back to {executiveSlides[0]?.shortTitle || "Overview"}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   )}
@@ -971,21 +1058,17 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                         </CarouselItem>
                       )}
 
-                      {/*
-                      {hasAdsPlatform && (
+                      {/* Advertising Overview — blended ads intelligence (Amazon, Google, TikTok, Meta) */}
+                      {hasAdsOverview && (
                         <CarouselItem>
-                          <AnalyticsSummaryCard
+                          <AdsOverviewCard
                             clientId={clientId!}
-                            type="ads"
-                            title="Ads & Campaigns Overview"
-                            icon={<Target className="h-5 w-5 text-amber-500" />}
-                            dateRange={dateRange}
-                            customDateRange={customDateRange}
+                            title="Advertising Overview"
                             isActive={activeTab === "analytics"}
+                            onScrollToDrilldown={() => scrollToSection("advertising")}
                           />
                         </CarouselItem>
                       )}
-                      */}
                     </CarouselContent>
                   </Carousel>
                 </div>
