@@ -435,13 +435,36 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         const data = new Uint8Array(arrayBuffer);
         const workbook = XLSX.read(data, { type: "array" });
 
-        // For Bulk files, only process Campaigns sheets to avoid huge payloads
+        // Crucial fix: Amazon Bulksheet exports often contain truncated/malformed dimension tags (e.g. A1:BB1)
+        // Recalculate sheet['!ref'] from the actual cells present in the sheet
+        const fixSheetRef = (sheet: XLSX.WorkSheet) => {
+            const cellKeys = Object.keys(sheet).filter(k => !k.startsWith('!'));
+            if (cellKeys.length === 0) return;
+            let minR = Infinity, maxR = 0, minC = Infinity, maxC = 0;
+            for (const k of cellKeys) {
+                const cell = XLSX.utils.decode_cell(k);
+                if (cell.r < minR) minR = cell.r;
+                if (cell.r > maxR) maxR = cell.r;
+                if (cell.c < minC) minC = cell.c;
+                if (cell.c > maxC) maxC = cell.c;
+            }
+            sheet['!ref'] = XLSX.utils.encode_range({ s: { r: minR, c: minC }, e: { r: maxR, c: maxC } });
+        };
+
+        for (const name of workbook.SheetNames) {
+            if (workbook.Sheets[name]) {
+                fixSheetRef(workbook.Sheets[name]);
+            }
+        }
+
+        // For Bulk files, process Campaigns & Search Term sheets
         const isBulkFile = workbook.SheetNames.length > 2 ||
             workbook.SheetNames.some(n => n.toLowerCase().includes('campaign'));
         const sheetsToProcess = isBulkFile
             ? workbook.SheetNames.filter(n =>
                 n.toLowerCase().includes('campaign') ||
-                n.toLowerCase().includes('sponsored')
+                n.toLowerCase().includes('sponsored') ||
+                n.toLowerCase().includes('search term')
             )
             : workbook.SheetNames;
         const finalSheets = sheetsToProcess.length > 0 ? sheetsToProcess : workbook.SheetNames;
@@ -451,31 +474,57 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
         for (const sheetName of finalSheets) {
             const sheet = workbook.Sheets[sheetName];
-            const csv = XLSX.utils.sheet_to_csv(sheet);
-            if (csv.trim()) allText.push(`--- Sheet: ${sheetName} ---\n${csv}`);
 
-            // Compute exact totals from this sheet
+            // Only compute exact totals from campaign sheets (avoid double counting search term / ad group totals)
+            const isCampaignSheet = sheetName.toLowerCase().includes('campaign') ||
+                sheetName.toLowerCase().includes('sponsored products') ||
+                sheetName.toLowerCase().includes('sponsored brands') ||
+                sheetName.toLowerCase().includes('sponsored display');
+            const isSearchTermSheet = sheetName.toLowerCase().includes('search term');
+
             const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[];
             if (rows.length === 0) continue;
             const keys = Object.keys(rows[0]).map(k => k.trim());
-            const hasEntity = keys.some(k => k.toLowerCase() === 'entity');
+            const entityKey = keys.find(k => k.toLowerCase() === 'entity' || k.toLowerCase() === 'record type');
 
-            const findKey = (patterns: string[]) => keys.find(k => patterns.some(p => k.toLowerCase().includes(p) || k.toLowerCase() === p));
+            const findKey = (patterns: string[]) => keys.find(k => patterns.some(p => k.toLowerCase() === p || k.toLowerCase().includes(p)));
             const spendKey = findKey(['spend', 'cost']);
             const salesKey = findKey(['14 day total sales', 'total sales', 'sales']);
             const ordersKey = findKey(['14 day total orders', '7 day total orders', 'total orders', 'unit orders', 'orders']);
             const clicksKey = findKey(['clicks']);
             const impressionsKey = findKey(['impressions']);
+            const parseNum = (row: Record<string, any>, k?: string) => k && row[k] ? parseFloat(String(row[k]).replace(/,/g, '')) || 0 : 0;
 
-            for (const row of rows) {
-                if (hasEntity && row['Entity'] !== 'Campaign') continue;
-                const parse = (k?: string) => k && row[k] ? parseFloat(String(row[k]).replace(/,/g, '')) || 0 : 0;
-                exactTotals.spend += parse(spendKey);
-                exactTotals.sales += parse(salesKey);
-                exactTotals.orders += parse(ordersKey);
-                exactTotals.clicks += parse(clicksKey);
-                exactTotals.impressions += parse(impressionsKey);
+            if (isCampaignSheet || !isBulkFile) {
+                for (const row of rows) {
+                    if (entityKey && String(row[entityKey] || '').trim().toLowerCase() !== 'campaign') continue;
+                    exactTotals.spend += parseNum(row, spendKey);
+                    exactTotals.sales += parseNum(row, salesKey);
+                    exactTotals.orders += parseNum(row, ordersKey);
+                    exactTotals.clicks += parseNum(row, clicksKey);
+                    exactTotals.impressions += parseNum(row, impressionsKey);
+                }
             }
+
+            // Build the text sent to the AI. Bulk sheets contain every keyword / product-ad row,
+            // which blows past the size limit, so keep only campaign rows and search terms with spend.
+            let textRows = rows;
+            if (isBulkFile && isCampaignSheet && entityKey) {
+                textRows = rows.filter(r => String(r[entityKey] || '').trim().toLowerCase() === 'campaign');
+            } else if (isBulkFile && isSearchTermSheet) {
+                textRows = rows.filter(r => parseNum(r, spendKey) > 0)
+                    .sort((a, b) => parseNum(b, spendKey) - parseNum(a, spendKey));
+            }
+            if (textRows.length === 0) continue;
+            const wanted = Object.keys(rows[0]).filter(k => {
+                const l = k.trim().toLowerCase();
+                return ['campaign name', 'customer search term', 'keyword text', 'match type', 'state', 'targeting type', 'impressions', 'clicks', 'spend', 'sales', 'orders', 'units', 'acos', 'roas', 'cpc'].some(p => l.includes(p));
+            });
+            const projected = isBulkFile && wanted.length
+                ? textRows.map(r => Object.fromEntries(wanted.map(k => [k, r[k] ?? ""])))
+                : textRows;
+            const csv = XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(projected));
+            if (csv.trim()) allText.push(`--- Sheet: ${sheetName} (${textRows.length} rows) ---\n${csv}`);
         }
 
         const MAX_CHARS = 50000;
@@ -501,6 +550,11 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             toast({ title: "Parsing file…", description: "Reading your report data" });
             const { csvText, exactTotals, fileName } = await parseFileClientSide(file);
 
+            // Guard: if no campaign metrics could be read, don't generate a misleading all-zero AI report
+            if (exactTotals.spend === 0 && exactTotals.sales === 0 && exactTotals.clicks === 0 && exactTotals.impressions === 0) {
+                throw new Error("Couldn't read any campaign spend/sales/clicks from this file. Make sure it's an Amazon Ads bulk or campaign report covering a period with activity.");
+            }
+
             // Parse Week 1 file if provided
             let w1Totals: typeof exactTotals | null = null;
             if (week1File) {
@@ -524,7 +578,9 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         fileName,
                         rawData: csvText,
                         exactTotals,
-                        reportPeriod: (() => { const dr = parseDateRangeFromFilename(fileName); return dr ? `${dr.from}_${dr.to}` : new Date().toISOString().substring(0, 7); })(),
+                        // Undated filenames fall back to today's date (not the month) so each upload
+                        // gets its own row and sorts after earlier dated reports.
+                        reportPeriod: (() => { const dr = parseDateRangeFromFilename(fileName); return dr ? `${dr.from}_${dr.to}` : new Date().toISOString().substring(0, 10); })(),
                         dateRange: parseDateRangeFromFilename(fileName),
                     }),
                 }
@@ -749,7 +805,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         <p className="text-xs mt-1 opacity-60 mb-2">
                             Supports Campaign Performance and Search Term reports
                         </p>
-                        {cachedData?.generation_status === 'failed' && (
+                        {cachedData?.[0]?.generation_status === 'failed' && (
                             <p className="text-xs mt-2 text-red-400 bg-red-500/10 py-1.5 px-3 rounded border border-red-500/20 inline-block font-medium">
                                 Previous analysis failed. Please try re-uploading the report.
                             </p>
