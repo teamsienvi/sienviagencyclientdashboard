@@ -19,6 +19,7 @@ import { getCurrentReportingWeek } from "@/utils/weeklyDateRange";
 import { isDataStale } from "@/lib/freshnessPolicy";
 import { useQuery } from "@tanstack/react-query";
 import { useSyncState } from "@/hooks/useSyncState";
+import { GeographicHeatmapWidget } from "@/components/analytics/GeographicHeatmapWidget";
 import {
   LineChart,
   Line,
@@ -363,24 +364,30 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
   const fetchOrders = async (pageInfo?: string) => {
     setOrdersLoading(true);
     try {
+      const sixtyDaysAgo = format(new Date(Date.now() - 60 * 24 * 60 * 60 * 1000), "yyyy-MM-dd");
       const { data, error } = await supabase.functions.invoke("shopify-analytics", {
         body: {
           clientId,
           endpoint: "orders",
-          start: dateRange.start,
+          start: sixtyDaysAgo,
           end: dateRange.end,
           pageInfo,
-          limit: 10,
+          limit: 20,
         },
       });
 
       if (error) throw error;
-      if (data?.success) {
+      if (data?.success && data.data?.length > 0) {
         setOrders(data.data);
         setOrdersPagination(data.pagination);
+      } else if (cachedData?.recentOrders?.length) {
+        setOrders(cachedData.recentOrders);
       }
     } catch (err) {
       console.error("Error fetching orders:", err);
+      if (cachedData?.recentOrders?.length) {
+        setOrders(cachedData.recentOrders);
+      }
     } finally {
       setOrdersLoading(false);
     }
@@ -766,6 +773,9 @@ const ShopifyAnalyticsSection = ({ clientId, clientName }: ShopifyAnalyticsSecti
           </CardContent>
         </Card>
       </div>
+
+      {/* Geographic Demand & Product Heatmap */}
+      <GeographicHeatmapWidget clientId={clientId} dateRange="60d" />
 
       {/* Orders Table */}
       <Card>
