@@ -5,14 +5,17 @@ interface TopCountriesWidgetProps {
   clientId: string;
   dateRange: DateRangePreset;
   countriesData?: any[];
+  className?: string;
 }
 
-export const TopCountriesWidget = ({ clientId, dateRange, countriesData }: TopCountriesWidgetProps) => {
+export const TopCountriesWidget = ({ clientId, dateRange, countriesData, className }: TopCountriesWidgetProps) => {
   return (
-    <GeographicHeatmapWidget
-      clientId={clientId}
-      dateRange={dateRange}
-      countriesData={countriesData}
-    />
+    <div className={`col-span-full w-full ${className || ""}`}>
+      <GeographicHeatmapWidget
+        clientId={clientId}
+        dateRange={dateRange}
+        countriesData={countriesData}
+      />
+    </div>
   );
 };

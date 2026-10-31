@@ -19,6 +19,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { NextAnalyticsPageLayout as AnalyticsPageLayout } from "@/components/analytics/NextAnalyticsPageLayout";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { PerformanceStoryModal } from "@/components/PerformanceStoryModal";
 
 const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
   const router = useRouter();  
@@ -50,7 +51,7 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
       if (!clientId) return null;
       const { data } = await supabase
         .from("client_ga4_config" as any)
-        .select("website_url")
+        .select("website_url, ga4_property_id, is_active")
         .eq("client_id", clientId)
         .maybeSingle();
       return (data as any);
@@ -305,6 +306,10 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
     }
     : null;
 
+  const hasWebsiteAnalytics = Boolean(
+    client?.supabase_url || (ga4Config?.ga4_property_id && ga4Config?.is_active !== false)
+  );
+
   // Helper to get error message and icon based on error type
   const getErrorDisplay = (type: AnalyticsErrorType) => {
     switch (type) {
@@ -465,6 +470,35 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
     >
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-end gap-4">
+            {hasWebsiteAnalytics && (
+              <PerformanceStoryModal
+                clientId={clientId}
+                type="website"
+                title={`${client?.name ?? "Website"} Performance`}
+                clientName={client?.name}
+                dateRange={dateRange === "all" ? "7d" : dateRange}
+                onDateRangeChange={(preset) => {
+                  if (preset !== "custom") setDateRange(preset as DateRangePreset);
+                }}
+                totalViews={normalizedAnalytics?.totalSessions || normalizedAnalytics?.pageViews || normalizedAnalytics?.visitors || 0}
+                totalEngagements={0}
+                followersGained={0}
+                totalFollowers={normalizedAnalytics?.visitors || 0}
+                platformData={(normalizedAnalytics?.trafficSources || []).map((source: any) => ({
+                  platform: source.source,
+                  views: source.sessions || source.visitors || 0,
+                  engagements: 0,
+                  engagementRate: 0,
+                  followers: 0,
+                  followersGained: 0,
+                }))}
+                timelineData={(normalizedAnalytics?.dailyBreakdown || []).map((day: any) => ({
+                  date: day.date,
+                  views: day.sessions || day.visitors || day.pageViews || 0,
+                  engagement: 0,
+                }))}
+              />
+            )}
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangePreset)}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
@@ -472,8 +506,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
               <SelectContent>
                 <SelectItem value="7d">Last 7 days</SelectItem>
                 <SelectItem value="30d">Last 30 days</SelectItem>
-                <SelectItem value="90d">Last 90 days</SelectItem>
-                <SelectItem value="365d">Last 365 days</SelectItem>
+                <SelectItem value="90d">Rolling quarter (90 days)</SelectItem>
+                <SelectItem value="365d">Rolling year (365 days)</SelectItem>
                 <SelectItem value="all">All Time</SelectItem>
               </SelectContent>
             </Select>
@@ -925,16 +959,20 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                             )}
                           </CardContent>
                         </Card>
+                      </div>
 
-                        {/* Top Countries */}
+                      {/* Geographic Demand & Product Heatmap (Full Width) */}
+                      <div className="w-full my-6">
                         <TopCountriesWidget 
                           clientId={clientId!} 
                           dateRange={dateRange} 
                           countriesData={normalizedAnalytics?.countries || normalizedAnalytics?.breakdowns?.countries || undefined}
                         />
+                      </div>
 
-                        {/* Browser Breakdown */}
-                        {normalizedAnalytics?.browsers && normalizedAnalytics.browsers.length > 0 && (
+                      {/* Browser Breakdown */}
+                      {normalizedAnalytics?.browsers && normalizedAnalytics.browsers.length > 0 && (
+                        <div className="grid gap-4 md:grid-cols-2">
                           <Card>
                             <CardHeader>
                               <div>
@@ -969,8 +1007,8 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                               </div>
                             </CardContent>
                           </Card>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </TabsContent>
