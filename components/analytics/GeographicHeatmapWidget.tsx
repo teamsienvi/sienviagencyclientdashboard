@@ -87,7 +87,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
 
   // Modes & filters
   const [viewMode, setViewMode] = useState<"us_map" | "global_list">("us_map");
-  const [metricMode, setMetricMode] = useState<"shopify" | "amazon" | "combined" | "traffic">("combined");
+  const [metricMode, setMetricMode] = useState<"shopify" | "amazon" | "combined" | "traffic">("shopify");
   const [selectedRange, setSelectedRange] = useState<string>(dateRange || "30d");
   const [selectedProduct, setSelectedProduct] = useState<string>("all");
   const [hoveredState, setHoveredState] = useState<string | null>(null);
@@ -449,14 +449,14 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                 </div>
                 <div>
                   <CardTitle className="text-xl font-bold flex items-center gap-2.5">
-                    Geographic Demand &amp; Multi-Channel Heatmap
+                    Geographic Demand &amp; Product Heatmap
                     <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300/40 text-xs font-semibold px-2 py-0.5">
                       <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600 inline" />
                       Live Synced
                     </Badge>
                   </CardTitle>
                   <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                    Interactive distribution of verified buyer orders (Shopify + Amazon) and GA4 visitor traffic across the United States.
+                    Interactive distribution of verified Shopify orders and GA4 visitor traffic across the United States.
                   </CardDescription>
                 </div>
               </div>
@@ -490,20 +490,9 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                 </button>
               </div>
 
-              {/* Data Source Switcher */}
+              {/* Data Source Switcher (Paid Orders vs Web Traffic) */}
               {viewMode === "us_map" && (
                 <div className="flex items-center bg-muted/60 p-1 rounded-lg border border-border/50 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setMetricMode("combined")}
-                    className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                      metricMode === "combined"
-                        ? "bg-indigo-600 text-white shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    ⚡ All Orders
-                  </button>
                   <button
                     type="button"
                     onClick={() => setMetricMode("shopify")}
@@ -513,18 +502,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    🛍️ Shopify
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMetricMode("amazon")}
-                    className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                      metricMode === "amazon"
-                        ? "bg-[#FF9900] text-white shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    📦 Amazon
+                    🛍️ Paid Orders
                   </button>
                   <button
                     type="button"
@@ -535,7 +513,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    🌐 Traffic
+                    🌐 Web Traffic
                   </button>
                 </div>
               )}
@@ -571,17 +549,6 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                   </SelectContent>
                 </Select>
               )}
-
-              {/* Amazon Sync / Connect Action Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs gap-1.5 border-[#FF9900]/40 text-[#FF9900] hover:bg-[#FF9900]/10"
-                onClick={() => setIsAmazonModalOpen(true)}
-              >
-                <ShoppingBag className="h-3.5 w-3.5" />
-                Sync Amazon Orders
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -596,9 +563,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                   <div className="flex items-center gap-2 text-muted-foreground font-medium flex-wrap">
                     <span>Active Channel:</span>
                     <span className="font-bold text-foreground">
-                      {metricMode === "combined" && "⚡ Combined Shopify & Amazon Orders"}
-                      {metricMode === "shopify" && "🛍️ Verified Shopify Sales"}
-                      {metricMode === "amazon" && "📦 Verified Amazon FBA Orders"}
+                      {metricMode === "shopify" && "🛍️ Verified Shopify Sales & Orders"}
                       {metricMode === "traffic" && "🌐 Domestic Web Visitors (GA4)"}
                     </span>
                     <Badge variant="outline" className="text-[10px] h-5 py-0 px-2 ml-1">
@@ -611,34 +576,13 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                     <span>Lower Demand</span>
                     <div className="flex items-center gap-1">
                       <div className="w-3.5 h-3.5 rounded-sm bg-muted/40 border border-border/40" />
-                      <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: metricMode === "amazon" ? "#fb923c" : metricMode === "combined" ? "#a5b4fc" : metricMode === "shopify" ? "#34d399" : "#93c5fd" }} />
-                      <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: metricMode === "amazon" ? "#f97316" : metricMode === "combined" ? "#818cf8" : metricMode === "shopify" ? "#10b981" : "#60a5fa" }} />
-                      <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: metricMode === "amazon" ? "#ea580c" : metricMode === "combined" ? "#6366f1" : metricMode === "shopify" ? "#059669" : "#3b82f6" }} />
+                      <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: metricMode === "shopify" ? "#34d399" : "#93c5fd" }} />
+                      <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: metricMode === "shopify" ? "#10b981" : "#60a5fa" }} />
+                      <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: metricMode === "shopify" ? "#059669" : "#3b82f6" }} />
                     </div>
                     <span>Highest Orders</span>
                   </div>
                 </div>
-
-                {/* Empty State Banner for Amazon if none synced yet */}
-                {metricMode === "amazon" && allAmazonOrders.length === 0 && (
-                  <div className="mb-4 p-3 rounded-xl bg-[#FF9900]/10 border border-[#FF9900]/25 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 text-[#FF9900]">
-                      <ShoppingBag className="h-5 w-5 flex-shrink-0" />
-                      <div>
-                        <div className="font-semibold">No Amazon orders synced yet for {dateBounds.label}.</div>
-                        <div className="text-muted-foreground text-[11px]">Upload your Amazon Seller Central Order Report or seed sample orders to view buyer distribution.</div>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs px-3 bg-background border-[#FF9900]/40 text-[#FF9900] hover:bg-[#FF9900]/10 self-start sm:self-auto"
-                      onClick={() => setIsAmazonModalOpen(true)}
-                    >
-                      Import Amazon Orders
-                    </Button>
-                  </div>
-                )}
 
                 {/* Large Interactive SVG Map */}
                 <div
