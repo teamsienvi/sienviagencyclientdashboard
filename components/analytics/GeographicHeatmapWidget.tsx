@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -210,6 +210,47 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
   // Extract raw order arrays
   const allShopifyOrders: any[] = useMemo(() => shopifyCache?.data?.recentOrders || [], [shopifyCache]);
   const allAmazonOrders: any[] = useMemo(() => amazonCache?.data?.recentOrders || [], [amazonCache]);
+
+  // Dynamically extract unique products from active orders
+  const availableProducts = useMemo(() => {
+    const productCounts: Record<string, number> = {};
+
+    for (const order of allShopifyOrders) {
+      for (const item of (order.lineItems || [])) {
+        const title = (item.title || "").trim();
+        if (title) {
+          productCounts[title] = (productCounts[title] || 0) + (item.quantity || 1);
+        }
+      }
+    }
+
+    for (const order of allAmazonOrders) {
+      for (const item of (order.lineItems || [])) {
+        const title = (item.title || "").trim();
+        if (title) {
+          productCounts[title] = (productCounts[title] || 0) + (item.quantity || 1);
+        }
+      }
+    }
+
+    if (Object.keys(productCounts).length === 0 && shopifyCache?.data?.topProducts) {
+      for (const p of shopifyCache.data.topProducts) {
+        if (p.title) {
+          productCounts[p.title] = p.sales || 1;
+        }
+      }
+    }
+
+    return Object.entries(productCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([title]) => title);
+  }, [allShopifyOrders, allAmazonOrders, shopifyCache]);
+
+  useEffect(() => {
+    if (selectedProduct !== "all" && !availableProducts.includes(selectedProduct)) {
+      setSelectedProduct("all");
+    }
+  }, [availableProducts, selectedProduct]);
 
   // Unified Order Aggregator by State
   const stateAggregatedData = useMemo(() => {
@@ -535,17 +576,19 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
               </Select>
 
               {/* Product Filter */}
-              {viewMode === "us_map" && (
+              {viewMode === "us_map" && availableProducts.length > 0 && (
                 <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                  <SelectTrigger className="w-[170px] h-8 text-xs bg-background/80">
-                    <Filter className="h-3 w-3 mr-1.5 text-muted-foreground" />
+                  <SelectTrigger className="w-[180px] h-8 text-xs bg-background/80 truncate">
+                    <Filter className="h-3 w-3 mr-1.5 text-muted-foreground flex-shrink-0" />
                     <SelectValue placeholder="All Products" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Products</SelectItem>
-                    <SelectItem value="tubing">Oxygen Tubing (2 Pack)</SelectItem>
-                    <SelectItem value="wholesale">Wholesale Portal</SelectItem>
-                    <SelectItem value="kink">50 ft Kink-Resistant</SelectItem>
+                  <SelectContent className="max-w-[320px]">
+                    <SelectItem value="all">All Products ({availableProducts.length})</SelectItem>
+                    {availableProducts.map((prod) => (
+                      <SelectItem key={prod} value={prod} className="truncate text-xs">
+                        {prod}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
