@@ -23,7 +23,15 @@ import {
     ChevronDown,
     ChevronUp,
     Target,
+    HelpCircle,
+    Info,
 } from "lucide-react";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -886,43 +894,132 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                     <div className="space-y-5">
 
                         {/* KPI Bar — with W1/W2 comparison if previous report exists */}
-                        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                            {([
-                                { label: "Ad Sales", curr: report.kpis.adSales, prev: previousReport?.kpis.adSales, fmt: fmt$, good: "up" },
-                                { label: "Ad Spend", curr: report.kpis.adSpend, prev: previousReport?.kpis.adSpend, fmt: fmt$, good: "down" },
-                                { label: "ACoS", curr: report.kpis.acos, prev: previousReport?.kpis.acos, fmt: fmtPct, good: "down", cls: acosClass(report.kpis.acos) },
-                                { label: "ROAS", curr: report.kpis.roas, prev: previousReport?.kpis.roas, fmt: fmtX, good: "up", cls: roasClass(report.kpis.roas) },
-                                { label: "Orders", curr: report.kpis.orders, prev: previousReport?.kpis.orders, fmt: fmtN, good: "up" },
-                                { label: "CTR", curr: report.kpis.ctr, prev: previousReport?.kpis.ctr, fmt: fmtPct, good: "up" },
-                                { label: "CVR", curr: report.kpis.cvr, prev: previousReport?.kpis.cvr, fmt: fmtPct, good: "up" },
-                                { label: "Avg CPC", curr: report.kpis.avgCpc, prev: previousReport?.kpis.avgCpc, fmt: fmt$, good: "down" },
-                            ] as { label: string; curr: number | null; prev?: number | null; fmt: (v: number | null | undefined) => string; good: 'up' | 'down'; cls?: string }[]).map(({ label, curr, prev, fmt: fmtFn, good, cls }) => {
-                                const change = curr != null && prev != null && prev !== 0
-                                    ? ((curr - prev) / Math.abs(prev)) * 100
-                                    : null;
-                                const isPositive = change != null && ((good === 'up' && change > 0) || (good === 'down' && change < 0));
-                                const isNegative = change != null && ((good === 'up' && change < 0) || (good === 'down' && change > 0));
+                        <TooltipProvider delayDuration={150}>
+                            <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+                                {([
+                                    { 
+                                        label: "Ad Sales", 
+                                        curr: report.kpis.adSales, 
+                                        prev: previousReport?.kpis.adSales, 
+                                        fmt: fmt$, 
+                                        good: "up",
+                                        tooltip: "Total gross revenue generated directly from customer purchases following an Amazon Ad click." 
+                                    },
+                                    { 
+                                        label: "Ad Spend", 
+                                        curr: report.kpis.adSpend, 
+                                        prev: previousReport?.kpis.adSpend, 
+                                        fmt: fmt$, 
+                                        good: "down",
+                                        tooltip: "Total advertising budget spent across all Amazon Sponsored Products, Brands, and Display campaigns." 
+                                    },
+                                    { 
+                                        label: "ACoS", 
+                                        curr: report.kpis.acos, 
+                                        prev: previousReport?.kpis.acos, 
+                                        fmt: fmtPct, 
+                                        good: "down", 
+                                        cls: acosClass(report.kpis.acos),
+                                        tooltip: "Advertising Cost of Sales = (Ad Spend ÷ Ad Sales) × 100. Lower is more profitable. E.g., 20% means $0.20 spent per $1.00 ad revenue." 
+                                    },
+                                    { 
+                                        label: "ROAS", 
+                                        curr: report.kpis.roas, 
+                                        prev: previousReport?.kpis.roas, 
+                                        fmt: fmtX, 
+                                        good: "up", 
+                                        cls: roasClass(report.kpis.roas),
+                                        tooltip: "Return on Ad Spend = Ad Sales ÷ Ad Spend. Higher is better. E.g., 4.0x means $4.00 earned for every $1.00 spent on ads." 
+                                    },
+                                    { 
+                                        label: "Orders", 
+                                        curr: report.kpis.orders, 
+                                        prev: previousReport?.kpis.orders, 
+                                        fmt: fmtN, 
+                                        good: "up",
+                                        tooltip: "Total converted purchase orders directly attributed to an Amazon ad click." 
+                                    },
+                                    { 
+                                        label: "CTR", 
+                                        curr: report.kpis.ctr, 
+                                        prev: previousReport?.kpis.ctr, 
+                                        fmt: fmtPct, 
+                                        good: "up",
+                                        tooltip: "Click-Through Rate = (Clicks ÷ Impressions) × 100. Percentage of shoppers who viewed the ad and clicked into the listing." 
+                                    },
+                                    { 
+                                        label: "CVR", 
+                                        curr: report.kpis.cvr, 
+                                        prev: previousReport?.kpis.cvr, 
+                                        fmt: fmtPct, 
+                                        good: "up",
+                                        tooltip: "Conversion Rate = (Orders ÷ Clicks) × 100. Percentage of ad clicks that resulted in a completed order." 
+                                    },
+                                    { 
+                                        label: "Avg CPC", 
+                                        curr: report.kpis.avgCpc, 
+                                        prev: previousReport?.kpis.avgCpc, 
+                                        fmt: fmt$, 
+                                        good: "down",
+                                        tooltip: "Average Cost Per Click = Total Spend ÷ Total Clicks. The average fee paid to Amazon per shopper click." 
+                                    },
+                                ] as { label: string; curr: number | null; prev?: number | null; fmt: (v: number | null | undefined) => string; good: 'up' | 'down'; cls?: string; tooltip: string }[]).map(({ label, curr, prev, fmt: fmtFn, good, cls, tooltip }) => {
+                                    const change = curr != null && prev != null && prev !== 0
+                                        ? ((curr - prev) / Math.abs(prev)) * 100
+                                        : null;
+                                    const isPositive = change != null && ((good === 'up' && change > 0) || (good === 'down' && change < 0));
+                                    const isNegative = change != null && ((good === 'up' && change < 0) || (good === 'down' && change > 0));
 
-                                return (
-                                    <div key={label} className="bg-muted/40 rounded-lg p-3 text-center border border-border/40">
-                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">{label}</p>
-                                        <p className={`text-base font-bold ${cls ?? ""}`}>{fmtFn(curr)}</p>
-                                        {prev != null && (
-                                            <div className="mt-1.5 pt-1.5 border-t border-border/30 space-y-0.5">
-                                                <p className="text-[9px] text-muted-foreground">prev: {fmtFn(prev)}</p>
-                                                {change != null && change !== 0 && (
-                                                    <div className={`flex items-center justify-center gap-0.5 text-[10px] font-semibold ${
-                                                        isPositive ? 'text-emerald-400' : isNegative ? 'text-red-400' : 'text-muted-foreground'
-                                                    }`}>
-                                                        {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                                                        <span>{change > 0 ? '+' : ''}{change.toFixed(1)}%</span>
+                                    return (
+                                        <Tooltip key={label}>
+                                            <TooltipTrigger asChild>
+                                                <div className="bg-muted/40 rounded-lg p-3 text-center border border-border/40 hover:border-orange-500/40 hover:bg-muted/60 transition-colors cursor-help group">
+                                                    <div className="flex items-center justify-center gap-1 mb-1">
+                                                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide group-hover:text-foreground transition-colors">{label}</p>
+                                                        <HelpCircle className="h-2.5 w-2.5 opacity-30 group-hover:opacity-100 text-orange-400 transition-opacity" />
                                                     </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                                                    <p className={`text-base font-bold ${cls ?? ""}`}>{fmtFn(curr)}</p>
+                                                    {prev != null && (
+                                                        <div className="mt-1.5 pt-1.5 border-t border-border/30 space-y-0.5">
+                                                            <p className="text-[9px] text-muted-foreground">prev: {fmtFn(prev)}</p>
+                                                            {change != null && change !== 0 && (
+                                                                <div className={`flex items-center justify-center gap-0.5 text-[10px] font-semibold ${
+                                                                    isPositive ? 'text-emerald-400' : isNegative ? 'text-red-400' : 'text-muted-foreground'
+                                                                }`}>
+                                                                    {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                                                                    <span>{change > 0 ? '+' : ''}{change.toFixed(1)}%</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="max-w-[260px] text-xs p-2.5">
+                                                <p className="font-semibold text-foreground mb-1">{label}</p>
+                                                <p className="text-muted-foreground leading-relaxed">{tooltip}</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    );
+                                })}
+                            </div>
+                        </TooltipProvider>
+
+                        {/* Metric Explanatory Note */}
+                        <div className="bg-muted/20 border border-border/40 rounded-lg px-3 py-2 text-[11px] text-muted-foreground flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5">
+                                <Info className="h-3.5 w-3.5 text-orange-400 shrink-0" />
+                                <span className="font-medium text-foreground">Terms Guide:</span>
+                                <span>Hover any metric card for formula.</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-muted-foreground/80">
+                                <span><strong>ACoS:</strong> Lower = More Profit</span>
+                                <span>•</span>
+                                <span><strong>ROAS:</strong> Higher = Better Return</span>
+                                <span>•</span>
+                                <span><strong>CVR:</strong> % Clicks Buying</span>
+                                <span>•</span>
+                                <span><strong>CPC:</strong> Cost Per Click</span>
+                            </div>
                         </div>
 
                         {/* Week-over-Week Progress Table */}

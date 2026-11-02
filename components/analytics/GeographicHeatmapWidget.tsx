@@ -20,12 +20,19 @@ import {
   Loader2,
   Calendar,
   Clock,
-  Layers
+  Layers,
+  HelpCircle
 } from "lucide-react";
 import { subDays, format } from "date-fns";
 import { US_STATE_PATHS } from "./usStatePaths";
 import { AmazonSyncModal } from "./AmazonSyncModal";
 import { filterExcludedCountries } from "@/lib/analytics/geo-exclusions";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface GeographicHeatmapWidgetProps {
   clientId: string;
@@ -338,11 +345,11 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
     // Determine top product per state
     Object.keys(stateMap).forEach((code) => {
       const topP = Object.entries(stateMap[code].products).sort((a, b) => b[1] - a[1])[0];
-      stateMap[code].topProduct = topP ? topP[0] : "OxiSure Tech Oxygen Tubing (2 Pack)";
+      stateMap[code].topProduct = topP ? topP[0] : (availableProducts[0] || "Store Products");
     });
 
     return stateMap;
-  }, [metricMode, allShopifyOrders, allAmazonOrders, dateBounds, selectedProduct]);
+  }, [metricMode, allShopifyOrders, allAmazonOrders, dateBounds, selectedProduct, availableProducts]);
 
   // Aggregate totals
   const totalRevenue = useMemo(() => {
@@ -411,6 +418,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
 
   // Top Ranked States
   const topRankedStates = useMemo(() => {
+    const defaultProduct = availableProducts[0] || "Store Products";
     if (metricMode !== "traffic") {
       const ranked = Object.entries(stateAggregatedData)
         .map(([id, data]) => ({
@@ -420,7 +428,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
           revenue: data.revenue,
           shopifyOrders: data.shopifyOrders,
           amazonOrders: data.amazonOrders,
-          topProduct: data.topProduct,
+          topProduct: data.topProduct || defaultProduct,
           sessions: scaledTrafficMap[id] || Math.round(45 * dateBounds.trafficMultiplier)
         }))
         .sort((a, b) => b.revenue - a.revenue);
@@ -435,7 +443,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
             revenue: 0,
             shopifyOrders: 0,
             amazonOrders: 0,
-            topProduct: "OxiSure Tech Oxygen Tubing",
+            topProduct: defaultProduct,
             sessions
           }))
           .sort((a, b) => b.sessions - a.sessions)
@@ -452,13 +460,13 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
           revenue: stateAggregatedData[id]?.revenue || 0,
           shopifyOrders: stateAggregatedData[id]?.shopifyOrders || 0,
           amazonOrders: stateAggregatedData[id]?.amazonOrders || 0,
-          topProduct: stateAggregatedData[id]?.topProduct || "OxiSure Tech Oxygen Tubing",
+          topProduct: stateAggregatedData[id]?.topProduct || defaultProduct,
           sessions
         }))
         .sort((a, b) => b.sessions - a.sessions)
         .slice(0, 6);
     }
-  }, [stateAggregatedData, metricMode, scaledTrafficMap, dateBounds.trafficMultiplier]);
+  }, [stateAggregatedData, metricMode, scaledTrafficMap, dateBounds.trafficMultiplier, availableProducts]);
 
   // Countries List Items
   const globalItems = useMemo(() => {
@@ -472,13 +480,20 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
   }, [countriesData, countryData]);
 
   const totalGlobalVisits = globalItems.reduce((acc, i) => acc + i.value, 0);
+  const usTrafficItem = globalItems.find((i) => i.country === "US" || i.country === "United States");
+  const actualUsTraffic = usTrafficItem?.value
+    ? usTrafficItem.value
+    : Math.round(Object.values(scaledTrafficMap).reduce((sum, v) => sum + v, 0));
+  const domesticSharePct = totalGlobalVisits > 0
+    ? Math.min(Math.round((actualUsTraffic / totalGlobalVisits) * 1000) / 10, 100)
+    : 85.0;
 
   const selectedStateDetails = stateAggregatedData[selectedState] || null;
   const activeStateName = STATE_NAMES[selectedState] || selectedState;
   const activeStateTraffic = scaledTrafficMap[selectedState] || Math.round(50 * dateBounds.trafficMultiplier);
 
   return (
-    <>
+    <TooltipProvider delayDuration={150}>
       <Card className={`col-span-full w-full overflow-hidden border border-border/80 shadow-lg ${className || ""}`}>
         {/* Expansive Header */}
         <CardHeader className="p-6 pb-4 border-b border-border/40 bg-muted/20">
@@ -491,10 +506,27 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                 <div>
                   <CardTitle className="text-xl font-bold flex items-center gap-2.5">
                     Geographic Demand &amp; Product Heatmap
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300/40 text-xs font-semibold px-2 py-0.5">
-                      <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600 inline" />
-                      Live Synced
-                    </Badge>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground transition-colors">
+                          <HelpCircle className="h-4 w-4" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[280px] text-xs p-2.5">
+                        Correlates verified customer orders with domestic website visitor sessions, identifying where your paying customers live and where prospective traffic is concentrated.
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300/40 text-xs font-semibold px-2 py-0.5 cursor-help">
+                          <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600 inline" />
+                          Live Synced
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[240px] text-xs p-2">
+                        Real-time data synchronization: Aggregates verified Shopify store sales and Google Analytics (GA4) traffic.
+                      </TooltipContent>
+                    </Tooltip>
                   </CardTitle>
                   <CardDescription className="text-xs text-muted-foreground mt-0.5">
                     Interactive distribution of verified Shopify orders and GA4 visitor traffic across the United States.
@@ -507,55 +539,85 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
             <div className="flex items-center gap-2.5 flex-wrap">
               {/* View Mode Toggle: US Map vs Global Countries */}
               <div className="flex items-center bg-muted/60 p-1 rounded-lg border border-border/50 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("us_map")}
-                  className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                    viewMode === "us_map"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  🗺️ US Map
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("global_list")}
-                  className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                    viewMode === "global_list"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  🌍 Global Countries
-                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("us_map")}
+                      className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                        viewMode === "us_map"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      🗺️ US Map
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs p-2">
+                    State-by-state demand distribution across the United States.
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode("global_list")}
+                      className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                        viewMode === "global_list"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      🌍 Global Countries
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs p-2">
+                    International website visitor breakdown across global regions.
+                  </TooltipContent>
+                </Tooltip>
               </div>
 
               {/* Data Source Switcher (Paid Orders vs Web Traffic) */}
               {viewMode === "us_map" && (
                 <div className="flex items-center bg-muted/60 p-1 rounded-lg border border-border/50 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setMetricMode("shopify")}
-                    className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                      metricMode === "shopify"
-                        ? "bg-emerald-600 text-white shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    🛍️ Paid Orders
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMetricMode("traffic")}
-                    className={`px-3 py-1.5 rounded-md font-medium transition-all ${
-                      metricMode === "traffic"
-                        ? "bg-blue-600 text-white shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    🌐 Web Traffic
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setMetricMode("shopify")}
+                        className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                          metricMode === "shopify"
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        🛍️ Paid Orders
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs p-2 max-w-[220px]">
+                      Highlights states where paying customers placed completed checkout orders, showing total revenue generated.
+                    </TooltipContent>
+                  </Tooltip>
+
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setMetricMode("traffic")}
+                        className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                          metricMode === "traffic"
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        🌐 Web Traffic
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="text-xs p-2 max-w-[220px]">
+                      Highlights states based on website browsing sessions and visitor interest from Google Analytics (GA4).
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               )}
 
@@ -768,15 +830,39 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                 {/* Expansive Summary KPIs Row */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-4 border-t border-border/50">
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
-                    <div className="text-xs text-muted-foreground font-medium">Verified Sales</div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <span>Verified Sales</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[240px] text-xs p-2">
+                          Total gross revenue collected from verified, completed customer transactions in this time window.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <div className="text-lg font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
                       ${totalRevenue.toFixed(2)}
                     </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">{dateBounds.label}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">Confirmed checkout revenue</div>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
-                    <div className="text-xs text-muted-foreground font-medium">Customer Orders</div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <span>Customer Orders</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[240px] text-xs p-2">
+                          Total number of individual checkout orders placed and fulfilled across verified store channels.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <div className="text-lg font-bold text-foreground mt-0.5">
                       {totalOrders} <span className="text-xs text-muted-foreground font-normal">fulfilled</span>
                     </div>
@@ -786,19 +872,45 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
-                    <div className="text-xs text-muted-foreground font-medium">Average Order Value</div>
-                    <div className="text-lg font-bold text-foreground mt-0.5">
-                      ${totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : "69.99"}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <span>Average Order Value</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[240px] text-xs p-2">
+                          Average dollar amount spent per transaction (Total Sales ÷ Total Orders). Measures average cart size.
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">Oxygen Tubing</div>
+                    <div className="text-lg font-bold text-foreground mt-0.5">
+                      ${totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : "0.00"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                      {totalOrders > 0 ? `${totalOrders} order(s) in period` : "Avg. spending per cart"}
+                    </div>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-muted/40 border border-border/50">
-                    <div className="text-xs text-muted-foreground font-medium">US Traffic (GA4)</div>
-                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                      {Math.round(6678 * dateBounds.trafficMultiplier).toLocaleString()}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <span>US Traffic (GA4)</span>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[240px] text-xs p-2">
+                          Total verified website visitor browsing sessions originating from the United States, tracked by Google Analytics (GA4).
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">83.5% Domestic Demand</div>
+                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-0.5">
+                      {actualUsTraffic.toLocaleString()}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{domesticSharePct}% Domestic Demand</div>
                   </div>
                 </div>
               </div>
@@ -813,8 +925,20 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                         <MapPin className="h-4 w-4 text-primary" />
                         {activeStateName} ({selectedState})
                       </h4>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
                         {selectedStateDetails?.ordersCount ? `Verified Buyer Destination` : "High Prospective Demand"}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                              <HelpCircle className="h-3 w-3" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[220px] text-xs p-2">
+                            {selectedStateDetails?.ordersCount
+                              ? "Customers from this state have completed verified purchases."
+                              : "Active visitor browsing sessions from this state without a checkout yet."}
+                          </TooltipContent>
+                        </Tooltip>
                       </span>
                     </div>
                     {selectedStateDetails?.ordersCount ? (
@@ -841,7 +965,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                             <span>{order.shippingAddress?.city}, {selectedState}</span>
                           </div>
                           <div className="text-xs font-medium truncate text-foreground pt-0.5">
-                            📦 {order.lineItems?.[0]?.title || "OxiSure Oxygen Tubing (2 Pack)"}
+                            📦 {order.lineItems?.[0]?.title || availableProducts[0] || "Purchased Product"}
                           </div>
                           <div className="flex items-center justify-between pt-1 text-[11px] text-muted-foreground">
                             <Badge
@@ -861,10 +985,25 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                     </div>
                   ) : (
                     <div className="p-4 rounded-xl bg-background/60 border border-dashed border-border/70 text-center text-xs space-y-2">
-                      <p className="font-medium text-foreground">Prospective Web Traffic</p>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <p className="font-semibold text-foreground">Prospective Web Traffic</p>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                              <HelpCircle className="h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[240px] text-xs p-2">
+                            Visitors from {activeStateName} who navigated your store in {dateBounds.label.toLowerCase()} but haven&apos;t checked out yet.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                       <p className="text-muted-foreground text-[11px] leading-relaxed">
                         {activeStateTraffic.toLocaleString()} prospective visits from {activeStateName} in {dateBounds.label.toLowerCase()}.
                       </p>
+                      <div className="text-[10px] text-muted-foreground/80 bg-muted/40 p-2 rounded-lg text-left">
+                        💡 <strong>Growth Opportunity:</strong> High browsing volume in {activeStateName} indicates strong regional brand interest. Localized promotions or marketplace shipping options can convert this traffic into sales.
+                      </div>
                       <Button
                         variant="outline"
                         size="sm"
@@ -880,10 +1019,22 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
                 {/* State Leaderboard Ranking */}
                 <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-sm space-y-3.5">
                   <div className="flex items-center justify-between pb-2 border-b border-border/40">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <TrendingUp className="h-4 w-4 text-primary" />
-                      Top Performing States
-                    </h4>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Top Performing States
+                      </h4>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="cursor-help text-muted-foreground/60 hover:text-muted-foreground">
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[240px] text-xs p-2">
+                          Ranks states by highest sales revenue (or total website sessions in Web Traffic mode) to highlight your top regional markets.
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <span className="text-xs text-muted-foreground">
                       {metricMode !== "traffic" && totalOrders > 0 ? "By Revenue" : "By Visits"}
                     </span>
@@ -1000,7 +1151,7 @@ export const GeographicHeatmapWidget: React.FC<GeographicHeatmapWidgetProps> = (
           setMetricMode("combined");
         }}
       />
-    </>
+    </TooltipProvider>
   );
 };
 

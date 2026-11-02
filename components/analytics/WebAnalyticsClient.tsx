@@ -961,14 +961,13 @@ const WebAnalyticsClient = ({ clientId }: { clientId: string }) => {
                         </Card>
                       </div>
 
-                      {/* Geographic Demand & Product Heatmap (Full Width) */}
-                      <div className="w-full my-6">
-                        <TopCountriesWidget 
-                          clientId={clientId!} 
-                          dateRange={dateRange} 
-                          countriesData={normalizedAnalytics?.countries || normalizedAnalytics?.breakdowns?.countries || undefined}
-                        />
-                      </div>
+                      {/* Geographic Demand & Product Heatmap (Full Width) — only shown for Shopify clients */}
+                      <TopCountriesWidget 
+                        clientId={clientId!} 
+                        dateRange={dateRange} 
+                        countriesData={normalizedAnalytics?.countries || normalizedAnalytics?.breakdowns?.countries || undefined}
+                        className="my-6"
+                      />
 
                       {/* Browser Breakdown */}
                       {normalizedAnalytics?.browsers && normalizedAnalytics.browsers.length > 0 && (
