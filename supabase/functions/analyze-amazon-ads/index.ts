@@ -14,7 +14,7 @@ const AMAZON_PROMPT = `You are an expert Amazon Ads analyst. Analyze the followi
 
 IMPORTANT: You MUST respond with ONLY a valid JSON object — no markdown, no code fences, no text outside the JSON. Your response must start with { and end with }.
 
-This is a BIWEEKLY (14-day) report. If a date range is provided, analyze trends across the full period.
+The REPORTING PERIOD section below states how many days this data covers. Describe the period using that exact length (e.g. "over the 7-day period"). If no period is given, say "in this reporting period" — never assume a specific number of days.
 
 - Ad Sales (Use the EXACT pre-calculated total provided)
 - Ad Spend (Use the EXACT pre-calculated total provided)
@@ -32,10 +32,10 @@ Identify:
 - Top 6 search terms with highest spend but ZERO sales (these are wasting budget)
 
 Then write:
-- executiveSummary: 3-4 bullet points referencing the actual numbers from the data. Include a mention of the 14-day reporting window.
-- clientNeedsToKnow: 1 honest paragraph about overall account health over the biweekly period
+- executiveSummary: 3-4 bullet points referencing the actual numbers from the data. Mention the reporting period length only if it is provided.
+- clientNeedsToKnow: 1 honest paragraph about overall account health over the reporting period
 - channelSnapshot: 1 paragraph about campaign type breakdown (Sponsored Products vs Brands vs Display, or whatever types are in the data)
-- actionPlan: 4-5 specific bullet points for the next 14 days, referencing actual campaign names from the data
+- actionPlan: 4-5 specific bullet points for the next reporting period, referencing actual campaign names from the data
 - finalRecommendation: 1 closing paragraph with a clear verdict
 
 Return EXACTLY this JSON structure (use null for any value you cannot determine):
@@ -100,6 +100,14 @@ serve(async (req) => {
         const exactCampaigns: any[] | null = Array.isArray(body.exactCampaigns) ? body.exactCampaigns : null;
         const exactWaste: any[] | null = Array.isArray(body.exactWaste) ? body.exactWaste : null;
         const week1Totals = body.week1Totals || null;
+        const week1DateRange = body.week1DateRange || null;
+        const periodWarning: string | null = body.periodWarning || null;
+        const daysIn = (r: any) => {
+            if (!r?.from || !r?.to) return null;
+            const ms = new Date(r.to + "T00:00:00Z").getTime() - new Date(r.from + "T00:00:00Z").getTime();
+            return Number.isFinite(ms) ? Math.round(ms / 86400000) + 1 : null;
+        };
+        const periodDays = daysIn(dateRange);
 
         if (!clientId) throw new Error("clientId is required");
         if (!fileContent || fileContent.trim().length < 20) throw new Error("File appears empty or too small.");
@@ -122,8 +130,8 @@ serve(async (req) => {
             : fileContent;
 
         const dateRangeContext = dateRange
-            ? `\nREPORTING PERIOD: ${dateRange.from} to ${dateRange.to} (14-day biweekly window)\n`
-            : '';
+            ? `\nREPORTING PERIOD: ${dateRange.from} to ${dateRange.to}${periodDays ? ` (${periodDays} days)` : ""}\n`
+            : `\nREPORTING PERIOD: not specified in the file — do not state a number of days.\n`;
 
         const fmtMoney = (v: number) => Number(v || 0).toFixed(2);
         const exactTablesContext = (exactCampaigns || exactWaste) ? `
@@ -133,8 +141,8 @@ ${(exactCampaigns || []).slice(0, 40).map((c: any) => `- ${c.name}: spend $${fmt
 EXACT TOP ZERO-SALE SEARCH TERMS (aggregated across ad groups):
 ${(exactWaste || []).map((t: any) => `- "${t.term}": ${t.clicks} clicks, $${fmtMoney(t.spend)} spend, $0 sales`).join("\n") || "- (none)"}
 ${week1Totals ? `
-PREVIOUS PERIOD (Week 1) TOTALS: spend $${fmtMoney(week1Totals.spend)}, sales $${fmtMoney(week1Totals.sales)}, orders ${week1Totals.orders}, clicks ${week1Totals.clicks}, impressions ${week1Totals.impressions}
-` : ""}` : "";
+PREVIOUS PERIOD (Week 1) TOTALS${week1DateRange ? ` (${week1DateRange.from} to ${week1DateRange.to})` : ""}: spend $${fmtMoney(week1Totals.spend)}, sales $${fmtMoney(week1Totals.sales)}, orders ${week1Totals.orders}, clicks ${week1Totals.clicks}, impressions ${week1Totals.impressions}
+${periodWarning ? `WARNING: ${periodWarning} Do NOT describe week-over-week growth or decline as real performance change; note that the periods may not be comparable.\n` : ""}` : ""}` : "";
 
         const preCalculatedContext = `
 ${"─".repeat(60)}
@@ -198,6 +206,9 @@ ${"─".repeat(60)}
                 parsedReport.wastefulSearchTerms = exactWaste.map((w: any) => ({ ...w, action: aiActions.get(w.term) || w.action || "Negate or cut bid" }));
             }
             if (week1Totals) parsedReport.week1Totals = week1Totals;
+            parsedReport.dateRange = dateRange;
+            parsedReport.week1DateRange = week1DateRange;
+            parsedReport.periodWarning = periodWarning;
             parsedReport.sourceFileName = fileName;
 
             const { error: updateError } = await supabase

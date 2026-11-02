@@ -77,7 +77,51 @@ interface AmazonReportData {
     wastefulSearchTerms: WastefulTerm[];
     actionPlan: string[];
     finalRecommendation: string;
+    week1Totals?: RawTotals | null;
+    dateRange?: DateRange | null;
+    week1DateRange?: DateRange | null;
+    periodWarning?: string | null;
 }
+
+type DateRange = { from: string; to: string };
+type RawTotals = { spend: number; sales: number; orders: number; clicks: number; impressions: number };
+
+const rangeDays = (r?: DateRange | null) => {
+    if (!r) return null;
+    const ms = new Date(r.to + "T00:00:00").getTime() - new Date(r.from + "T00:00:00").getTime();
+    return Number.isFinite(ms) ? Math.round(ms / 86400000) + 1 : null;
+};
+
+const fmtRange = (r?: DateRange | null) => {
+    if (!r) return "";
+    try {
+        return `${format(new Date(r.from + "T00:00:00"), "MMM d")} – ${format(new Date(r.to + "T00:00:00"), "MMM d, yyyy")}`;
+    } catch { return `${r.from} – ${r.to}`; }
+};
+
+// Flags uploads where Week 1 and Week 2 clearly cover different lengths of time
+// (e.g. a 30-day export compared against a 7-day export).
+const detectPeriodMismatch = (
+    w2: RawTotals | null | undefined,
+    w1: RawTotals | null | undefined,
+    w2Range?: DateRange | null,
+    w1Range?: DateRange | null,
+): string | null => {
+    const d2 = rangeDays(w2Range), d1 = rangeDays(w1Range);
+    if (d1 && d2 && Math.abs(d1 - d2) > 1) {
+        return `Week 1 covers ${d1} days but Week 2 covers ${d2} days, so the comparison isn't like-for-like. Re-export both files with the same date range length.`;
+    }
+    if (!w1 || !w2) return null;
+    const ratio = (a: number, b: number) => (a > 0 && b > 0 ? a / b : null);
+    const spendRatio = ratio(w2.spend, w1.spend);
+    const impRatio = ratio(w2.impressions, w1.impressions);
+    const r = spendRatio ?? impRatio;
+    if (r != null && (r >= 1.8 || r <= 0.55)) {
+        const pct = Math.round(r * 100);
+        return `Week 2 ad spend is ${pct}% of Week 1. That usually means one file was exported with a different date range (e.g. 30 days vs 7 days). Check both exports cover the same number of days before trusting the week-over-week numbers.`;
+    }
+    return null;
+};
 
 interface AmazonAdsReportCardProps {
     clientId: string;
@@ -312,7 +356,7 @@ function buildPrintHTML(
 
   ${(data.actionPlan?.length || 0) > 0 ? `
   <div class="section">
-    <div class="section-title">Action Plan for the Next 14 Days</div>
+    <div class="section-title">Action Plan for the Next Period</div>
     <ul>${actionBullets}</ul>
   </div>` : ""}
 
@@ -448,6 +492,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         exactCampaigns: TopCampaign[];
         exactWaste: WastefulTerm[];
         fileName: string;
+        dateRange: DateRange | null;
     }> => {
         const arrayBuffer = await f.arrayBuffer();
         const data = new Uint8Array(arrayBuffer);
@@ -492,6 +537,23 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         const campaignRows: TopCampaign[] = [];
         const seenCampaignIds = new Set<string>();
         const termAgg = new Map<string, { clicks: number; spend: number; sales: number }>();
+        // Track the earliest/latest dates found in any Date / Start Date / End Date column.
+        // Bulk files usually have no date columns (range lives in the filename), but
+        // campaign/search-term reports do — this catches renamed files.
+        let minDate: string | null = null, maxDate: string | null = null;
+        const toISODate = (v: any): string | null => {
+            if (v == null || v === "") return null;
+            if (typeof v === "number") {
+                if (v < 30000 || v > 80000) return null; // not an Excel date serial
+                const d = XLSX.SSF.parse_date_code(v);
+                return d ? `${d.y}-${String(d.m).padStart(2, "0")}-${String(d.d).padStart(2, "0")}` : null;
+            }
+            const s = String(v).trim();
+            if (/^\d{8}$/.test(s)) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+            const dt = new Date(s);
+            if (isNaN(dt.getTime()) || dt.getFullYear() < 2015) return null;
+            return format(dt, "yyyy-MM-dd");
+        };
 
         for (const sheetName of finalSheets) {
             const sheet = workbook.Sheets[sheetName];
@@ -529,6 +591,17 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             const campaignNameKey = findKey(['campaign name', 'campaign name (informational only)', 'name']);
             const campaignIdKey = keys.find(k => k.toLowerCase() === 'campaign id');
             const searchTermKey = findKey(['customer search term']);
+            const dateKeys = keys.filter(k => ['date', 'start date', 'end date'].includes(k.toLowerCase()));
+            if (dateKeys.length) {
+                for (const row of rows) {
+                    for (const dk of dateKeys) {
+                        const iso = toISODate(row[dk]);
+                        if (!iso) continue;
+                        if (!minDate || iso < minDate) minDate = iso;
+                        if (!maxDate || iso > maxDate) maxDate = iso;
+                    }
+                }
+            }
             const parseNum = (row: Record<string, any>, k?: string) => k && row[k] ? parseFloat(String(row[k]).replace(/[,$%]/g, '')) || 0 : 0;
 
             if (isCampaignSheet || !isBulkFile) {
@@ -604,7 +677,10 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             .slice(0, 6)
             .map(([term, a]) => ({ term, clicks: a.clicks, spend: round2(a.spend), sales: 0, action: "Negate or cut bid" }));
 
-        return { csvText, exactTotals, exactCampaigns, exactWaste, fileName: f.name };
+        const dateRange = parseDateRangeFromFilename(f.name)
+            ?? (minDate && maxDate ? { from: minDate, to: maxDate } : null);
+
+        return { csvText, exactTotals, exactCampaigns, exactWaste, fileName: f.name, dateRange };
     };
 
     // ─── Analysis ────────────────────────────────────────────────────────────
@@ -621,7 +697,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
             // Parse client-side — no binary upload, no xlsx import on edge function
             toast({ title: "Parsing file…", description: "Reading your report data" });
-            const { csvText, exactTotals, exactCampaigns, exactWaste, fileName } = await parseFileClientSide(file);
+            const { csvText, exactTotals, exactCampaigns, exactWaste, fileName, dateRange } = await parseFileClientSide(file);
 
             // Guard: if no campaign metrics could be read, don't generate a misleading all-zero AI report
             if (exactTotals.spend === 0 && exactTotals.sales === 0 && exactTotals.clicks === 0 && exactTotals.impressions === 0) {
@@ -630,10 +706,23 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
 
             // Parse Week 1 file if provided
             let w1Totals: typeof exactTotals | null = null;
+            let w1Range: DateRange | null = null;
             if (week1File) {
                 const w1 = await parseFileClientSide(week1File);
                 w1Totals = w1.exactTotals;
+                w1Range = w1.dateRange;
                 setWeek1Totals(w1Totals);
+            }
+
+            // Catch mismatched exports (e.g. 30-day vs 7-day) before generating a misleading comparison
+            const periodWarning = detectPeriodMismatch(exactTotals, w1Totals, dateRange, w1Range);
+            if (periodWarning) {
+                const proceed = window.confirm(`⚠️ Possible date range mismatch\n\n${periodWarning}\n\nWeek 1: $${w1Totals?.spend.toFixed(2)} spend, ${w1Totals?.orders} orders${w1Range ? ` (${fmtRange(w1Range)})` : ""}\nWeek 2: $${exactTotals.spend.toFixed(2)} spend, ${exactTotals.orders} orders${dateRange ? ` (${fmtRange(dateRange)})` : ""}\n\nPress OK to generate anyway, or Cancel to pick different files.`);
+                if (!proceed) {
+                    setIsAnalyzing(false);
+                    hasTriggeredAnalysis.current = false;
+                    return;
+                }
             }
 
             toast({ title: "Analyzing…", description: "Sending to AI for analysis" });
@@ -656,8 +745,10 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                         week1Totals: w1Totals,
                         // Undated filenames fall back to today's date (not the month) so each upload
                         // gets its own row and sorts after earlier dated reports.
-                        reportPeriod: (() => { const dr = parseDateRangeFromFilename(fileName); return dr ? `${dr.from}_${dr.to}` : new Date().toISOString().substring(0, 10); })(),
-                        dateRange: parseDateRangeFromFilename(fileName),
+                        reportPeriod: dateRange ? `${dateRange.from}_${dateRange.to}` : new Date().toISOString().substring(0, 10),
+                        dateRange,
+                        week1DateRange: w1Range,
+                        periodWarning,
                     }),
                 }
             );
@@ -892,6 +983,43 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 {/* Report Output */}
                 {!isAnalyzing && report && (
                     <div className="space-y-5">
+
+                        {/* Reporting period + date range mismatch warning */}
+                        {(() => {
+                            const warning = report.periodWarning
+                                ?? detectPeriodMismatch(
+                                    report.kpis.adSpend != null ? { spend: report.kpis.adSpend, sales: report.kpis.adSales ?? 0, orders: report.kpis.orders ?? 0, clicks: 0, impressions: 0 } : null,
+                                    report.week1Totals ?? week1Totals,
+                                    report.dateRange,
+                                    report.week1DateRange,
+                                );
+                            const days = rangeDays(report.dateRange);
+                            return (
+                                <>
+                                    {report.dateRange && (
+                                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                            <Badge variant="outline" className="text-[11px] font-normal border-orange-500/30 text-orange-400">
+                                                Reporting period: {fmtRange(report.dateRange)}{days ? ` (${days} days)` : ""}
+                                            </Badge>
+                                            {report.week1DateRange && (
+                                                <Badge variant="outline" className="text-[11px] font-normal">
+                                                    Compared with: {fmtRange(report.week1DateRange)}{rangeDays(report.week1DateRange) ? ` (${rangeDays(report.week1DateRange)} days)` : ""}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    )}
+                                    {warning && (
+                                        <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-xs">
+                                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                                            <div className="space-y-0.5">
+                                                <p className="font-semibold text-foreground">Possible date range mismatch</p>
+                                                <p className="text-muted-foreground">{warning}</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
 
                         {/* KPI Bar — with W1/W2 comparison if previous report exists */}
                         <TooltipProvider delayDuration={150}>
