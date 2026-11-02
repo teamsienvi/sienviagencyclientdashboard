@@ -689,6 +689,16 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             toast({ title: "No file selected", description: "Upload an Amazon Ads CSV or Excel report", variant: "destructive" });
             return;
         }
+        // Saved reports only restore the file *name* (the file itself isn't stored),
+        // so re-analyzing needs a fresh upload.
+        if (file.size === 0 || (week1File && week1File.size === 0)) {
+            toast({
+                title: "Please re-upload the report file",
+                description: `The original file "${file.size === 0 ? file.name : week1File?.name}" isn't stored with saved reports. Click the upload box and select it again, then press Generate Report.`,
+                variant: "destructive",
+            });
+            return;
+        }
 
         setIsAnalyzing(true);
         hasTriggeredAnalysis.current = true;
