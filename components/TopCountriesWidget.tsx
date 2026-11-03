@@ -31,7 +31,12 @@ export const TopCountriesWidget = ({ clientId, dateRange, countriesData, classNa
     staleTime: 5 * 60 * 1000,
   });
 
-  const hasShopifyAnalytics = !!shopifyCache?.data && Object.keys(shopifyCache.data).length > 0;
+  // Require data synced within the last 30 days, so clients that have moved off Shopify
+  // (e.g. Snarky Humans, last synced Aug 2026) stop showing a stale map.
+  const SHOPIFY_FRESHNESS_MS = 30 * 24 * 60 * 60 * 1000;
+  const collectedAt = shopifyCache?.collected_at ? new Date(shopifyCache.collected_at).getTime() : 0;
+  const isFresh = collectedAt > 0 && Date.now() - collectedAt < SHOPIFY_FRESHNESS_MS;
+  const hasShopifyAnalytics = isFresh && !!shopifyCache?.data && Object.keys(shopifyCache.data).length > 0;
 
   if (isLoading || !hasShopifyAnalytics) return null;
 
