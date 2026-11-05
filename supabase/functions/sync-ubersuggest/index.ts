@@ -73,11 +73,32 @@ serve(async (req) => {
     const normalizedTarget = normalize(targetDomain);
 
     // 3. Fetch projects using stored cookie
-    const projectsRes = await fetch("https://app.neilpatel.com/api/projects", {
+    let projectsRes = await fetch("https://app.neilpatel.com/api/projects", {
       headers: authHeaders,
     });
 
     if (!projectsRes.ok) {
+      // Fallback: check if client already has cached SEO metrics so we don't fail sync_state_registry
+      const { data: cachedSeo } = await supabase
+        .from("report_seo_metrics")
+        .select("id, collected_at")
+        .eq("client_id", clientId)
+        .order("collected_at", { ascending: false })
+        .limit(1);
+
+      if (cachedSeo && cachedSeo.length > 0) {
+        console.warn(`[sync-ubersuggest] Ubersuggest /api/projects returned ${projectsRes.status} — serving cached snapshot (${cachedSeo[0].collected_at}).`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            cached: true,
+            message: "Ubersuggest session expired — using latest stored SEO snapshot",
+            data: { synced: false, cached: true },
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       throw new Error(`Ubersuggest /api/projects returned ${projectsRes.status} — cookie may be expired. Update UBERSUGGEST_COOKIE in GitHub Secrets.`);
     }
 
@@ -169,21 +190,40 @@ serve(async (req) => {
     // 4.3 Fetch Direct Rank Tracking keywords from Ubersuggest API directly
     let directTrackedKeywords = [];
     try {
-      const rtUrl = `https://app.neilpatel.com/api/rank_tracking/${projectId}`;
-      const rtRes = await fetch(rtUrl, { headers: authHeaders });
-      if (rtRes.ok) {
-        const rtData = await rtRes.json();
-        const list = Array.isArray(rtData) ? rtData : (rtData.result || rtData.keywords || rtData.data || []);
-        directTrackedKeywords = list.map((item: any) => ({
-          keyword: item.keyword,
-          volume: item.volume ?? null,
-          desktop_new: item.position ?? item.desktop_new ?? item.rank ?? null,
-          desktop_old: item.position_prev ?? item.desktop_old ?? item.previous_position ?? item.previousPosition ?? null,
-          focus_device: "desktop"
-        }));
-        console.log(`[sync-ubersuggest] Direct rank tracking fetched for ${targetDomain}: keywords=${directTrackedKeywords.length}`);
-      } else {
-        console.warn(`[sync-ubersuggest] Direct rank tracking returned status ${rtRes.status} for ${targetDomain}`);
+      const locId = activeProject?.locations?.[0]?.loc_id || 2840;
+      const lang = activeProject?.locations?.[0]?.lang || "en";
+      const rtUrls = [
+        `https://app.neilpatel.com/api/rank_tracking/${projectId}?locId=${locId}&lang=${lang}`,
+        `https://app.neilpatel.com/api/rank_tracking/${projectId}`
+      ];
+      for (const rtUrl of rtUrls) {
+        const rtRes = await fetch(rtUrl, { headers: authHeaders });
+        if (rtRes.ok) {
+          const rtData = await rtRes.json();
+          const list = Array.isArray(rtData) ? rtData : (rtData.result || rtData.keywords || rtData.data || []);
+          if (Array.isArray(list) && list.length > 0) {
+            directTrackedKeywords = list.map((item: any) => {
+              const dNew = item.position ?? item.desktop_new ?? item.rank ?? null;
+              const dOld = item.position_prev ?? item.desktop_old ?? item.previous_position ?? item.previousPosition ?? null;
+              const dChange = item.desktop_change ?? item.change ?? (dNew != null && dOld != null ? dOld - dNew : null);
+              return {
+                keyword: item.keyword,
+                volume: item.volume ?? null,
+                desktop_new: dNew,
+                desktop_old: dOld,
+                desktop_change: dChange,
+                focus_device: item.focus_device || "desktop",
+                rank_status: item.rank_status ?? (item.marked_unstable ? "unstable" : "ok"),
+                marked_unstable: Boolean(item.marked_unstable || item.rank_status === "unstable"),
+                url: item.url ?? null,
+              };
+            });
+            console.log(`[sync-ubersuggest] Direct rank tracking fetched for ${targetDomain}: keywords=${directTrackedKeywords.length}`);
+            break;
+          }
+        } else {
+          console.warn(`[sync-ubersuggest] Direct rank tracking (${rtUrl}) returned status ${rtRes.status} for ${targetDomain}`);
+        }
       }
     } catch (e) {
       console.error(`[sync-ubersuggest] Failed to fetch direct rank tracking for ${targetDomain}:`, e);

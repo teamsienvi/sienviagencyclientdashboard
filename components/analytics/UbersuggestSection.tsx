@@ -100,6 +100,38 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
   const score = latest.site_audit_score || 0;
   const issues = typeof latest.site_audit_issues === 'string' ? JSON.parse(latest.site_audit_issues) : latest.site_audit_issues;
   const keywords = typeof latest.tracked_keywords === 'string' ? JSON.parse(latest.tracked_keywords) : (latest.tracked_keywords || []);
+  const sortedKeywords = [...keywords].sort((a: any, b: any) => {
+    const aRanked = a.desktop_new !== null && a.desktop_new !== undefined;
+    const bRanked = b.desktop_new !== null && b.desktop_new !== undefined;
+    if (aRanked && !bRanked) return -1;
+    if (!aRanked && bRanked) return 1;
+    if (aRanked && bRanked) {
+      if (a.desktop_new !== b.desktop_new) return a.desktop_new - b.desktop_new;
+      return (b.volume || 0) - (a.volume || 0);
+    }
+    return String(a.keyword || '').localeCompare(String(b.keyword || ''));
+  });
+
+  const rankedKws = keywords.filter((kw: any) => kw.desktop_new !== null && kw.desktop_new !== undefined);
+  const prevRankedKws = keywords.filter((kw: any) => kw.desktop_old !== null && kw.desktop_old !== undefined);
+  const avgPosition = rankedKws.length > 0
+    ? Number((rankedKws.reduce((sum: number, kw: any) => sum + Number(kw.desktop_new), 0) / rankedKws.length).toFixed(2))
+    : null;
+  const prevAvgPosition = prevRankedKws.length > 0
+    ? Number((prevRankedKws.reduce((sum: number, kw: any) => sum + Number(kw.desktop_old), 0) / prevRankedKws.length).toFixed(2))
+    : null;
+  const avgPositionChange = avgPosition !== null && prevAvgPosition !== null
+    ? Number((prevAvgPosition - avgPosition).toFixed(2))
+    : null;
+
+  const top3Count = keywords.filter((kw: any) => kw.desktop_new != null && kw.desktop_new <= 3).length;
+  const prevTop3Count = prevRankedKws.length > 0 ? keywords.filter((kw: any) => kw.desktop_old != null && kw.desktop_old <= 3).length : null;
+  const top10Count = keywords.filter((kw: any) => kw.desktop_new != null && kw.desktop_new > 3 && kw.desktop_new <= 10).length;
+  const prevTop10Count = prevRankedKws.length > 0 ? keywords.filter((kw: any) => kw.desktop_old != null && kw.desktop_old > 3 && kw.desktop_old <= 10).length : null;
+  const top100Count = keywords.filter((kw: any) => kw.desktop_new != null && kw.desktop_new > 10 && kw.desktop_new <= 100).length;
+  const prevTop100Count = prevRankedKws.length > 0 ? keywords.filter((kw: any) => kw.desktop_old != null && kw.desktop_old > 10 && kw.desktop_old <= 100).length : null;
+  const notRankedCount = keywords.filter((kw: any) => kw.desktop_new == null).length;
+  const prevNotRankedCount = prevRankedKws.length > 0 ? keywords.length - prevRankedKws.length : null;
   const totalIssues = issues?.total || 0;
   const fromDate = issues?.from_date;
   const toDate = issues?.to_date;
@@ -566,8 +598,117 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
+          <div>
+            {/* Rank Tracking Summary Bar (Average Position & Distribution) */}
+            <div className="p-4 border-b bg-muted/10 grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="bg-background/80 border rounded-lg p-3 flex flex-col justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Average Position
+                </span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  {prevAvgPosition !== null && prevAvgPosition !== avgPosition && (
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {prevAvgPosition.toFixed(2)} →
+                    </span>
+                  )}
+                  <span className="text-xl font-bold font-mono text-foreground">
+                    {avgPosition !== null ? avgPosition.toFixed(2) : "—"}
+                  </span>
+                  {avgPositionChange !== null && avgPositionChange !== 0 && (
+                    <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      avgPositionChange > 0
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-red-500/10 text-red-600 dark:text-red-400"
+                    }`}>
+                      {avgPositionChange > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+                      {avgPositionChange > 0 ? `+${avgPositionChange.toFixed(2)}` : avgPositionChange.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-background/80 border rounded-lg p-3 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Top 3
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  {prevTop3Count !== null && prevTop3Count !== top3Count && (
+                    <span className="text-xs text-muted-foreground font-mono">{prevTop3Count} →</span>
+                  )}
+                  <span className="text-lg font-bold font-mono text-emerald-500">{top3Count}</span>
+                </div>
+              </div>
+
+              <div className="bg-background/80 border rounded-lg p-3 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Top 10
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  {prevTop10Count !== null && prevTop10Count !== top10Count && (
+                    <span className="text-xs text-muted-foreground font-mono">{prevTop10Count} →</span>
+                  )}
+                  <span className="text-lg font-bold font-mono text-amber-500">{top10Count}</span>
+                </div>
+              </div>
+
+              <div className="bg-background/80 border rounded-lg p-3 flex flex-col justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-orange-500" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Top 100
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  {prevTop100Count !== null && prevTop100Count !== top100Count && (
+                    <span className="text-xs text-muted-foreground font-mono">{prevTop100Count} →</span>
+                  )}
+                  <span className="text-lg font-bold font-mono text-foreground">{top100Count}</span>
+                </div>
+              </div>
+
+              <div className="bg-background/80 border rounded-lg p-3 flex flex-col justify-between col-span-2 sm:col-span-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Not Ranked
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5 mt-1">
+                  {prevNotRankedCount !== null && prevNotRankedCount !== notRankedCount && (
+                    <span className="text-xs text-muted-foreground font-mono">{prevNotRankedCount} →</span>
+                  )}
+                  <span className="text-lg font-bold font-mono text-muted-foreground">{notRankedCount}</span>
+                </div>
+              </div>
+            </div>
+
+            {keywords.length > 0 && keywords.every((kw: any) => kw.desktop_new === null && kw.desktop_old === null) && (
+              <div className="mx-5 mt-4 mb-2 p-3.5 bg-amber-500/[0.08] dark:bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
+                <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p className="font-semibold text-foreground">
+                    Target Keywords Queued in Ubersuggest — Awaiting Next Automated Crawl
+                  </p>
+                  <p>
+                    These {keywords.length} target keywords are configured in your Ubersuggest rank tracking campaign. They will display rank numbers once Ubersuggest’s external scraper completes its next scheduled crawl cycle.
+                  </p>
+                  <p className="pt-0.5">
+                    💡 <em>Looking for your live Google rankings?</em> Your uploaded Google Search Console data (with 1,000+ actual indexed queries, live positions, impressions, and clicks) is live in the{" "}
+                    <a href="#gsc" className="text-emerald-600 dark:text-emerald-400 font-semibold underline hover:opacity-80">
+                      Google Search Console section below
+                    </a>.
+                  </p>
+                </div>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
                   <thead className="bg-muted/10 text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-5 py-3 font-semibold rounded-tl-xl">
@@ -602,7 +743,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                       </th>
                       <th className="px-5 py-3 font-semibold text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <span>Current Rank</span>
+                          <span>Position</span>
                           <UITooltip>
                             <TooltipTrigger asChild>
                               <span className="cursor-help text-muted-foreground/50 hover:text-muted-foreground transition-colors">
@@ -625,7 +766,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                               </span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-[200px] text-xs p-2 normal-case font-normal">
-                              The change in ranking position compared to the previous week.
+                              The change in ranking position compared to the previous crawl.
                             </TooltipContent>
                           </UITooltip>
                         </div>
@@ -633,48 +774,68 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {keywords.slice(0, showAllKeywords ? keywords.length : 10).map((kw: any, idx: number) => {
-                      const improved = kw.desktop_change > 0 || (!kw.desktop_old && kw.desktop_new);
-                      const dropped = kw.desktop_change < 0 || (kw.desktop_old && !kw.desktop_new);
-                      const isPending = kw.desktop_new === null && kw.desktop_old === null && kw.volume === null;
+                    {sortedKeywords.slice(0, showAllKeywords ? sortedKeywords.length : 10).map((kw: any, idx: number) => {
+                      const hasRank = kw.desktop_new !== null && kw.desktop_new !== undefined;
+                      const hadRank = kw.desktop_old !== null && kw.desktop_old !== undefined;
+                      const rawChange = kw.desktop_change !== undefined && kw.desktop_change !== null
+                        ? Number(kw.desktop_change)
+                        : (hasRank && hadRank ? Number(kw.desktop_old) - Number(kw.desktop_new) : null);
+
+                      const isUnstable = !hasRank && (kw.marked_unstable === true || kw.rank_status === "unstable");
+                      const isPending = !hasRank && !isUnstable && (kw.rank_status === "pending" || (!hadRank && kw.volume === null && !kw.rank_status));
+                      const improved = hasRank && ((rawChange !== null && rawChange > 0) || (!hadRank && rawChange === null));
+                      const dropped = (hasRank && rawChange !== null && rawChange < 0) || (!hasRank && hadRank);
                       
                       return (
                         <tr key={idx} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-5 py-4 font-medium text-foreground max-w-[200px] truncate" title={kw.keyword}>
-                            {kw.keyword}
+                          <td className="px-5 py-4 font-medium text-foreground max-w-[240px]" title={kw.keyword}>
+                            <div className="truncate">{kw.keyword}</div>
+                            {kw.url && (
+                              <div className="text-[10px] text-muted-foreground/70 truncate font-normal mt-0.5">
+                                {kw.url.replace(/^https?:\/\/(www\.)?/, "")}
+                              </div>
+                            )}
                           </td>
-                          <td className="px-5 py-4 text-muted-foreground">
+                          <td className="px-5 py-4 text-muted-foreground font-mono text-xs">
                             {kw.volume?.toLocaleString() ?? '—'}
                           </td>
                           <td className="px-5 py-4 text-right">
-                            {isPending ? (
-                              <span className="text-muted-foreground italic">Pending</span>
-                            ) : (
-                              <span className="font-mono font-bold text-foreground">
-                                {kw.desktop_new ? `#${kw.desktop_new}` : 'Out'}
+                            {hasRank ? (
+                              <span className={`font-mono font-bold ${
+                                kw.desktop_new <= 3
+                                  ? 'text-emerald-500'
+                                  : kw.desktop_new <= 10
+                                  ? 'text-amber-500'
+                                  : 'text-foreground'
+                              }`}>
+                                #{kw.desktop_new}
                               </span>
+                            ) : isUnstable ? (
+                              <div className="inline-flex flex-col items-end leading-tight">
+                                <span className="text-xs font-medium text-muted-foreground">Pending</span>
+                                <span className="text-[10px] text-muted-foreground/60">Unstable</span>
+                              </div>
+                            ) : isPending ? (
+                              <span className="text-xs text-muted-foreground italic">Pending</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Not ranked</span>
                             )}
                           </td>
                           <td className="px-5 py-4 text-right">
-                            {isPending ? (
-                              <span className="inline-block bg-muted text-muted-foreground text-[10px] px-2 py-1 rounded-full whitespace-nowrap">
-                                Awaiting Crawl
-                              </span>
+                            {!hasRank && !hadRank ? (
+                              <span className="text-muted-foreground/60 font-mono text-xs">—</span>
                             ) : improved ? (
-                              <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs px-2 py-1 rounded-full font-medium">
+                              <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs px-2 py-1 rounded-full font-medium font-mono">
                                 <TrendingUp className="h-3 w-3" />
-                                {kw.desktop_change || 'New'}
+                                {rawChange !== null && rawChange > 0 ? `+${rawChange}` : 'New'}
                               </span>
                             ) : dropped ? (
-                              <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-600 dark:text-red-400 text-xs px-2 py-1 rounded-full font-medium">
+                              <span className="inline-flex items-center gap-1 bg-red-500/10 text-red-600 dark:text-red-400 text-xs px-2 py-1 rounded-full font-medium font-mono">
                                 <TrendingDown className="h-3 w-3" />
-                                {Math.abs(kw.desktop_change) || 'Lost'}
+                                {rawChange !== null && rawChange < 0 ? Math.abs(rawChange) : 'Lost'}
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-muted-foreground text-xs px-2 py-1 rounded-full font-medium">
-                                <Minus className="h-3 w-3" />
-                                0
-                              </span>
+                              <span className="text-muted-foreground/60 font-mono text-xs">—</span>
                             )}
                           </td>
                         </tr>
@@ -703,6 +864,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                   </div>
                 )}
               </div>
+            </div>
         )}
       </div>
 

@@ -301,6 +301,31 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
       toast.success("Google Search Console data imported successfully!");
       queryClient.invalidateQueries({ queryKey: ["client-gsc-metrics", clientId] });
       queryClient.invalidateQueries({ queryKey: ["client-connected-accounts", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["hairtamin-gsc-performance-story", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] });
+
+      // Automatically trigger background regeneration of SEO & Website AI summaries
+      // and re-invalidate the cached summary queries once each Edge Function finishes.
+      supabase.functions
+        .invoke("generate-analytics-summary", {
+          body: { clientId, type: "seo", dateRange: "7d" },
+        })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] });
+          queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] });
+        })
+        .catch((err) => console.warn("Background SEO summary refresh error:", err));
+
+      supabase.functions
+        .invoke("generate-analytics-summary", {
+          body: { clientId, type: "website", dateRange: "7d" },
+        })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] });
+          queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] });
+        })
+        .catch((err) => console.warn("Background website summary refresh error:", err));
       
       setParsedData(null);
       onSuccess?.();

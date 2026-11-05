@@ -162,7 +162,7 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     const top_pages = aggregateGSCList(relevantRows.flatMap((r: any) => r.top_pages || []), "page");
     const device_breakdown = aggregateSimpleList(relevantRows.flatMap((r: any) => r.device_breakdown || []), "device");
     const country_breakdown = aggregateSimpleList(relevantRows.flatMap((r: any) => r.country_breakdown || []), "country");
-    const search_appearance = aggregateSimpleList(relevantRows.flatMap((r: any) => r.search_appearance || []), "search_appearance");
+    const search_appearance = aggregateSimpleList(relevantRows.flatMap((r: any) => r.search_appearance || []), "type");
 
     return {
       ...latestRow,

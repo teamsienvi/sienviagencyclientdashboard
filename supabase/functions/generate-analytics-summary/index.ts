@@ -17,14 +17,16 @@ serve(async (req) => {
         const googleApiKey = Deno.env.get("GEMINI_API_KEY")
             || Deno.env.get("GOOGLE_API_KEY")
             || Deno.env.get("YOUTUBE_API_KEY");
+        const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 
         const keySource = Deno.env.get("GEMINI_API_KEY") ? "GEMINI_API_KEY"
             : Deno.env.get("GOOGLE_API_KEY") ? "GOOGLE_API_KEY"
-                : Deno.env.get("YOUTUBE_API_KEY") ? "YOUTUBE_API_KEY" : "none";
-        console.log("Using API key from:", keySource, "key prefix:", googleApiKey?.substring(0, 8) + "...");
+                : Deno.env.get("YOUTUBE_API_KEY") ? "YOUTUBE_API_KEY"
+                    : openaiApiKey ? "OPENAI_API_KEY" : "none";
+        console.log("Using API key from:", keySource, "key prefix:", (googleApiKey || openaiApiKey)?.substring(0, 8) + "...");
 
-        if (!googleApiKey) {
-            throw new Error("No Gemini/Google API key configured. Set GEMINI_API_KEY, GOOGLE_API_KEY, or YOUTUBE_API_KEY");
+        if (!googleApiKey && !openaiApiKey) {
+            throw new Error("No AI API key configured. Set GEMINI_API_KEY, GOOGLE_API_KEY, or OPENAI_API_KEY");
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -121,9 +123,20 @@ serve(async (req) => {
         const detectedPlatforms = extractPlatforms(analyticsContext);
         console.log(`Detected platforms for ${client.name}:`, detectedPlatforms);
 
-        // Call Gemini API
+        // Call AI (Gemini primary, OpenAI gpt-4o-mini fallback if Gemini quota/credits depleted)
         const prompt = buildPrompt(client.name, type, analyticsContext, startStr, endStr, detectedPlatforms);
-        const aiSummary = await callGemini(googleApiKey, prompt);
+        let aiSummary: any;
+        try {
+            if (!googleApiKey) throw new Error("No Gemini key, falling back to OpenAI");
+            aiSummary = await callGemini(googleApiKey, prompt);
+        } catch (geminiErr) {
+            console.warn("Gemini failed, attempting OpenAI fallback:", geminiErr instanceof Error ? geminiErr.message : String(geminiErr));
+            if (openaiApiKey) {
+                aiSummary = await callOpenAI(openaiApiKey, prompt);
+            } else {
+                throw geminiErr;
+            }
+        }
 
         // Merge metrics into the AI summary
         const summaryData = {
@@ -1220,28 +1233,64 @@ async function collectSeoData(
                     improvedCount++; // newly entered top 100
                 }
             });
-            const rankingKeywords = newestKeywords.filter((kw: any) => kw.desktop_new != null);
+            let rankingKeywords = newestKeywords.filter((kw: any) => kw.desktop_new != null);
             const unstableCount = newestKeywords.filter((kw: any) => kw.rank_status === "unstable").length;
             const pendingCount = newestKeywords.filter((kw: any) => kw.rank_status === "pending").length;
-
-            // Set main metrics for dashboard display
-            metricsResult.total_views = newestKeywords.length; // Tracked Keywords Count
-            metricsResult.engagement_rate = newestScore ?? 0; // Site Health Score
-            metricsResult.followers_gained = scoreDiff; // Weekly score change
-            metricsResult.unique_visitors = newestIssuesCount; // Total site issues
 
             const domain = newest.raw_project_data?.domain || newest.raw_project_data?.url || "SEO";
             metricsResult.top_platform = domain;
 
             let organicTrafficStr = "N/A";
             let organicKeywordsCount = "N/A";
+            let backlinksCountStr = "N/A";
+            let refDomainsCountStr = "N/A";
+            let domainOrganicFallbackUsed = false;
+
             if (newest.raw_project_data?.domain_overview) {
                 const overview = newest.raw_project_data.domain_overview;
-                const traffic = overview.organic_traffic ?? overview.traffic ?? null;
-                const kws = overview.organic_keywords ?? overview.keywords ?? null;
-                if (traffic !== null) organicTrafficStr = traffic.toLocaleString();
-                if (kws !== null) organicKeywordsCount = kws.toLocaleString();
+                const traffic = overview.organic_traffic ?? overview.traffic ?? overview.Total_Organic_Traffic ?? null;
+                const domainKwsArr = Array.isArray(overview.organicKeywords)
+                    ? overview.organicKeywords
+                    : Array.isArray(overview.Organic_Keywords)
+                        ? overview.Organic_Keywords
+                        : Array.isArray(overview.keywords)
+                            ? overview.keywords
+                            : [];
+                const kws = overview.organic ?? overview.organic_keywords ?? (typeof overview.keywords === "number" ? overview.keywords : null) ?? (domainKwsArr.length > 0 ? domainKwsArr.length : null);
+                const backlinks = overview.backlinks ?? overview.Total_Backlinks ?? null;
+                const refDomains = overview.refDomains ?? overview.Total_RefDomains ?? null;
+
+                if (traffic !== null && typeof traffic === "number") organicTrafficStr = traffic.toLocaleString();
+                if (kws !== null && typeof kws === "number") organicKeywordsCount = kws.toLocaleString();
+                if (backlinks !== null && typeof backlinks === "number") backlinksCountStr = backlinks.toLocaleString();
+                if (refDomains !== null && typeof refDomains === "number") refDomainsCountStr = refDomains.toLocaleString();
+
+                if (rankingKeywords.length === 0 && domainKwsArr.length > 0) {
+                    const validDomainKws = domainKwsArr
+                        .filter((k: any) => k && k.keyword && k.position != null)
+                        .map((k: any) => ({
+                            keyword: k.keyword,
+                            desktop_new: Number(k.position),
+                            desktop_old: null,
+                            volume: k.volume ?? null,
+                            traffic: k.traffic ?? null,
+                        }));
+                    if (validDomainKws.length > 0) {
+                        domainOrganicFallbackUsed = true;
+                        rankingKeywords = validDomainKws;
+                        top3Count = validDomainKws.filter((k: any) => k.desktop_new <= 3).length;
+                        top10Count = validDomainKws.filter((k: any) => k.desktop_new <= 10).length;
+                    }
+                }
             }
+
+            const effectiveTrackedCount = domainOrganicFallbackUsed ? rankingKeywords.length : newestKeywords.length;
+
+            // Set main metrics for dashboard display
+            metricsResult.total_views = effectiveTrackedCount; // Tracked Keywords Count
+            metricsResult.engagement_rate = newestScore ?? 0; // Site Health Score
+            metricsResult.followers_gained = scoreDiff; // Weekly score change
+            metricsResult.unique_visitors = newestIssuesCount; // Total site issues
 
             const hasAudit = newestScore !== null && newestScore !== undefined;
             metricsResult.has_seo = true;
@@ -1250,16 +1299,16 @@ async function collectSeoData(
                 health_score: hasAudit ? newestScore : null,
                 health_change: hasAudit && oldestScore != null ? scoreDiff : null,
                 issues: hasAudit ? newestIssuesCount : null,
-                tracked_keywords: newestKeywords.length,
+                tracked_keywords: effectiveTrackedCount,
                 ranking_keywords: rankingKeywords.length,
                 top3: top3Count,
                 top10: top10Count,
                 improved: improvedCount,
                 declined: declinedCount,
-                unstable: unstableCount,
-                pending: pendingCount,
+                unstable: domainOrganicFallbackUsed ? 0 : unstableCount,
+                pending: domainOrganicFallbackUsed ? 0 : pendingCount,
                 top_keywords: [...rankingKeywords]
-                    .sort((a: any, b: any) => a.desktop_new - b.desktop_new)
+                    .sort((a: any, b: any) => (a.desktop_new - b.desktop_new) || ((b.traffic || b.volume || 0) - (a.traffic || a.volume || 0)))
                     .slice(0, 5)
                     .map((kw: any) => ({ keyword: kw.keyword, position: kw.desktop_new, previous: kw.desktop_old ?? null, volume: kw.volume ?? null })),
                 collected_at: newest.collected_at,
@@ -1278,33 +1327,39 @@ async function collectSeoData(
 
             if (hasAudit && newestIssues?.highest_impact && Array.isArray(newestIssues.highest_impact) && newestIssues.highest_impact.length > 0) {
                 output += `- Key Issues Detected:\n` +
-                    newestIssues.highest_impact.slice(0, 3).map((issue: any) => `  - ${issue.title || issue.issue_type || "Issue"}: ${issue.count || 0} occurrences (${issue.difficulty || "medium"} difficulty)`).join('\n') + `\n`;
+                    newestIssues.highest_impact.slice(0, 3).map((issue: any) => `  - ${issue.title || issue.issue_type || issue.id || "Issue"}: ${issue.count || 0} occurrences (${issue.difficulty || "medium"} difficulty)`).join('\n') + `\n`;
             }
 
-            if (newestKeywords.length === 0) {
+            if (effectiveTrackedCount === 0) {
                 output += `\n## Keyword Rankings\n- No keywords are being tracked yet. Do NOT claim the site has zero rankings or no search visibility based on keyword tracking.\n`;
+            } else if (domainOrganicFallbackUsed) {
+                output += `\n## Organic Keyword Rankings (Top ${rankingKeywords.length} Organic Keywords Analyzed via Ubersuggest)\n` +
+                    `- Total Domain Organic Keywords Ranking in Google: ${organicKeywordsCount}\n` +
+                    `- Top ${rankingKeywords.length} Organic Keywords Breakdown: ${top3Count} in Top 3, ${top10Count} in Top 10\n` +
+                    `- Note: Custom rank-tracker campaign target keywords (${newestKeywords.length}) are awaiting Ubersuggest's next crawl check — do NOT claim 0 keywords rank in the top 100.\n`;
             } else {
-            output += `\n## Keyword Rankings (Tracked Keywords: ${newestKeywords.length})\n` +
-                `- Keywords ranking in Google top 100: ${rankingKeywords.length}\n` +
-                `- Keywords in Top 3: ${top3Count}\n` +
-                `- Keywords in Top 10: ${top10Count}\n` +
-                `- Improved ranks: ${improvedCount} keywords\n` +
-                `- Declined ranks: ${declinedCount} keywords\n` +
-                (unstableCount > 0 ? `- Keywords with unstable/unconfirmed rank data: ${unstableCount} (their position is UNKNOWN — do NOT count them as outside the top 100)\n` : "") +
-                (pendingCount > 0 ? `- Keywords newly added, first rank check pending: ${pendingCount}\n` : "");
+                output += `\n## Keyword Rankings (Tracked Keywords: ${newestKeywords.length})\n` +
+                    `- Keywords ranking in Google top 100: ${rankingKeywords.length}\n` +
+                    `- Keywords in Top 3: ${top3Count}\n` +
+                    `- Keywords in Top 10: ${top10Count}\n` +
+                    `- Improved ranks: ${improvedCount} keywords\n` +
+                    `- Declined ranks: ${declinedCount} keywords\n` +
+                    (unstableCount > 0 ? `- Keywords with unstable/unconfirmed rank data: ${unstableCount} (their position is UNKNOWN — do NOT count them as outside the top 100)\n` : "") +
+                    (pendingCount > 0 ? `- Keywords newly added, first rank check pending: ${pendingCount}\n` : "");
             }
             if (rankingKeywords.length > 0) {
-                output += `- Ranking keywords (current position, previous position, monthly volume):\n` +
-                    rankingKeywords
-                        .sort((a: any, b: any) => a.desktop_new - b.desktop_new)
+                output += `- Top Ranking Keywords (current position, monthly volume):\n` +
+                    [...rankingKeywords]
+                        .sort((a: any, b: any) => (a.desktop_new - b.desktop_new) || ((b.traffic || b.volume || 0) - (a.traffic || a.volume || 0)))
                         .slice(0, 10)
-                        .map((kw: any) => `  - "${kw.keyword}": #${kw.desktop_new} (prev ${kw.desktop_old ?? "not ranking"}), vol ${kw.volume ?? "N/A"}`)
+                        .map((kw: any) => `  - "${kw.keyword}": #${kw.desktop_new}${kw.desktop_old != null ? ` (prev #${kw.desktop_old})` : ""}, vol ${kw.volume ?? "N/A"}`)
                         .join('\n') + `\n`;
             }
 
             output += `\n## Domain Visibility Overview\n` +
                 `- Est. Organic Monthly Traffic: ${organicTrafficStr}\n` +
-                `- Total Organic Keywords: ${organicKeywordsCount}\n`;
+                `- Total Organic Keywords: ${organicKeywordsCount}\n` +
+                (backlinksCountStr !== "N/A" ? `- Total Backlinks: ${backlinksCountStr} (across ${refDomainsCountStr} referring domains)\n` : "");
 
             sections.push(output);
         } else {
@@ -1318,52 +1373,86 @@ async function collectSeoData(
                 .from("report_gsc_metrics")
                 .select("*")
                 .eq("client_id", clientId)
-                .order("collected_at", { ascending: false })
-                .limit(1)
+                .order("date_range_end", { ascending: false })
+                .limit(10)
             : { data: null, error: null };
 
         if (!gscErr && gscRows && gscRows.length > 0) {
             const gsc = gscRows[0];
-            const daily = Array.isArray(gsc.daily_breakdown) ? gsc.daily_breakdown : [];
+            const prevGsc = gscRows.length > 1 ? gscRows[1] : null;
             const topQueries = Array.isArray(gsc.top_queries) ? gsc.top_queries : [];
             const topPages = Array.isArray(gsc.top_pages) ? gsc.top_pages : [];
             const devices = Array.isArray(gsc.device_breakdown) ? gsc.device_breakdown : [];
             const countries = Array.isArray(gsc.country_breakdown) ? gsc.country_breakdown : [];
 
-            // Calculate 7-day metrics from daily breakdown if available
+            // Combine unique daily breakdown points across all uploads (oldest to newest collected so newest wins)
+            const dateMap = new Map<string, any>();
+            [...gscRows]
+                .sort((a: any, b: any) => new Date(a.collected_at || 0).getTime() - new Date(b.collected_at || 0).getTime())
+                .forEach((r: any) => {
+                    if (Array.isArray(r.daily_breakdown)) {
+                        r.daily_breakdown.forEach((d: any) => {
+                            if (d && d.date) dateMap.set(d.date, d);
+                        });
+                    }
+                });
+            const allDaily = Array.from(dateMap.values()).sort((a: any, b: any) => a.date.localeCompare(b.date));
+
+            // Calculate 7-day metrics from latest upload / combined daily breakdown
             let gscClicks = gsc.total_clicks || 0;
             let gscImpressions = gsc.total_impressions || 0;
             let gscCtr = parseFloat(gsc.avg_ctr) || 0;
             let gscPosition = parseFloat(gsc.avg_position) || 0;
-            let windowLabel = `${gsc.date_range_start} to ${gsc.date_range_end}`;
-            let trendStr = "";
+            let windowLabel = `Last 7 Days (${gsc.date_range_start} to ${gsc.date_range_end})`;
+            let clicksTrendStr = "";
+            let impressionsTrendStr = "";
+            let ctrTrendStr = "";
+            let posTrendStr = "";
 
-            if (daily.length >= 7) {
-                const last7Daily = daily.slice(-7);
-                const last7Clicks = last7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
-                const last7Impressions = last7Daily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
-                const last7Ctr = last7Impressions > 0 ? (last7Clicks / last7Impressions) * 100 : 0;
-                const last7Pos = last7Daily.length > 0 ? (last7Daily.reduce((s: number, d: any) => s + (d.position || 0), 0) / last7Daily.length) : 0;
-
-                const prev7Daily = daily.slice(-14, -7);
-                const prev7Clicks = prev7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
-                const clicksTrend = prev7Clicks > 0 ? ((last7Clicks - prev7Clicks) / prev7Clicks) * 100 : 0;
-
-                gscClicks = last7Clicks;
-                gscImpressions = last7Impressions;
-                gscCtr = last7Ctr;
-                gscPosition = last7Pos;
+            const latestDaily = Array.isArray(gsc.daily_breakdown) ? gsc.daily_breakdown : [];
+            if (latestDaily.length > 7) {
+                const last7Daily = allDaily.slice(-7);
+                gscClicks = last7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+                gscImpressions = last7Daily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+                gscCtr = gscImpressions > 0 ? (gscClicks / gscImpressions) * 100 : 0;
+                gscPosition = last7Daily.length > 0 ? (last7Daily.reduce((s: number, d: any) => s + (d.position || 0), 0) / last7Daily.length) : 0;
                 windowLabel = `Last 7 Days (${last7Daily[0]?.date} to ${last7Daily[last7Daily.length - 1]?.date})`;
-                trendStr = ` (previous 7-day period had ${prev7Clicks.toLocaleString()} clicks, ${clicksTrend >= 0 ? '+' : ''}${clicksTrend.toFixed(1)}% change)`;
+            }
+
+            if (allDaily.length >= 14) {
+                const prev7Daily = allDaily.slice(-14, -7);
+                const prev7Clicks = prev7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+                const prev7Impressions = prev7Daily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+                const prev7Ctr = prev7Impressions > 0 ? (prev7Clicks / prev7Impressions) * 100 : 0;
+                const prev7Pos = prev7Daily.length > 0 ? (prev7Daily.reduce((s: number, d: any) => s + (d.position || 0), 0) / prev7Daily.length) : 0;
+                const prevWindow = `${prev7Daily[0]?.date} to ${prev7Daily[prev7Daily.length - 1]?.date}`;
+
+                if (prev7Clicks > 0) {
+                    const clicksTrend = ((gscClicks - prev7Clicks) / prev7Clicks) * 100;
+                    clicksTrendStr = ` (vs ${prev7Clicks.toLocaleString()} clicks in prior 7-day period ${prevWindow}, ${clicksTrend >= 0 ? '+' : ''}${clicksTrend.toFixed(1)}% change)`;
+                }
+                if (prev7Impressions > 0) {
+                    const impTrend = ((gscImpressions - prev7Impressions) / prev7Impressions) * 100;
+                    impressionsTrendStr = ` (vs ${prev7Impressions.toLocaleString()} impressions in prior 7-day period, ${impTrend >= 0 ? '+' : ''}${impTrend.toFixed(1)}% change)`;
+                }
+                if (prev7Ctr > 0) {
+                    ctrTrendStr = ` (vs ${prev7Ctr.toFixed(2)}% in prior 7-day period)`;
+                }
+                if (prev7Pos > 0) {
+                    posTrendStr = ` (vs ${prev7Pos.toFixed(2)} in prior 7-day period)`;
+                }
+            } else if (prevGsc && prevGsc.total_clicks > 0) {
+                const prevClicks = prevGsc.total_clicks;
+                const clicksTrend = ((gscClicks - prevClicks) / prevClicks) * 100;
+                clicksTrendStr = ` (vs ${prevClicks.toLocaleString()} clicks in prior period ${prevGsc.date_range_start} to ${prevGsc.date_range_end}, ${clicksTrend >= 0 ? '+' : ''}${clicksTrend.toFixed(1)}% change)`;
             }
 
             let gscOutput = `## Google Search Console (Organic Search Performance - Last 7 Days)\n` +
                 `- Reporting Window: ${windowLabel}\n` +
-                `- 7-Day Organic Search Clicks: ${gscClicks.toLocaleString()}${trendStr}\n` +
-                `- 7-Day Organic Search Impressions: ${gscImpressions.toLocaleString()}\n` +
-                `- 7-Day Average Search CTR: ${gscCtr.toFixed(2)}%\n` +
-                `- 7-Day Average Search Ranking Position: ${gscPosition.toFixed(1)}\n` +
-                `- Full Historical Reference (90-Day Total): ${(gsc.total_clicks || 0).toLocaleString()} clicks, ${(gsc.total_impressions || 0).toLocaleString()} impressions\n`;
+                `- 7-Day Organic Search Clicks: ${gscClicks.toLocaleString()}${clicksTrendStr}\n` +
+                `- 7-Day Organic Search Impressions: ${gscImpressions.toLocaleString()}${impressionsTrendStr}\n` +
+                `- 7-Day Average Search CTR: ${gscCtr.toFixed(2)}%${ctrTrendStr}\n` +
+                `- 7-Day Average Search Ranking Position: ${gscPosition.toFixed(2)}${posTrendStr}\n`;
 
             if (topQueries.length > 0) {
                 gscOutput += `\n- Top Organic Search Queries Driving Clicks (Top ${Math.min(10, topQueries.length)}):\n` +
@@ -1614,4 +1703,53 @@ async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promi
         console.error("Failed to parse Gemini response:", parseErr, "Full raw text:", text);
         throw new Error("Failed to parse AI response as JSON. Raw preview: " + text.substring(0, 500));
     }
+}
+
+async function callOpenAI(apiKey: string, prompt: string): Promise<any> {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+            temperature: 0.7,
+            max_tokens: 2048,
+        }),
+    });
+
+    if (!res.ok) {
+        const errText = await res.text();
+        console.error("OpenAI fallback error:", res.status, errText);
+        throw new Error(`OpenAI API returned ${res.status}: ${errText.substring(0, 500)}`);
+    }
+
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    if (!text) {
+        throw new Error("Empty response from OpenAI");
+    }
+
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+        throw new Error("No JSON object in OpenAI response");
+    }
+
+    const parsed = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+    const validateArray = (arr: any, fallbackStr: string) => {
+        if (!Array.isArray(arr) || arr.length === 0) return [fallbackStr];
+        const valid = arr.filter((item: any) => typeof item === "string" && item.trim().length > 0);
+        return valid.length > 0 ? valid : [fallbackStr];
+    };
+
+    return {
+        strengths: validateArray(parsed.strengths, "Performance was stable, but no standout strengths or outliers were identified this week."),
+        weaknesses: validateArray(parsed.weaknesses, "No critical weaknesses or major performance regressions were detected in this period."),
+        smartActions: validateArray(parsed.smartActions, "Continue monitoring current campaigns and consider testing new creatives once more data aggregates."),
+        highlights: validateArray(parsed.highlights, "Data volume was stable with no major trend shifts."),
+    };
 }

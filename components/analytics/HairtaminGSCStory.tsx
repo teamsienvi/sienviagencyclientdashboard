@@ -27,7 +27,7 @@ export function HairtaminGSCStory({ clientId }: { clientId: string }) {
         .order("date_range_end", { ascending: false })
         .limit(2);
       if (error) throw error;
-      return (data || []) as GSCRow[];
+      return (data || []) as unknown as GSCRow[];
     },
     enabled: !!clientId,
   });
@@ -44,8 +44,20 @@ export function HairtaminGSCStory({ clientId }: { clientId: string }) {
   const impressionsDeltaText = impressionsDelta === null ? "No prior period" : `${impressionsDelta >= 0 ? "+" : ""}${impressionsDelta.toFixed(1)}% vs prior week`;
   const query = (q: string) => current.top_queries?.find(x => x.query.toLowerCase() === q.toLowerCase());
   const brand = query("hairtamin");
-  const prenatal = current.top_queries?.find(x => /prenatal vitamins for hair growth/i.test(x.query));
+  const prenatal = current.top_queries?.find(x => /prenatal vitamins for hair growth/i.test(x.query)) ||
+    current.top_queries?.find(x => /prenatal|mom|growth/i.test(x.query));
   const brushPage = current.top_pages?.find(x => x.page.includes("miracle-brush"));
+  const topLandingUrl = current.top_pages?.[0]?.page;
+  const topLandingPath = topLandingUrl
+    ? (() => {
+        try {
+          const path = new URL(topLandingUrl).pathname;
+          return path === "/" ? "Homepage (/)" : path;
+        } catch {
+          return topLandingUrl;
+        }
+      })()
+    : "Not reported";
 
   return <div className="space-y-6">
     <div>
@@ -73,7 +85,7 @@ export function HairtaminGSCStory({ clientId }: { clientId: string }) {
           {brand && <li><strong>Brand demand:</strong> “hairtamin” drove {number(brand.clicks)} clicks ({number(brand.impressions)} impressions).</li>}
           {prenatal && <li><strong>Discovery opportunity:</strong> “{prenatal.query}” earned {number(prenatal.impressions)} impressions and {number(prenatal.clicks)} clicks ({pct(prenatal.ctr)} CTR).</li>}
           {brushPage && <li><strong>Miracle Brush:</strong> product page received {number(brushPage.clicks)} clicks from {number(brushPage.impressions)} impressions ({pct(brushPage.ctr)} CTR).</li>}
-          <li><strong>Top landing page:</strong> {current.top_pages?.[0]?.page ? new URL(current.top_pages[0].page).pathname : "Not reported"} with {number(current.top_pages?.[0]?.clicks || 0)} clicks.</li>
+          <li><strong>Top landing page:</strong> {topLandingPath} with {number(current.top_pages?.[0]?.clicks || 0)} clicks.</li>
         </ul>
       </section>
       <section className="rounded-xl border bg-card p-4">
