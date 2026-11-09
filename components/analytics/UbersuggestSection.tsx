@@ -688,7 +688,7 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
               </div>
             </div>
 
-            {keywords.length > 0 && keywords.every((kw: any) => kw.desktop_new === null && kw.desktop_old === null) && (
+            {keywords.length > 0 && keywords.every((kw: any) => kw.desktop_new === null && kw.desktop_old === null && kw.volume === null && !kw.rank_status) && (
               <div className="mx-5 mt-4 mb-2 p-3.5 bg-amber-500/[0.08] dark:bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-start gap-3">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground space-y-1">
@@ -698,12 +698,14 @@ export function UbersuggestSection({ clientId, dateRange = "30d", customDateRang
                   <p>
                     These {keywords.length} target keywords are configured in your Ubersuggest rank tracking campaign. They will display rank numbers once Ubersuggest’s external scraper completes its next scheduled crawl cycle.
                   </p>
-                  <p className="pt-0.5">
-                    💡 <em>Looking for your live Google rankings?</em> Your uploaded Google Search Console data (with 1,000+ actual indexed queries, live positions, impressions, and clicks) is live in the{" "}
-                    <a href="#gsc" className="text-emerald-600 dark:text-emerald-400 font-semibold underline hover:opacity-80">
-                      Google Search Console section below
-                    </a>.
-                  </p>
+                  {clientId === "6c14388a-b7da-48fe-a8e4-57172f1f862a" && (
+                    <p className="pt-0.5">
+                      💡 <em>Looking for your live Google rankings?</em> Your uploaded Google Search Console data (with 1,000+ actual indexed queries, live positions, impressions, and clicks) is live in the{" "}
+                      <a href="#gsc" className="text-emerald-600 dark:text-emerald-400 font-semibold underline hover:opacity-80">
+                        Google Search Console section below
+                      </a>.
+                    </p>
+                  )}
                 </div>
               </div>
             )}
