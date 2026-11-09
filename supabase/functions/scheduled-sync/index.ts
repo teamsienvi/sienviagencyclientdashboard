@@ -60,6 +60,7 @@ serve(async (req) => {
     shopify: { success: 0, failed: 0, errors: [] as string[] },
     ubersuggest: { success: 0, failed: 0, errors: [] as string[] },
     ga4: { success: 0, failed: 0, errors: [] as string[] },
+    summaries: { success: 0, failed: 0, errors: [] as string[] },
   };
 
   // Helper to sync a platform for both periods
@@ -513,6 +514,49 @@ serve(async (req) => {
         results.ga4.errors.push(`${siteName}: ${err.message}`);
       }
       await new Promise(r => setTimeout(r, 500));
+    }
+
+    // 9. TRIGGER AI SUMMARIES & OVERVIEWS AFTER ALL DATA SYNCS COMPLETE
+    console.log("\n=== Triggering Daily Summaries & Overviews (SEO, Website, Social) ===");
+    const { data: activeClients } = await supabase
+      .from("clients")
+      .select("id, name")
+      .eq("is_active", true);
+
+    const seoClientIds = new Set((ubersuggestConfigs || []).map((c: any) => c.client_id));
+    const ga4ClientIds = new Set((ga4Configs || []).map((c: any) => c.client_id));
+
+    for (const client of activeClients || []) {
+      const summaryJobs: Array<{ platform: string; module: string }> = [
+        { platform: "social", module: "social_summary" },
+      ];
+      if (seoClientIds.has(client.id)) {
+        summaryJobs.push({ platform: "seo", module: "seo_summary" });
+      }
+      if (seoClientIds.has(client.id) || ga4ClientIds.has(client.id)) {
+        summaryJobs.push({ platform: "website", module: "website_summary" });
+      }
+
+      for (const job of summaryJobs) {
+        try {
+          const { error: sumErr } = await supabase.functions.invoke("orchestrate-sync", {
+            body: {
+              clientId: client.id,
+              platform: job.platform,
+              module: job.module,
+              forceRetry: true,
+            },
+          });
+          if (sumErr) throw sumErr;
+          results.summaries.success++;
+          console.log(`  ✓ Dispatched ${job.module} for ${client.name}`);
+        } catch (err: any) {
+          results.summaries.failed++;
+          console.error(`  ✗ Failed to dispatch ${job.module} for ${client.name}: ${err.message}`);
+          results.summaries.errors.push(`${client.name} (${job.module}): ${err.message}`);
+        }
+        await new Promise(r => setTimeout(r, 150));
+      }
     }
 
     console.log("\n=== Scheduled Sync Complete ===");

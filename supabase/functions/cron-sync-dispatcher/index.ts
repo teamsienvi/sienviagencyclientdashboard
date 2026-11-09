@@ -25,7 +25,7 @@ serve(async (req) => {
         const now = new Date().toISOString();
 
         // Query builder using inner join to filter for active clients
-        const { data: eligibleModules, error } = await supabase
+        const { data: rawEligibleModules, error } = await supabase
             .from("sync_state_registry")
             .select(`
                 client_id, 
@@ -38,13 +38,33 @@ serve(async (req) => {
             .lt("retry_count", 3)
             .or(`job_locked_until.is.null,job_locked_until.lt.${now}`)
             .or(`and(status.eq.ready,or(stale_after_at.lt.${now},stale_after_at.is.null)),and(status.eq.failed,next_retry_at.lt.${now})`)
-            .limit(15); // Small conservative batch size as requested
+            .limit(40);
 
         if (error) {
             throw error;
         }
 
-        console.log(`[cron-sync-dispatcher] Found ${eligibleModules?.length || 0} eligible modules.`);
+        // Always prioritize raw data syncs (especially seo/ubersuggest and ga4) BEFORE summary/overview generation.
+        // If a client has any raw data module eligible in this sweep, hold off on its *_summary modules until the next sweep.
+        const allEligible = rawEligibleModules || [];
+        const dataSyncModules = allEligible.filter((m: any) => !String(m.module).endsWith("_summary"));
+        const summaryModules = allEligible.filter((m: any) => String(m.module).endsWith("_summary"));
+
+        // Sort data sync modules so seo/ubersuggest and ga4/website run first
+        const priorityOrder = (m: any) => {
+            if (m.platform === "seo" || m.module === "ubersuggest") return 1;
+            if (m.platform === "ga4" || m.platform === "website") return 2;
+            if (m.platform === "shopify") return 3;
+            return 4;
+        };
+        dataSyncModules.sort((a: any, b: any) => priorityOrder(a) - priorityOrder(b));
+
+        const clientsWithPendingDataSync = new Set(dataSyncModules.map((m: any) => m.client_id));
+        const readySummaryModules = summaryModules.filter((m: any) => !clientsWithPendingDataSync.has(m.client_id));
+
+        const eligibleModules = [...dataSyncModules, ...readySummaryModules].slice(0, 15);
+
+        console.log(`[cron-sync-dispatcher] Found ${eligibleModules.length} eligible modules (${dataSyncModules.length} data sync, ${readySummaryModules.length} summary).`);
 
         const dispatched = [];
         const failed = [];
