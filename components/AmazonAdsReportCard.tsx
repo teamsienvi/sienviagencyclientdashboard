@@ -70,6 +70,9 @@ interface WastefulTerm {
 interface AmazonReportData {
     sourceFileName?: string;
     kpis: AmazonKPIs;
+    whatsWorking?: string[];
+    whatsNotWorking?: string[];
+    strategies?: string[];
     executiveSummary: string[];
     clientNeedsToKnow: string;
     channelSnapshot: string;
@@ -85,6 +88,115 @@ interface AmazonReportData {
 
 type DateRange = { from: string; to: string };
 type RawTotals = { spend: number; sales: number; orders: number; clicks: number; impressions: number };
+
+// Synthesizes High-Level Reporting (What's Working This Week, What's Not, Strategies)
+// Uses AI-generated arrays when present and falls back to deterministic data-driven insights for older cached reports.
+function deriveHighLevelInsights(
+    data: AmazonReportData,
+    prevData?: AmazonReportData | null,
+    w1RawTotals?: RawTotals | null,
+): { whatsWorking: string[]; whatsNotWorking: string[]; strategies: string[] } {
+    const campaigns = data.topRevenueCampaigns || [];
+    const wasteTerms = data.wastefulSearchTerms || [];
+    const kpis = data.kpis;
+
+    // 1. What's Working This Week
+    let whatsWorking = Array.isArray(data.whatsWorking) ? data.whatsWorking.filter(Boolean) : [];
+    if (whatsWorking.length === 0) {
+        const winningCampaigns = campaigns
+            .filter(c => c.sales > 0)
+            .sort((a, b) => b.sales - a.sales || b.roas - a.roas);
+
+        for (const c of winningCampaigns.slice(0, 3)) {
+            whatsWorking.push(
+                `"${c.name}" generated $${c.sales.toFixed(2)} in sales (${c.orders} ${c.orders === 1 ? "order" : "orders"}) on $${c.spend.toFixed(2)} spend — delivering a ${c.roas.toFixed(2)}x ROAS (${c.acos.toFixed(1)}% ACoS).`
+            );
+        }
+
+        const w1Sales = w1RawTotals?.sales ?? prevData?.kpis?.adSales ?? null;
+        const w1Spend = w1RawTotals?.spend ?? prevData?.kpis?.adSpend ?? null;
+        if (w1Sales != null && kpis.adSales != null && kpis.adSales > w1Sales && w1Sales > 0) {
+            const pct = (((kpis.adSales - w1Sales) / w1Sales) * 100).toFixed(1);
+            whatsWorking.push(`Ad-attributed revenue grew +${pct}% week-over-week (from $${w1Sales.toFixed(2)} to $${kpis.adSales.toFixed(2)}).`);
+        } else if (w1Spend != null && kpis.adSpend != null && kpis.adSpend < w1Spend && w1Spend > 0) {
+            const saved = (w1Spend - kpis.adSpend).toFixed(2);
+            whatsWorking.push(`Ad spend was tightened by $${saved} week-over-week ($${w1Spend.toFixed(2)} → $${kpis.adSpend.toFixed(2)}) while isolating converting traffic.`);
+        }
+
+        if (whatsWorking.length < 3 && kpis.cvr != null && kpis.cvr >= 4) {
+            whatsWorking.push(`Account conversion rate (CVR) reached ${kpis.cvr.toFixed(2)}% across ${kpis.orders ?? 0} total orders, showing strong listing-level buyer intent when shoppers click.`);
+        }
+        if (whatsWorking.length === 0 && (data.executiveSummary?.length || 0) > 0) {
+            whatsWorking = data.executiveSummary.slice(0, 2);
+        }
+    }
+
+    // 2. What's Not Working
+    let whatsNotWorking = Array.isArray(data.whatsNotWorking) ? data.whatsNotWorking.filter(Boolean) : [];
+    if (whatsNotWorking.length === 0) {
+        const zeroSaleCampaigns = campaigns
+            .filter(c => c.sales === 0 && c.spend > 0)
+            .sort((a, b) => b.spend - a.spend);
+        const totalZeroSaleSpend = zeroSaleCampaigns.reduce((s, c) => s + c.spend, 0);
+
+        if (zeroSaleCampaigns.length > 0) {
+            const topBleeders = zeroSaleCampaigns
+                .slice(0, 2)
+                .map(c => `"${c.name}" ($${c.spend.toFixed(2)})`)
+                .join(" and ");
+            whatsNotWorking.push(
+                `${zeroSaleCampaigns.length} ${zeroSaleCampaigns.length === 1 ? "campaign" : "campaigns"} spent a combined $${totalZeroSaleSpend.toFixed(2)} with $0 attributed sales — led by ${topBleeders}.`
+            );
+        }
+
+        const highAcosCampaigns = campaigns
+            .filter(c => c.sales > 0 && c.acos > 50)
+            .sort((a, b) => b.spend - a.spend);
+        if (highAcosCampaigns.length > 0) {
+            const worst = highAcosCampaigns[0];
+            whatsNotWorking.push(
+                `"${worst.name}" is converting at an elevated ${worst.acos.toFixed(1)}% ACoS (${worst.roas.toFixed(2)}x ROAS), spending $${worst.spend.toFixed(2)} for $${worst.sales.toFixed(2)} in sales.`
+            );
+        }
+
+        if (wasteTerms.length > 0) {
+            const totalWasteSpend = wasteTerms.reduce((s, t) => s + t.spend, 0);
+            const totalWasteClicks = wasteTerms.reduce((s, t) => s + t.clicks, 0);
+            const topTermNames = wasteTerms.slice(0, 3).map(t => `"${t.term}" ($${t.spend.toFixed(2)})`).join(", ");
+            whatsNotWorking.push(
+                `Top non-converting search terms bled $${totalWasteSpend.toFixed(2)} across ${totalWasteClicks} clicks with 0 orders — including ${topTermNames}.`
+            );
+        }
+
+        if (kpis.acos != null && kpis.acos > 45) {
+            whatsNotWorking.push(
+                `Blended account ACoS sits at ${kpis.acos.toFixed(1)}% (${(kpis.roas ?? 0).toFixed(2)}x ROAS), driven by non-converting discovery and broad/auto targeting spend.`
+            );
+        }
+    }
+
+    // 3. Strategies
+    let strategies = Array.isArray(data.strategies) ? data.strategies.filter(Boolean) : [];
+    if (strategies.length === 0) {
+        if (Array.isArray(data.actionPlan) && data.actionPlan.length > 0) {
+            strategies = [...data.actionPlan];
+        } else {
+            const topWinner = campaigns.find(c => c.sales > 0 && c.roas >= 2);
+            const topBleeder = campaigns.filter(c => c.sales === 0 && c.spend > 0).sort((a, b) => b.spend - a.spend)[0];
+            if (topWinner) {
+                strategies.push(`Reallocate daily budget toward "${topWinner.name}" (${topWinner.roas.toFixed(2)}x ROAS) and isolate its converting search terms into Exact Match campaigns.`);
+            }
+            if (topBleeder) {
+                strategies.push(`Pause or cut bids by 35–50% on "${topBleeder.name}" ($${topBleeder.spend.toFixed(2)} spend, 0 orders) to stop immediate budget bleed.`);
+            }
+            if (wasteTerms.length > 0) {
+                strategies.push(`Add Negative Exact keywords/targets for ${wasteTerms.slice(0, 3).map(t => `"${t.term}"`).join(", ")} to eliminate non-converting click spend.`);
+            }
+        }
+    }
+
+    return { whatsWorking, whatsNotWorking, strategies };
+}
 
 const rangeDays = (r?: DateRange | null) => {
     if (!r) return null;
@@ -264,6 +376,10 @@ function buildPrintHTML(
 
     const execBullets = data.executiveSummary.map((b) => `<li>${b}</li>`).join("");
     const actionBullets = data.actionPlan.map((b) => `<li>${b}</li>`).join("");
+    const highLevel = deriveHighLevelInsights(data, prevData, w1RawTotals);
+    const workingBullets = highLevel.whatsWorking.map((b) => `<li>${b}</li>`).join("");
+    const notWorkingBullets = highLevel.whatsNotWorking.map((b) => `<li>${b}</li>`).join("");
+    const strategyBullets = highLevel.strategies.map((b) => `<li>${b}</li>`).join("");
 
     return `<!DOCTYPE html>
 <html>
@@ -281,6 +397,12 @@ function buildPrintHTML(
   .kpi-value { font-size: 15px; font-weight: 700; color: #111; }
   .section { margin-bottom: 18px; }
   .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1.5px solid #e2e2e2; padding-bottom: 4px; margin-bottom: 8px; color: #333; }
+  .hl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  .hl-card { border-radius: 6px; padding: 10px 12px; border: 1px solid #e2e2e2; }
+  .hl-working { background: #f0fdf4; border-color: #bbf7d0; }
+  .hl-not-working { background: #fef2f2; border-color: #fecaca; }
+  .hl-strategies { background: #fffbeb; border-color: #fde68a; }
+  .hl-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
   ul { padding-left: 16px; }
   li { margin-bottom: 4px; line-height: 1.5; }
   p { line-height: 1.6; }
@@ -317,6 +439,24 @@ function buildPrintHTML(
   </div>
 
   ${buildWoWSection()}
+
+  <div class="section">
+    <div class="section-title">High-Level Weekly Report</div>
+    <div class="hl-grid">
+      <div class="hl-card hl-working">
+        <div class="hl-title green">What's Working This Week</div>
+        <ul>${workingBullets || "<li>No profitable campaigns recorded in this period.</li>"}</ul>
+      </div>
+      <div class="hl-card hl-not-working">
+        <div class="hl-title red">What's Not Working</div>
+        <ul>${notWorkingBullets || "<li>No major budget bleeders detected.</li>"}</ul>
+      </div>
+      <div class="hl-card hl-strategies">
+        <div class="hl-title amber">Strategies</div>
+        <ul>${strategyBullets || "<li>Maintain current bidding and targeting controls.</li>"}</ul>
+      </div>
+    </div>
+  </div>
 
   ${(data.executiveSummary?.length || 0) > 0 ? `
   <div class="section">
@@ -374,7 +514,7 @@ function buildPrintHTML(
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCardProps) {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(true);
     const [file, setFile] = useState<File | null>(null);
     const [week1File, setWeek1File] = useState<File | null>(null);
     const [week1Totals, setWeek1Totals] = useState<{ spend: number; sales: number; orders: number; clicks: number; impressions: number } | null>(null);
@@ -406,7 +546,7 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 .from("amazon_ads_reports" as any)
                 .select("parsed_data, generated_at, source_file_name, generation_status, report_period")
                 .eq("client_id", clientId)
-                .order("report_period", { ascending: false })
+                .order("generated_at", { ascending: false })
                 .limit(2);
 
             if (error) throw error;
@@ -415,7 +555,10 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         enabled: !!clientId,
         refetchInterval: (query) => {
             const rows = query.state.data as any[] | undefined;
-            return rows?.[0]?.generation_status === 'pending' ? 5000 : false;
+            const latest = rows?.[0];
+            if (latest?.generation_status !== 'pending') return false;
+            const ageMs = latest.generated_at ? Date.now() - new Date(latest.generated_at).getTime() : Infinity;
+            return ageMs < 90_000 ? 4000 : false;
         }
     });
 
@@ -423,8 +566,9 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
         if (cachedData && cachedData.length > 0) {
             const latest = cachedData[0];
             const prev = cachedData.length > 1 ? cachedData[1] : null;
+            const pendingAgeMs = latest.generated_at ? Date.now() - new Date(latest.generated_at).getTime() : Infinity;
 
-            if (latest.generation_status === 'pending') {
+            if (latest.generation_status === 'pending' && pendingAgeMs < 90_000) {
                 setIsAnalyzing(true);
                 hasTriggeredAnalysis.current = true;
             } else if (latest.generation_status === 'complete' && latest.parsed_data) {
@@ -444,15 +588,20 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                 if ((latest.parsed_data as any).week1Totals) {
                     setWeek1Totals((latest.parsed_data as any).week1Totals);
                 }
-            } else if (latest.generation_status === 'failed') {
+            } else {
+                // Either 'failed' or a stale 'pending' row (>90s old) — never lock the UI in loading state
                 setIsAnalyzing(false);
-                if (hasTriggeredAnalysis.current) {
+                if (prev?.generation_status === 'complete' && prev?.parsed_data && !report) {
+                    setReport(prev.parsed_data as AmazonReportData);
+                    if (prev.generated_at) setGeneratedAt(new Date(prev.generated_at));
+                }
+                if (latest.generation_status === 'failed' && hasTriggeredAnalysis.current) {
                     toast({ title: "Analysis failed", description: "Background worker failed to process the report.", variant: "destructive" });
                     hasTriggeredAnalysis.current = false;
                 }
             }
         }
-    }, [cachedData, file, toast]);
+    }, [cachedData, file, report, toast]);
 
     // ─── File handling ───────────────────────────────────────────────────────
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -591,7 +740,13 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             const campaignNameKey = findKey(['campaign name', 'campaign name (informational only)', 'name']);
             const campaignIdKey = keys.find(k => k.toLowerCase() === 'campaign id');
             const searchTermKey = findKey(['customer search term']);
-            const dateKeys = keys.filter(k => ['date', 'start date', 'end date'].includes(k.toLowerCase()));
+            // In Amazon Bulksheets, "Start Date" and "End Date" on Campaign rows are the campaign's
+            // historical creation/flight dates (often years old), NOT the export's reporting period.
+            const dateKeys = keys.filter(k => {
+                const lower = k.toLowerCase();
+                if (isBulkFile) return lower === 'date';
+                return ['date', 'start date', 'end date'].includes(lower);
+            });
             if (dateKeys.length) {
                 for (const row of rows) {
                     for (const dk of dateKeys) {
@@ -677,8 +832,12 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             .slice(0, 6)
             .map(([term, a]) => ({ term, clicks: a.clicks, spend: round2(a.spend), sales: 0, action: "Negate or cut bid" }));
 
-        const dateRange = parseDateRangeFromFilename(f.name)
-            ?? (minDate && maxDate ? { from: minDate, to: maxDate } : null);
+        const inferredRange = minDate && maxDate ? { from: minDate, to: maxDate } : null;
+        const inferredDays = rangeDays(inferredRange);
+        const validInferredRange = inferredRange && inferredDays != null && inferredDays >= 1 && inferredDays <= 65
+            ? inferredRange
+            : null;
+        const dateRange = parseDateRangeFromFilename(f.name) ?? validInferredRange;
 
         return { csvText, exactTotals, exactCampaigns, exactWaste, fileName: f.name, dateRange };
     };
@@ -773,15 +932,23 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
             if (result.status === 'complete' && result.data) {
                 setReport(result.data);
                 setGeneratedAt(new Date());
+                setIsAnalyzing(false);
+                hasTriggeredAnalysis.current = false;
                 toast({ title: "Report ready!", description: "Your Amazon Ads report has been generated." });
             } else {
+                setIsAnalyzing(false);
                 toast({ title: "Processing", description: "Report is being processed." });
             }
 
             queryClient.invalidateQueries({ queryKey: ["amazon-ads-report", clientId] });
+            queryClient.invalidateQueries({ queryKey: ["amazon-ads-overview", clientId] });
+            queryClient.invalidateQueries({ queryKey: ["client-connected-accounts", clientId] });
 
         } catch (err: any) {
             toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
+            setIsAnalyzing(false);
+            hasTriggeredAnalysis.current = false;
+        } finally {
             setIsAnalyzing(false);
         }
     };
@@ -1238,6 +1405,104 @@ export function AmazonAdsReportCard({ clientId, clientName }: AmazonAdsReportCar
                                     </Table>
                                 </div>
                             </div>
+                            );
+                        })()}
+
+                        {/* High-Level Weekly Reporting: What's Working, What's Not, Strategies */}
+                        {(() => {
+                            const { whatsWorking, whatsNotWorking, strategies } = deriveHighLevelInsights(
+                                report,
+                                previousReport,
+                                report.week1Totals ?? week1Totals,
+                            );
+                            return (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Target className="h-4 w-4 text-orange-400" />
+                                            <span className="font-semibold text-sm">High-Level Weekly Report</span>
+                                        </div>
+                                        <Badge variant="outline" className="text-[10px] border-orange-500/30 text-orange-400">
+                                            Executive Breakdown
+                                        </Badge>
+                                    </div>
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                                        {/* 1. What's Working This Week */}
+                                        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 flex flex-col justify-between">
+                                            <div>
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2 text-emerald-400">
+                                                        <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                                        <span className="font-semibold text-sm">What&apos;s Working This Week</span>
+                                                    </div>
+                                                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                                                        Wins
+                                                    </Badge>
+                                                </div>
+                                                <ul className="space-y-2">
+                                                    {whatsWorking.length > 0 ? whatsWorking.map((item, i) => (
+                                                        <li key={i} className="text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                                                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-emerald-400" />
+                                                            <span>{item}</span>
+                                                        </li>
+                                                    )) : (
+                                                        <li className="text-xs text-muted-foreground">No profitable campaigns recorded in this period.</li>
+                                                    )}
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. What's Not Working */}
+                                        <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4 flex flex-col justify-between">
+                                            <div>
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2 text-red-400">
+                                                        <AlertTriangle className="h-4 w-4 shrink-0" />
+                                                        <span className="font-semibold text-sm">What&apos;s Not Working</span>
+                                                    </div>
+                                                    <Badge variant="outline" className="text-[10px] border-red-500/30 text-red-400 bg-red-500/10">
+                                                        Bleeders
+                                                    </Badge>
+                                                </div>
+                                                <ul className="space-y-2">
+                                                    {whatsNotWorking.length > 0 ? whatsNotWorking.map((item, i) => (
+                                                        <li key={i} className="text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                                                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-red-400" />
+                                                            <span>{item}</span>
+                                                        </li>
+                                                    )) : (
+                                                        <li className="text-xs text-muted-foreground">No major budget bleeders detected in this period.</li>
+                                                    )}
+                                                </ul>
+                                            </div>
+                                        </div>
+
+                                        {/* 3. Strategies */}
+                                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-col justify-between">
+                                            <div>
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="flex items-center gap-2 text-amber-400">
+                                                        <Lightbulb className="h-4 w-4 shrink-0" />
+                                                        <span className="font-semibold text-sm">Strategies</span>
+                                                    </div>
+                                                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400 bg-amber-500/10">
+                                                        Playbook
+                                                    </Badge>
+                                                </div>
+                                                <ol className="space-y-2">
+                                                    {strategies.length > 0 ? strategies.map((item, i) => (
+                                                        <li key={i} className="text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                                                            <span className="shrink-0 font-bold text-amber-400 w-4">{i + 1}.</span>
+                                                            <span>{item}</span>
+                                                        </li>
+                                                    )) : (
+                                                        <li className="text-xs text-muted-foreground">Maintain current bidding and targeting controls.</li>
+                                                    )}
+                                                </ol>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             );
                         })()}
 

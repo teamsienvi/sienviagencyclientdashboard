@@ -203,4 +203,8 @@ export const clientsData: Client[] = [
     logo: hairtaminLogo.src,
     reports: [],
   },
+  {
+    name: "Secure and Style",
+    reports: [],
+  },
 ];

@@ -720,8 +720,14 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
       Boolean(connectedAccounts?.metaAds) ||
       Boolean(metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform)));
 
-    return hasUploadedAds || hasConnectedAds;
-  }, [client?.name, connectedAccounts, metricoolPlatforms]);
+    const isStrictlyAdsOnly =
+      !hasSocialMedia &&
+      !hasWebAndEcomm &&
+      !connectedAccounts?.ubersuggest &&
+      !showSearchConsole;
+
+    return hasUploadedAds || hasConnectedAds || isStrictlyAdsOnly;
+  }, [client?.name, connectedAccounts, metricoolPlatforms, hasSocialMedia, hasWebAndEcomm, showSearchConsole]);
 
   // Dynamic Executive Insight Layer slides based on client capabilities
   const executiveSlides = useMemo(() => {

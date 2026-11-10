@@ -284,6 +284,20 @@ export const CLIENT_BRAND_THEMES: Record<string, ClientBrandTheme> = {
     websiteUrl: "sienvi.com",
     tagline: "Performance Agency Command Center & Multi-Client Growth",
   },
+
+  // Secure and Style — Amazon Commerce Amber & Slate
+  "Secure and Style": {
+    primary: "#D97706",
+    primaryLight: "#FBBF24",
+    primaryDark: "#92400E",
+    secondary: "#0F172A",
+    surface: "#0F172A",
+    textLight: "#FFFFFF",
+    textDark: "#1E293B",
+    badgeBg: "#FEF3C7",
+    badgeText: "#92400E",
+    tagline: "Amazon Marketplace & Sponsored Ads Performance",
+  },
 };
 
 /**

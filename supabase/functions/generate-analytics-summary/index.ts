@@ -1706,6 +1706,9 @@ async function callGemini(apiKey: string, prompt: string, maxRetries = 3): Promi
 }
 
 async function callOpenAI(apiKey: string, prompt: string): Promise<any> {
+    const safePrompt = typeof (prompt as any).toWellFormed === "function"
+        ? (prompt as any).toWellFormed()
+        : prompt.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -1714,7 +1717,7 @@ async function callOpenAI(apiKey: string, prompt: string): Promise<any> {
         },
         body: JSON.stringify({
             model: "gpt-4o-mini",
-            messages: [{ role: "user", content: prompt }],
+            messages: [{ role: "user", content: safePrompt }],
             response_format: { type: "json_object" },
             temperature: 0.7,
             max_tokens: 2048,

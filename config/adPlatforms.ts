@@ -22,6 +22,7 @@ const CLIENT_AD_PLATFORMS: Record<string, AdPlatform[]> = {
   "Snarky Pets": ["meta", "google", "tiktok", "amazon"],
   "Serenity Scrolls": ["meta", "google", "tiktok", "amazon"],
   "Ban Batu": ["amazon"],
+  "Secure and Style": ["amazon"],
   "BSUE Brow & Lash": [],
   "PlayIQ": [],
   "Hwabelle": ["amazon"],

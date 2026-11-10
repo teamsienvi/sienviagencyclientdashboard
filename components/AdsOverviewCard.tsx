@@ -90,7 +90,7 @@ export function AdsOverviewCard({
                 .from("amazon_ads_reports" as any)
                 .select("parsed_data, generated_at, report_period, source_file_name, generation_status")
                 .eq("client_id", clientId)
-                .order("report_period", { ascending: false })
+                .order("generated_at", { ascending: false })
                 .limit(1)
                 .maybeSingle();
             if (error) return null;
@@ -107,7 +107,7 @@ export function AdsOverviewCard({
                 .from("google_ads_reports" as any)
                 .select("parsed_data, generated_at, report_period, source_file_name, generation_status")
                 .eq("client_id", clientId)
-                .order("report_period", { ascending: false })
+                .order("generated_at", { ascending: false })
                 .limit(1)
                 .maybeSingle();
             if (error) return null;
@@ -157,7 +157,8 @@ export function AdsOverviewCard({
     // Process Amazon Ads KPIs
     const amz = useMemo(() => {
         if (!amazonData?.parsed_data?.kpis) return null;
-        const k = amazonData.parsed_data.kpis;
+        const p = amazonData.parsed_data;
+        const k = p.kpis;
         return {
             spend: Number(k.adSpend ?? k.spend ?? 0),
             sales: Number(k.adSales ?? k.sales ?? 0),
@@ -167,8 +168,11 @@ export function AdsOverviewCard({
             avgCpc: Number(k.avgCpc ?? k.cpc ?? 0),
             ctr: Number(k.ctr ?? 0),
             cvr: Number(k.cvr ?? 0),
-            summary: amazonData.parsed_data.executiveSummary || null,
-            actionPlan: amazonData.parsed_data.actionPlan || null,
+            summary: p.executiveSummary || null,
+            whatsWorking: Array.isArray(p.whatsWorking) ? p.whatsWorking : [],
+            whatsNotWorking: Array.isArray(p.whatsNotWorking) ? p.whatsNotWorking : [],
+            strategies: Array.isArray(p.strategies) && p.strategies.length > 0 ? p.strategies : (p.actionPlan || []),
+            actionPlan: p.actionPlan || null,
             fileName: amazonData.source_file_name || null,
             period: amazonData.report_period || null,
             generatedAt: amazonData.generated_at || null,
@@ -509,8 +513,55 @@ const extractSummaryText = (summary: any): string | null => {
                             </div>
                         </div>
 
+                        {/* High-Level Weekly Breakdown: What's Working, What's Not, Strategies */}
+                        {amz && (amz.whatsWorking.length > 0 || amz.whatsNotWorking.length > 0) && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="bg-emerald-500/5 border border-emerald-500/25 rounded-2xl p-4 shadow-xs">
+                                    <p className="font-semibold text-sm mb-2.5 flex items-center gap-2 text-emerald-500">
+                                        <CheckCircle2 className="h-4 w-4 shrink-0" /> What&apos;s Working This Week
+                                    </p>
+                                    <ul className="space-y-2">
+                                        {amz.whatsWorking.map((w: string, i: number) => (
+                                            <li key={i} className="text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-emerald-400" />
+                                                <span>{clean(w)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <div className="bg-red-500/5 border border-red-500/25 rounded-2xl p-4 shadow-xs">
+                                    <p className="font-semibold text-sm mb-2.5 flex items-center gap-2 text-red-400">
+                                        <AlertTriangle className="h-4 w-4 shrink-0" /> What&apos;s Not Working
+                                    </p>
+                                    <ul className="space-y-2">
+                                        {amz.whatsNotWorking.map((w: string, i: number) => (
+                                            <li key={i} className="text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                                                <span className="mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 bg-red-400" />
+                                                <span>{clean(w)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+
+                                <div className="bg-amber-500/5 border border-amber-500/25 rounded-2xl p-4 shadow-xs">
+                                    <p className="font-semibold text-sm mb-2.5 flex items-center gap-2 text-amber-500">
+                                        <Lightbulb className="h-4 w-4 shrink-0" /> Strategies
+                                    </p>
+                                    <ol className="space-y-2">
+                                        {(amz.strategies || []).map((s: string, i: number) => (
+                                            <li key={i} className="text-xs text-foreground/85 flex gap-2 leading-relaxed">
+                                                <span className="shrink-0 font-bold text-amber-500 w-4">{i + 1}.</span>
+                                                <span>{clean(typeof s === 'string' ? s : (s as any).action || JSON.stringify(s))}</span>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Strategic Recommendations / Action Plan */}
-                        {amz?.actionPlan && Array.isArray(amz.actionPlan) && amz.actionPlan.length > 0 && (
+                        {amz?.actionPlan && Array.isArray(amz.actionPlan) && amz.actionPlan.length > 0 && amz.whatsWorking.length === 0 && (
                             <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5 shadow-sm">
                                 <p className="font-semibold text-base mb-3 flex items-center gap-2 text-primary">
                                     <Lightbulb className="h-4 w-4" /> Advertising Strategic Action Plan

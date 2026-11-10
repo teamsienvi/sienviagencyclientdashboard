@@ -32,10 +32,13 @@ Identify:
 - Top 6 search terms with highest spend but ZERO sales (these are wasting budget)
 
 Then write:
+- whatsWorking: 3-5 concrete bullet points on WHAT IS WORKING THIS WEEK — top revenue/ROAS campaigns, profitable ACoS drivers, strong conversion/click metrics, or week-over-week gains. Every bullet MUST cite actual campaign names and exact numbers ($ sales, $ spend, ROAS, ACoS, or orders).
+- whatsNotWorking: 3-5 concrete bullet points on WHAT IS NOT WORKING THIS WEEK — budget bleeders (campaigns with high spend and $0 sales or unprofitable ACoS), wasted search terms/ASINs with 0 orders, low CTR/CVR bottlenecks, or week-over-week declines. Every bullet MUST cite actual campaign names or search terms and exact dollar spend.
+- strategies: 4-5 high-level strategic recommendations and optimization plays for the next week — how to scale winning campaigns/keywords, negate or cut bleeders, reallocate budget, refine match types/placements, and lower ACoS while growing sales. Reference actual campaign names and search terms.
 - executiveSummary: 3-4 bullet points referencing the actual numbers from the data. Mention the reporting period length only if it is provided.
 - clientNeedsToKnow: 1 honest paragraph about overall account health over the reporting period
 - channelSnapshot: 1 paragraph about campaign type breakdown (Sponsored Products vs Brands vs Display, or whatever types are in the data)
-- actionPlan: 4-5 specific bullet points for the next reporting period, referencing actual campaign names from the data
+- actionPlan: 4-5 specific tactical steps for the next reporting period, referencing actual campaign names from the data
 - finalRecommendation: 1 closing paragraph with a clear verdict
 
 Return EXACTLY this JSON structure (use null for any value you cannot determine):
@@ -51,12 +54,12 @@ Return EXACTLY this JSON structure (use null for any value you cannot determine)
     "cvr": 0.0,
     "avgCpc": 0.00
   },
+  "whatsWorking": ["win 1 with exact numbers", "win 2 with exact numbers", "win 3 with exact numbers"],
+  "whatsNotWorking": ["issue 1 with exact numbers", "issue 2 with exact numbers", "issue 3 with exact numbers"],
+  "strategies": ["strategy 1", "strategy 2", "strategy 3", "strategy 4"],
   "executiveSummary": ["bullet 1", "bullet 2", "bullet 3"],
   "clientNeedsToKnow": "paragraph text",
   "channelSnapshot": "paragraph text",
-  "topRevenueCampaigns": [
-    { "name": "Campaign Name", "spend": 0.00, "sales": 0.00, "acos": 0.0, "orders": 0, "roas": 0.00 }
-  ],
   "wastefulSearchTerms": [
     { "term": "search term", "clicks": 0, "spend": 0.00, "sales": 0.00, "action": "Negate or cut bid" }
   ],
@@ -68,8 +71,7 @@ RULES:
 - Only use numbers actually present in the data. Do NOT invent metrics.
 - Be specific: reference actual campaign names and search terms from the data.
 - wastefulSearchTerms: ONLY include terms where sales = 0 and spend > 0. Sort by spend descending.
-- topRevenueCampaigns: sort by sales descending.
-- Each executiveSummary bullet must include at least one specific number (dollar amount, percentage, count).
+- Each whatsWorking, whatsNotWorking, and executiveSummary bullet must include at least one specific number (dollar amount, percentage, count).
 - If a field cannot be determined from the data, use null.
 - No fluff. Direct and actionable.
 
@@ -246,6 +248,10 @@ ${"─".repeat(60)}
 
 // ─── Chat Completions API (fast, single call, no polling) ────────────────────
 async function callChatCompletion(apiKey: string, userMessage: string): Promise<any> {
+    const safeMessage = typeof (userMessage as any).toWellFormed === "function"
+        ? (userMessage as any).toWellFormed()
+        : userMessage.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "");
+
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -264,7 +270,7 @@ async function callChatCompletion(apiKey: string, userMessage: string): Promise<
                 },
                 {
                     role: "user",
-                    content: userMessage
+                    content: safeMessage
                 }
             ]
         })
@@ -302,6 +308,9 @@ function parseAmazonResponse(text: string): any {
                     cvr: parsed.kpis?.cvr ?? null,
                     avgCpc: parsed.kpis?.avgCpc ?? null,
                 },
+                whatsWorking: Array.isArray(parsed.whatsWorking) ? parsed.whatsWorking : [],
+                whatsNotWorking: Array.isArray(parsed.whatsNotWorking) ? parsed.whatsNotWorking : [],
+                strategies: Array.isArray(parsed.strategies) ? parsed.strategies : [],
                 executiveSummary: parsed.executiveSummary || [],
                 clientNeedsToKnow: parsed.clientNeedsToKnow || "",
                 channelSnapshot: parsed.channelSnapshot || "",
@@ -318,6 +327,9 @@ function parseAmazonResponse(text: string): any {
     // Fallback: return empty structure
     return {
         kpis: { adSales: null, adSpend: null, acos: null, roas: null, orders: null, ctr: null, cvr: null, avgCpc: null },
+        whatsWorking: [],
+        whatsNotWorking: [],
+        strategies: [],
         executiveSummary: [text.substring(0, 300)],
         clientNeedsToKnow: "",
         channelSnapshot: "",
