@@ -29,6 +29,7 @@ export async function getArchivedClients() {
     .from("clients")
     .select("id, name, logo_url")
     .eq("is_active", false)
+    .not("name", "ilike", "%[MIGRATED]%")
     .order("name");
 
   if (error) {

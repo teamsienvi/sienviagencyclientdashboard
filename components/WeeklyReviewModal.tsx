@@ -164,7 +164,8 @@ export function WeeklyReviewModal({ open, onClose }: { open: boolean; onClose: (
     queryFn: async () => {
       const { data, error } = await supabase
         .from("analytics_summaries")
-        .select("client_id, type, period_start, period_end, generated_at, summary_data, clients(id, name, logo_url)")
+        .select("client_id, type, period_start, period_end, generated_at, summary_data, clients!inner(id, name, logo_url, is_active)")
+        .eq("clients.is_active", true)
         .in("type", ["social", "website"])
         .order("generated_at", { ascending: false });
 

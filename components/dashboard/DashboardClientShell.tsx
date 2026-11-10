@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { ClientCard } from "@/components/ClientCard";
 import { DashboardStats } from "@/components/DashboardStats";
@@ -24,18 +25,39 @@ interface DashboardClientShellProps {
 
 export default function DashboardClientShell({ dbClients, archivedDbClients = [], metricoolConfigs }: DashboardClientShellProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
   const [archivingIds, setArchivingIds] = useState<Set<string>>(new Set());
+  const [localActiveClients, setLocalActiveClients] = useState<DbClient[]>(dbClients ?? []);
+  const [localArchivedClients, setLocalArchivedClients] = useState<ArchivedDbClient[]>(
+    (archivedDbClients ?? []).filter((c) => !c.name.includes("[MIGRATED]"))
+  );
+
+  useEffect(() => {
+    setLocalActiveClients(dbClients ?? []);
+  }, [dbClients]);
+
+  useEffect(() => {
+    setLocalArchivedClients((archivedDbClients ?? []).filter((c) => !c.name.includes("[MIGRATED]")));
+  }, [archivedDbClients]);
 
   const clientIdMap = useMemo(() => {
     const map: Record<string, string> = {};
-    dbClients?.forEach((client) => {
+    localActiveClients?.forEach((client) => {
       map[client.name] = client.id;
     });
     return map;
-  }, [dbClients]);
+  }, [localActiveClients]);
+
+  const staticLogoMap = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    clientsData.forEach((c) => {
+      map[c.name.trim().toLowerCase()] = c.logo;
+    });
+    return map;
+  }, []);
 
   const metricoolPlatformsMap = useMemo(() => {
     const map: Record<string, string[]> = {};
@@ -50,20 +72,30 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
 
   const websiteAnalyticsMap = useMemo(() => {
     const map: Record<string, string> = {};
-    dbClients?.forEach((client) => {
+    localActiveClients?.forEach((client) => {
       if (client.supabase_url) {
         map[client.name] = client.id;
       }
     });
     return map;
-  }, [dbClients]);
+  }, [localActiveClients]);
 
   const filteredClients = useMemo(() => {
-    if (!searchQuery.trim()) return clientsData;
-    return clientsData.filter((client: Client) =>
+    const archivedSet = new Set(localArchivedClients.map((c) => c.name.trim().toLowerCase()));
+    const activeSet = new Set(localActiveClients.map((c) => c.name.trim().toLowerCase()));
+
+    const activeClientsData = clientsData.filter((client: Client) => {
+      const normalized = client.name.trim().toLowerCase();
+      if (archivedSet.has(normalized)) return false;
+      if (activeSet.size > 0 && !activeSet.has(normalized)) return false;
+      return true;
+    });
+
+    if (!searchQuery.trim()) return activeClientsData;
+    return activeClientsData.filter((client: Client) =>
       client.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [searchQuery]);
+  }, [searchQuery, localActiveClients, localArchivedClients]);
 
   const getAuthHeaders = async (): Promise<Record<string, string>> => {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -97,6 +129,18 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
         throw new Error(data.error || "Failed to archive client");
       }
 
+      setLocalActiveClients(prev => prev.filter(c => c.id !== clientId));
+      setLocalArchivedClients(prev => {
+        if (prev.some(c => c.id === clientId)) return prev;
+        const logoUrl = staticLogoMap[clientName.trim().toLowerCase()] || null;
+        return [...prev, { id: clientId, name: clientName, logo_url: logoUrl }].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+      });
+      queryClient.invalidateQueries({ queryKey: ["user-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-review-raw"] });
+
       toast.success(`${clientName} has been archived`, {
         description: "You can restore it from the Archived Clients section below.",
       });
@@ -128,6 +172,17 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to restore client");
       }
+
+      setLocalArchivedClients(prev => prev.filter(c => c.id !== clientId));
+      setLocalActiveClients(prev => {
+        if (prev.some(c => c.id === clientId)) return prev;
+        return [...prev, { id: clientId, name: clientName, supabase_url: null }].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        );
+      });
+      queryClient.invalidateQueries({ queryKey: ["user-clients"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["weekly-review-raw"] });
 
       toast.success(`${clientName} has been restored`, {
         description: "The client is now visible in the Command Center.",
@@ -205,7 +260,7 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
         )}
 
         {/* ── Archived Clients Section ── */}
-        {archivedDbClients.length > 0 && (
+        {localArchivedClients.length > 0 && (
           <div className="mt-16">
             <button
               onClick={() => setArchivedOpen(!archivedOpen)}
@@ -215,7 +270,7 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
                 <Archive className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                 <span className="font-semibold text-foreground">Archived Clients</span>
                 <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-muted-foreground/10 text-muted-foreground">
-                  {archivedDbClients.length}
+                  {localArchivedClients.length}
                 </span>
               </div>
               {archivedOpen ? (
@@ -227,42 +282,47 @@ export default function DashboardClientShell({ dbClients, archivedDbClients = []
 
             {archivedOpen && (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-                {archivedDbClients.map((archivedClient) => (
-                  <div
-                    key={archivedClient.id}
-                    className="relative rounded-xl border border-border/40 bg-card/50 p-5 opacity-70 hover:opacity-90 transition-all duration-200"
-                  >
-                    <div className="flex items-center gap-4 mb-4">
-                      {archivedClient.logo_url ? (
-                        <img
-                          src={archivedClient.logo_url}
-                          alt={archivedClient.name}
-                          className="w-12 h-12 rounded-lg object-cover grayscale"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                          <span className="text-lg font-bold text-muted-foreground">
-                            {archivedClient.name.charAt(0)}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-foreground truncate">{archivedClient.name}</h3>
-                        <p className="text-xs text-muted-foreground">Archived</p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRestore(archivedClient.id, archivedClient.name)}
-                      disabled={archivingIds.has(archivedClient.id)}
-                      className="w-full gap-2 font-medium border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all"
+                {localArchivedClients.map((archivedClient) => {
+                  const resolvedLogo =
+                    archivedClient.logo_url ||
+                    staticLogoMap[archivedClient.name.trim().toLowerCase()];
+                  return (
+                    <div
+                      key={archivedClient.id}
+                      className="relative rounded-xl border border-border/40 bg-card/50 p-5 opacity-70 hover:opacity-90 transition-all duration-200"
                     >
-                      <RotateCcw className={`h-4 w-4 text-primary ${archivingIds.has(archivedClient.id) ? "animate-spin" : ""}`} />
-                      {archivingIds.has(archivedClient.id) ? "Restoring..." : "Restore to Command Center"}
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-center gap-4 mb-4">
+                        {resolvedLogo ? (
+                          <img
+                            src={resolvedLogo}
+                            alt={archivedClient.name}
+                            className="w-12 h-12 rounded-lg object-cover grayscale"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                            <span className="text-lg font-bold text-muted-foreground">
+                              {archivedClient.name.charAt(0)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-foreground truncate">{archivedClient.name}</h3>
+                          <p className="text-xs text-muted-foreground">Archived</p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRestore(archivedClient.id, archivedClient.name)}
+                        disabled={archivingIds.has(archivedClient.id)}
+                        className="w-full gap-2 font-medium border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all"
+                      >
+                        <RotateCcw className={`h-4 w-4 text-primary ${archivingIds.has(archivedClient.id) ? "animate-spin" : ""}`} />
+                        {archivingIds.has(archivedClient.id) ? "Restoring..." : "Restore to Command Center"}
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
