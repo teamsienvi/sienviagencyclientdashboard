@@ -594,6 +594,7 @@ async function computeWebOrGA4Metrics(
             .from("report_gsc_metrics" as any)
             .select("*")
             .eq("client_id", clientId)
+            .order("collected_at", { ascending: false })
             .order("date_range_end", { ascending: false })
             .limit(2),
     ]);

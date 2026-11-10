@@ -86,13 +86,62 @@ export function WebsiteOverviewCard({ clientId, title = "Website Overview", isAc
         staleTime: 0,
     });
 
+    // Subscribe directly to live GSC metrics so the Google Search card in Website Overview
+    // updates instantaneously whenever a new CSV is uploaded, never showing stale numbers
+    const { data: gscRows } = useQuery({
+        queryKey: ["client-gsc-metrics", clientId],
+        queryFn: async () => {
+            if (!clientId) return [];
+            const { data, error } = await supabase
+                .from("report_gsc_metrics" as any)
+                .select("*")
+                .eq("client_id", clientId)
+                .order("collected_at", { ascending: false })
+                .order("date_range_end", { ascending: false });
+            if (error) throw error;
+            return (data || []) as any[];
+        },
+        enabled: !!clientId,
+        staleTime: 0,
+    });
+
     const summary = row?.summary_data || null;
     const m = summary?.metrics || {};
     const web = m.web || null;
     const shop = m.shop || null;
     const seo = m.seo || null;
-    const gsc = m.gsc || null;
-    const isNewFormat = "web" in m || "seo" in m || "shop" in m || "gsc" in m;
+
+    const liveGsc = (() => {
+        if (!gscRows || gscRows.length === 0) return null;
+        const latest = gscRows[0];
+        const daily = Array.isArray(latest.daily_breakdown) ? latest.daily_breakdown : [];
+        if (daily.length > 7) {
+            const last7 = [...daily].sort((a: any, b: any) => String(a.date).localeCompare(String(b.date))).slice(-7);
+            const clicks = last7.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+            const impressions = last7.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+            const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0;
+            const position = last7.length > 0 ? last7.reduce((s: number, d: any) => s + (d.position || 0), 0) / last7.length : 0;
+            return {
+                clicks,
+                impressions,
+                ctr,
+                position,
+                window: `Last 7 Days (${last7[0]?.date} to ${last7[last7.length - 1]?.date})`,
+            };
+        }
+        return {
+            clicks: latest.total_clicks ?? 0,
+            impressions: latest.total_impressions ?? 0,
+            ctr: parseFloat(latest.avg_ctr) || 0,
+            position: parseFloat(latest.avg_position) || 0,
+            window: latest.date_range_start && latest.date_range_end
+                ? `Last 7 Days (${latest.date_range_start} to ${latest.date_range_end})`
+                : m.gsc?.window,
+        };
+    })();
+
+    const gsc = liveGsc || m.gsc || null;
+    const isNewFormat = "web" in m || "seo" in m || "shop" in m || "gsc" in m || Boolean(liveGsc);
 
     const strengths: string[] = summary?.strengths || [];
     const weaknesses: string[] = summary?.weaknesses || [];

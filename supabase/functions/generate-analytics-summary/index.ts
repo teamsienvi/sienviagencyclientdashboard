@@ -191,6 +191,22 @@ serve(async (req) => {
                 debugUpsertError = insertError;
             } else {
                 console.log(`Analytics summary cached for ${clientId} / ${type}`);
+                const nowIso = new Date().toISOString();
+                const staleAfterIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+                await supabase
+                    .from("sync_state_registry")
+                    .update({
+                        status: "ready",
+                        last_synced_at: nowIso,
+                        last_success_at: nowIso,
+                        stale_after_at: staleAfterIso,
+                        retry_count: 0,
+                        error_message: null,
+                        job_locked_until: null,
+                    })
+                    .eq("client_id", clientId)
+                    .eq("platform", type)
+                    .eq("module", `${type}_summary`);
             }
         } catch (cacheErr) {
             console.warn("Failed to cache summary (table may not exist):", cacheErr);
@@ -1373,6 +1389,7 @@ async function collectSeoData(
                 .from("report_gsc_metrics")
                 .select("*")
                 .eq("client_id", clientId)
+                .order("collected_at", { ascending: false })
                 .order("date_range_end", { ascending: false })
                 .limit(10)
             : { data: null, error: null };
@@ -1419,7 +1436,29 @@ async function collectSeoData(
                 windowLabel = `Last 7 Days (${last7Daily[0]?.date} to ${last7Daily[last7Daily.length - 1]?.date})`;
             }
 
-            if (allDaily.length >= 14) {
+            const isWeeklyPrev = prevGsc && (prevGsc.daily_breakdown?.length || 0) <= 14 && (prevGsc.total_clicks || 0) > 0;
+            if (latestDaily.length <= 7 && isWeeklyPrev) {
+                const prev7Clicks = prevGsc.total_clicks || 0;
+                const prev7Impressions = prevGsc.total_impressions || 0;
+                const prev7Ctr = parseFloat(prevGsc.avg_ctr) || (prev7Impressions > 0 ? (prev7Clicks / prev7Impressions) * 100 : 0);
+                const prev7Pos = parseFloat(prevGsc.avg_position) || 0;
+                const prevWindow = `${prevGsc.date_range_start} to ${prevGsc.date_range_end}`;
+
+                if (prev7Clicks > 0) {
+                    const clicksTrend = ((gscClicks - prev7Clicks) / prev7Clicks) * 100;
+                    clicksTrendStr = ` (vs ${prev7Clicks.toLocaleString()} clicks in prior 7-day period ${prevWindow}, ${clicksTrend >= 0 ? '+' : ''}${clicksTrend.toFixed(1)}% change)`;
+                }
+                if (prev7Impressions > 0) {
+                    const impTrend = ((gscImpressions - prev7Impressions) / prev7Impressions) * 100;
+                    impressionsTrendStr = ` (vs ${prev7Impressions.toLocaleString()} impressions in prior 7-day period, ${impTrend >= 0 ? '+' : ''}${impTrend.toFixed(1)}% change)`;
+                }
+                if (prev7Ctr > 0) {
+                    ctrTrendStr = ` (vs ${prev7Ctr.toFixed(2)}% in prior 7-day period)`;
+                }
+                if (prev7Pos > 0) {
+                    posTrendStr = ` (vs ${prev7Pos.toFixed(2)} in prior 7-day period)`;
+                }
+            } else if (allDaily.length >= 14) {
                 const prev7Daily = allDaily.slice(-14, -7);
                 const prev7Clicks = prev7Daily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
                 const prev7Impressions = prev7Daily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);

@@ -41,11 +41,13 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
         .from("report_gsc_metrics" as any)
         .select("*")
         .eq("client_id", clientId)
-        .order("collected_at", { ascending: false });
+        .order("collected_at", { ascending: false })
+        .order("date_range_end", { ascending: false });
       if (error) throw error;
       return (data || []) as any[];
     },
     enabled: !!clientId && isActive,
+    staleTime: 0,
   });
 
   // Date filtering logic
@@ -69,15 +71,26 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [gscRows]);
 
+  const latestRow = gscRows?.[0] || null;
+
   const filteredDaily = useMemo(() => {
+    if (dateFilter === "7d" && latestRow && Array.isArray(latestRow.daily_breakdown) && latestRow.daily_breakdown.length > 0 && latestRow.daily_breakdown.length <= 7) {
+      return [...latestRow.daily_breakdown].sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+    }
     if (allDailyBreakdown.length === 0) return [];
     if (dateFilter === "all") return allDailyBreakdown;
     const days = filterDays[dateFilter] || 7;
     return allDailyBreakdown.slice(-days);
-  }, [allDailyBreakdown, dateFilter]);
+  }, [allDailyBreakdown, dateFilter, latestRow]);
 
-  const currentStartDate = filteredDaily.length > 0 ? filteredDaily[0].date : (gscRows?.[0]?.date_range_start || "");
-  const currentEndDate = filteredDaily.length > 0 ? filteredDaily[filteredDaily.length - 1].date : (gscRows?.[0]?.date_range_end || "");
+  const isLatest7dDirect = dateFilter === "7d" && latestRow && (latestRow.daily_breakdown?.length || 0) <= 7;
+
+  const currentStartDate = isLatest7dDirect
+    ? (latestRow.date_range_start || (filteredDaily[0]?.date ?? ""))
+    : (filteredDaily.length > 0 ? filteredDaily[0].date : (latestRow?.date_range_start || ""));
+  const currentEndDate = isLatest7dDirect
+    ? (latestRow.date_range_end || (filteredDaily[filteredDaily.length - 1]?.date ?? ""))
+    : (filteredDaily.length > 0 ? filteredDaily[filteredDaily.length - 1].date : (latestRow?.date_range_end || ""));
 
   // Helpers to aggregate multi-period lists
   const aggregateGSCList = (items: any[], keyProp: string) => {
@@ -174,13 +187,23 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     };
   }, [gscRows, dateFilter]);
 
-  // Recalculate KPIs from filtered daily data
-  const filteredTotalClicks = filteredDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
-  const filteredTotalImpressions = filteredDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
-  const filteredAvgCtr = filteredTotalImpressions > 0 ? (filteredTotalClicks / filteredTotalImpressions) * 100 : 0;
-  const filteredAvgPosition = filteredDaily.length > 0
-    ? filteredDaily.reduce((s: number, d: any) => s + (d.position || 0), 0) / filteredDaily.length
-    : 0;
+  // Recalculate KPIs from latest 7d snapshot or filtered daily data
+  const dailyClicksSum = filteredDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+  const dailyImpSum = filteredDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+  const filteredTotalClicks = isLatest7dDirect && (latestRow?.total_clicks ?? 0) > 0
+    ? latestRow.total_clicks
+    : dailyClicksSum;
+  const filteredTotalImpressions = isLatest7dDirect && (latestRow?.total_impressions ?? 0) > 0
+    ? latestRow.total_impressions
+    : dailyImpSum;
+  const filteredAvgCtr = isLatest7dDirect && parseFloat(latestRow?.avg_ctr) > 0
+    ? parseFloat(latestRow.avg_ctr)
+    : (filteredTotalImpressions > 0 ? (filteredTotalClicks / filteredTotalImpressions) * 100 : 0);
+  const filteredAvgPosition = isLatest7dDirect && parseFloat(latestRow?.avg_position) > 0
+    ? parseFloat(latestRow.avg_position)
+    : (filteredDaily.length > 0
+        ? filteredDaily.reduce((s: number, d: any) => s + (d.position || 0), 0) / filteredDaily.length
+        : 0);
 
   if (isLoading) {
     return (
@@ -236,16 +259,24 @@ export function GSCSection({ clientId, isActive = true }: GSCSectionProps) {
     impressions: d.impressions,
   }));
 
-  // Trend comparison: compare selected window vs equal preceding window
+  // Trend comparison: compare selected window vs previous weekly upload (for 7d) or equal preceding daily window
   const currentCount = filteredDaily.length;
+  const prevRow = gscRows && gscRows.length > 1 ? gscRows[1] : null;
+  const usePrevRowFor7d = isLatest7dDirect && prevRow && (prevRow.daily_breakdown?.length || 0) <= 14 && (prevRow.total_clicks || 0) > 0;
   const prevPeriodDaily = dateFilter !== "all" && allDailyBreakdown.length >= currentCount * 2
     ? allDailyBreakdown.slice(-currentCount * 2, -currentCount)
     : [];
-  const prevClicks = prevPeriodDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
+  const prevClicks = usePrevRowFor7d
+    ? (prevRow.total_clicks || 0)
+    : prevPeriodDaily.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
   const clicksTrend = prevClicks > 0 ? ((filteredTotalClicks - prevClicks) / prevClicks) * 100 : 0;
-  const prevImpressions = prevPeriodDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
+  const prevImpressions = usePrevRowFor7d
+    ? (prevRow.total_impressions || 0)
+    : prevPeriodDaily.reduce((s: number, d: any) => s + (d.impressions || 0), 0);
   const impressionsTrend = prevImpressions > 0 ? ((filteredTotalImpressions - prevImpressions) / prevImpressions) * 100 : 0;
-  const trendLabel = prevPeriodDaily.length > 0 ? `vs prev ${prevPeriodDaily.length}d` : `trend`;
+  const trendLabel = usePrevRowFor7d
+    ? "vs prev 7d"
+    : (prevPeriodDaily.length > 0 ? `vs prev ${prevPeriodDaily.length}d` : `trend`);
 
   const totalDeviceClicks = deviceBreakdown.reduce((s: number, d: any) => s + (d.clicks || 0), 0);
 

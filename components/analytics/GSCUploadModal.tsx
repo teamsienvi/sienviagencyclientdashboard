@@ -76,6 +76,7 @@ function parsePct(s: string): number {
 
 export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUploadModalProps) {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string>("");
   const [parsedData, setParsedData] = useState<{
     dateRangeStart: string;
     dateRangeEnd: string;
@@ -100,8 +101,9 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
     if (!files || files.length === 0) return;
 
     setIsProcessing(true);
+    setStatusMessage("Reading CSV files...");
     try {
-      const fileMap = new Map<string, string>();
+      const rawFiles: { name: string; content: string }[] = [];
 
       // Check if it's a zip file
       if (files.length === 1 && files[0].name.toLowerCase().endsWith(".zip")) {
@@ -111,138 +113,249 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
         for (const [filename, fileObj] of Object.entries(zip.files)) {
           if (!fileObj.dir && filename.toLowerCase().endsWith(".csv")) {
             const content = await fileObj.async("text");
-            // Normalize filename without directory path
             const baseName = filename.split("/").pop()?.split("\\").pop() || filename;
-            fileMap.set(baseName.toLowerCase(), content);
+            rawFiles.push({ name: baseName.toLowerCase(), content });
           }
         }
       } else {
-        // Multiple CSV files
+        // One or more CSV/ZIP files
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          if (file.name.toLowerCase().endsWith(".csv")) {
+          const lowerName = file.name.toLowerCase();
+          if (lowerName.endsWith(".zip")) {
+            const zip = await JSZip.loadAsync(file);
+            for (const [filename, fileObj] of Object.entries(zip.files)) {
+              if (!fileObj.dir && filename.toLowerCase().endsWith(".csv")) {
+                const content = await fileObj.async("text");
+                const baseName = filename.split("/").pop()?.split("\\").pop() || filename;
+                rawFiles.push({ name: baseName.toLowerCase(), content });
+              }
+            }
+          } else if (lowerName.endsWith(".csv")) {
             const content = await file.text();
-            fileMap.set(file.name.toLowerCase(), content);
+            rawFiles.push({ name: lowerName, content });
           }
         }
       }
 
-      if (fileMap.size === 0) {
+      if (rawFiles.length === 0) {
         toast.error("No valid CSV files found. Please upload a GSC ZIP export or CSV files.");
         setIsProcessing(false);
+        setStatusMessage("");
         return;
       }
 
-      // Parse CSV files
+      // Parse CSV files using BOTH header inspection and filename matching
       let dailyBreakdown: any[] = [];
       let topQueries: any[] = [];
       let topPages: any[] = [];
       let countryBreakdown: any[] = [];
       let deviceBreakdown: any[] = [];
       let searchAppearance: any[] = [];
-      const filesDetected: string[] = [];
+      const filesDetectedSet = new Set<string>();
 
-      // 1. Chart.csv or Dates.csv
-      const chartRaw = fileMap.get("chart.csv") || fileMap.get("dates.csv");
-      if (chartRaw) {
-        filesDetected.push("Chart/Dates");
-        const rows = parseCSV(chartRaw);
-        dailyBreakdown = rows.slice(1).map((r) => ({
-          date: r[0],
-          clicks: parseInt(r[1]) || 0,
-          impressions: parseInt(r[2]) || 0,
-          ctr: parsePct(r[3]),
-          position: parseFloat(r[4]) || 0,
-        })).filter(d => d.date && d.date.length >= 8);
+      for (const file of rawFiles) {
+        const rows = parseCSV(file.content);
+        if (rows.length < 2) continue;
+
+        const headers = rows[0].map((h) => h.toLowerCase().replace(/^\uFEFF/, "").trim());
+        const firstCol = headers[0] || "";
+        const fname = file.name;
+
+        const isChart =
+          firstCol === "date" ||
+          firstCol === "dates" ||
+          fname === "chart.csv" ||
+          fname === "dates.csv" ||
+          fname.includes("chart") ||
+          fname.includes("dates");
+
+        const isQueries =
+          firstCol.includes("quer") ||
+          fname === "queries.csv" ||
+          fname.includes("quer");
+
+        const isPages =
+          firstCol.includes("page") ||
+          firstCol === "url" ||
+          fname === "pages.csv" ||
+          fname.includes("page");
+
+        const isCountries =
+          firstCol.includes("countr") ||
+          fname === "countries.csv" ||
+          fname.includes("countr");
+
+        const isDevices =
+          firstCol.includes("device") ||
+          fname === "devices.csv" ||
+          fname.includes("device");
+
+        const isSearchApp =
+          firstCol.includes("appearance") ||
+          fname.includes("appearance");
+
+        if (isChart) {
+          filesDetectedSet.add("Chart/Dates");
+          dailyBreakdown = rows.slice(1).map((r) => ({
+            date: r[0],
+            clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+            impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+            ctr: parsePct(r[3]),
+            position: parseFloat(r[4]) || 0,
+          })).filter((d) => d.date && /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+        } else if (isQueries) {
+          filesDetectedSet.add("Queries");
+          topQueries = rows.slice(1).map((r) => ({
+            query: r[0],
+            clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+            impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+            ctr: parsePct(r[3]),
+            position: parseFloat(r[4]) || 0,
+          })).filter((q) => q.query);
+        } else if (isPages) {
+          filesDetectedSet.add("Pages");
+          topPages = rows.slice(1).map((r) => ({
+            page: r[0],
+            clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+            impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+            ctr: parsePct(r[3]),
+            position: parseFloat(r[4]) || 0,
+          })).filter((p) => p.page);
+        } else if (isCountries) {
+          filesDetectedSet.add("Countries");
+          countryBreakdown = rows.slice(1).map((r) => ({
+            country: r[0],
+            clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+            impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+            ctr: parsePct(r[3]),
+            position: parseFloat(r[4]) || 0,
+          })).filter((c) => c.country);
+        } else if (isDevices) {
+          filesDetectedSet.add("Devices");
+          deviceBreakdown = rows.slice(1).map((r) => ({
+            device: r[0],
+            clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+            impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+            ctr: parsePct(r[3]),
+            position: parseFloat(r[4]) || 0,
+          })).filter((d) => d.device);
+        } else if (isSearchApp) {
+          filesDetectedSet.add("Search Appearance");
+          searchAppearance = rows.slice(1).map((r) => ({
+            type: r[0],
+            clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+            impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+            ctr: parsePct(r[3]),
+            position: parseFloat(r[4]) || 0,
+          })).filter((s) => s.type);
+        } else {
+          // Fallback: inspect first data row value to infer table type
+          const sampleVal = (rows[1]?.[0] || "").trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(sampleVal)) {
+            filesDetectedSet.add("Chart/Dates");
+            dailyBreakdown = rows.slice(1).map((r) => ({
+              date: r[0],
+              clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+              impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+              ctr: parsePct(r[3]),
+              position: parseFloat(r[4]) || 0,
+            })).filter((d) => d.date && /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+          } else if (sampleVal.startsWith("http://") || sampleVal.startsWith("https://")) {
+            filesDetectedSet.add("Pages");
+            topPages = rows.slice(1).map((r) => ({
+              page: r[0],
+              clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+              impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+              ctr: parsePct(r[3]),
+              position: parseFloat(r[4]) || 0,
+            })).filter((p) => p.page);
+          } else {
+            filesDetectedSet.add("Queries");
+            topQueries = rows.slice(1).map((r) => ({
+              query: r[0],
+              clicks: parseInt((r[1] || "").replace(/,/g, "")) || 0,
+              impressions: parseInt((r[2] || "").replace(/,/g, "")) || 0,
+              ctr: parsePct(r[3]),
+              position: parseFloat(r[4]) || 0,
+            })).filter((q) => q.query);
+          }
+        }
       }
 
-      // 2. Queries.csv
-      const queriesRaw = fileMap.get("queries.csv");
-      if (queriesRaw) {
-        filesDetected.push("Queries");
-        const rows = parseCSV(queriesRaw);
-        topQueries = rows.slice(1).map((r) => ({
-          query: r[0],
-          clicks: parseInt(r[1]) || 0,
-          impressions: parseInt(r[2]) || 0,
-          ctr: parsePct(r[3]),
-          position: parseFloat(r[4]) || 0,
-        })).filter(q => q.query);
+      const filesDetected = Array.from(filesDetectedSet);
+      if (filesDetected.length === 0) {
+        toast.error("Could not recognize GSC table columns in the uploaded CSV.");
+        setIsProcessing(false);
+        setStatusMessage("");
+        return;
       }
 
-      // 3. Pages.csv
-      const pagesRaw = fileMap.get("pages.csv");
-      if (pagesRaw) {
-        filesDetected.push("Pages");
-        const rows = parseCSV(pagesRaw);
-        topPages = rows.slice(1).map((r) => ({
-          page: r[0],
-          clicks: parseInt(r[1]) || 0,
-          impressions: parseInt(r[2]) || 0,
-          ctr: parsePct(r[3]),
-          position: parseFloat(r[4]) || 0,
-        })).filter(p => p.page);
-      }
+      // Compute KPIs from the most authoritative table included in the upload:
+      // 1. Chart/Dates (exact daily property totals)
+      // 2. Devices (exact property totals across Desktop + Mobile + Tablet)
+      // 3. Countries
+      // 4. Queries
+      // 5. Pages
+      // 6. Search Appearance
+      const primaryTable =
+        dailyBreakdown.length > 0 ? dailyBreakdown :
+        deviceBreakdown.length > 0 ? deviceBreakdown :
+        countryBreakdown.length > 0 ? countryBreakdown :
+        topQueries.length > 0 ? topQueries :
+        topPages.length > 0 ? topPages :
+        searchAppearance;
 
-      // 4. Countries.csv
-      const countriesRaw = fileMap.get("countries.csv");
-      if (countriesRaw) {
-        filesDetected.push("Countries");
-        const rows = parseCSV(countriesRaw);
-        countryBreakdown = rows.slice(1).map((r) => ({
-          country: r[0],
-          clicks: parseInt(r[1]) || 0,
-          impressions: parseInt(r[2]) || 0,
-          ctr: parsePct(r[3]),
-          position: parseFloat(r[4]) || 0,
-        })).filter(c => c.country);
-      }
-
-      // 5. Devices.csv
-      const devicesRaw = fileMap.get("devices.csv");
-      if (devicesRaw) {
-        filesDetected.push("Devices");
-        const rows = parseCSV(devicesRaw);
-        deviceBreakdown = rows.slice(1).map((r) => ({
-          device: r[0],
-          clicks: parseInt(r[1]) || 0,
-          impressions: parseInt(r[2]) || 0,
-          ctr: parsePct(r[3]),
-          position: parseFloat(r[4]) || 0,
-        })).filter(d => d.device);
-      }
-
-      // 6. Search appearance.csv
-      const searchAppRaw = fileMap.get("search appearance.csv") || fileMap.get("search_appearance.csv");
-      if (searchAppRaw) {
-        filesDetected.push("Search Appearance");
-        const rows = parseCSV(searchAppRaw);
-        searchAppearance = rows.slice(1).map((r) => ({
-          type: r[0],
-          clicks: parseInt(r[1]) || 0,
-          impressions: parseInt(r[2]) || 0,
-          ctr: parsePct(r[3]),
-          position: parseFloat(r[4]) || 0,
-        })).filter(s => s.type);
-      }
-
-      // Calculate totals
-      const totalClicks = dailyBreakdown.length > 0
-        ? dailyBreakdown.reduce((s, d) => s + d.clicks, 0)
-        : topQueries.reduce((s, q) => s + q.clicks, 0);
-
-      const totalImpressions = dailyBreakdown.length > 0
-        ? dailyBreakdown.reduce((s, d) => s + d.impressions, 0)
-        : topQueries.reduce((s, q) => s + q.impressions, 0);
-
+      const totalClicks = primaryTable.reduce((s, item) => s + (item.clicks || 0), 0);
+      const totalImpressions = primaryTable.reduce((s, item) => s + (item.impressions || 0), 0);
       const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+      const weightedPosNumerator = primaryTable.reduce(
+        (s, item) => s + (item.position || 0) * (item.impressions || 1),
+        0
+      );
+      const weightedPosDenominator = primaryTable.reduce(
+        (s, item) => s + (item.impressions || 1),
+        0
+      );
       const avgPosition = dailyBreakdown.length > 0
-        ? dailyBreakdown.reduce((s, d) => s + d.position, 0) / dailyBreakdown.length
-        : 0;
+        ? dailyBreakdown.reduce((s, d) => s + (d.position || 0), 0) / dailyBreakdown.length
+        : (weightedPosDenominator > 0 ? weightedPosNumerator / weightedPosDenominator : 0);
 
+      // Determine date range
       const dates = dailyBreakdown.map((d) => d.date).sort();
-      const dateRangeStart = dates.length > 0 ? dates[0] : new Date().toISOString().slice(0, 10);
-      const dateRangeEnd = dates.length > 0 ? dates[dates.length - 1] : new Date().toISOString().slice(0, 10);
+      let dateRangeStart = dates[0] || "";
+      let dateRangeEnd = dates[dates.length - 1] || "";
+
+      if (!dateRangeStart || !dateRangeEnd) {
+        // Check if any filename encodes YYYY-MM-DD dates
+        const allNames = Array.from(files).map((f) => f.name).join(" ");
+        const matchedDates = allNames.match(/\d{4}-\d{2}-\d{2}/g);
+        if (matchedDates && matchedDates.length >= 2) {
+          const sortedMatched = [...matchedDates].sort();
+          dateRangeStart = sortedMatched[0];
+          dateRangeEnd = sortedMatched[sortedMatched.length - 1];
+        } else {
+          // Check latest existing row in report_gsc_metrics for this client
+          const { data: latestExisting } = await supabase
+            .from("report_gsc_metrics" as any)
+            .select("date_range_start, date_range_end, collected_at")
+            .eq("client_id", clientId)
+            .order("collected_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latestExisting && (latestExisting as any).date_range_start && (latestExisting as any).date_range_end) {
+            dateRangeStart = (latestExisting as any).date_range_start;
+            dateRangeEnd = (latestExisting as any).date_range_end;
+          } else {
+            const end = new Date();
+            const start = new Date();
+            start.setDate(end.getDate() - 6);
+            dateRangeStart = start.toISOString().slice(0, 10);
+            dateRangeEnd = end.toISOString().slice(0, 10);
+          }
+        }
+      }
 
       setParsedData({
         dateRangeStart,
@@ -260,12 +373,16 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
         filesDetected,
       });
 
-      toast.success(`Successfully parsed ${filesDetected.length} GSC data tables.`);
+      toast.success(`Successfully parsed ${filesDetected.length} GSC data table${filesDetected.length > 1 ? "s" : ""}.`);
     } catch (err: any) {
       console.error("GSC parse error:", err);
       toast.error(`Error processing files: ${err.message || "Invalid format"}`);
     } finally {
       setIsProcessing(false);
+      setStatusMessage("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -273,21 +390,127 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
     if (!parsedData || !clientId) return;
 
     setIsProcessing(true);
+    setStatusMessage("Saving GSC metrics to database...");
     try {
+      // Fetch existing row for this date range AND latest row overall so partial CSV uploads
+      // (e.g. uploading only Queries.csv or Pages.csv or Chart.csv) merge cleanly instead of wiping other tables
+      const [{ data: samePeriodRow }, { data: latestExistingRow }] = await Promise.all([
+        supabase
+          .from("report_gsc_metrics" as any)
+          .select("*")
+          .eq("client_id", clientId)
+          .eq("date_range_start", parsedData.dateRangeStart)
+          .eq("date_range_end", parsedData.dateRangeEnd)
+          .maybeSingle(),
+        supabase
+          .from("report_gsc_metrics" as any)
+          .select("*")
+          .eq("client_id", clientId)
+          .order("collected_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      const baseRow: any = samePeriodRow || latestExistingRow || null;
+      const isPartialUpload = parsedData.filesDetected.length < 5;
+
+      const mergedTopQueries =
+        parsedData.topQueries.length > 0
+          ? parsedData.topQueries
+          : (isPartialUpload && Array.isArray(baseRow?.top_queries) ? baseRow.top_queries : []);
+
+      const mergedTopPages =
+        parsedData.topPages.length > 0
+          ? parsedData.topPages
+          : (isPartialUpload && Array.isArray(baseRow?.top_pages) ? baseRow.top_pages : []);
+
+      const mergedDevices =
+        parsedData.deviceBreakdown.length > 0
+          ? parsedData.deviceBreakdown
+          : (isPartialUpload && Array.isArray(baseRow?.device_breakdown) ? baseRow.device_breakdown : []);
+
+      const mergedCountries =
+        parsedData.countryBreakdown.length > 0
+          ? parsedData.countryBreakdown
+          : (isPartialUpload && Array.isArray(baseRow?.country_breakdown) ? baseRow.country_breakdown : []);
+
+      const mergedSearchAppearance =
+        parsedData.searchAppearance.length > 0
+          ? parsedData.searchAppearance
+          : (isPartialUpload && Array.isArray(baseRow?.search_appearance) ? baseRow.search_appearance : []);
+
+      let mergedDailyBreakdown =
+        parsedData.dailyBreakdown.length > 0
+          ? parsedData.dailyBreakdown
+          : (samePeriodRow && Array.isArray((samePeriodRow as any).daily_breakdown) && (samePeriodRow as any).daily_breakdown.length > 0
+              ? (samePeriodRow as any).daily_breakdown
+              : []);
+
+      // Determine final KPI totals:
+      // If this upload included Chart/Dates or is a new period, use parsedData's KPIs;
+      // If merging a secondary table (like Pages.csv) into an existing period that already has Chart.csv, preserve Chart.csv totals unless parsedData has higher/authoritative totals.
+      let finalClicks = parsedData.totalClicks;
+      let finalImpressions = parsedData.totalImpressions;
+      let finalCtr = parsedData.avgCtr;
+      let finalPosition = parsedData.avgPosition;
+
+      if (
+        parsedData.dailyBreakdown.length === 0 &&
+        samePeriodRow &&
+        Array.isArray((samePeriodRow as any).daily_breakdown) &&
+        (samePeriodRow as any).daily_breakdown.length > 0 &&
+        !parsedData.filesDetected.includes("Devices")
+      ) {
+        // Keep the authoritative Chart.csv totals from samePeriodRow if the user is just adding Pages/Queries to the same period
+        finalClicks = (samePeriodRow as any).total_clicks || parsedData.totalClicks;
+        finalImpressions = (samePeriodRow as any).total_impressions || parsedData.totalImpressions;
+        finalCtr = parseFloat((samePeriodRow as any).avg_ctr) || parsedData.avgCtr;
+        finalPosition = parseFloat((samePeriodRow as any).avg_position) || parsedData.avgPosition;
+      }
+
+      // If daily_breakdown is still empty (e.g., user uploaded Queries.csv for a new date range without Chart.csv),
+      // synthesize daily breakdown points across dateRangeStart..dateRangeEnd so charts and date filters update immediately
+      if (mergedDailyBreakdown.length === 0 && parsedData.dateRangeStart && parsedData.dateRangeEnd) {
+        const startDt = new Date(parsedData.dateRangeStart + "T00:00:00Z");
+        const endDt = new Date(parsedData.dateRangeEnd + "T00:00:00Z");
+        const daysList: string[] = [];
+        for (let d = new Date(startDt); d <= endDt && daysList.length < 95; d.setUTCDate(d.getUTCDate() + 1)) {
+          daysList.push(d.toISOString().slice(0, 10));
+        }
+        if (daysList.length === 0) daysList.push(parsedData.dateRangeStart);
+        const n = daysList.length;
+        const baseClicks = Math.floor(finalClicks / n);
+        const remClicks = finalClicks - baseClicks * n;
+        const baseImp = Math.floor(finalImpressions / n);
+        const remImp = finalImpressions - baseImp * n;
+
+        mergedDailyBreakdown = daysList.map((dateStr, idx) => {
+          const c = baseClicks + (idx < remClicks ? 1 : 0);
+          const imp = baseImp + (idx < remImp ? 1 : 0);
+          return {
+            date: dateStr,
+            clicks: c,
+            impressions: imp,
+            ctr: imp > 0 ? parseFloat(((c / imp) * 100).toFixed(2)) : parseFloat(finalCtr.toFixed(2)),
+            position: parseFloat(finalPosition.toFixed(2)),
+          };
+        });
+      }
+
       const row = {
         client_id: clientId,
         date_range_start: parsedData.dateRangeStart,
         date_range_end: parsedData.dateRangeEnd,
-        total_clicks: parsedData.totalClicks,
-        total_impressions: parsedData.totalImpressions,
-        avg_ctr: parseFloat(parsedData.avgCtr.toFixed(4)),
-        avg_position: parseFloat(parsedData.avgPosition.toFixed(2)),
-        top_queries: parsedData.topQueries,
-        top_pages: parsedData.topPages,
-        device_breakdown: parsedData.deviceBreakdown,
-        country_breakdown: parsedData.countryBreakdown,
-        daily_breakdown: parsedData.dailyBreakdown,
-        search_appearance: parsedData.searchAppearance,
+        total_clicks: finalClicks,
+        total_impressions: finalImpressions,
+        avg_ctr: parseFloat(finalCtr.toFixed(4)),
+        avg_position: parseFloat(finalPosition.toFixed(2)),
+        top_queries: mergedTopQueries,
+        top_pages: mergedTopPages,
+        device_breakdown: mergedDevices,
+        country_breakdown: mergedCountries,
+        daily_breakdown: mergedDailyBreakdown,
+        search_appearance: mergedSearchAppearance,
         source: "csv_import",
         collected_at: new Date().toISOString(),
       };
@@ -298,35 +521,47 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
 
       if (error) throw error;
 
-      toast.success("Google Search Console data imported successfully!");
-      queryClient.invalidateQueries({ queryKey: ["client-gsc-metrics", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["client-connected-accounts", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["hairtamin-gsc-performance-story", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] });
-      queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] });
+      // Immediately invalidate & refetch all GSC-dependent queries so UI cards, tables, and charts update right away
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["client-gsc-metrics", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["client-connected-accounts", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["hairtamin-gsc-performance-story", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["summary-metrics", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] }),
+      ]);
 
-      // Automatically trigger background regeneration of SEO & Website AI summaries
-      // and re-invalidate the cached summary queries once each Edge Function finishes.
-      supabase.functions
-        .invoke("generate-analytics-summary", {
-          body: { clientId, type: "seo", dateRange: "7d" },
-        })
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] });
-          queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] });
-        })
-        .catch((err) => console.warn("Background SEO summary refresh error:", err));
+      // Sync & regenerate SEO & Website Overview AI summaries via server endpoint (with service-role patching)
+      setStatusMessage("Updating SEO & Website AI Overviews...");
+      try {
+        const syncResp = await fetch("/api/gsc/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clientId, row }),
+        });
+        if (!syncResp.ok) {
+          throw new Error(`Sync route returned ${syncResp.status}`);
+        }
+      } catch {
+        // Fallback to direct Edge Function invocation if server route is unavailable
+        await Promise.allSettled([
+          supabase.functions.invoke("generate-analytics-summary", {
+            body: { clientId, type: "seo", dateRange: "7d" },
+          }),
+          supabase.functions.invoke("generate-analytics-summary", {
+            body: { clientId, type: "website", dateRange: "7d" },
+          }),
+        ]);
+      }
 
-      supabase.functions
-        .invoke("generate-analytics-summary", {
-          body: { clientId, type: "website", dateRange: "7d" },
-        })
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] });
-          queryClient.invalidateQueries({ queryKey: ["client-summary-metrics", clientId] });
-        })
-        .catch((err) => console.warn("Background website summary refresh error:", err));
-      
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["client-gsc-metrics", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["hairtamin-gsc-performance-story", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["analytics-summary", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["summary-metrics", clientId] }),
+        queryClient.invalidateQueries({ queryKey: ["sync_state", clientId] }),
+      ]);
+
+      toast.success("Google Search Console data & AI Overviews updated!");
       setParsedData(null);
       onSuccess?.();
       onClose();
@@ -335,6 +570,7 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
       toast.error(`Failed to save GSC data: ${err.message}`);
     } finally {
       setIsProcessing(false);
+      setStatusMessage("");
     }
   };
 
@@ -388,14 +624,34 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
           {/* Parsed Summary Preview */}
           {parsedData && (
             <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                   <span className="font-semibold text-sm">Ready to Import</span>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {parsedData.dateRangeStart} → {parsedData.dateRangeEnd}
-                </span>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <input
+                    type="date"
+                    value={parsedData.dateRangeStart}
+                    onChange={(e) =>
+                      setParsedData((prev) =>
+                        prev ? { ...prev, dateRangeStart: e.target.value } : prev
+                      )
+                    }
+                    className="bg-background border border-border rounded px-2 py-1 text-xs font-medium"
+                  />
+                  <span className="text-muted-foreground">→</span>
+                  <input
+                    type="date"
+                    value={parsedData.dateRangeEnd}
+                    onChange={(e) =>
+                      setParsedData((prev) =>
+                        prev ? { ...prev, dateRangeEnd: e.target.value } : prev
+                      )
+                    }
+                    className="bg-background border border-border rounded px-2 py-1 text-xs font-medium"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-border">
@@ -429,7 +685,7 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => { setParsedData(null); onClose(); }}>
+          <Button variant="outline" disabled={isProcessing} onClick={() => { setParsedData(null); onClose(); }}>
             Cancel
           </Button>
           <Button
@@ -438,7 +694,7 @@ export function GSCUploadModal({ clientId, isOpen, onClose, onSuccess }: GSCUplo
             className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
           >
             {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Save to Dashboard
+            {isProcessing ? (statusMessage || "Saving...") : "Save to Dashboard"}
           </Button>
         </DialogFooter>
       </DialogContent>

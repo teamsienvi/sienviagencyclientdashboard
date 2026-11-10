@@ -22,14 +22,16 @@ export function HairtaminGSCStory({ clientId }: { clientId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("report_gsc_metrics" as any)
-        .select("date_range_start,date_range_end,total_clicks,total_impressions,avg_ctr,avg_position,top_queries,top_pages")
+        .select("date_range_start,date_range_end,total_clicks,total_impressions,avg_ctr,avg_position,top_queries,top_pages,collected_at")
         .eq("client_id", clientId)
+        .order("collected_at", { ascending: false })
         .order("date_range_end", { ascending: false })
         .limit(2);
       if (error) throw error;
       return (data || []) as unknown as GSCRow[];
     },
     enabled: !!clientId,
+    staleTime: 0,
   });
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading Search Console performance…</p>;
