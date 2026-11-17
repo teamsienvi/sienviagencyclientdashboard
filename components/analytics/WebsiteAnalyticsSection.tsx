@@ -48,6 +48,24 @@ export function WebsiteAnalyticsSection({ clientId }: { clientId: string }) {
       if (invokeError || data?.ok === false || data?.error || data?.errorType) {
         return await fetchLocalWebAnalyticsFallback(clientId, startDate, endDate);
       }
+      const sessions =
+        data?.analytics?.totalSessions ?? data?.analytics?.summary?.totalSessions ?? 0;
+      if (sessions === 0 && dateRange === "7d") {
+        const start30 = format(subDays(new Date(), 30), "yyyy-MM-dd");
+        const { data: data30, error: err30 } = await supabase.functions.invoke(
+          "fetch-ga4-analytics",
+          {
+            body: { clientId, startDate: start30, endDate },
+          }
+        );
+        const s30 =
+          data30?.analytics?.totalSessions ??
+          data30?.analytics?.summary?.totalSessions ??
+          0;
+        if (!err30 && s30 > 0) {
+          return data30;
+        }
+      }
       return data;
     },
     enabled: !!clientId && !!ga4Config, // Only run if config exists

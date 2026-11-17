@@ -59,6 +59,43 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           dateRange.endDate
         );
       }
+      const sessions =
+        data?.analytics?.totalSessions ?? data?.analytics?.summary?.totalSessions ?? 0;
+      const pvs =
+        data?.analytics?.pageViews ?? data?.analytics?.summary?.totalPageViews ?? 0;
+      if (sessions === 0 && pvs === 0) {
+        const localFallback = await fetchLocalWebAnalyticsFallback(
+          clientId,
+          dateRange.startDate,
+          dateRange.endDate
+        );
+        if (
+          (localFallback.analytics.totalSessions || 0) > 0 ||
+          (localFallback.analytics.totalPageViews || 0) > 0
+        ) {
+          return localFallback;
+        }
+        if (dateFilter === "7d" || dateFilter === "14d") {
+          const start30 = format(subDays(new Date(), 30), "yyyy-MM-dd");
+          const { data: data30, error: err30 } = await supabase.functions.invoke(
+            "fetch-ga4-analytics",
+            {
+              body: {
+                clientId,
+                startDate: start30,
+                endDate: dateRange.endDate,
+              },
+            }
+          );
+          const s30 =
+            data30?.analytics?.totalSessions ??
+            data30?.analytics?.summary?.totalSessions ??
+            0;
+          if (!err30 && s30 > 0) {
+            return data30;
+          }
+        }
+      }
       return data;
     },
     enabled: !!clientId && isActive,

@@ -215,13 +215,66 @@ export const useClientAnalytics = ({
       }
 
       // Handle nested analytics structure from the edge function
-      const analytics = data.analytics?.analytics || data.analytics;
+      let analytics = data.analytics?.analytics || data.analytics;
+      let effectiveDateRange = data.dateRange || dates;
+
+      const totalSessions =
+        analytics?.summary?.totalSessions ?? analytics?.totalSessions ?? 0;
+      const totalPageViews =
+        analytics?.summary?.totalPageViews ?? analytics?.pageViews ?? 0;
+
+      if (totalSessions === 0 && totalPageViews === 0) {
+        try {
+          const localFallback = await fetchLocalWebAnalyticsFallback(
+            clientId,
+            dates.startDate,
+            dates.endDate
+          );
+          if (
+            (localFallback.analytics.totalSessions || 0) > 0 ||
+            (localFallback.analytics.totalPageViews || 0) > 0
+          ) {
+            return {
+              clientId: localFallback.clientId,
+              clientName: localFallback.clientName,
+              analytics: localFallback.analytics,
+              dateRange: localFallback.dateRange,
+            };
+          }
+        } catch {
+          // ignore local fallback error
+        }
+
+        // If 7d window has 0 GA4 sessions (e.g. during a recent tag recovery), fall back to 30d GA4 data
+        if (dateRange === "7d") {
+          const dates30 = getDateRange("30d");
+          const { data: data30, error: err30 } = await supabase.functions.invoke(
+            "fetch-client-analytics",
+            {
+              body: {
+                clientId,
+                startDate: dates30.startDate,
+                endDate: dates30.endDate,
+              },
+            }
+          );
+          if (!err30 && data30?.ok !== false && !data30?.errorType) {
+            const analytics30 = data30.analytics?.analytics || data30.analytics;
+            const s30 =
+              analytics30?.summary?.totalSessions ?? analytics30?.totalSessions ?? 0;
+            if (s30 > 0) {
+              analytics = analytics30;
+              effectiveDateRange = data30.dateRange || dates30;
+            }
+          }
+        }
+      }
 
       return {
         clientId: data.clientId,
         clientName: data.clientName,
         analytics,
-        dateRange: data.dateRange,
+        dateRange: effectiveDateRange,
       };
     },
     enabled: enabled && !!clientId,
