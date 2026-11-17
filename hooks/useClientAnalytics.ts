@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { subDays, format } from "date-fns";
+import { fetchLocalWebAnalyticsFallback } from "@/lib/analytics/localWebAnalyticsFallback";
 
 export interface TrafficSource {
   source: string;
@@ -66,6 +67,7 @@ export interface AnalyticsData {
   dailyBreakdown?: DailyBreakdown[];
   topPages?: TopPage[];
   browsers?: BrowserBreakdown[];
+  countries?: { country: string; count: number; sessions?: number }[];
   // External API format (sources/devices arrays)
   sources?: { source: string; count: number }[];
   devices?: { device: string; count: number }[];
@@ -174,20 +176,42 @@ export const useClientAnalytics = ({
         },
       });
 
-      if (error) {
-        throw new Error(error.message || "Failed to fetch analytics");
-      }
-
-      // Check if the response contains an error/not configured state
-      if (data?.ok === false || data?.errorType) {
-        return {
-          clientId: data.clientId || clientId,
-          clientName: data.clientName || '',
-          analytics: null,
-          dateRange: dates,
-          errorType: data.errorType as AnalyticsErrorType,
-          errorDetails: data.details || data.error,
-        };
+      if (error || data?.ok === false || data?.errorType) {
+        if (data?.errorType === "inactive") {
+          return {
+            clientId: data.clientId || clientId,
+            clientName: data.clientName || "",
+            analytics: null,
+            dateRange: dates,
+            errorType: "inactive",
+            errorDetails: data.details || data.error,
+          };
+        }
+        try {
+          const fallback = await fetchLocalWebAnalyticsFallback(
+            clientId,
+            dates.startDate,
+            dates.endDate
+          );
+          return {
+            clientId: fallback.clientId,
+            clientName: fallback.clientName,
+            analytics: fallback.analytics,
+            dateRange: fallback.dateRange,
+          };
+        } catch {
+          if (error) {
+            throw new Error(error.message || "Failed to fetch analytics");
+          }
+          return {
+            clientId: data?.clientId || clientId,
+            clientName: data?.clientName || "",
+            analytics: null,
+            dateRange: dates,
+            errorType: data?.errorType as AnalyticsErrorType,
+            errorDetails: data?.details || data?.error,
+          };
+        }
       }
 
       // Handle nested analytics structure from the edge function

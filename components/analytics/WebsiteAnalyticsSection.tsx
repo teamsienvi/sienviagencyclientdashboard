@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchLocalWebAnalyticsFallback } from "@/lib/analytics/localWebAnalyticsFallback";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -34,16 +35,19 @@ export function WebsiteAnalyticsSection({ clientId }: { clientId: string }) {
       if (dateRange === "7d") days = 7;
       if (dateRange === "90d") days = 90;
       
+      const startDate = format(subDays(new Date(), days), "yyyy-MM-dd");
+      const endDate = format(new Date(), "yyyy-MM-dd");
       const { data, error: invokeError } = await supabase.functions.invoke("fetch-ga4-analytics", {
         body: {
           clientId,
-          startDate: format(subDays(new Date(), days), "yyyy-MM-dd"),
-          endDate: format(new Date(), "yyyy-MM-dd"),
+          startDate,
+          endDate,
         },
       });
 
-      if (invokeError) throw new Error(invokeError.message || "Failed to fetch analytics");
-      if (data?.ok === false) throw new Error(data.error || "Failed to fetch analytics");
+      if (invokeError || data?.ok === false || data?.error || data?.errorType) {
+        return await fetchLocalWebAnalyticsFallback(clientId, startDate, endDate);
+      }
       return data;
     },
     enabled: !!clientId && !!ga4Config, // Only run if config exists

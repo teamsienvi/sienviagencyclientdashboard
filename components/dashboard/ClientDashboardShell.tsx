@@ -660,7 +660,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
   // Check if client has any ads platforms connected
   const hasAdsPlatform = useMemo(() => {
-    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents" || client?.name === "CheerCPT" || client?.name === "HAIRtamin") return false;
+    if (client?.name === "Father Figure Formula" || client?.name === "Sienvi Agency" || client?.name === "The Billionaire Brother" || client?.name === "BSUE Brow & Lash" || client?.name === "PlayIQ" || client?.name === "The Haven At Deer Park" || client?.name === "Cissie Pryor Presents" || client?.name === "CheerCPT" || client?.name === "HAIRtamin" || client?.name === "In the Dome") return false;
     if (metricoolPlatforms?.some(p => ['meta_ads', 'google_ads', 'tiktok_ads'].includes(p.platform))) return true;
     if (connectedAccounts?.metaAds) return true;
     if (client?.name && hasAmazonOrdersAnalytics(client.name)) return true;
@@ -692,7 +692,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
     const webEcommClients = [
       "Snarky Pets", "Snarky Humans", "BlingyBag", "Father Figure Formula", 
       "Sienvi Agency", "PlayIQ", "Serenity Scrolls", "Hwabelle", "OxiSure Tech",
-      "Billionaire Brother", "The Billionaire Brother"
+      "Billionaire Brother", "The Billionaire Brother", "In the Dome"
     ];
     return webEcommClients.some(cName => name.toLowerCase().includes(cName.toLowerCase()));
   }, [client, clientGa4PropertyId, connectedAccounts, hasEmailCampaigns]);
@@ -1406,7 +1406,7 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
 
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         {/* Website specific */}
-                        {(client.supabase_url || clientGa4PropertyId) && (
+                        {(client.supabase_url || clientGa4PropertyId || client.name === "In the Dome") && (
                           <Card className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group shadow-sm bg-card/80 backdrop-blur-sm" onClick={() => router.push(`/web-analytics/${clientId}`)}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                               <div className="flex items-center gap-3">
@@ -1602,6 +1602,11 @@ export default function ClientDashboardShell({ clientId }: ClientDashboardShellP
                           </Card>
                         )}
                       </div>
+                      {client.name === "In the Dome" && (
+                        <div className="mt-6 bg-card/90 rounded-2xl p-4 md:p-6 border border-emerald-200/60 dark:border-emerald-500/20 shadow-xs">
+                          <GA4InlineSection clientId={clientId!} isActive={activeTab === "analytics"} />
+                        </div>
+                      )}
                       {/* Website Traffic section hidden per request
                       {(client.supabase_url || clientGa4PropertyId) && (
                         <WebsiteAnalyticsSection clientId={clientId!} />

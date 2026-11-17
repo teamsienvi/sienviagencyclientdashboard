@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { filterExcludedCountries } from "@/lib/analytics/geo-exclusions";
+import { fetchLocalWebAnalyticsFallback } from "@/lib/analytics/localWebAnalyticsFallback";
 import { format, subDays } from "date-fns";
 import {
   Users, Eye, Clock, TrendingDown, TrendingUp, Globe, Activity,
@@ -51,8 +52,13 @@ export function GA4InlineSection({ clientId, isActive = true }: GA4InlineSection
           endDate: dateRange.endDate,
         },
       });
-      if (error) throw new Error(error.message);
-      if (data?.error || data?.errorType) throw new Error(data.error || "GA4 not configured");
+      if (error || data?.error || data?.errorType || data?.ok === false) {
+        return await fetchLocalWebAnalyticsFallback(
+          clientId,
+          dateRange.startDate,
+          dateRange.endDate
+        );
+      }
       return data;
     },
     enabled: !!clientId && isActive,

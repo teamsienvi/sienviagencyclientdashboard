@@ -3,6 +3,7 @@ import blingybagLogo from "@/assets/logos/blingybag-logo.jpeg";
 import snarkyassLogo from "@/assets/logos/snarkyass-logo.jpeg";
 import snarkyhumansLogo from "@/assets/logos/snarkyhumans-logo.png";
 import hairtaminLogo from "@/assets/logos/hairtamin-logo.png";
+import inTheDomeLogo from "@/assets/logos/in-the-dome-logo.png";
 
 // Map client names (lowercase) to their local logo asset imports
 const logoMap: Record<string, string> = {
@@ -11,6 +12,7 @@ const logoMap: Record<string, string> = {
     "snarky a$$ humans": snarkyassLogo.src,
     "snarky humans": snarkyhumansLogo.src,
     "hairtamin": hairtaminLogo.src,
+    "in the dome": inTheDomeLogo.src,
 };
 
 /**

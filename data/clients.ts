@@ -15,8 +15,8 @@ import billionaireBrotherLogo from "@/assets/logos/billionaire-brother-logo.jpg"
 import hwabelleLogo from "@/assets/logos/hwabelle-logo.png";
 import cheercptLogo from "@/assets/logos/cheercpt-logo.jpeg";
 
-
 import hairtaminLogo from "@/assets/logos/hairtamin-logo.png";
+import inTheDomeLogo from "@/assets/logos/in-the-dome-logo.png";
 
 export interface Report {
   dateRange: string;
@@ -173,7 +173,6 @@ export const clientsData: Client[] = [
     logo: blingybagLogo.src,
     reports: [],
   },
-
   {
     name: "PlayIQ",
     logo: playiqLogo.src,
@@ -205,6 +204,11 @@ export const clientsData: Client[] = [
   },
   {
     name: "Secure and Style",
+    reports: [],
+  },
+  {
+    name: "In the Dome",
+    logo: inTheDomeLogo.src,
     reports: [],
   },
 ];

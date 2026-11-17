@@ -298,6 +298,21 @@ export const CLIENT_BRAND_THEMES: Record<string, ClientBrandTheme> = {
     badgeText: "#92400E",
     tagline: "Amazon Marketplace & Sponsored Ads Performance",
   },
+
+  // In the Dome — Calgary Flames Crimson & Dark Arena Slate
+  "In the Dome": {
+    primary: "#DC2626",
+    primaryLight: "#F87171",
+    primaryDark: "#991B1B",
+    secondary: "#F59E0B",
+    surface: "#101114",
+    textLight: "#FFFFFF",
+    textDark: "#1E293B",
+    badgeBg: "#FEE2E2",
+    badgeText: "#991B1B",
+    websiteUrl: "inthedome.ca",
+    tagline: "Independent Calgary Flames Podcast & Fan Perspective",
+  },
 };
 
 /**
